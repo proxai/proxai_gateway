@@ -156,7 +156,7 @@ Per-user LaunchAgent at `~/Library/LaunchAgents/co.proxai.gateway.plist`. `RunAt
 - Update prompt: menu-bar tray (Phase 2). For MVP, an out-of-date warning surfaces in `proxai-gateway status` output.
 - **Stale-binary auto-pause** is the safety net: if the gateway's release date is older than 90 days, it logs a warning daily; older than 180 days, it stops uploading until the user updates. This bounds the "user on old redaction rules" exposure.
 
-The dynamic-config / signed-config story (push rules without client release) is **explicitly deferred to post-seed**. The current update cadence is "monthly minor releases, hotfix when a major provider changes a key format."
+The dynamic-config / signed-config story (push rules without client release) is **out of MVP scope** — see Phase 3. The MVP cadence is "minor releases on demand, hotfix when a major provider changes a key format."
 
 ---
 
@@ -179,7 +179,7 @@ The dynamic-config / signed-config story (push rules without client release) is 
 ### Out
 
 - Antigravity (Phase 4 / customer-pulled)
-- Dynamic config — signed remote rules / source list (post-seed)
+- Dynamic config — signed remote rules / source list (Phase 3)
 - HTTP proxy / base-URL override (Phase 2, opt-in)
 - Hooks-based collection (Phase 2)
 - Menu-bar tray UI (Phase 2)
@@ -197,25 +197,25 @@ The dynamic-config / signed-config story (push rules without client release) is 
 
 ## 9. Roadmap
 
-### Phase 0 — groundwork (week 1–2)
+### Phase 0 — groundwork
 - Repo skeleton, CI, Apache 2.0 license, threat model, SBOM
 - Redaction module + fuzz corpus (critical-path)
 - Lock the `proxai_nest` raw-ingest contract
 - Verification spikes — already done in this thread for all three MVP agents
 
-### Phase 1 — MVP (week 3–6)
+### Phase 1 — MVP
 - Three collectors + buffer + uploader
 - launchd installer + Typer CLI
 - Internal dogfooding by ProxAI engineers
 - Beta with 1–2 friendly customers
 
-### Phase 2 — comfort & coverage (month 3–4)
+### Phase 2 — comfort & coverage
 - Menu-bar tray (rumps): status, last-upload, pause toggle, update prompt
 - Optional HTTP proxy (`ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL`) for users who want realtime in addition to polling
 - Hooks-based Claude Code collector for sub-poll-interval freshness
 - Linux support (systemd user unit, identical collector code)
 
-### Phase 3 — enterprise polish (month 5–6)
+### Phase 3 — enterprise polish
 - Self-hosted backend mode for security-sensitive customers
 - MDM-friendly install package (signed `.pkg`)
 - SOC 2 Type 1 evidence collection
@@ -223,7 +223,7 @@ The dynamic-config / signed-config story (push rules without client release) is 
 - Windows support
 - **Dynamic config** (signed remote rules + source list) — once we've outgrown the bundled-binary update model
 
-### Phase 4 — hard targets (month 7+, customer-pulled only)
+### Phase 4 — hard targets (customer-pulled only)
 - Antigravity collector (reverse-engineer the protobuf schema, AEAD decryption against the keychain item, install-time consent for the keychain prompt, version-pinned)
 - Optional MITM mode — only if a real customer asks
 - Team analytics / policy mode — separate product surfaces
@@ -247,7 +247,7 @@ The dynamic-config / signed-config story (push rules without client release) is 
 
 1. `proxai_nest` raw-ingest contract: owned by backend team; lock before MVP code-freeze.
 2. Anonymous gateway-self-telemetry (crash counts, version): opt-in at install time.
-3. Stale-binary thresholds (90/180 days?): pick after first month of beta data.
+3. Stale-binary thresholds (90/180 days?): pick after enough beta data to calibrate.
 
 ---
 

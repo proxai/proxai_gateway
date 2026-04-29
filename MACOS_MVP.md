@@ -131,19 +131,44 @@ When we add it (Phase 2): a small Swift `.app` shell with `NSStatusItem` that ta
 
 The two that matter most: **FDA** (probe at install) and **Gatekeeper** (document workaround).
 
-## 8. MVP execution plan
+## 8. MVP execution order
 
-| Week | Work |
-|---|---|
-| **1** | Repo init from `proxai_ops` build/lint/test scaffolding (rewritten, not copied). `commander` CLI skeleton. Redaction module + fuzz corpus + `redaction-test` subcommand. **Critical-path piece — secrets must never escape.** |
-| **2** | JSONL watcher (byte-offset cursor, rotation detection, `mtime` fast-path). SQLite watcher (`better-sqlite3` + `VACUUM INTO`, rowid cursor). Local buffer + `source_cursors` table. HTTPS uploader to `proxai_nest` ingest stub with UUIDv7 idempotency. |
-| **3** | Three sources: Claude Code (`~/.claude/projects/*/*.jsonl`), Cursor (`cursorDiskKV` rows), Codex (`~/.codex/sessions/**/rollout-*.jsonl` + `state_*.sqlite` `threads`). Skip-list enforced by unit test. End-to-end test: real session → captured raw bytes in mock backend. |
-| **4** | `install` / `uninstall` commands writing the launchd plist. FDA probe + deeplink. Consent screen. Stale-binary auto-pause (90/180-day defaults). |
-| **5** | Chaos: reboot, sleep/wake, network drop, 24h backend outage, file rotation. README, threat model, redaction-rules doc. SBOM in CI. |
-| **6** | Internal dogfooding (every ProxAI engineer runs it). 1–2 friendly external customers. |
+Listed as dependency order, not a schedule. Each block depends on the ones above; they can be parallelized within a block.
+
+**Foundation (must come first; redaction is the critical-path safety property)**
+- Repo init using `proxai_ops` build/lint/test scaffolding patterns (rewritten, not copied)
+- `commander` CLI skeleton
+- Redaction module + fuzz corpus + `redaction-test` subcommand. **Secrets must never escape.**
+
+**Engines + buffer + uploader (parallel block)**
+- JSONL watcher: byte-offset cursor, rotation detection, `mtime` fast-path
+- SQLite watcher: `better-sqlite3` + `VACUUM INTO` snapshot, rowid cursor
+- Local buffer with `source_cursors` table on `~/.proxai/buffer.db`
+- HTTPS uploader to `proxai_nest` ingest stub with UUIDv7 idempotency
+
+**Three sources (parallel block, depends on Engines)**
+- Claude Code (`~/.claude/projects/*/*.jsonl`)
+- Cursor (`cursorDiskKV` rows)
+- Codex (`~/.codex/sessions/**/rollout-*.jsonl` + `state_*.sqlite` `threads`)
+- Skip-list enforced by unit test
+- End-to-end test: real session → captured raw bytes arrive in mock backend
+
+**Install + control surface**
+- `install` / `uninstall` writing the launchd plist
+- FDA probe + System Settings deeplink
+- Consent screen (per `USER_EXPERIENCE.md`)
+- Stale-binary auto-pause (default thresholds)
+
+**Hardening before release**
+- Chaos scenarios: reboot, sleep/wake, network drop, 24h backend outage, file rotation
+- README, redaction-rules doc, SBOM in CI
+
+**Beta**
+- Internal dogfooding (every ProxAI engineer runs it on their laptop)
+- 1–2 friendly external customers
 
 ## 9. Open questions
 
 1. Apple Developer account procurement — needed for Phase 2 signing; certificates take a day to issue, get it on the calendar.
-2. Stale-binary thresholds (90 / 180 days?) — placeholders; calibrate after first-month beta data.
-3. FDA prevalence on Cursor's path across macOS versions — empirical question for week 4 testing.
+2. Stale-binary thresholds (90 / 180 days?) — placeholders; calibrate from beta data.
+3. FDA prevalence on Cursor's path across macOS versions — empirical question to verify during install-flow testing.

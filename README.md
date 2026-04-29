@@ -4,7 +4,7 @@ A macOS background service that captures the LLM activity of your coding agents 
 
 It reads each agent's local transcript files directly. **No network proxy. No root certificate. No traffic interception.** Secret redaction runs on your laptop before any byte leaves it.
 
-Open source (Apache 2.0). Pre-seed MVP.
+Open source (Apache 2.0).
 
 ---
 
@@ -109,7 +109,6 @@ If you're a contributor reading these in order: `README.md` → `DESIGN.md` → 
 
 | | |
 |---|---|
-| Phase | Pre-seed MVP |
 | Platforms | macOS (Apple Silicon and Intel) |
 | Agents | Claude Code, Cursor, Codex |
 | Distribution | npm registry as `@proxai/gateway` |

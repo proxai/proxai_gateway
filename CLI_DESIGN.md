@@ -429,7 +429,7 @@ npm uninstall -g @proxai/gateway
 
 ## 7. Backend dependencies (proxai_nest API)
 
-The CLI depends on the following endpoints. **These are gating for MVP** and should be locked with the backend team before week 2.
+The CLI depends on the following endpoints. **These are gating for MVP** and should be locked with the backend team before collector code is written.
 
 | Endpoint | Method | Used by | Body | Returns |
 |---|---|---|---|---|
