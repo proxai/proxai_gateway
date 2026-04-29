@@ -41,9 +41,15 @@ AgentCallRecord
 │   └── provider_model: ProviderModelType | None   # null when Cursor 'default' (auto-router)
 │
 ├── result: AgentResultRecord
-│   ├── content: list[MessageContent]          # canonical chronological event log:
-│   │                                          #   THINKING, TEXT, TOOL(CALL), TOOL(RESULT), IMAGE, …
-│   ├── output_text: str | None                # convenience: concatenated assistant TEXT blocks
+│   ├── content: list[MessageContent]          # canonical chronological event log for THIS turn's
+│   │                                          #   own activity: THINKING, TEXT, TOOL(CALL),
+│   │                                          #   TOOL(RESULT), IMAGE, …
+│   ├── sub_agents: list[SubAgentRun] | None   # spawned sub-agents' event streams, flat list with
+│   │                                          #   parent pointers. See §1.4 and §2.4.
+│   ├── final_text: str | None                 # convenience: last MessageContent.TEXT block in content;
+│   │                                          #   None if the turn has no TEXT blocks (e.g. agent's
+│   │                                          #   last action was a tool call with no summary).
+│   │                                          #   Deliberate divergence from CallRecord.output_text — see §2.13.
 │   ├── tool_summary: dict[str, int] | None    # Counter of tool names called this turn
 │   ├── stop_reason: str | None                # provider-reported termination reason
 │   ├── usage: AgentUsageType | None
@@ -126,7 +132,43 @@ AttachmentRef
 
 We **never** inline file or commit *content* into an `AttachmentRef`. Content goes through `MessageContent.IMAGE` / `DOCUMENT` blocks when present.
 
-### 1.4 Enums
+### 1.4 `SubAgentRun` — embedded sub-agent event stream
+
+When the parent agent spawns a sub-agent (Claude Code's Task tool, Codex's agent-spawn, Cursor's sub-composer), the sub-agent's full event stream is embedded in `result.sub_agents` rather than emitted as a separate `AgentCallRecord`. See §2.4 for the design rationale.
+
+```
+SubAgentRun
+├── sub_agent_id: str                          # native id from source (typically the spawning
+│                                              #   tool call's call_id); unique within this AgentCallRecord
+├── parent_sub_agent_id: str | None            # None when spawned directly by the parent turn;
+│                                              #   another sub_agent_id otherwise (grandchild case)
+├── name: str | None                           # sub-agent type / name from the source
+│                                              #   (Claude Code Task args 'subagent_type';
+│                                              #   Codex spawned-thread title; Cursor sub-composer name)
+├── content: list[MessageContent]              # the sub-agent's events, same vocabulary as result.content
+└── sub_agent_metadata: dict | None            # loose bag for source-specific stamps
+                                               #   (native_chat_id, agent_path, status, …)
+```
+
+**Tree reconstruction.** The list is flat — every sub-agent in the tree, regardless of depth, lives in `result.sub_agents`. Walking `parent_sub_agent_id` pointers reconstructs the tree:
+
+```python
+def sub_agent_tree(sub_agents: list[SubAgentRun]) -> tuple[list, dict]:
+    children_of: dict[str, list[SubAgentRun]] = defaultdict(list)
+    roots: list[SubAgentRun] = []
+    for sa in sub_agents:
+        if sa.parent_sub_agent_id is None:
+            roots.append(sa)
+        else:
+            children_of[sa.parent_sub_agent_id].append(sa)
+    return roots, children_of
+```
+
+Most consumers iterate the flat list ("show me everything that happened under this user submission") and never need the tree. Tree reconstruction is the rare case.
+
+**Pairing with the parent.** Every `SubAgentRun.sub_agent_id` corresponds to a `MessageContent(TOOL, kind=CALL, call_id=<id>)` block in some parent stream — either the record's `result.content` (root sub-agents) or another `SubAgentRun.content` (grandchildren). The matching `kind=RESULT` block in the same parent stream carries the sub-agent's return value as the parent observed it. This means the spawn → activity → return relationship is fully discoverable from either side.
+
+### 1.5 Enums
 
 ```
 AgentAppName     : CLAUDE_CODE | CURSOR | CODEX
@@ -138,7 +180,7 @@ ToolKind         : CALL | RESULT
 
 Adding a new agent (e.g. Antigravity) means: extend `AgentAppName`, write a parser, no other schema changes.
 
-### 1.5 Per-agent `agent_metadata` examples
+### 1.6 Per-agent `agent_metadata` examples
 
 These are **illustrative, not a required schema.** Parsers are free to add or omit keys, and the shape can drift across agent versions without invalidating older records — that's the entire point of using a loose dict here. Project resolution and other downstream concerns read `cwd` (and whatever else they want) from this bag at query time, with no schema migration cost.
 
@@ -249,14 +291,18 @@ Each record carries `turn.parent_turn_id` pointing to the prior turn in the same
 
 We deliberately do **not** carry inlined chat history on the record. Storage stays O(N) total, not O(N²). The MVP analytics — which features / time spent / project tokens — aggregate over per-turn rows directly; they never need the chain walk.
 
-### 2.4 Sub-agents are independent chats
+### 2.4 Sub-agents are embedded in `result.sub_agents`
 
-When an agent spawns a sub-agent (Claude Code Task tool, Codex agent-spawn, Cursor sub-composer):
+When the parent agent spawns a sub-agent (Claude Code Task tool, Codex agent-spawn, Cursor sub-composer):
 
-1. The spawning turn records a regular `MessageContent(TOOL, kind=CALL, name='Task', …)` block in its `result.content`. Nothing structural distinguishes it from any other tool call.
-2. The sub-agent's records form their own chain, with their own `chat_id`, walking back through their own `parent_turn_id`s. Independent linked list.
+1. The spawning turn records a regular `MessageContent(TOOL, kind=CALL, name='Task', call_id='X', …)` block in `result.content`. Nothing structurally distinguishes it from any other tool call. The matching `kind=RESULT` block (same `call_id`) carries the sub-agent's return value as the parent observed it.
+2. The sub-agent's full event stream — its thinking, text, and tool calls — is embedded in `result.sub_agents` as a `SubAgentRun` (§1.4). The `SubAgentRun.sub_agent_id` is the parent's spawning `call_id`; the relationship is discoverable from either side.
+3. Sub-agents that themselves spawn sub-agents flatten upward: every descendant in the tree lives in the same flat `result.sub_agents` list, distinguished by its `parent_sub_agent_id`. The schema stays flat; the graph is data, not structure.
+4. **Token and time roll up to the parent's totals.** `usage`, `timestamp`, `tool_summary`, and `final_text` describe the *user submission as a whole* — including all sub-agent activity. The dashboard never needs to find and sum children separately.
 
-There is no cross-chat schema relation. **The chat is the unit. Period.** If a future feature needs cross-chat threading, the lightweight place to preserve it is in `agent_metadata['spawned_from']` on the child's first record (parser stamps it from `thread_spawn_edges` for Codex or sidechain directory layout for Claude Code). Non-breaking.
+This collapses what would otherwise be cross-chat schema work into a single record per user submission. Sub-agents do not get their own `chat_id`; they live inside the parent record. **The user submission is the unit, period.**
+
+The trade-off is honest: sub-agents lose independent queryability ("show me all turns where the Explore sub-agent ran" becomes a JSONB scan over `result.sub_agents`, not a typed-column query). The raw bytes are preserved in object storage (per `DESIGN.md` §2.1), so a post-MVP "promote sub-agents to first-class records" parser is always available — but that's a tomorrow problem, not today's.
 
 ### 2.5 Token usage: one population + a quality flag
 
@@ -363,7 +409,13 @@ Non-negotiable — without it we can't re-parse historical records under an upda
 
 The full content of one turn — every thinking block, every text block, every tool call, every tool result — is `result.content`, a `list[MessageContent]` in the same order they arrived in the source.
 
-Parsers populate `content` directly. The `output_text` shortcut (concatenated assistant TEXT blocks) is a derived view; never write it directly. `tool_summary` is also derived. They are stored as columns for fast dashboard rollups without scanning the `content` blob.
+Parsers populate `content` directly. `final_text` and `tool_summary` are derived views; never write them directly. They are stored as columns for fast dashboard rollups without scanning the `content` blob.
+
+**`final_text` semantics** (deliberate divergence from `CallRecord.output_text`): the text of the *last* `MessageContent` block in `content` whose type is `TEXT`. `None` if no TEXT block exists (the rare case where the agent's last action was a tool call with no follow-up summary).
+
+Why divergent from `CallRecord`: in agent turns, `content` interleaves thinking, intermediate narration ("I'll now check…"), tool calls, tool results, and a closing summary. Concatenating all TEXT blocks (CallRecord's convention) mixes the intermediate narration with the actual answer, producing a noisy stream. The last TEXT block is what the user reads as "the answer" — verified across all three agents (Codex's `task_complete.last_agent_message` matches the last TEXT block byte-for-byte; Cursor and Claude Code follow the same convention by construction). Codex even codifies it explicitly with `phase: "final_answer"`.
+
+When `final_text` is `None` and `tool_summary` is non-empty, the dashboard fallback is "Used N tools: <tool_summary>" (~3% of Claude Code turns in observed data; rare in Cursor / Codex).
 
 ---
 
@@ -381,7 +433,8 @@ Parsers populate `content` directly. The `output_text` shortcut (concatenated as
 | `query.connection_options` | dropped | Cache / fallback / endpoint-override are SDK concerns. |
 | `query.hash_value` | dropped | Replaced by `id` (§2.10). |
 | `result.choices` | dropped | Agents are always n=1. |
-| `result.output_image` / `output_audio` / `output_video` / `output_json` / `output_pydantic` | dropped | Agents output text + tools. Only `output_text` shortcut retained. |
+| `result.output_text` | renamed → `result.final_text`, semantics changed | CallRecord concatenates all TEXT blocks; AgentCallRecord takes only the last TEXT block in `content` (the "final answer"). See §2.12. |
+| `result.output_image` / `output_audio` / `output_video` / `output_json` / `output_pydantic` | dropped | Agents output text + tools. No analogous shortcuts. |
 | `result.error` / `result.error_traceback` | dropped (moved → `agent_metadata['incomplete_reason']` / etc.) | Disk capture has no Python tracebacks; error explanations are rare and synthetic. The loose bag handles them when present. |
 | `connection: ConnectionMetadata` | dropped | Replaced by `capture: CaptureMetadata` (§2.11). |
 | `debug.raw_provider_response` | dropped | We capture from disk, not network. |
@@ -415,6 +468,9 @@ Condensed view of the typed spine; full field-by-field details in `CALL_RECORD_M
 | `query.provider_model.provider` | infer from model prefix | infer / null when default | `threads.model_provider` ✓ |
 | `query.provider_model.model` | `message.model` | `composerData.modelConfig.modelName` | `threads.model` ✓ |
 | `result.content` | assistant content + tool_result user blocks | bubbles `type=2` text/thinking/toolFormerData | `response_item` (message/reasoning/function_call/function_call_output/web_search_call) + event_msg sidecars |
+| `result.sub_agents[*].sub_agent_id` | spawning Task tool's `call_id` | spawning sub-composer tool's `call_id` | spawning function_call's `call_id` |
+| `result.sub_agents[*].content` | parsed from `<session-dir>/subagents/agent-*.jsonl` | parsed from sub-composer bubbles via `subComposerIds` / `subagentComposerIds` | parsed from child rollout via `thread_spawn_edges` |
+| `result.sub_agents[*].name` | `Task` args `subagent_type` | sub-composer `name` | child `threads.title` |
 | `result.usage.input_tokens` (auth.) | sum across assistants ✓ | null | null |
 | `result.usage.cache_*_tokens` | sum ✓ | null | null |
 | `result.usage.estimated_*_tokens` | null (we have authoritative) | tiktoken | tiktoken |
@@ -534,7 +590,7 @@ AgentCallRecord(
             MessageContent(type=ContentType.THINKING, text="The user wants…"),
             MessageContent(type=ContentType.TEXT, text="I'll explore the project structure and then…"),
         ],
-        output_text="I'll explore the project structure and then…",
+        final_text="I'll explore the project structure and then…",
         usage=AgentUsageType(
             input_tokens=6, output_tokens=444,
             tokens_are_estimated=False,
@@ -612,7 +668,7 @@ result=AgentResultRecord(
         ),
         MessageContent(type=ContentType.TEXT, text="Found the serializer at types.py:838. It handles…"),
     ],
-    output_text="Found the serializer at types.py:838. It handles…",
+    final_text="Found the serializer at types.py:838. It handles…",
     tool_summary={"Read": 1, "Bash": 1},
     usage=AgentUsageType(
         input_tokens=47, output_tokens=4982,
@@ -657,7 +713,7 @@ AgentCallRecord(
     ),
     result=AgentResultRecord(
         content=[...],                                      # 49 bubbles collapsed into blocks
-        output_text="The error happens because traceback.format_exc() returns a string…",
+        final_text="The error happens because traceback.format_exc() returns a string…",
         tool_summary={"read_file_v2": 8, "ripgrep_raw_search": 5, "semantic_search_full": 1,
                       "edit_file_v2": 1, "read_lints": 1, "web_search": 1},
         usage=AgentUsageType(
@@ -739,7 +795,7 @@ AgentCallRecord(
             MessageContent(type=ContentType.THINKING, encrypted=True, byte_length=894),
             MessageContent(type=ContentType.TEXT, text="Looked at provider docs…"),
         ],
-        output_text="Looked at provider docs…",
+        final_text="Looked at provider docs…",
         tool_summary={"exec_command": 1},
         usage=AgentUsageType(
             input_tokens=4200, output_tokens=520,
@@ -778,7 +834,139 @@ AgentCallRecord(
 )
 ```
 
-### 6.5 Idle-flushed (`INCOMPLETE`) turn
+### 6.5 Claude Code — turn with parallel sub-agents and a grandchild
+
+Parent turn invokes the Task tool twice in parallel, spawning two root sub-agents (`A`, `B`). Sub-agent `A` then spawns its own sub-agent `C`. All three live in the flat `result.sub_agents` list; the tree is reconstructed via `parent_sub_agent_id`.
+
+```python
+AgentCallRecord(
+    id="…",
+    turn=TurnInfo(turn_id="…", parent_turn_id="…", status=TurnStatusType.SUCCESS),
+    chat=ChatStamp(chat_id="…", chat_title="Refactor proposal", created_at_utc=…),
+    agent_app=AgentApp(name=AgentAppName.CLAUDE_CODE, version="2.1.122"),
+    query=AgentQueryRecord(
+        user_input=UserInput(content=[MessageContent(
+            type=ContentType.TEXT, text="Find all usages of ResultRecord and propose a refactor.")]),
+        provider_model=ProviderModelType(provider="anthropic", model="claude-opus-4-7"),
+    ),
+    result=AgentResultRecord(
+        content=[
+            MessageContent(type=ContentType.THINKING, text="Splitting work across two search agents…"),
+            MessageContent(type=ContentType.TEXT, text="I'll spawn two parallel search agents."),
+            MessageContent(                                                       # spawn A
+                type=ContentType.TOOL,
+                tool_content=ToolContent(
+                    kind=ToolKind.CALL, name="Task", call_id="toolu_AAAA",
+                    arguments={"subagent_type": "Explore", "description": "search ResultRecord refs"},
+                ),
+            ),
+            MessageContent(                                                       # spawn B
+                type=ContentType.TOOL,
+                tool_content=ToolContent(
+                    kind=ToolKind.CALL, name="Task", call_id="toolu_BBBB",
+                    arguments={"subagent_type": "Explore", "description": "search ResultRecord usages in tests"},
+                ),
+            ),
+            MessageContent(                                                       # result A
+                type=ContentType.TOOL,
+                tool_content=ToolContent(
+                    kind=ToolKind.RESULT, name="Task", call_id="toolu_AAAA",
+                    result="Found 47 references in src/; details inline.",
+                ),
+            ),
+            MessageContent(                                                       # result B
+                type=ContentType.TOOL,
+                tool_content=ToolContent(
+                    kind=ToolKind.RESULT, name="Task", call_id="toolu_BBBB",
+                    result="Found 12 test references…",
+                ),
+            ),
+            MessageContent(type=ContentType.TEXT, text="Search agents found 47 + 12 references. Proposed refactor: …"),
+        ],
+        sub_agents=[
+            SubAgentRun(                                                          # root sub-agent A
+                sub_agent_id="toolu_AAAA",
+                parent_sub_agent_id=None,
+                name="Explore",
+                content=[
+                    MessageContent(type=ContentType.THINKING, text="Need to find ResultRecord usages…"),
+                    MessageContent(type=ContentType.TEXT, text="Searching codebase."),
+                    MessageContent(type=ContentType.TOOL, tool_content=ToolContent(
+                        kind=ToolKind.CALL, name="Grep", call_id="toolu_inner_1",
+                        arguments={"pattern": "ResultRecord"})),
+                    MessageContent(type=ContentType.TOOL, tool_content=ToolContent(
+                        kind=ToolKind.RESULT, name="Grep", call_id="toolu_inner_1",
+                        result="src/proxai/types.py:42:…\n…")),
+                    MessageContent(type=ContentType.TOOL, tool_content=ToolContent(    # spawn C
+                        kind=ToolKind.CALL, name="Task", call_id="toolu_CCCC",
+                        arguments={"subagent_type": "Explore", "description": "deep grep on serializer.py"})),
+                    MessageContent(type=ContentType.TOOL, tool_content=ToolContent(    # result C
+                        kind=ToolKind.RESULT, name="Task", call_id="toolu_CCCC",
+                        result="Found 8 additional references in serializer.py")),
+                    MessageContent(type=ContentType.TEXT, text="Found 47 references in src/; details inline."),
+                ],
+                sub_agent_metadata={"native_chat_id": "agent-a1bdac760e33f967d"},
+            ),
+            SubAgentRun(                                                          # root sub-agent B
+                sub_agent_id="toolu_BBBB",
+                parent_sub_agent_id=None,
+                name="Explore",
+                content=[
+                    MessageContent(type=ContentType.TEXT, text="Searching tests."),
+                    MessageContent(type=ContentType.TOOL, tool_content=ToolContent(
+                        kind=ToolKind.CALL, name="Grep", call_id="toolu_inner_2",
+                        arguments={"pattern": "ResultRecord", "include": "tests/"})),
+                    MessageContent(type=ContentType.TOOL, tool_content=ToolContent(
+                        kind=ToolKind.RESULT, name="Grep", call_id="toolu_inner_2",
+                        result="tests/test_client.py:128:…")),
+                    MessageContent(type=ContentType.TEXT, text="Found 12 test references…"),
+                ],
+                sub_agent_metadata={"native_chat_id": "agent-b2cdef781f44e078e"},
+            ),
+            SubAgentRun(                                                          # grandchild C, spawned by A
+                sub_agent_id="toolu_CCCC",
+                parent_sub_agent_id="toolu_AAAA",
+                name="Explore",
+                content=[
+                    MessageContent(type=ContentType.TEXT, text="Deep grep on serializer.py."),
+                    MessageContent(type=ContentType.TOOL, tool_content=ToolContent(
+                        kind=ToolKind.CALL, name="Read", call_id="toolu_inner_3",
+                        arguments={"file_path": "/repo/src/proxai/serializers/type_serializer.py"})),
+                    MessageContent(type=ContentType.TOOL, tool_content=ToolContent(
+                        kind=ToolKind.RESULT, name="Read", call_id="toolu_inner_3",
+                        result="<file contents>")),
+                    MessageContent(type=ContentType.TEXT, text="Found 8 additional references in serializer.py"),
+                ],
+                sub_agent_metadata={"native_chat_id": "agent-c3def892a55f189f0"},
+            ),
+        ],
+        final_text="Search agents found 47 + 12 references. Proposed refactor: …",
+        tool_summary={"Task": 2, "Grep": 2, "Read": 1},                           # totals across parent + sub-agents
+        usage=AgentUsageType(
+            input_tokens=234, output_tokens=8210,                                 # totals across parent + sub-agents
+            cache_creation_input_tokens=14000, cache_read_input_tokens=180000,
+            tokens_are_estimated=False,
+            cost_nano_usd=410_000_000,
+        ),
+        timestamp=AgentTimeStampType(
+            start_utc_date=…,
+            end_utc_date=…,                                                        # parent's last event
+            response_time=…,                                                       # spans all sub-agent activity
+        ),
+    ),
+    capture=…,
+    agent_metadata={...},
+)
+```
+
+Reading guide:
+- The parent's `result.content` shows what the user "saw": two parallel Task spawns, two results, a wrap-up text.
+- `result.sub_agents[0]` is sub-agent A's run; one of its content blocks is itself a `Task` spawn for grandchild C.
+- `result.sub_agents[1]` is sub-agent B's run.
+- `result.sub_agents[2]` is grandchild C's run, with `parent_sub_agent_id="toolu_AAAA"` — discoverable as A's child.
+- Total tokens / time / tool count on the record include all three sub-agents + the parent's own activity.
+
+### 6.6 Idle-flushed (`INCOMPLETE`) turn
 
 The turn opened, then no new bytes for 30 minutes — the parser gave up waiting and emitted what it had. `usage` is best-effort over the partial content. The explanation goes in `agent_metadata['incomplete_reason']`; the typed schema doesn't carry an error field (see §2.9).
 
@@ -789,7 +977,7 @@ AgentCallRecord(
     query=AgentQueryRecord(user_input=…, provider_model=…),
     result=AgentResultRecord(
         content=[...whatever made it to disk before the gap...],
-        output_text=None,                                    # no terminator → no final text
+        final_text=None,                                     # no terminator → no final text block
         usage=AgentUsageType(
             input_tokens=<over partial content>,
             output_tokens=<over partial content>,
@@ -826,10 +1014,11 @@ AgentCallRecord(
 
 ## 8. Open questions
 
-1. **`output_text` for tool-heavy turns.** When the assistant's only output is tool calls with no final text, `output_text` is `None`. Dashboard should handle gracefully — recommend "Used N tools: <tool_summary>" as the row label rather than "(empty response)."
+1. **`final_text` for tool-heavy turns.** When the agent's last action is a tool call with no closing text, `final_text` is `None` (~3% of Claude Code turns in observed data; rare elsewhere). Dashboard should handle gracefully — recommend "Used N tools: <tool_summary>" as the row label rather than "(empty response)."
 2. **Encrypted reasoning across providers.** Only Codex encrypts today. If others adopt similar encryption, the existing `MessageContent(THINKING).encrypted` flag handles it uniformly. No schema change needed.
 3. **Multi-modal output for agents.** None of the three observed agents produce images/audio/video as output. Schema inherits from `CallRecord` if it ever appears.
 4. **Idle-flush threshold.** 30 min same as in `ALGORITHM_*.md`. Calibrate after beta data.
+5. **Sub-agent storage footprint.** Embedding sub-agents into the parent record (§2.4) means a heavy turn with multiple sub-agents (each with dozens of tool calls) inflates the parent record. In observed Claude Code data this is rare; if it ever becomes hot-path (a small number of "mega-records" dominating storage), the mitigation is to externalize `result.sub_agents` to side-storage (referenced by id from the parent). Schema-compatible. Not a blocker.
 
 ---
 
