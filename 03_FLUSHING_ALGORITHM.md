@@ -590,7 +590,7 @@ What `proxai_nest` needs to implement to consume what this gateway sends:
 
 1. **`POST /v1/raw_records` endpoint** with the DTO in §3.2 and the response semantics in §3.4.
 2. **Raw blob storage** keyed by `capture_id`. Idempotent on receive (existing `capture_id` → 200, no overwrite).
-3. **Per-`source_kind` parser dispatch.** Three parsers (one per agent), each consuming the `body` according to its `body_format` and feeding into the `AgentCallRecord` shape per `04_AGENT_CALL_RECORD.md` and `05_AGENT_CALL_RECORD_MAPPING.md`.
+3. **Per-`source_kind` parser dispatch.** Three parsers (one per agent), each consuming the `body` according to its `body_format` and feeding into the `AgentCallRecord` shape per `04_AGENT_CALL_RECORD.md` and `05_AGENT_CALL_RECORD_MAPPING.md`. The DTO fields map to the record's `capture` group as: `source_app` → `capture.agent` (enum), `agent_schema_version` → `capture.agent_version`, `source_path` → `capture.source_path`, `captured_at_utc` → `capture.captured_at_utc`, `gateway_version` → `capture.gateway_version`.
 4. **Linear-stream reassembly** for `jsonl_append`: sort batches by `(host_id, source_path_hash, source_inode, watermark.start)`. Concatenate. Parse. The output is a stream of records ordered by source position.
 5. **Snapshot reassembly** for `sqlite_kv_snapshot` / `sqlite_table_snapshot`: each batch is a list of rows; backend mirrors the source SQLite shape and triggers parser passes when source-side completion conditions are met (per parser, defined in `05_AGENT_CALL_RECORD_MAPPING.md`).
 6. **Re-redaction on receive** as the third privacy stage (§8). Even if gateway redaction misses something, backend stage-3 catches it before persistence.

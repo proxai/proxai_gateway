@@ -14,7 +14,7 @@ This is the definitive reference for how an `AgentCallRecord` is shaped, how it 
 
 ```
 AgentCallRecord
-├── id: str                                    # deterministic hash(agent_app.name, chat.chat_id, turn.turn_id);
+├── id: str                                    # deterministic hash(capture.agent, chat.chat_id, turn.turn_id);
 │                                              #   same input → same id; enables idempotent upsert.
 │
 ├── turn: TurnInfo
@@ -28,10 +28,6 @@ AgentCallRecord
 │   ├── chat_id: str                           # Claude Code sessionId | Cursor composerId | Codex thread.id
 │   ├── chat_title: str | None                 # auto-generated; latest record's value is current
 │   └── created_at_utc: datetime               # chat start (stable per chat)
-│
-├── agent_app: AgentApp
-│   ├── name: AgentAppName                     # CLAUDE_CODE | CURSOR | CODEX
-│   └── version: str                           # source schema / CLI version (e.g. '2.1.122' / '13:3' / '0.126.0-alpha.8')
 │
 ├── query: AgentQueryRecord
 │   ├── user_input: UserInput
@@ -68,11 +64,11 @@ AgentCallRecord
 │       └── time_to_first_token_ms: int | None # Codex direct (others: None)
 │
 ├── capture: CaptureMetadata                   # provenance — required on every record
-│   ├── source: str                            # 'claude-code' | 'cursor' | 'codex'
-│   ├── source_path: str                       # JSONL or DB path
-│   ├── record_ref: str                        # native record id from source
-│   ├── schema_version: str                    # upstream agent's schema version
-│   ├── captured_at_utc: datetime              # gateway clock
+│   ├── agent: AgentAppName                    # CLAUDE_CODE | CURSOR | CODEX
+│   ├── agent_version: str                     # source schema / CLI version
+│   │                                          #   (e.g. '2.1.122' / '13:3' / '0.126.0-alpha.8')
+│   ├── source_path: str                       # JSONL or DB path on the host
+│   ├── captured_at_utc: datetime              # gateway clock when bytes were read
 │   └── gateway_version: str                   # @proxai/gateway release
 │
 └── agent_metadata: dict                       # loose, agent-specific bag.
@@ -278,7 +274,7 @@ We never emit multi-turn records, per-event records, or per-thinking-block recor
 Every record carries the full set of metadata stamps it needs to be interpreted on its own. No `chat`, `session`, `project`, or `workspace` entities exist in the database — those are concepts, not tables. The DB has one table, `agent_call_records`, partitioned by `chat_id`.
 
 Within a single chat (one `chat_id`):
-- Stable stamps repeat identical values across records (`agent_app.name`, `chat.created_at_utc`, `agent_metadata['cwd']` in the common case, …). Column compression handles the redundancy; the simplicity of `WHERE chat_id = X SELECT *` is worth the duplication.
+- Stable stamps repeat identical values across records (`capture.agent`, `chat.created_at_utc`, `agent_metadata['cwd']` in the common case, …). Column compression handles the redundancy; the simplicity of `WHERE chat_id = X SELECT *` is worth the duplication.
 - Stamps that legitimately vary per turn (`cwd` after a `cd`, `git_sha` after a commit, `permission_mode` after a toggle, `cumulative_tokens` per turn, `tool_inventory` after `deferred_tools_delta`) capture each turn's actual state.
 
 Storage cost of all stamps: ~500 B / record × 1M records ≈ 500 MB nominal — ~1% of total content. Cheap.
@@ -383,7 +379,7 @@ Aggregates that care about completed work filter `status=SUCCESS`. INCOMPLETE / 
 ### 2.10 `id` is deterministic
 
 ```
-id = blake2b_128(agent_app.name || '\x1f' || chat.chat_id || '\x1f' || turn.turn_id)
+id = blake2b_128(capture.agent || '\x1f' || chat.chat_id || '\x1f' || turn.turn_id)
 ```
 
 Encoded as base32 for compact display. Same source bytes → same `id`. Re-uploads, gateway retries, and backend re-parses upsert by `id` and never duplicate.
@@ -394,16 +390,21 @@ Every `AgentCallRecord` carries a non-null `capture` group:
 
 ```python
 CaptureMetadata(
-    source='claude-code' | 'cursor' | 'codex',
+    agent=AgentAppName.CLAUDE_CODE,
+    agent_version='2.1.122',
     source_path='~/.claude/projects/.../<sessionId>.jsonl',
-    record_ref='<promptId>',
-    schema_version='2.1.122',
     captured_at_utc=<gateway clock>,
     gateway_version='@proxai/gateway 0.1.4',
 )
 ```
 
-Non-negotiable — without it we can't re-parse historical records under an updated parser, can't triage schema-drift, and can't honor user data-deletion by source. Closes [G-S6].
+`capture` carries everything needed to identify the source agent, dispatch the right parser version, and trace any record back to the host file it came from. Non-negotiable — without it we can't re-parse historical records under an updated parser, can't triage schema-drift, and can't honor user data-deletion by source.
+
+**On the `record_ref` field that used to live here:** dropped as redundant. The native source id is reconstructible from typed fields:
+- Claude Code / Codex: `record_ref` was always equal to `turn.turn_id`.
+- Cursor: `record_ref` was `chat.chat_id || ':' || turn.turn_id`.
+
+A consumer that wants the native source id formats one of those expressions per `capture.agent`. No round-trip loss.
 
 ### 2.12 `result.content` is the canonical chronological event log
 
@@ -441,7 +442,7 @@ When `final_text` is `None` and `tool_summary` is non-empty, the dashboard fallb
 | `result.usage` | extended → `AgentUsageType` | Adds Anthropic cache fields, estimation flags, thread cumulative (§2.5). Closes [G-U1]. |
 | `MessageContent(TOOL).tool_content.ToolContent` | extended | Adds `arguments`, `result`, `result_truncated`, `exit_code`, `result_cwd`, `duration_ms`, `call_id` (§1.2). Closes [G-T2]. |
 | `MessageContent(THINKING)` | extended | Adds `encrypted: bool`, `byte_length: int` for Codex (§2.6). |
-| (none) | **+** `turn`, `chat`, `agent_app`, `capture` | New typed spine. Closes [G-S1]–[G-S6]. |
+| (none) | **+** `turn`, `chat`, `capture` (with `capture.agent` and `capture.agent_version` absorbing what was once a separate `agent_app` group) | New typed spine. Closes [G-S1]–[G-S6]. |
 | (none) | **+** `agent_metadata: dict` | Loose bag for everything agent-specific (cwd, git, modes, sandbox, …). Closes [G-S7]–[G-S9], [G-A1], [G-M1] without forcing typed slots. |
 
 Shape primitives — `MessageContent`, `ToolContent` (extended), `Citation`, `ProviderModelType` — are shared with `CallRecord`. A parser can populate either record type with the same content blocks.
@@ -460,8 +461,8 @@ Condensed view of the typed spine; full field-by-field details in `05_AGENT_CALL
 | `turn.status` | derived | derived | direct (`task_started`/`task_complete` bracket) |
 | `chat.chat_id` | `sessionId` | `composerId` | `threads.id` |
 | `chat.chat_title` | `ai-title` | `composerData.name` | `threads.title` |
-| `agent_app.name` | `CLAUDE_CODE` | `CURSOR` | `CODEX` |
-| `agent_app.version` | `message.version` | `_v` | `threads.cli_version` |
+| `capture.agent` | `CLAUDE_CODE` | `CURSOR` | `CODEX` |
+| `capture.agent_version` | `message.version` | `composerData._v + ':' + bubble._v` | `threads.cli_version` |
 | `query.user_input.content` | `user.message.content` | `bubble.text` + `richText` + images | `event_msg/user_message.message` ‖ `response_item/message[role=user]` |
 | `query.user_input.attachments` | `attachment` records this turn | `bubble.context.{selections,commits,…}` | (rare) |
 | `query.user_input.slash_command` | parse from `<command-name>` markup | null | (in user_message text) |
@@ -478,7 +479,7 @@ Condensed view of the typed spine; full field-by-field details in `05_AGENT_CALL
 | `result.timestamp.start_utc_date` | first record `timestamp` | first user-bubble `createdAt` | `task_started.started_at` |
 | `result.timestamp.end_utc_date` | last record `timestamp` | last assistant-bubble `createdAt` | `task_complete.completed_at` |
 | `result.timestamp.time_to_first_token_ms` | null | null | `task_complete.time_to_first_token_ms` ✓ |
-| `capture.record_ref` | `promptId` | `composerId:user_bubbleId` | `turn_id` |
+| `capture.source_path` | path of the JSONL file | path of `state.vscdb` | path of the rollout JSONL |
 | `agent_metadata` | see §1.5 | see §1.5 | see §1.5 |
 
 ✓ = direct read; gaps are filled with derivation, estimation, or null.
@@ -494,14 +495,14 @@ def walk_chat(rec: AgentCallRecord, store: AgentRecordStore) -> list[AgentCallRe
     # Walk back to the first turn (parent_turn_id is None).
     cur = rec
     while cur.turn.parent_turn_id is not None:
-        prev = store.get(rec.agent_app.name, rec.chat.chat_id, cur.turn.parent_turn_id)
+        prev = store.get(rec.capture.agent, rec.chat.chat_id, cur.turn.parent_turn_id)
         if prev is None:
             break                                       # gap (unflushed bytes); stop walking
         cur = prev
     # Walk forward by parent_turn_id matches in this chat.
     chain = [cur]
     while True:
-        nxt = store.find_child(rec.agent_app.name, rec.chat.chat_id,
+        nxt = store.find_child(rec.capture.agent, rec.chat.chat_id,
                                parent_turn_id=chain[-1].turn.turn_id)
         if nxt is None:
             break
@@ -509,7 +510,7 @@ def walk_chat(rec: AgentCallRecord, store: AgentRecordStore) -> list[AgentCallRe
     return chain
 ```
 
-Index hint for the backend: `(agent_app, chat_id, parent_turn_id)` covers both the back-walk and the forward-walk. `(agent_app, chat_id, turn_id)` is the primary key.
+Index hint for the backend: `(capture.agent, chat.chat_id, turn.parent_turn_id)` covers both the back-walk and the forward-walk. `(capture.agent, chat.chat_id, turn.turn_id)` is the primary key.
 
 To materialize chat history into a `Chat` object (for replay, support, debug — not used by MVP analytics):
 
@@ -555,7 +556,7 @@ from proxai.types import (
 )
 from proxai_gateway.types import (
     AgentCallRecord, TurnInfo, TurnStatusType,
-    ChatStamp, AgentApp, AgentAppName,
+    ChatStamp, AgentAppName,
     AgentQueryRecord, UserInput, AttachmentRef, AttachmentKind,
     AgentResultRecord, AgentUsageType, AgentTimeStampType,
     CaptureMetadata,
@@ -577,7 +578,6 @@ AgentCallRecord(
         chat_title="Algorithm design for gateway",
         created_at_utc=dt.datetime(2026, 4, 29, 4, 40, 17),
     ),
-    agent_app=AgentApp(name=AgentAppName.CLAUDE_CODE, version="2.1.122"),
     query=AgentQueryRecord(
         user_input=UserInput(
             content=[MessageContent(type=ContentType.TEXT, text="Ok we made the basic structure…")],
@@ -604,10 +604,9 @@ AgentCallRecord(
         ),
     ),
     capture=CaptureMetadata(
-        source="claude-code",
+        agent=AgentAppName.CLAUDE_CODE,
+        agent_version="2.1.122",
         source_path="~/.claude/projects/-Users-osmanaka-repos-proxai-proxai-gateway/9d2576ec-…jsonl",
-        record_ref="a1060146-31f7-49bc-b4ad-b60a1f3dc509",
-        schema_version="2.1.122",
         captured_at_utc=dt.datetime(2026, 4, 29, 13, 39, 25),
         gateway_version="@proxai/gateway 0.1.0",
     ),
@@ -692,7 +691,6 @@ AgentCallRecord(
         chat_title="TypeError traceback issue",
         created_at_utc=dt.datetime(2026, 2, 21, 21, 55, 18, 742000),
     ),
-    agent_app=AgentApp(name=AgentAppName.CURSOR, version="13:3"),
     query=AgentQueryRecord(
         user_input=UserInput(
             content=[MessageContent(
@@ -728,10 +726,9 @@ AgentCallRecord(
         ),
     ),
     capture=CaptureMetadata(
-        source="cursor",
+        agent=AgentAppName.CURSOR,
+        agent_version="13:3",
         source_path="~/Library/Application Support/Cursor/User/globalStorage/state.vscdb",
-        record_ref="831d2410-…:a81ac48a-…",
-        schema_version="13:3",
         captured_at_utc=dt.datetime(2026, 4, 29, 10, 17),
         gateway_version="@proxai/gateway 0.1.0",
     ),
@@ -763,7 +760,6 @@ AgentCallRecord(
         chat_title="Check thinking support",
         created_at_utc=dt.datetime(2026, 4, 29, 14, 37, 25),
     ),
-    agent_app=AgentApp(name=AgentAppName.CODEX, version="0.126.0-alpha.8"),
     query=AgentQueryRecord(
         user_input=UserInput(
             content=[MessageContent(type=ContentType.TEXT, text="Inspect provider list")],
@@ -811,10 +807,9 @@ AgentCallRecord(
         ),
     ),
     capture=CaptureMetadata(
-        source="codex",
+        agent=AgentAppName.CODEX,
+        agent_version="0.126.0-alpha.8",
         source_path="~/.codex/sessions/2026/04/29/rollout-2026-04-29T10-37-25-019dd9ac-…jsonl",
-        record_ref="019dd9ac-d822-7992-a311-db298dd37939",
-        schema_version="0.126.0-alpha.8",
         captured_at_utc=dt.datetime(2026, 4, 29, 14, 41),
         gateway_version="@proxai/gateway 0.1.0",
     ),
@@ -843,7 +838,6 @@ AgentCallRecord(
     id="…",
     turn=TurnInfo(turn_id="…", parent_turn_id="…", status=TurnStatusType.SUCCESS),
     chat=ChatStamp(chat_id="…", chat_title="Refactor proposal", created_at_utc=…),
-    agent_app=AgentApp(name=AgentAppName.CLAUDE_CODE, version="2.1.122"),
     query=AgentQueryRecord(
         user_input=UserInput(content=[MessageContent(
             type=ContentType.TEXT, text="Find all usages of ResultRecord and propose a refactor.")]),
@@ -1002,7 +996,7 @@ AgentCallRecord(
 ## 7. Schema versioning and extensibility
 
 - The doc you're reading is `AgentCallRecord` v0.1.
-- The `schema_version` field on `capture` tracks the **upstream agent's** schema (`message.version`, `_v`, `cli_version`), not ours. Our schema's version is implied by the `gateway_version` field.
+- The `agent_version` field on `capture` tracks the **upstream agent's** schema / build (`message.version`, `_v`, `cli_version`), not ours. Our schema's version is implied by the `gateway_version` field.
 - **Adding new typed fields** is a non-breaking change: parsers populate the new field; old records read `null`/default.
   - New `agent_metadata` keys: any time, no migration. **This is the primary growth surface.**
   - New top-level groups: nullable; old records get `null`.
@@ -1031,6 +1025,6 @@ AgentCallRecord(
    - `packages/nest-ingest/src/parsers/cursor.ts`
    - `packages/nest-ingest/src/parsers/codex.ts`
 4. Build a fixture corpus (raw bytes + expected `AgentCallRecord` JSON) and run as golden-file tests. Each fixture asserts both the typed spine and the per-agent `agent_metadata` keys documented in §1.5.
-5. Define the database schema. One table — `agent_call_records`. Primary key `(agent_app, chat_id, turn_id)`. Indexes: `(agent_app, chat_id, parent_turn_id)` for chain walks; `(agent_app, capture.captured_at_utc)` for ingest monitoring. JSONB columns for `result.content`, `query.user_input.attachments`, `agent_metadata`. Optional functional indexes on `agent_metadata` keys (e.g. `agent_metadata->>'cwd'`) added when downstream queries warrant.
+5. Define the database schema. One table — `agent_call_records`. Primary key `(capture.agent, chat.chat_id, turn.turn_id)`. Indexes: `(capture.agent, chat.chat_id, turn.parent_turn_id)` for chain walks; `(capture.agent, capture.captured_at_utc)` for ingest monitoring. JSONB columns for `result.content`, `query.user_input.attachments`, `agent_metadata`. Optional functional indexes on `agent_metadata` keys (e.g. `agent_metadata->>'cwd'`) added when downstream queries warrant.
 6. Build the project-breadcrumb derivation as a separate concern (read `agent_metadata['cwd']`, apply git-root / monorepo logic, produce a `chat → project` mapping table). Keep this independent of the record schema.
 7. Write the analytics queries that answer the user's three MVP questions as templated SQL — confirm none of them need the chain walk.

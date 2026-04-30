@@ -29,7 +29,7 @@ These rules apply to all three parsers. Per-agent specifics start at §3.
 ### 2.1 The deterministic `id`
 
 ```
-id = blake2b_128(agent_app.name || '\x1f' || chat.chat_id || '\x1f' || turn.turn_id)
+id = blake2b_128(capture.agent || '\x1f' || chat.chat_id || '\x1f' || turn.turn_id)
 ```
 
 base32-encoded. Same source bytes always produce the same `id`; re-uploads upsert. Never invent a UUID.
@@ -87,16 +87,17 @@ When the parent agent spawns a sub-agent, the sub-agent's full event stream goes
 
 ### 2.7 Capture provenance
 
-The `capture` group is **filled by the gateway DTO**, not derived from agent bytes. The parser passes it through verbatim:
+The `capture` group carries everything about *where this record came from* — both the agent identity and the gateway-side ingest metadata. It is **filled mostly from the gateway DTO**, with the agent name converted to the `AgentAppName` enum:
 
 | `capture.*` | Comes from |
 |---|---|
-| `source` | DTO `source_app` |
+| `agent` | DTO `source_app` → `AgentAppName` enum (`'claude-code'` → `CLAUDE_CODE`, …) |
+| `agent_version` | DTO `agent_schema_version` |
 | `source_path` | DTO `source_path` |
-| `record_ref` | turn's native id (promptId / `composerId:user_bubbleId` / turn_id) |
-| `schema_version` | DTO `agent_schema_version` |
 | `captured_at_utc` | DTO `captured_at_utc` |
 | `gateway_version` | DTO `gateway_version` |
+
+The native source-record id (the old `capture.record_ref`) is **derivable** from typed fields and is no longer a stored field: `turn.turn_id` for Claude Code and Codex, `chat.chat_id || ':' || turn.turn_id` for Cursor. Format-on-read.
 
 ---
 
@@ -130,8 +131,8 @@ A turn is finalized when a *later* `promptId` appears (or 30-min idle).
 | `chat.chat_id` | record `sessionId` | direct |
 | `chat.chat_title` | latest `type=ai-title` record's `aiTitle` | use most recent value seen in stream |
 | `chat.created_at_utc` | first record's `timestamp` | ISO-8601 → datetime |
-| `agent_app.name` | constant | `CLAUDE_CODE` |
-| `agent_app.version` | record `version` | direct (e.g. `'2.1.122'`) |
+| `capture.agent` | constant | `CLAUDE_CODE` |
+| `capture.agent_version` | record `version` | direct (e.g. `'2.1.122'`) |
 | `query.user_input.content` | the `user` record's `message.content` | `str` → `[MessageContent(TEXT, text=…)]`; `list[dict]` → translate per content-type |
 | `query.user_input.slash_command` | text content | regex `<command-name>(/[a-z]+)</command-name>` → first capture group |
 | `query.user_input.attachments` | `attachment` records sharing this `promptId` | translate per `attachment.type` (image / file / `deferred_tools_delta` / etc.) |
@@ -219,8 +220,8 @@ The composer's `status` field marks completion: `'completed'` means the entire c
 | `chat.chat_id` | the `composerId` | direct |
 | `chat.chat_title` | `composerData.name` | direct (auto-generated) |
 | `chat.created_at_utc` | first user-bubble's `createdAt` | direct |
-| `agent_app.name` | constant | `CURSOR` |
-| `agent_app.version` | `composerData._v` + `':'` + bubble `_v` | combined (e.g. `'13:3'`) |
+| `capture.agent` | constant | `CURSOR` |
+| `capture.agent_version` | `composerData._v` + `':'` + bubble `_v` | combined (e.g. `'13:3'`) |
 | `query.user_input.content` | user-bubble `text` | `[MessageContent(TEXT, text=bubble.text)]`; pasted images go as IMAGE blocks |
 | `query.user_input.slash_command` | not present in Cursor | `None` |
 | `query.user_input.attachments` | `bubble.context.{selections, commits, pullRequests, terminalSelections, browserSelections, …}` | translate per kind to `AttachmentRef` |
@@ -311,8 +312,8 @@ The threads-table values mostly populate `agent_metadata` (since they're agent-e
 | `chat.chat_id` | `threads.id` (= rollout filename UUID = `session_meta.payload.id`) | direct |
 | `chat.chat_title` | `threads.title` | direct (auto-generated; updated via `event_msg/thread_name_updated`) |
 | `chat.created_at_utc` | `threads.created_at` (or `created_at_ms`) | direct |
-| `agent_app.name` | constant | `CODEX` |
-| `agent_app.version` | `threads.cli_version` | direct |
+| `capture.agent` | constant | `CODEX` |
+| `capture.agent_version` | `threads.cli_version` | direct |
 | `query.user_input.content` | `event_msg/user_message.payload.message` (preferred) or `response_item/message[role=user].content[].text` | text → `[MessageContent(TEXT)]`; rare images → `IMAGE` blocks |
 | `query.user_input.slash_command` | parse from text (Codex doesn't structure these) | `None` typically |
 | `query.user_input.attachments` | `event_msg/user_message.payload.images` (rare) | translate to `AttachmentRef(IMAGE)` |
@@ -375,7 +376,7 @@ agent_metadata = {
 - **`event_msg/exec_command_end`** is the rich version of a tool result for shell commands. It carries `cwd`, `parsed_cmd`, full `stdout`/`stderr`, `exit_code`, `duration`. Prefer it over `function_call_output` when both exist for the same `call_id` — promote `exit_code`, `result_cwd`, `duration_ms` to the `ToolContent` typed fields; stash extras in `agent_metadata` if useful.
 - **`stage1_outputs` table is privacy-sensitive** (Codex internal memory summaries). Gateway skips it; parser never sees it.
 - **`thread_spawn_edges` was empty in observed data.** Sub-agent embedding is forward-compatible scaffolding; verify when first exercised.
-- **CLI version upgrade mid-thread is rare but possible.** `agent_app.version` is the version on the latest record we saw. If a thread was started under v0.125 and continued under v0.126, the parser sees the latter.
+- **CLI version upgrade mid-thread is rare but possible.** `capture.agent_version` is the version on the latest record we saw. If a thread was started under v0.125 and continued under v0.126, the parser sees the latter.
 
 ---
 
@@ -423,7 +424,6 @@ AgentCallRecord(
         chat_title="Check thinking support",
         created_at_utc=dt.datetime(2026, 4, 29, 14, 37, 25),
     ),
-    agent_app=AgentApp(name=AgentAppName.CODEX, version="0.126.0-alpha.8"),
     query=AgentQueryRecord(
         user_input=UserInput(
             content=[MessageContent(type=ContentType.TEXT, text="Inspect provider list")],
@@ -464,9 +464,9 @@ AgentCallRecord(
         ),
     ),
     capture=CaptureMetadata(
-        source="codex", source_path="~/.codex/sessions/.../rollout-...jsonl",
-        record_ref="019dd9ac-d822-7992-a311-db298dd37939",
-        schema_version="0.126.0-alpha.8",
+        agent=AgentAppName.CODEX,
+        agent_version="0.126.0-alpha.8",
+        source_path="~/.codex/sessions/.../rollout-...jsonl",
         captured_at_utc=dt.datetime(2026, 4, 29, 14, 41),
         gateway_version="@proxai/gateway 0.1.0",
     ),
