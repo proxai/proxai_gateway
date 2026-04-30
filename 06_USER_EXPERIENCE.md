@@ -1,5 +1,19 @@
 # User Experience — `proxai-gateway`
 
+> **⚠️ Tentative document — not a product spec.**
+>
+> This is an early sketch of what the on-screen text and user flows *could* look like. It is **not** a commitment to build the product this way. Specific copy, command names, screen flows, error messages, and timing thresholds in this doc are starting-point proposals — meant to inform discussion, not to be implemented verbatim.
+>
+> Treat everything here as one designer's first pass. The real product surface will be decided by:
+> - what real beta users actually struggle with,
+> - what the eng team finds practical to ship,
+> - what the marketing / brand voice ultimately settles on,
+> - what feedback comes from security review and customer pilots.
+>
+> If you're an engineer reading this to implement: cross-check with the team before treating any specific phrasing or flow as final. The structure (what kinds of messages exist, what states need a UX) is more durable than the literal text.
+
+---
+
 The user-visible flows and on-screen copy. This complements [`02_CLI_DESIGN.md`](02_CLI_DESIGN.md) — that doc is the engineer's command reference; this one is what the user actually sees and reads. The engineer building any user-visible message implements against the copy specified here unless they have a documented reason to deviate.
 
 ---
