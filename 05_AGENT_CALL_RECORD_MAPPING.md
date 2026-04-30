@@ -1,8 +1,8 @@
-# CallRecord Mapping — Claude Code, Cursor, Codex
+# AgentCallRecord Mapping — Claude Code, Cursor, Codex
 
-> **Backend-side reference.** Parsing happens in `proxai_nest`, not in the gateway. The gateway uploads redacted raw bytes (see `DESIGN.md` §2); this doc is the reference for converting those bytes into `CallRecord` shape on the backend. It will eventually move to the `proxai_nest` repo.
+> **Backend-side reference.** Parsing happens in `proxai_nest`, not in the gateway. The gateway uploads redacted raw bytes (see `01_INTRO.md` §2 and the DTO contract in `03_FLUSHING_ALGORITHM.md` §3); this doc is the reference for converting those bytes into `AgentCallRecord` shape on the backend. It will eventually move to the `proxai_nest` repo.
 
-How the data each agent writes to disk maps onto the `CallRecord` schema defined in `proxai/docs/user_agents/api_guidelines/call_record.md` (source of truth: `proxai/src/proxai/types.py`).
+How the data each agent writes to disk maps onto the `AgentCallRecord` schema defined in `04_AGENT_CALL_RECORD.md`. The base SDK `CallRecord` (`proxai/src/proxai/types.py`) is the conceptual ancestor; `04_AGENT_CALL_RECORD.md` §3 documents the deliberate divergences.
 
 Some fields are inherently N/A for third-party-agent capture (proxai cache layer, fallback chains, debug sidecar). The goal of this doc is to be honest about what we get for free, what has to be derived, and what cannot be recovered at all.
 

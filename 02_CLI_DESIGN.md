@@ -434,7 +434,7 @@ The CLI depends on the following endpoints. **These are gating for MVP** and sho
 | Endpoint | Method | Used by | Body | Returns |
 |---|---|---|---|---|
 | `/v1/auth/validate` | POST | `install` | `{api_key}` | `{valid: bool, account_email, error?}`. **Should reuse the existing SDK auth-validate machinery — no new auth flow needed.** |
-| `/v1/raw_records` | POST | `run` (uploader) | NDJSON of envelopes (see DESIGN.md) with `Authorization: Bearer <api_key>` | `{accepted: int, rejected: [{id, reason}]}` |
+| `/v1/raw_records` | POST | `run` (uploader) | DTO per `03_FLUSHING_ALGORITHM.md` §3 with `Authorization: Bearer <api_key>` | `{accepted: int, rejected: [{id, reason}]}` |
 | `/v1/health` | GET | `status`, `doctor` | — | `{ok: true, version}` |
 | `/v1/gateway/latest_version` | GET | `status`, `doctor` | — | `{latest_version, release_date}` (used for stale-binary warnings) |
 

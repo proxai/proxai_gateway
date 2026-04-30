@@ -156,7 +156,7 @@ Listed as dependency order, not a schedule. Each block depends on the ones above
 **Install + control surface**
 - `install` / `uninstall` writing the launchd plist
 - FDA probe + System Settings deeplink
-- Consent screen (per `USER_EXPERIENCE.md`)
+- Consent screen (per `06_USER_EXPERIENCE.md`)
 - Stale-binary auto-pause (default thresholds)
 
 **Hardening before release**

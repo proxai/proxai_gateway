@@ -4,7 +4,7 @@ Source of truth: this document. Once code lands, the source of truth shifts to `
 
 This is the definitive reference for how an `AgentCallRecord` is shaped, how it relates to the SDK's `CallRecord` (`proxai/src/proxai/types.py`), and how the three coding agents (Claude Code, Cursor, Codex) map onto it. Read this before touching the gateway parsers, the backend ingester, or any analytics that consume agent traffic.
 
-> **Companion docs:** `ALGORITHM_CLAUDE.md`, `ALGORITHM_CURSOR.md`, `ALGORITHM_CODEX.md` (per-agent extraction algorithms); `CALL_RECORD_MAPPING.md` (field-by-field mapping from raw bytes); `DESIGN.md` (gateway architecture).
+> **Companion docs:** `03_FLUSHING_ALGORITHM.md` (gateway-side capture); `05_AGENT_CALL_RECORD_MAPPING.md` (field-by-field mapping from raw bytes); `01_INTRO.md` (gateway architecture).
 
 **The shape in one sentence:** one record per turn (`<user input>` + `<all agent responses until next user input>`), partitioned by `chat_id`, linked back to the prior turn in the same chat by `parent_turn_id`. Cross-agent semantics live in a small typed spine; everything agent-specific lives in a loose `agent_metadata: dict`.
 
@@ -89,7 +89,7 @@ Two backwards-compatible additions for agents:
 | Change | Where | Why |
 |---|---|---|
 | `THINKING` block gets optional `encrypted: bool` and `byte_length: int \| None` fields | `MessageContent` | Codex reasoning is opaque (`encrypted_content` blob). We capture metadata only — see §2.6. SDK use case never sets these. |
-| `TOOL` block's `ToolContent` is extended (see §1.2) | `MessageContent.tool_content` | Coding-agent tool calls carry args, results, exit codes, cwd. Closes [G-T2] in `CALL_RECORD_MAPPING.md`. |
+| `TOOL` block's `ToolContent` is extended (see §1.2) | `MessageContent.tool_content` | Coding-agent tool calls carry args, results, exit codes, cwd. Closes [G-T2] in `05_AGENT_CALL_RECORD_MAPPING.md`. |
 
 ### 1.2 `ToolContent` — extended for agents
 
@@ -302,7 +302,7 @@ When the parent agent spawns a sub-agent (Claude Code Task tool, Codex agent-spa
 
 This collapses what would otherwise be cross-chat schema work into a single record per user submission. Sub-agents do not get their own `chat_id`; they live inside the parent record. **The user submission is the unit, period.**
 
-The trade-off is honest: sub-agents lose independent queryability ("show me all turns where the Explore sub-agent ran" becomes a JSONB scan over `result.sub_agents`, not a typed-column query). The raw bytes are preserved in object storage (per `DESIGN.md` §2.1), so a post-MVP "promote sub-agents to first-class records" parser is always available — but that's a tomorrow problem, not today's.
+The trade-off is honest: sub-agents lose independent queryability ("show me all turns where the Explore sub-agent ran" becomes a JSONB scan over `result.sub_agents`, not a typed-column query). The raw bytes are preserved in object storage (per `01_INTRO.md` §2.1), so a post-MVP "promote sub-agents to first-class records" parser is always available — but that's a tomorrow problem, not today's.
 
 ### 2.5 Token usage: one population + a quality flag
 
@@ -340,14 +340,14 @@ The fact that reasoning happened, how much, and at what `reasoning_effort` (whic
 
 ### 2.7 `agent_metadata` is the loose round-trip bag
 
-All agent-specific stamps and any field we don't promote to the typed spine live in `agent_metadata: dict`. Per `CALL_RECORD_MAPPING.md` §4 ("the schema we ship for MVP must round-trip every byte we care about"), the parser dumps unknown fields here, and downstream consumers either query directly via JSONB ops or ingest the bag as context to AI consumers that handle loose JSON natively.
+All agent-specific stamps and any field we don't promote to the typed spine live in `agent_metadata: dict`. Per `05_AGENT_CALL_RECORD_MAPPING.md` §4 ("the schema we ship for MVP must round-trip every byte we care about"), the parser dumps unknown fields here, and downstream consumers either query directly via JSONB ops or ingest the bag as context to AI consumers that handle loose JSON natively.
 
 Two principles:
 
 1. **Per-agent shape is by convention, not enforcement.** Each agent's parser puts what it has under stable keys (see §1.5 for examples). Schema doesn't enforce; tests do.
 2. **Promoting is a non-breaking refactor.** If a field in `agent_metadata` ever earns its way to the typed spine, the typed slot reads from the dict if absent on the row, and the dict is gradually cleared by re-parses. No client release needed.
 
-The dict is **never** a place to put PII or secrets — those are caught by gateway-stage redaction (§3 of `DESIGN.md`) before bytes ever reach the parser.
+The dict is **never** a place to put PII or secrets — those are caught by gateway-stage redaction (§3 of `01_INTRO.md`) before bytes ever reach the parser.
 
 ### 2.8 Provider/model can be null
 
@@ -450,7 +450,7 @@ Shape primitives — `MessageContent`, `ToolContent` (extended), `Citation`, `Pr
 
 ## 4. Per-agent field mapping
 
-Condensed view of the typed spine; full field-by-field details in `CALL_RECORD_MAPPING.md`. **Per-agent `agent_metadata` keys are documented in §1.5** rather than being repeated here.
+Condensed view of the typed spine; full field-by-field details in `05_AGENT_CALL_RECORD_MAPPING.md`. **Per-agent `agent_metadata` keys are documented in §1.5** rather than being repeated here.
 
 | `AgentCallRecord` field | Claude Code | Cursor | Codex |
 |---|---|---|---|
@@ -1008,7 +1008,7 @@ AgentCallRecord(
   - New top-level groups: nullable; old records get `null`.
   - New `MessageContent` content types: extend `ContentType`; old parsers pass through.
 - **Renaming or removing fields** is breaking and requires a migration. Use `agent_metadata` as a staging area.
-- **Re-parsing historical bytes** is the routine update path: bump the parser, re-run over object-stored raw blobs (per `DESIGN.md` §2.1), upsert by `id`. Old fields go null where the new parser doesn't populate them.
+- **Re-parsing historical bytes** is the routine update path: bump the parser, re-run over object-stored raw blobs (per `01_INTRO.md` §2.1), upsert by `id`. Old fields go null where the new parser doesn't populate them.
 
 ---
 
@@ -1025,11 +1025,11 @@ AgentCallRecord(
 ## 9. Next steps
 
 1. Write the TypeScript types in `proxai_nest/src/types/agent_call_record.ts` matching this design. Generate a JSON Schema from the TS types for client-side validation.
-2. Update `CALL_RECORD_MAPPING.md`: every gap (`G-S1`–`G-S9`, `G-T1`, `G-T2`, `G-U1`, `G-A1`, `G-M1`, `G-D1`, `G-D2`) is now closed by either a typed slot or `agent_metadata` in `AgentCallRecord`. Cross-link.
-3. Implement the parsers — each agent's parser produces `AgentCallRecord` directly:
-   - `packages/nest-ingest/src/parsers/claude_code.ts` (per `ALGORITHM_CLAUDE.md` §4)
-   - `packages/nest-ingest/src/parsers/cursor.ts` (per `ALGORITHM_CURSOR.md` §4)
-   - `packages/nest-ingest/src/parsers/codex.ts` (per `ALGORITHM_CODEX.md` §4)
+2. Update `05_AGENT_CALL_RECORD_MAPPING.md`: every gap (`G-S1`–`G-S9`, `G-T1`, `G-T2`, `G-U1`, `G-A1`, `G-M1`, `G-D1`, `G-D2`) is now closed by either a typed slot or `agent_metadata` in `AgentCallRecord`. Cross-link.
+3. Implement the parsers — each agent's parser produces `AgentCallRecord` directly. Source data layout, watermark, and DTO contract are in `03_FLUSHING_ALGORITHM.md`; field-by-field semantics are in `05_AGENT_CALL_RECORD_MAPPING.md`.
+   - `packages/nest-ingest/src/parsers/claude_code.ts`
+   - `packages/nest-ingest/src/parsers/cursor.ts`
+   - `packages/nest-ingest/src/parsers/codex.ts`
 4. Build a fixture corpus (raw bytes + expected `AgentCallRecord` JSON) and run as golden-file tests. Each fixture asserts both the typed spine and the per-agent `agent_metadata` keys documented in §1.5.
 5. Define the database schema. One table — `agent_call_records`. Primary key `(agent_app, chat_id, turn_id)`. Indexes: `(agent_app, chat_id, parent_turn_id)` for chain walks; `(agent_app, capture.captured_at_utc)` for ingest monitoring. JSONB columns for `result.content`, `query.user_input.attachments`, `agent_metadata`. Optional functional indexes on `agent_metadata` keys (e.g. `agent_metadata->>'cwd'`) added when downstream queries warrant.
 6. Build the project-breadcrumb derivation as a separate concern (read `agent_metadata['cwd']`, apply git-root / monorepo logic, produce a `chat → project` mapping table). Keep this independent of the record schema.

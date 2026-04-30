@@ -89,7 +89,7 @@ The redaction module and its fuzz corpus get built **before** any collector code
 
 ## 4. What we capture per agent
 
-Operational details (exact paths, what's inside each file, files to never read) live in `CAPTURE_TARGETS.md`. Summary table here:
+Operational details (exact paths, what's inside each file, files to never read) live in `03_FLUSHING_ALGORITHM.md`. Summary table here:
 
 | Agent | What we read | Format | Verified |
 |---|---|---|---|
@@ -98,7 +98,7 @@ Operational details (exact paths, what's inside each file, files to never read) 
 | **Codex** | `~/.codex/sessions/*/*/*/rollout-*.jsonl` (rollouts) + `~/.codex/state_*.sqlite` `threads` table (sidecar metadata) | JSONL with `{timestamp, type, payload}` envelope; sidecar SQLite versioned by filename. Plaintext. | ✓ on this machine |
 | Antigravity | `~/.gemini/antigravity/conversations/<uuid>.pb` | **AEAD-encrypted** with key in login keychain `Antigravity Safe Storage`. Schema is private protobuf. | Investigated; deferred to Phase 4. |
 
-Three Anthropic-style cache fields, Cursor `toolFormerData`, Codex `dynamic_tools`, etc. — see `CALL_RECORD_MAPPING.md` for the full per-field mapping (a backend-side concern).
+Three Anthropic-style cache fields, Cursor `toolFormerData`, Codex `dynamic_tools`, etc. — see `05_AGENT_CALL_RECORD_MAPPING.md` for the full per-field mapping (a backend-side concern).
 
 ---
 
@@ -139,7 +139,7 @@ If any of these break, the affected collector logs and pauses; other collectors 
 
 CLI/build/lint/test scaffolding **patterns** are lifted from `proxai_ops`, but the gateway is a separate codebase — different threat model (customer machines, secrets in scope), different license (Apache 2.0, OSS), different auditability needs.
 
-No proxy server, no MITM, no signed-config plumbing — all dropped from MVP. See `MACOS_MVP.md` for the full macOS implementation plan.
+No proxy server, no MITM, no signed-config plumbing — all dropped from MVP. See `07_MACOS_MVP.md` for the full macOS implementation plan.
 
 ---
 
@@ -172,7 +172,7 @@ The dynamic-config / signed-config story (push rules without client release) is 
 6. Installer: writes launchd plist; **no shell-profile changes needed**, no env vars.
 7. `~/.proxai/PAUSED` sentinel kill switch.
 8. Hardcoded path allowlist (`~/.claude/`, `~/.codex/`, `~/Library/Application Support/Cursor/`).
-9. Hard-skip blacklist enforced by unit test (`~/.codex/auth.json`, Cursor `ItemTable`, etc. — see `CAPTURE_TARGETS.md`).
+9. Hard-skip blacklist enforced by unit test (`~/.codex/auth.json`, Cursor `ItemTable`, etc. — see `03_FLUSHING_ALGORITHM.md`).
 10. Stale-binary auto-pause.
 11. Open-source repo with README, CONTRIBUTING, LICENSE (Apache 2.0), threat model, redaction-rules doc.
 

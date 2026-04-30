@@ -44,7 +44,7 @@ npm uninstall -g @proxai/gateway
 | Session and workspace metadata | Anything outside `~/.claude/`, `~/.codex/`, Cursor's data dir |
 | Git branch / repo for the session | Files you didn't open in a coding agent |
 
-The exact paths are listed in [`CAPTURE_TARGETS.md`](CAPTURE_TARGETS.md). Anything not on that list, the gateway never reads.
+The exact paths are listed in [`03_FLUSHING_ALGORITHM.md`](03_FLUSHING_ALGORITHM.md) §5–§7. Anything not on that list, the gateway never reads.
 
 ---
 
@@ -94,14 +94,15 @@ Total CPU per hour while you're working: under five seconds. The gateway will no
 
 | Doc | What's in it |
 |---|---|
-| [`DESIGN.md`](DESIGN.md) | Overall architecture and MVP scope |
-| [`CAPTURE_TARGETS.md`](CAPTURE_TARGETS.md) | Exact files the gateway reads, per agent |
-| [`CALL_RECORD_MAPPING.md`](CALL_RECORD_MAPPING.md) | Backend-side reference: how raw captures map to ProxAI's `CallRecord` |
-| [`MACOS_MVP.md`](MACOS_MVP.md) | macOS implementation details (launchd, file watching, gotchas) |
-| [`CLI_DESIGN.md`](CLI_DESIGN.md) | Full CLI command reference |
-| [`USER_EXPERIENCE.md`](USER_EXPERIENCE.md) | What the user sees and how messages should read |
+| [`01_INTRO.md`](01_INTRO.md) | Overall architecture and MVP scope |
+| [`02_CLI_DESIGN.md`](02_CLI_DESIGN.md) | Full CLI command reference |
+| [`03_FLUSHING_ALGORITHM.md`](03_FLUSHING_ALGORITHM.md) | Per-agent capture, watermarks, and the backend-upload DTO contract |
+| [`04_AGENT_CALL_RECORD.md`](04_AGENT_CALL_RECORD.md) | The typed record the backend produces from raw bytes |
+| [`05_AGENT_CALL_RECORD_MAPPING.md`](05_AGENT_CALL_RECORD_MAPPING.md) | Backend-side reference: how raw fields map to `AgentCallRecord` |
+| [`06_USER_EXPERIENCE.md`](06_USER_EXPERIENCE.md) | What the user sees and how messages should read |
+| [`07_MACOS_MVP.md`](07_MACOS_MVP.md) | macOS implementation details (launchd, file watching, gotchas) |
 
-If you're a contributor reading these in order: `README.md` → `DESIGN.md` → `MACOS_MVP.md` → `CLI_DESIGN.md` → the rest as needed.
+If you're a contributor reading these in order: `README.md` → `01_INTRO.md` → `03_FLUSHING_ALGORITHM.md` → `04_AGENT_CALL_RECORD.md` → the rest as needed.
 
 ---
 
@@ -114,7 +115,7 @@ If you're a contributor reading these in order: `README.md` → `DESIGN.md` → 
 | Distribution | npm registry as `@proxai/gateway` |
 | License | Apache 2.0 |
 
-Antigravity, Linux, Windows, menu-bar tray, native `.pkg` installer, signed code, optional HTTP-proxy capture mode — all post-MVP. See [`DESIGN.md`](DESIGN.md) §9 for the roadmap.
+Antigravity, Linux, Windows, menu-bar tray, native `.pkg` installer, signed code, optional HTTP-proxy capture mode — all post-MVP. See [`01_INTRO.md`](01_INTRO.md) §9 for the roadmap.
 
 ---
 
@@ -132,7 +133,7 @@ The redaction layer scans every captured record for known secret formats (Anthro
 **Does this slow my machine down?**
 Very unlikely to be detectable. The gateway uses `mtime` checks before reading anything, and a full poll cycle is under 200 ms. Sustained CPU is under five seconds per hour.
 
-**My company requires Full Disk Access pre-approval.** The installer probes for FDA at install time and prints clear instructions if it's needed. For MDM-managed deployments, see the Phase 3 roadmap in [`DESIGN.md`](DESIGN.md).
+**My company requires Full Disk Access pre-approval.** The installer probes for FDA at install time and prints clear instructions if it's needed. For MDM-managed deployments, see the Phase 3 roadmap in [`01_INTRO.md`](01_INTRO.md).
 
 **Where does my data go?**
 By default, to `nest.proxai.co`. Self-hosted backend mode is on the Phase 3 roadmap.

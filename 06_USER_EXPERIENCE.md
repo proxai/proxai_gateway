@@ -1,6 +1,6 @@
 # User Experience — `proxai-gateway`
 
-The user-visible flows and on-screen copy. This complements [`CLI_DESIGN.md`](CLI_DESIGN.md) — that doc is the engineer's command reference; this one is what the user actually sees and reads. The engineer building any user-visible message implements against the copy specified here unless they have a documented reason to deviate.
+The user-visible flows and on-screen copy. This complements [`02_CLI_DESIGN.md`](02_CLI_DESIGN.md) — that doc is the engineer's command reference; this one is what the user actually sees and reads. The engineer building any user-visible message implements against the copy specified here unless they have a documented reason to deviate.
 
 ---
 
@@ -366,7 +366,7 @@ To remove the package as well:
 
 ## 7. Error catalog
 
-Every common error gets a specified message: **what happened, why it happened, what to do next**. Three lines max. The exit code is in [`CLI_DESIGN.md`](CLI_DESIGN.md) §8.
+Every common error gets a specified message: **what happened, why it happened, what to do next**. Three lines max. The exit code is in [`02_CLI_DESIGN.md`](02_CLI_DESIGN.md) §8.
 
 ### Invalid API key
 
