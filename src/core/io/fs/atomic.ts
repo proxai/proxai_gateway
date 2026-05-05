@@ -7,7 +7,11 @@ export async function writeAtomic(path: string, data: string | Uint8Array): Prom
   try {
     await rename(tmp, path);
   } catch (err) {
-    await unlink(tmp).catch(() => undefined);
+    try {
+      await unlink(tmp);
+    } catch {
+      // best-effort cleanup; original rename error is what callers need to see
+    }
     throw err;
   }
 }

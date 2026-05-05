@@ -115,6 +115,31 @@ test('falls back to "unknown" when message.version is missing', async () => {
   expect(batch?.agentSchemaVersion).toBe('unknown');
 });
 
+test('skips malformed JSON lines while scanning for version', async () => {
+  const file = await makeFile(
+    'this-line-is-not-json\n{"type":"user","text":"hi"}\n{"type":"assistant","version":"3.5.7"}\n',
+  );
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const batch = nextPendingBatch(buffer);
+  expect(batch?.agentSchemaVersion).toBe('3.5.7');
+});
+
+test('skips empty lines while scanning for version', async () => {
+  const file = await makeFile('\n\n{"type":"user","version":"4.0.0"}\n');
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const batch = nextPendingBatch(buffer);
+  expect(batch?.agentSchemaVersion).toBe('4.0.0');
+});
+
+test('falls back when no parseable line carries a version', async () => {
+  const file = await makeFile(
+    'this-line-is-not-json\n{"type":"user","text":"hi"}\n{"type":"assistant","content":[]}\n',
+  );
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const batch = nextPendingBatch(buffer);
+  expect(batch?.agentSchemaVersion).toBe('unknown');
+});
+
 test('redacts secrets from the body before storing', async () => {
   const file = await makeFile(
     '{"type":"user","text":"export OPENAI_KEY=sk-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQrSt"}\n',

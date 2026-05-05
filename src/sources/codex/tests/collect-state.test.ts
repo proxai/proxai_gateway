@@ -349,3 +349,41 @@ test('records errors and does not crash when the source file is unreadable', asy
   expect(result.errors.length).toBeGreaterThan(0);
   expect(result.capturedBatches).toBe(0);
 });
+
+test('returns "unknown" agentSchemaVersion when threads table is absent', async () => {
+  const path = join(dir, 'state_no_threads.sqlite');
+  const db = new Database(path, { create: true });
+  db.run(
+    'CREATE TABLE thread_dynamic_tools (thread_id TEXT, position INTEGER, name TEXT, PRIMARY KEY (thread_id, position))',
+  );
+  db.close();
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('seed failed');
+  const file: DiscoveredCodexStateFile = {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+  const { agentSchemaVersion } = await collectCodexState(file, ctx(buffer));
+  expect(agentSchemaVersion).toBe('unknown');
+});
+
+test('falls back to "unknown" when sampleCliVersion query throws on a malformed threads table', async () => {
+  const path = join(dir, 'state_bad_threads.sqlite');
+  const db = new Database(path, { create: true });
+  db.run('CREATE TABLE threads (id TEXT PRIMARY KEY)');
+  db.close();
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('seed failed');
+  const file: DiscoveredCodexStateFile = {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+  const { agentSchemaVersion } = await collectCodexState(file, ctx(buffer));
+  expect(agentSchemaVersion).toBe('unknown');
+});

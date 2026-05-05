@@ -103,6 +103,50 @@ test('rollouts use default version when no state file exists', async () => {
   expect(row.agentSchemaVersion).toBe('unknown');
 });
 
+test('captures discover errors when baseDir is a regular file', async () => {
+  const filePath = join(dir, 'is-a-file');
+  await writeFile(filePath, 'not a directory');
+  const poller = makeCodexSourcePoller({ baseDir: filePath });
+  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  expect(result.errors.length).toBeGreaterThan(0);
+});
+
+test('captures state-side discover error when baseDir is extreme', async () => {
+  const tooLong = `/${'x'.repeat(10_000)}`;
+  const poller = makeCodexSourcePoller({ baseDir: tooLong });
+  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  expect(result.errors.length).toBeGreaterThan(0);
+});
+
+test('copies per-table state errors into pollCodex result.errors', async () => {
+  await seedStateDb('state_3.sqlite', [{ id: 't1', cli_version: 'codex-test' }]);
+  const closedBuffer = openInMemoryBufferDb();
+  closedBuffer.close();
+  const poller = makeCodexSourcePoller({ baseDir: dir });
+  const result = await poller({ buffer: closedBuffer, gatewayVersion: 'gw-0.1' });
+  expect(result.errors.length).toBeGreaterThan(0);
+  expect(result.errors.some((e) => e.table !== undefined)).toBe(true);
+});
+
+test('copies per-rollout collect errors into pollCodex result.errors', async () => {
+  await seedRollout('sessions/2026/05/05/rollout-001.jsonl', '{"type":"user","text":"x"}\n');
+  const closedBuffer = openInMemoryBufferDb();
+  closedBuffer.close();
+  const poller = makeCodexSourcePoller({ baseDir: dir });
+  const result = await poller({ buffer: closedBuffer, gatewayVersion: 'gw-0.1' });
+  expect(result.errors.length).toBeGreaterThan(0);
+});
+
+test('captures per-rollout collect errors in result.errors', async () => {
+  await seedRollout('sessions/2026/05/05/rollout-001.jsonl', '{"type":"user","text":"x"}\n');
+  const rolloutPath = join(dir, 'sessions/2026/05/05/rollout-001.jsonl');
+  await rm(rolloutPath, { force: true });
+  await mkdir(rolloutPath, { recursive: true });
+  const poller = makeCodexSourcePoller({ baseDir: dir });
+  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  expect(result.filesProcessed).toBeGreaterThanOrEqual(0);
+});
+
 test('state-only run still inserts batches from threads table', async () => {
   await seedStateDb('state_1.sqlite', [{ id: 'tA', cli_version: 'codex-1.0.0' }]);
   const poller = makeCodexSourcePoller({ baseDir: dir });

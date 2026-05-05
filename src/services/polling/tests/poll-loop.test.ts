@@ -145,3 +145,15 @@ test('runs without abort signal but caller ends loop via callback that aborts el
   });
   expect(c.calls).toBe(1);
 });
+
+test('aborts during sleepUntilAbort runs cleanup via onAbort path', async () => {
+  const c = counter();
+  const ctrl = new AbortController();
+  const promise = runPollLoop(makeContext([c.source]), {
+    intervalMs: 5_000,
+    abortSignal: ctrl.signal,
+  });
+  setTimeout(() => ctrl.abort(), 30);
+  await promise;
+  expect(c.calls).toBeGreaterThanOrEqual(1);
+});

@@ -31,3 +31,6 @@ Thumbs.db
 
 # Local dev state (anything a developer might create when smoke-testing)
 .proxai/
+
+# Claude Code project metadata
+.claude/

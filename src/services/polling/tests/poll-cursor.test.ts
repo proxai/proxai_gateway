@@ -82,3 +82,25 @@ test('skips db files with no allowlisted prefixes (no batch)', async () => {
   expect(result.filesProcessed).toBe(1);
   expect(result.capturedBatches).toBe(0);
 });
+
+test('captures discover error in result.errors when baseDir is unreadable', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  const filePath = join(dir, 'is-a-file');
+  await writeFile(filePath, 'not a directory');
+  const poller = makeCursorSourcePoller({ baseDir: filePath });
+  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  expect(result.filesProcessed).toBe(0);
+  expect(result.errors.length).toBeGreaterThan(0);
+});
+
+test('aggregates per-file collect errors into result.errors', async () => {
+  await seedDb('globalStorage/state.vscdb', [
+    { key: 'composerData:abc', value: JSON.stringify({ _v: 13 }) },
+  ]);
+  const closedBuffer = openInMemoryBufferDb();
+  closedBuffer.close();
+  const poller = makeCursorSourcePoller({ baseDir: dir });
+  const result = await poller({ buffer: closedBuffer, gatewayVersion: 'gw-0.1' });
+  expect(result.filesProcessed).toBe(1);
+  expect(result.errors.length).toBeGreaterThan(0);
+});

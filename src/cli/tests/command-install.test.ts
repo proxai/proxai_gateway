@@ -228,3 +228,24 @@ test('honors installSource option', async () => {
   const config = await loadConfigFromFile(configPath);
   expect(config.account.installSource).toBe('brew');
 });
+
+test('formatError falls back to String(err) when validate throws a non-Error value', async () => {
+  const control = newControl();
+  const baseDeps = deps(control);
+  const output = captureOutput();
+  const httpClientFactory = (() =>
+    ({
+      validateApiKey: async () => {
+        throw 'plain-string-failure';
+      },
+      pinAllowedHost: async () => ({ allowedHostIds: [] }),
+    }) as unknown as HttpClient) as unknown as (apiKey: string, hostId: string) => HttpClient;
+  const result = await runInstall(
+    { ...baseDeps, output, httpClientFactory },
+    { apiKey: 'pxg_abc' },
+  );
+  expect(result.exitCode).toBe(1);
+  const errorLine = output.lines.find((l) => l.level === 'error');
+  expect(errorLine?.msg).toContain('API key validation failed');
+  expect(errorLine?.msg).toContain('plain-string-failure');
+});

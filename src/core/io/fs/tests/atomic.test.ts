@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -41,5 +41,17 @@ test('writeAtomic does not leave behind .tmp orphans on success', async () => {
   await writeAtomic(path, 'data');
   const files = await readdir(dir);
   const orphans = files.filter((f) => f.startsWith('d.txt.') && f.endsWith('.tmp'));
+  expect(orphans).toEqual([]);
+});
+
+test('writeAtomic cleans up tmp and rethrows when rename fails', async () => {
+  const targetDir = join(dir, 'is-a-dir');
+  await mkdir(targetDir);
+  await writeFile(join(targetDir, 'child'), 'child');
+
+  await expect(writeAtomic(targetDir, 'data')).rejects.toThrow();
+
+  const files = await readdir(dir);
+  const orphans = files.filter((f) => f.startsWith('is-a-dir.') && f.endsWith('.tmp'));
   expect(orphans).toEqual([]);
 });

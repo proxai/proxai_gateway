@@ -77,3 +77,23 @@ test('subsequent poll on same files captures only new bytes', async () => {
   expect(result.capturedBatches).toBe(1);
   expect(countByStatus(buffer).pending).toBe(2);
 });
+
+test('captures discover error in result.errors when baseDir is unreadable', async () => {
+  const filePath = join(dir, 'is-a-file');
+  await writeFile(filePath, 'not a directory');
+  const poller = makeClaudeCodeSourcePoller({ baseDir: filePath });
+  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  expect(result.filesProcessed).toBe(0);
+  expect(result.errors.length).toBeGreaterThan(0);
+  expect(result.errors[0]?.sourcePath).toBe(filePath);
+});
+
+test('aggregates per-file collect errors into result.errors', async () => {
+  await seedSession('p1', 's1.jsonl', '{"type":"user"}\n');
+  const closedBuffer = openInMemoryBufferDb();
+  closedBuffer.close();
+  const poller = makeClaudeCodeSourcePoller({ baseDir: dir });
+  const result = await poller({ buffer: closedBuffer, gatewayVersion: 'gw-0.1' });
+  expect(result.filesProcessed).toBe(1);
+  expect(result.errors.length).toBeGreaterThan(0);
+});

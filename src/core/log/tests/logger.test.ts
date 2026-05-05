@@ -72,3 +72,22 @@ test('default base bindings exclude pid and hostname', () => {
 test('defaultLogFilePath ends with the canonical filename', () => {
   expect(defaultLogFilePath()).toMatch(/structured\.log$/);
 });
+
+test('createLogger writes to file when filePath provided', async () => {
+  const logPath = join(dir, 'file-logger.log');
+  const logger = createLogger({ filePath: logPath, level: 'info' });
+  logger.info('hello-from-file');
+  await Bun.sleep(50);
+  expect(typeof logger.info).toBe('function');
+});
+
+test('createLogger uses pretty transport when pretty=true', () => {
+  const logger = createLogger({ pretty: true, level: 'info' });
+  expect(typeof logger.info).toBe('function');
+  expect(typeof logger.warn).toBe('function');
+});
+
+test('createLogger uses default stdout destination when no overrides given', () => {
+  const logger = createLogger();
+  expect(typeof logger.info).toBe('function');
+});

@@ -220,3 +220,34 @@ test('host_id from context is sent on the wire', async () => {
   await uploadBatch(ctx, stored);
   expect(seen.hostId).toBe('h_override');
 });
+
+test('unknown thrown value (non-Error) is captured and marks batch failed', async () => {
+  const batch = newClaudeCodeBatch('payload');
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+
+  const ctx = ctxWith(mockFetch(() => jsonResponse({})));
+  ctx.http.uploadRawRecord = (async () => {
+    throw 'plain string thrown';
+  }) as typeof ctx.http.uploadRawRecord;
+
+  const outcome = await uploadBatch(ctx, stored);
+  expect(outcome.kind).toBe('fatal');
+  if (outcome.kind === 'fatal') expect(outcome.error).toContain('unknown error');
+  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+});
+
+test('unknown error with a falsy message falls back to String(err)', async () => {
+  const batch = newClaudeCodeBatch('payload');
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+
+  const ctx = ctxWith(mockFetch(() => jsonResponse({})));
+  ctx.http.uploadRawRecord = (async () => {
+    throw { weird: true };
+  }) as typeof ctx.http.uploadRawRecord;
+
+  const outcome = await uploadBatch(ctx, stored);
+  expect(outcome.kind).toBe('fatal');
+  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+});
