@@ -24,6 +24,7 @@
     "isolatedModules": true,
 
     "paths": {
+      "cli/*": ["./src/cli/*"],
       "core/*": ["./src/core/*"],
       "services/*": ["./src/services/*"],
       "sources/*": ["./src/sources/*"]
