@@ -10,8 +10,30 @@ Open source (Apache 2.0).
 
 ## Quickstart
 
+ProxAI Gateway ships as a single self-contained native binary per OS / arch. **You do not need Bun, Node, or any other runtime installed.** Pick whichever channel is most convenient — they all deliver the same compiled binary:
+
 ```sh
+# Homebrew (macOS, Linux)
+brew install proxai/tap/proxai-gateway
+
+# Bun
+bun add -g @proxai/gateway
+
+# pnpm
+pnpm add -g @proxai/gateway
+
+# Yarn
+yarn global add @proxai/gateway
+
+# npm
 npm install -g @proxai/gateway
+```
+
+Or download the binary for your OS / arch directly from [GitHub Releases](https://github.com/proxai/proxai-gateway/releases) and drop it on your `PATH`.
+
+Then:
+
+```sh
 proxai-gateway install
 proxai-gateway status
 ```
@@ -25,11 +47,16 @@ proxai-gateway pause
 proxai-gateway resume
 ```
 
-To remove it entirely:
+To remove it entirely (the second command matches whichever package manager you used above):
 
 ```sh
 proxai-gateway uninstall
-npm uninstall -g @proxai/gateway
+
+bun rm -g @proxai/gateway              # Bun
+# or: pnpm rm -g @proxai/gateway
+# or: yarn global remove @proxai/gateway
+# or: npm uninstall -g @proxai/gateway
+# or: brew uninstall proxai/tap/proxai-gateway
 ```
 
 ---
@@ -110,9 +137,11 @@ If you're a contributor reading these in order: `README.md` → `01_INTRO.md` �
 
 | | |
 |---|---|
-| Platforms | macOS (Apple Silicon and Intel) |
+| Platforms (MVP `install` flow) | macOS (Apple Silicon and Intel) |
+| Platforms (binaries shipped) | macOS arm64 / x64, Linux x64 / arm64, Windows x64 / arm64 — all from the same build pipeline; Linux and Windows `install` flows land in later phases |
 | Agents | Claude Code, Cursor, Codex |
-| Distribution | npm registry as `@proxai/gateway` |
+| Runtime on the user's machine | None — the binary is fully self-contained (Bun runtime + JS bundled in by `bun build --compile`) |
+| Distribution | Homebrew tap `proxai/tap/proxai-gateway`; npm meta-package `@proxai/gateway` (installable via `bun`, `pnpm`, `yarn`, `npm` — pulls the matching platform binary via `optionalDependencies`); signed binaries on GitHub Releases |
 | License | Apache 2.0 |
 
 Antigravity, Linux, Windows, menu-bar tray, native `.pkg` installer, signed code, optional HTTP-proxy capture mode — all post-MVP. See [`01_INTRO.md`](01_INTRO.md) §9 for the roadmap.

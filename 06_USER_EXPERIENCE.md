@@ -120,7 +120,10 @@ will fail silently in the background.
 
 To grant it:
   1. Open System Settings -> Privacy & Security -> Full Disk Access
-  2. Click "+", add: /usr/local/bin/node
+  2. Click "+", add the proxai-gateway binary
+     (typical paths: /opt/homebrew/bin/proxai-gateway,
+      ~/.bun/bin/proxai-gateway, or /usr/local/bin/proxai-gateway -
+      run "proxai-gateway doctor" to print the exact path)
   3. Toggle the switch ON
 
   [Open System Settings now]   [Skip - I'll do it later]
@@ -240,7 +243,8 @@ Issue: Full Disk Access not granted; Cursor capture is failing.
 
 To fix:
   1. Open System Settings -> Privacy & Security -> Full Disk Access
-  2. Add and enable: /usr/local/bin/node
+  2. Add and enable the proxai-gateway binary
+     (run "proxai-gateway doctor" to print the exact path)
   3. Captures will resume on the next poll cycle (within 5 min)
 
 Last upload:        17 min ago (Claude Code + Codex working normally)
@@ -306,7 +310,7 @@ $ proxai-gateway resume
 
 ## 5. Update prompts
 
-There is no auto-update prompt UI in MVP. The mechanism is `npm install -g @proxai/gateway@latest`. But the gateway must surface that it's getting old.
+There is no auto-update prompt UI in MVP. The mechanism is to re-run the global install with `@latest` (Bun, pnpm, yarn, or npm) or `brew upgrade`. The gateway records which package manager produced the install (`install_source` in config) and prints the matching command. It must surface that it's getting old.
 
 ### Inside `status` — fresh
 
@@ -314,17 +318,19 @@ There is no auto-update prompt UI in MVP. The mechanism is `npm install -g @prox
   Binary age:  12 days
 ```
 
-### Inside `status` — over 90 days
+### Inside `status` — over 90 days (Bun-installed example)
 
 ```
-  Binary age:  93 days  [warn]   Update recommended:  npm install -g @proxai/gateway@latest
+  Binary age:  93 days  [warn]   Update recommended:  bun add -g @proxai/gateway@latest
 ```
 
-### Inside `status` — over 180 days (auto-paused)
+(For pnpm: `pnpm add -g @proxai/gateway@latest`. For yarn: `yarn global add @proxai/gateway@latest`. For npm: `npm install -g @proxai/gateway@latest`. For Homebrew: `brew upgrade proxai/tap/proxai-gateway`.)
+
+### Inside `status` — over 180 days (auto-paused, Bun-installed example)
 
 ```
   Binary age:  187 days  [err]   AUTO-PAUSED for safety. Update to resume:
-                                 npm install -g @proxai/gateway@latest
+                                 bun add -g @proxai/gateway@latest
 ```
 
 When the daemon auto-pauses for staleness, the structured log records it and a one-time notification is logged at WARN level so it shows in `proxai-gateway tail`:
@@ -369,12 +375,16 @@ This cannot be undone. Continue? [y/N]:
 
 ### Done
 
+The CLI prints the package-removal command that matches whichever package manager produced the install (recorded as `install_source` at install time). For a Bun install:
+
 ```
 [ok] ProxAI Gateway uninstalled.
 
 To remove the package as well:
-  npm uninstall -g @proxai/gateway
+  bun rm -g @proxai/gateway
 ```
+
+(For pnpm: `pnpm rm -g @proxai/gateway`. For yarn: `yarn global remove @proxai/gateway`. For npm: `npm uninstall -g @proxai/gateway`. For Homebrew: `brew uninstall proxai/tap/proxai-gateway`.)
 
 ---
 

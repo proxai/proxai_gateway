@@ -8,12 +8,14 @@
 
 ## 1. What it is
 
-A macOS Python service that watches the on-disk transcripts of three coding agents — Claude Code, Cursor, and Codex — applies secret redaction, and ships the bytes to ProxAI's backend. The backend parses them into `CallRecord`s.
+A background service that watches the on-disk transcripts of three coding agents — Claude Code, Cursor, and Codex — applies secret redaction, and ships the bytes to ProxAI's backend. The backend parses them into `CallRecord`s.
 
 - Polling cadence: every 5 minutes.
-- Auto-starts at login as a per-user launchd LaunchAgent.
+- Auto-starts at login (per-user launchd LaunchAgent on macOS; per-user systemd unit on Linux; per-user Scheduled Task / Service on Windows — MVP ships macOS first; Linux and Windows binaries are produced by the same build pipeline from day one).
 - Open-source (Apache 2.0).
-- Distributed via PyPI; updated by `pip install --upgrade`.
+- **Shipped as a single pre-compiled native executable** per OS / architecture. End users do **not** install Bun or Node — the runtime is bundled into the binary by `bun build --compile`. Distribution channels: the npm package `@proxai/gateway` (installable via `bun`, `pnpm`, `yarn`, or `npm` — a small optional-dependency matrix selects the platform binary at install time, the same pattern `esbuild` / `oxlint` / `swc` use), a Homebrew formula on macOS and Linux, and signed binaries on GitHub Releases for direct download.
+
+The codebase is written in TypeScript on Bun, but Bun is a **dev-time** dependency only. End users never see it.
 
 Antigravity is **deferred** — its conversations are AEAD-encrypted at rest with a private protobuf schema. See §5 for the investigation; not in scope for MVP or Phase 2.
 
@@ -81,7 +83,7 @@ Captured payloads contain source code, internal docs, prompts about unreleased f
 2. **Gateway, upload-time.** Independent regex pass with a different rule corpus (`detect-secrets` patterns). Catches Stage-1 bugs.
 3. **Backend, ingest-time.** Third pass on receive. Catches stale client rules.
 
-Rules and corpus are **bundled with the gateway binary** in MVP. Updating the rule set means a `pip install --upgrade`. See §8 for safety nets that bound the lag.
+Rules and corpus are **bundled with the gateway binary** in MVP. Updating the rule set means re-running the global install (`bun add -g @proxai/gateway@latest`, or the equivalent under pnpm / yarn / npm / Homebrew). See §8 for safety nets that bound the lag.
 
 The redaction module and its fuzz corpus get built **before** any collector code.
 
@@ -124,20 +126,39 @@ If any of these break, the affected collector logs and pauses; other collectors 
 
 ## 6. Tech stack
 
+### Dev-time tooling (what we use to write and test the code)
+
 | Concern | Pick |
 |---|---|
-| Language / runtime | TypeScript on Node 24 (ES Modules) — stack-aligned with `proxai_nest`/`proxai_web`/`proxai_ops` |
-| CLI | `commander` + `chalk` + `ora` + `inquirer` |
-| File watching | `chokidar` (FSEvents wrapper) — Phase 2 only as a wake-up nudge; MVP is pure polling |
-| SQLite | `better-sqlite3` (sync, native binding) for both consumer-DB reads and the local buffer; `?mode=ro` + `VACUUM INTO` snapshot for WAL safety |
-| Outbound HTTP | stdlib `fetch` / `undici` |
+| Language | TypeScript (strict, ESM-only) |
+| Dev runtime | **Bun** (latest stable). Also the runtime that gets bundled into the shipped binary by `bun build --compile`. End users do not install Bun. |
+| CLI framework | `commander` (full ESM, modern Node/Bun support, stable, no transpile shims) + `chalk` + `ora` + `@inquirer/prompts` |
+| File system | `Bun.file` / `Bun.write` for reads and writes; `node:fs` (Bun-supported) only where Bun does not yet expose a native equivalent (e.g., `fs.realpathSync`, `fs.statSync` edge cases). Native FSEvents-based watching deferred to Phase 2 as a wake-up nudge; MVP is pure polling. |
+| SQLite | `bun:sqlite` (built-in, sync, native) for both consumer-DB reads and the local buffer; `?mode=ro` + `VACUUM INTO` snapshot for WAL safety. No `better-sqlite3` dependency. |
+| Outbound HTTP | Bun's built-in `fetch` |
 | Redaction | `gitleaks` + `detect-secrets` rule corpora ported to JS regex |
-| Logging | `pino` → JSON in `~/Library/Logs/proxai-gateway/` |
-| Packaging | `pnpm` (internal) → npm registry as `@proxai/gateway`; users install via `npm install -g @proxai/gateway` |
-| Auto-start | per-user launchd LaunchAgent |
-| Testing | `vitest`; golden-file tests against captured fixtures |
+| Logging | `pino` → JSON in the platform-appropriate log dir (`~/Library/Logs/proxai-gateway/` on macOS; `~/.local/state/proxai-gateway/log/` on Linux; `%LOCALAPPDATA%\proxai-gateway\Logs\` on Windows) |
+| Internal package manager | `bun install`, `bun test`, `bun build`. No pnpm/yarn/npm in dev. |
+| Auto-start | launchd LaunchAgent (macOS); systemd user unit (Linux); Scheduled Task (Windows). MVP ships macOS first; the Linux and Windows binaries are produced by the same build pipeline from day one. |
+| Lint / format | `oxlint` (lint) + `prettier` (format). No ESLint. |
+| Testing | `bun test` (Bun's built-in test runner); golden-file tests against captured fixtures |
 
-CLI/build/lint/test scaffolding **patterns** are lifted from `proxai_ops`, but the gateway is a separate codebase — different threat model (customer machines, secrets in scope), different license (Apache 2.0, OSS), different auditability needs.
+### Build & distribution (what end users get)
+
+End users get **one self-contained native executable** per OS / arch. They do not install Bun or Node.
+
+| Concern | Pick |
+|---|---|
+| Build command | `bun build --compile --target=<target> --minify ./src/cli.ts --outfile dist/<target>/proxai-gateway[.exe]` |
+| Compiled targets | `bun-darwin-arm64`, `bun-darwin-x64`, `bun-linux-x64`, `bun-linux-arm64`, `bun-windows-x64`, `bun-windows-arm64`. Each output is a single self-contained binary with the Bun runtime bundled in (~50–90 MB). |
+| npm publication | `@proxai/gateway` is the meta-package (no native code itself, ~30 KB). It declares `optionalDependencies` on six platform packages — `@proxai/gateway-darwin-arm64`, `@proxai/gateway-darwin-x64`, `@proxai/gateway-linux-x64`, `@proxai/gateway-linux-arm64`, `@proxai/gateway-win32-x64`, `@proxai/gateway-win32-arm64` — each pinned with `os` / `cpu` fields so `bun`/`pnpm`/`yarn`/`npm` install only the matching one. The meta-package's `bin` is a tiny launcher shim (Node-compatible JS, ~30 lines) that resolves and execs the platform binary. Pattern verified by `esbuild`, `oxlint`, `swc`, `lightningcss`, `biome`. |
+| Homebrew | A formula in tap `proxai/tap` (`proxai-gateway`) pulls the matching macOS or Linux binary directly from GitHub Releases. No npm involved. |
+| GitHub Releases | All six binaries + `SHA256SUMS` + a sigstore/cosign signing manifest attached to every tag. Direct-download install path for users who can't or won't go through a package manager. |
+| Code signing | macOS: Developer ID + notarization (Phase 2). Windows: Authenticode (Phase 2). Linux: detached signature on GitHub Releases. MVP ships unsigned binaries with the documented Gatekeeper / SmartScreen workarounds. |
+
+### Codebase posture
+
+The repo is a fresh codebase: no source, scaffolding, or build configuration is copied from any other ProxAI repo. The threat model (customer machines, developer secrets in scope), the license (Apache 2.0, OSS), and the auditability bar are unique to the gateway and drive its tooling choices.
 
 No proxy server, no MITM, no signed-config plumbing — all dropped from MVP. See `07_MACOS_MVP.md` for the full macOS implementation plan.
 
@@ -151,8 +172,14 @@ Per-user LaunchAgent at `~/Library/LaunchAgents/co.proxai.gateway.plist`. `RunAt
 `KeepAlive` is set so launchd restarts on crash but **not** on clean exit — `proxai-gateway stop` actually stays stopped until next login.
 
 ### Update story (MVP)
-- Distribution: npm registry as `@proxai/gateway`.
-- Update mechanism: `npm install -g @proxai/gateway@latest` + restart.
+- Distribution: npm registry as `@proxai/gateway` (meta-package + per-platform binary packages, see §6 "Build & distribution"), plus a Homebrew tap (`proxai/tap/proxai-gateway`), plus signed binaries on GitHub Releases.
+- Update mechanism: re-run the global install with `@latest` and then `proxai-gateway start`. The user's chosen package manager pulls the new platform binary; no Bun or Node install is involved. Examples:
+  - `bun add -g @proxai/gateway@latest`
+  - `pnpm add -g @proxai/gateway@latest`
+  - `yarn global add @proxai/gateway@latest`
+  - `npm install -g @proxai/gateway@latest`
+  - `brew upgrade proxai/tap/proxai-gateway`
+  - Or download the new binary from GitHub Releases and replace it on disk.
 - Update prompt: menu-bar tray (Phase 2). For MVP, an out-of-date warning surfaces in `proxai-gateway status` output.
 - **Stale-binary auto-pause** is the safety net: if the gateway's release date is older than 90 days, it logs a warning daily; older than 180 days, it stops uploading until the user updates. This bounds the "user on old redaction rules" exposure.
 
@@ -183,12 +210,13 @@ The dynamic-config / signed-config story (push rules without client release) is 
 - HTTP proxy / base-URL override (Phase 2, opt-in)
 - Hooks-based collection (Phase 2)
 - Menu-bar tray UI (Phase 2)
-- Linux/Windows (Phase 3+)
+- Linux `install` flow + systemd user unit (Phase 2). Linux binaries (`bun-linux-x64`, `bun-linux-arm64`) are produced and published from day one; only the platform-specific install / auto-start surface lands later.
+- Windows `install` flow + Scheduled Task (Phase 3). Windows binaries (`bun-windows-x64`, `bun-windows-arm64`) are produced and published from day one; same caveat.
 - MITM mode (deprioritized; may never ship)
 
 ### Success criteria
 
-- Developer runs `pip install proxai-gateway && proxai-gateway install`, reboots, uses the three agents normally for a day → backend has a complete, redacted, raw-byte record of every turn within 5 min of it occurring.
+- Developer installs the binary through any supported channel (`brew install proxai/tap/proxai-gateway`, `bun add -g @proxai/gateway`, `pnpm add -g @proxai/gateway`, `yarn global add @proxai/gateway`, `npm install -g @proxai/gateway`, or a direct download from GitHub Releases) **without installing Bun, Node, or any other runtime**, runs `proxai-gateway install`, reboots, uses the three agents normally for a day → backend has a complete, redacted, raw-byte record of every turn within 5 min of it occurring.
 - Zero captured rows contain raw `Authorization` headers, `x-api-key` headers, or matched `gitleaks` patterns. Verified via fuzz test corpus.
 - Service survives reboot, sleep/wake, network drop, and 24h backend outage without losing captures (chaos-tested).
 - p99 read overhead per poll cycle < 200 ms.
@@ -205,7 +233,7 @@ The dynamic-config / signed-config story (push rules without client release) is 
 
 ### Phase 1 — MVP
 - Three collectors + buffer + uploader
-- launchd installer + Typer CLI
+- launchd installer + `commander`-based CLI
 - Internal dogfooding by ProxAI engineers
 - Beta with 1–2 friendly customers
 

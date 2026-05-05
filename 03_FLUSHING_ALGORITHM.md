@@ -489,7 +489,7 @@ Three stages, all detailed in `01_INTRO.md` §3:
 2. **Gateway, upload-time.** Independent regex pass with a different rule corpus (`detect-secrets`). Catches stage-1 bugs.
 3. **Backend, ingest-time.** Third pass on receive. Catches stale-client rules.
 
-The redaction module is **bundled with the gateway binary** in MVP. Updating means `npm install -g @proxai/gateway@latest`. Stale-binary auto-pause (>180 days since release) is the safety net.
+The redaction module is **bundled with the gateway binary** in MVP. Updating means re-running the global install with `@latest` under whichever package manager produced the install (`bun`, `pnpm`, `yarn`, or `npm`), or `brew upgrade proxai/tap/proxai-gateway`. Stale-binary auto-pause (>180 days since release) is the safety net.
 
 ### 8.1 What about `agent_metadata` and the rest?
 

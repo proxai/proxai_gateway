@@ -62,7 +62,7 @@ proxai-gateway install [--api-key <key>] [--non-interactive] [--ingest-url <url>
 4. **Validate API key against backend.** `POST /v1/auth/validate` with the key. Backend returns `{valid: bool, account_email, error?}` or an error. The CLI generates `machine_id` (UUIDv7) locally and includes it on every upload — backend doesn't need to mint it. On invalid key: print clear message + dashboard link, retry up to 3 times, then exit 2.
 5. **Probe Full Disk Access.** Try reading `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`. On `EPERM`/`EACCES`: print FDA grant instructions including the System Settings deeplink (`x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles`). With `--accept-warnings`: continue and surface a warning. Without: exit 3.
 6. **Initialize state directory.** Create `~/.proxai/` (mode 0700), write `config.toml`, initialize `~/.proxai/buffer.db` (SQLite WAL).
-7. **Generate launchd plist.** Render template into `~/Library/LaunchAgents/co.proxai.gateway.plist`. Substitute the absolute path to the user's `node` binary and the installed `proxai-gateway` script.
+7. **Generate launchd plist.** Render template into `~/Library/LaunchAgents/co.proxai.gateway.plist`. Substitute the absolute path of the `proxai-gateway` binary itself (resolved via `realpath` of `argv[0]`, which `bun build --compile` sets correctly). The shipped artifact is a single self-contained executable — there is no separate runtime to invoke. launchd has a minimal `PATH`, so the plist must carry an absolute path.
 8. **Bootstrap launchd.** `launchctl bootstrap gui/$(id -u) <plist>`. Verify with `launchctl print gui/$(id -u)/co.proxai.gateway`.
 9. **Smoke-test upload.** Send a synthetic test record to the ingest endpoint. Backend acks. With `--accept-warnings`: warn and continue if smoke fails (transient network).
 10. **Print summary.** Where logs are, how to view status, how to pause, how to uninstall.
@@ -109,7 +109,7 @@ proxai-gateway uninstall [--purge] [--non-interactive]
 2. **Bootout launchd.** `launchctl bootout gui/$(id -u)/co.proxai.gateway`.
 3. **Remove plist.** Delete `~/Library/LaunchAgents/co.proxai.gateway.plist`.
 4. **Optionally purge.** If `--purge`: remove `~/.proxai/`. Otherwise leave it for re-install.
-5. **Print summary.** Note that `npm uninstall -g @proxai/gateway` is the next step to remove the package itself.
+5. **Print summary.** Note that the package is removed with the package-manager command that matches the install path — `bun rm -g @proxai/gateway`, `pnpm rm -g @proxai/gateway`, `yarn global remove @proxai/gateway`, `npm uninstall -g @proxai/gateway`, or `brew uninstall proxai/tap/proxai-gateway`. The installer records which one was used and prints the matching command.
 
 **Exit codes**: 0 success; 1 generic; 4 launchd unload failed.
 
@@ -282,8 +282,8 @@ proxai-gateway doctor [--json] [--include-logs]
 **Checks performed**
 
 - Binary version, install date, days-since-update
-- Node version (must satisfy `>=24`)
-- macOS version, architecture (arm64/x86_64), under Rosetta?
+- Embedded Bun runtime version (the version that was bundled into the binary at build time — informational only; users do not have a separately installed Bun)
+- OS + version, architecture (arm64/x86_64), under Rosetta? (macOS) / glibc vs musl (Linux) / build (Windows)
 - launchd unit state (`launchctl print`)
 - Config file present and readable, `~/.proxai/` permissions correct (0700)
 - Buffer DB integrity (`PRAGMA integrity_check`)
@@ -301,7 +301,7 @@ proxai-gateway doctor [--json] [--include-logs]
 
 ```
 proxai-gateway version           # short: 0.4.2
-proxai-gateway version --full    # JSON: version, build_date, node_version, platform, arch, redaction_rules_version, schema_compat
+proxai-gateway version --full    # JSON: version, build_date, embedded_bun_version, platform, arch, redaction_rules_version, schema_compat, install_source (bun|pnpm|yarn|npm|brew|github_release)
 ```
 
 ---
@@ -383,16 +383,28 @@ Permissions: `~/.proxai/` is mode 0700; everything inside is mode 0600 unless ot
 ## 6. Common workflows
 
 **First-time setup**
-```
-npm install -g @proxai/gateway
+```sh
+# pick whichever package manager you already use
+bun add -g @proxai/gateway              # Bun
+# or: pnpm add -g @proxai/gateway
+# or: yarn global add @proxai/gateway
+# or: npm install -g @proxai/gateway
+# or: brew install proxai/tap/proxai-gateway
+
 proxai-gateway install
 # (paste API key, accept consent, grant FDA if prompted)
 proxai-gateway status
 ```
 
 **Update (MVP — manual)**
-```
-npm install -g @proxai/gateway@latest
+```sh
+# match the package manager you installed with
+bun add -g @proxai/gateway@latest        # Bun
+# or: pnpm add -g @proxai/gateway@latest
+# or: yarn global add @proxai/gateway@latest
+# or: npm install -g @proxai/gateway@latest
+# or: brew upgrade proxai/tap/proxai-gateway
+
 proxai-gateway start   # forces a relaunch under the new binary
 ```
 
@@ -417,12 +429,18 @@ proxai-gateway doctor --json --include-logs > diagnostic.json
 ```
 
 **Uninstall**
-```
+```sh
 proxai-gateway uninstall
-npm uninstall -g @proxai/gateway
-# or, full purge:
+# then remove the package itself with the matching package manager:
+bun rm -g @proxai/gateway
+# or: pnpm rm -g @proxai/gateway
+# or: yarn global remove @proxai/gateway
+# or: npm uninstall -g @proxai/gateway
+# or: brew uninstall proxai/tap/proxai-gateway
+
+# or, full purge of local state too:
 proxai-gateway uninstall --purge
-npm uninstall -g @proxai/gateway
+# (then the same package-manager removal command as above)
 ```
 
 ---
@@ -467,13 +485,14 @@ Codes are stable across versions. Adding new codes is allowed; renumbering exist
 
 These are deliberately left for the implementing engineer's judgment, with the relevant constraints called out. Document the choice in the implementation PR.
 
-1. **Argument parsing library.** `commander` is the proxai_ops convention; stick with it unless there's a specific reason. Avoid yargs / oclif.
-2. **Interactive prompts.** `inquirer` in `install` is fine. Do not introduce additional UX libraries elsewhere — keep `status`/`doctor` output as plain printf.
+1. **Argument parsing library.** `commander` — modern ESM build, stable API, runs cleanly under Bun. Avoid `yargs` and `oclif`.
+2. **Interactive prompts.** `@inquirer/prompts` (the modular ESM rewrite of inquirer) for `install`. Do not introduce additional UX libraries elsewhere — keep `status`/`doctor` output as plain printf.
 3. **Spinners.** `ora` for the install flow only (where steps are long-running). Don't sprinkle elsewhere.
 4. **API key validation timeout.** Suggest 10 seconds. If the backend is slow, the user shouldn't be stuck.
 5. **`status --watch` refresh default.** 5 seconds is the suggestion. Don't make it shorter; it queries the daemon over a local socket.
-6. **`tail`'s log source.** Read `structured.log` directly with a tailing parser. Don't shell out to `tail -f`.
+6. **`tail`'s log source.** Read `structured.log` directly with a tailing parser (use `Bun.file().stream()` for incremental reads). Don't shell out to `tail -f`.
 7. **`doctor`'s redaction of log content.** When `--include-logs`, run the bundled redactor over each line before printing. Implies redactor is reusable as a library function.
-8. **launchctl invocation.** Use `child_process.execFile` with explicit args; never shell out with string concatenation. The `Label` (`co.proxai.gateway`) is the only dynamic bit.
-9. **Unix socket for daemon ↔ CLI.** The CLI commands `status`, `pause`, `resume`, `tail` need to talk to the running daemon. Use a Unix domain socket at `~/.proxai/control.sock`. Permissions 0600. Newline-delimited JSON-RPC.
+8. **launchctl invocation.** Use `Bun.spawn` (or `node:child_process`'s `execFile`) with explicit argv; never shell out with string concatenation. The `Label` (`co.proxai.gateway`) is the only dynamic bit.
+9. **Unix socket for daemon ↔ CLI.** The CLI commands `status`, `pause`, `resume`, `tail` need to talk to the running daemon. Use a Unix domain socket at `~/.proxai/control.sock`. Permissions 0600. Newline-delimited JSON-RPC. Bun's `Bun.serve({ unix: ... })` is the server side; the CLI side opens via `Bun.connect` (or `node:net`).
 10. **Idempotency of `install`.** Re-running `install` should detect the existing setup and reconcile rather than blow up. If the API key in the prompt differs from the one in config, re-validate and update; don't error.
+11. **Install-source detection.** Determine where the binary lives (Bun global root, Homebrew prefix, npm/pnpm/yarn global root, or a manually-placed GitHub Releases binary) by inspecting the resolved path of `argv[0]` against known prefixes. Record it in `~/.proxai/config.toml` (`install_source`). `uninstall`'s output and `status`'s "update available" hint use this to print the matching update / removal command.
