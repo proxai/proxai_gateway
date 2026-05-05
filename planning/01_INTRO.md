@@ -149,7 +149,7 @@ End users get **one self-contained native executable** per OS / arch. They do no
 
 | Concern | Pick |
 |---|---|
-| Build command | `bun build --compile --target=<target> --minify ./src/cli.ts --outfile dist/<target>/proxai-gateway[.exe]` |
+| Build command | `bun build --compile --target=<target> --minify ./src/main.ts --outfile dist/<target>/proxai-gateway[.exe]` |
 | Compiled targets | `bun-darwin-arm64`, `bun-darwin-x64`, `bun-linux-x64`, `bun-linux-arm64`, `bun-windows-x64`, `bun-windows-arm64`. Each output is a single self-contained binary with the Bun runtime bundled in (~50–90 MB). |
 | npm publication | `@proxai/gateway` is the meta-package (no native code itself, ~30 KB). It declares `optionalDependencies` on six platform packages — `@proxai/gateway-darwin-arm64`, `@proxai/gateway-darwin-x64`, `@proxai/gateway-linux-x64`, `@proxai/gateway-linux-arm64`, `@proxai/gateway-win32-x64`, `@proxai/gateway-win32-arm64` — each pinned with `os` / `cpu` fields so `bun`/`pnpm`/`yarn`/`npm` install only the matching one. The meta-package's `bin` is a tiny launcher shim (Node-compatible JS, ~30 lines) that resolves and execs the platform binary. Pattern verified by `esbuild`, `oxlint`, `swc`, `lightningcss`, `biome`. |
 | Homebrew | A formula in tap `proxai/tap` (`proxai-gateway`) pulls the matching macOS or Linux binary directly from GitHub Releases. No npm involved. |

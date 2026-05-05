@@ -31,7 +31,7 @@ How the gateway runs on a Mac: installer, auto-start, file watching, and the mac
 
 | Concern | Pick |
 |---|---|
-| Compiler | `bun build --compile --target=<target> --minify ./src/cli.ts` produces the single-file native binary |
+| Compiler | `bun build --compile --target=<target> --minify ./src/main.ts` produces the single-file native binary |
 | Targets shipped MVP | `bun-darwin-arm64`, `bun-darwin-x64` (functional `install` flow) |
 | Targets shipped Phase 1+ | `bun-linux-x64`, `bun-linux-arm64`, `bun-windows-x64`, `bun-windows-arm64` (binaries published alongside macOS; their platform-specific auto-start lands incrementally) |
 | Binary size budget | < 100 MB after `--minify`. Strip via `--sourcemap=none --compile`. |
