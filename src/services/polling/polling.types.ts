@@ -1,0 +1,53 @@
+import type { Database } from 'bun:sqlite';
+
+import type { HttpClient } from 'services/http';
+import type { DrainResult } from 'services/uploader';
+
+export interface SourcePollerContext {
+  buffer: Database;
+  gatewayVersion: string;
+}
+
+export interface SourcePollerError {
+  sourcePath: string;
+  reason: string;
+  table?: string;
+}
+
+export interface SourcePollerResult {
+  filesProcessed: number;
+  capturedBatches: number;
+  capturedBytes: number;
+  errors: SourcePollerError[];
+}
+
+export type SourcePoller = (ctx: SourcePollerContext) => Promise<SourcePollerResult>;
+
+export interface RegisteredSource {
+  name: string;
+  poll: SourcePoller;
+}
+
+export interface PollCycleContext {
+  buffer: Database;
+  http: HttpClient;
+  hostId: string;
+  gatewayVersion: string;
+  sources: readonly RegisteredSource[];
+  pauseSentinelPath: string;
+}
+
+export interface PollCycleResult {
+  paused: boolean;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  sourceResults: Record<string, SourcePollerResult>;
+  drainResult: DrainResult | null;
+}
+
+export interface PollLoopOptions {
+  intervalMs?: number;
+  abortSignal?: AbortSignal;
+  onCycleComplete?: (result: PollCycleResult) => void;
+}

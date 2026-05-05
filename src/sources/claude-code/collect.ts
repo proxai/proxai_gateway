@@ -95,22 +95,28 @@ export async function collectClaudeCodeFile(
 }
 
 function extractAgentSchemaVersion(jsonlText: string): string {
-  const firstNewline = jsonlText.indexOf('\n');
-  const firstLine = firstNewline === -1 ? jsonlText : jsonlText.slice(0, firstNewline);
-  if (firstLine.length === 0) return CLAUDE_CODE_DEFAULT_AGENT_SCHEMA_VERSION;
-  try {
-    const parsed = JSON.parse(firstLine) as {
-      message?: { version?: unknown };
-      version?: unknown;
-    };
-    if (typeof parsed.message?.version === 'string' && parsed.message.version.length > 0) {
-      return parsed.message.version;
+  let cursor = 0;
+  const len = jsonlText.length;
+  while (cursor < len) {
+    const newlineIndex = jsonlText.indexOf('\n', cursor);
+    const lineEnd = newlineIndex === -1 ? len : newlineIndex;
+    const line = jsonlText.slice(cursor, lineEnd);
+    cursor = newlineIndex === -1 ? len : newlineIndex + 1;
+    if (line.length === 0) continue;
+    try {
+      const parsed = JSON.parse(line) as {
+        message?: { version?: unknown };
+        version?: unknown;
+      };
+      if (typeof parsed.version === 'string' && parsed.version.length > 0) {
+        return parsed.version;
+      }
+      if (typeof parsed.message?.version === 'string' && parsed.message.version.length > 0) {
+        return parsed.message.version;
+      }
+    } catch {
+      continue;
     }
-    if (typeof parsed.version === 'string' && parsed.version.length > 0) {
-      return parsed.version;
-    }
-    return CLAUDE_CODE_DEFAULT_AGENT_SCHEMA_VERSION;
-  } catch {
-    return CLAUDE_CODE_DEFAULT_AGENT_SCHEMA_VERSION;
   }
+  return CLAUDE_CODE_DEFAULT_AGENT_SCHEMA_VERSION;
 }

@@ -1,0 +1,3 @@
+{"_fixture":"SYNTHETIC - all fields below are fake. No real user content."}
+{"type":"last-prompt","leafUuid":"00000000-0000-0000-0000-0000000000aa","sessionId":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}
+{"parentUuid":null,"isSidechain":false,"promptId":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","type":"user","message":{"role":"user","content":"first segment"},"uuid":"cccccccc-cccc-cccc-cccc-cccccccccccc","timestamp":"2026-02-01T00:00:00.000Z","permissionMode":"default","userType":"external","entrypoint":"cli","cwd":"/tmp/test-project","sessionId":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","version":"2.1.100","gitBranch":"main"}

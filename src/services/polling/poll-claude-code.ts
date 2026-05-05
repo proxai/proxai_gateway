@@ -1,0 +1,56 @@
+import {
+  collectClaudeCodeFile,
+  defaultClaudeCodeProjectsRoot,
+  discoverClaudeCodeFiles,
+} from 'sources/claude-code';
+import type {
+  SourcePoller,
+  SourcePollerContext,
+  SourcePollerResult,
+} from 'services/polling/polling.types.ts';
+
+export interface ClaudeCodeSourcePollerOptions {
+  baseDir?: string;
+}
+
+export function makeClaudeCodeSourcePoller(
+  options: ClaudeCodeSourcePollerOptions = {},
+): SourcePoller {
+  const baseDir = options.baseDir ?? defaultClaudeCodeProjectsRoot();
+  return (ctx) => pollClaudeCode(ctx, baseDir);
+}
+
+async function pollClaudeCode(
+  ctx: SourcePollerContext,
+  baseDir: string,
+): Promise<SourcePollerResult> {
+  const result: SourcePollerResult = {
+    filesProcessed: 0,
+    capturedBatches: 0,
+    capturedBytes: 0,
+    errors: [],
+  };
+
+  let files;
+  try {
+    files = await discoverClaudeCodeFiles(baseDir);
+  } catch (err) {
+    result.errors.push({
+      sourcePath: baseDir,
+      reason: err instanceof Error ? err.message : String(err),
+    });
+    return result;
+  }
+
+  for (const file of files) {
+    const collectResult = await collectClaudeCodeFile(file, ctx);
+    result.filesProcessed++;
+    result.capturedBatches += collectResult.capturedBatches;
+    result.capturedBytes += collectResult.capturedBytes;
+    for (const err of collectResult.errors) {
+      result.errors.push({ sourcePath: err.sourcePath, reason: err.reason });
+    }
+  }
+
+  return result;
+}
