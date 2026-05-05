@@ -26,3 +26,47 @@ test('redacts a Shopify access token (shpat_)', () => {
   const result = applyRedaction(input, PAYMENT_RULES);
   expect(result.redacted).toContain('[REDACTED:shopify-token]');
 });
+
+test('redacts a Square application ID (sq0idp-)', () => {
+  const input = 'SQ_APP_ID=sq0idp-AbCdEfGhIjKlMnOpQrStUv';
+  const result = applyRedaction(input, PAYMENT_RULES);
+  expect(result.redacted).toContain('[REDACTED:square-app-id]');
+});
+
+test('redacts an Adyen API key', () => {
+  const input =
+    'ADYEN_KEY=AQE0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+  const result = applyRedaction(input, PAYMENT_RULES);
+  expect(result.redacted).toContain('[REDACTED:adyen-api-key]');
+});
+
+test('redacts a BlockCypher token (keyword-anchored)', () => {
+  const input = 'BLOCKCYPHER_TOKEN=0123456789abcdef0123456789abcdef';
+  const result = applyRedaction(input, PAYMENT_RULES);
+  expect(result.redacted).toContain('[REDACTED:blockcypher-token]');
+});
+
+test('redacts a PayPal client secret (keyword-anchored)', () => {
+  const input =
+    'PAYPAL_CLIENT_SECRET=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZab';
+  const result = applyRedaction(input, PAYMENT_RULES);
+  expect(result.redacted).toContain('[REDACTED:paypal-client-secret]');
+});
+
+test('redacts a Shopify shared webhook secret (keyword-anchored)', () => {
+  const input = 'SHOPIFY_SHARED_SECRET=0123456789abcdef0123456789abcdef';
+  const result = applyRedaction(input, PAYMENT_RULES);
+  expect(result.redacted).toContain('[REDACTED:shopify-shared-secret]');
+});
+
+test('redacts a Razorpay key ID (rzp_live_)', () => {
+  const input = 'RAZORPAY_KEY_ID=rzp_live_AbCdEfGhIjKlMn';
+  const result = applyRedaction(input, PAYMENT_RULES);
+  expect(result.redacted).toContain('[REDACTED:razorpay-key-id]');
+});
+
+test('redacts a Plaid client secret (keyword-anchored)', () => {
+  const input = 'PLAID_SECRET=0123456789abcdef0123456789abcd';
+  const result = applyRedaction(input, PAYMENT_RULES);
+  expect(result.redacted).toContain('[REDACTED:plaid-secret]');
+});

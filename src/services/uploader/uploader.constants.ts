@@ -1,0 +1,1 @@
+export const DEFAULT_MAX_BATCHES_PER_DRAIN = 1024;

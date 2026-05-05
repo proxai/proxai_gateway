@@ -16,10 +16,38 @@ export const CRYPTO_KEYS_RULES: readonly RedactionRule[] = [
     stage: 1,
   },
   {
+    id: 'pgp-private-key-block',
+    description: 'PGP private key block',
+    pattern: /-----BEGIN PGP PRIVATE KEY BLOCK-----[\s\S]+?-----END PGP PRIVATE KEY BLOCK-----/g,
+    replacement: '[REDACTED:pgp-private-key-block]',
+    stage: 1,
+  },
+  {
     id: 'private-key-block-fallback',
     description: 'Generic BEGIN/END block fallback (any prefix variant)',
     pattern: /-----BEGIN [^-]{0,40}-----[\s\S]+?-----END [^-]{0,40}-----/g,
     replacement: '[REDACTED:private-key-block]',
     stage: 2,
+  },
+  {
+    id: 'age-secret-key',
+    description: 'Age encryption secret key (AGE-SECRET-KEY-1...)',
+    pattern: /\bAGE-SECRET-KEY-1[0-9A-Z]{50,}\b/g,
+    replacement: '[REDACTED:age-secret-key]',
+    stage: 1,
+  },
+  {
+    id: 'putty-private-key',
+    description: 'PuTTY user private key file (.ppk header)',
+    pattern: /PuTTY-User-Key-File-\d+:[\s\S]+?Private-MAC:\s*[a-f0-9]+/g,
+    replacement: '[REDACTED:putty-private-key]',
+    stage: 1,
+  },
+  {
+    id: 'minisign-secret-key',
+    description: 'Minisign secret key file marker',
+    pattern: /untrusted comment:\s*minisign encrypted secret key\s*\n[A-Za-z0-9+/=]{40,}/g,
+    replacement: '[REDACTED:minisign-secret-key]',
+    stage: 1,
   },
 ];

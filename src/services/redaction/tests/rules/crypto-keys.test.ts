@@ -30,3 +30,30 @@ test('Stage 2 fallback redacts non-standard BEGIN/END blocks', () => {
   const result = applyRedaction(input, CRYPTO_KEYS_RULES);
   expect(result.redacted).toContain('[REDACTED:');
 });
+
+test('redacts an Age secret key', () => {
+  const input = 'KEY=AGE-SECRET-KEY-1QYQSZQGPQYQSZQGPQYQSZQGPQYQSZQGPQYQSZQGPQYQSZQGPQYQSZQGZ8Y';
+  const result = applyRedaction(input, CRYPTO_KEYS_RULES);
+  expect(result.redacted).toContain('[REDACTED:age-secret-key]');
+});
+
+test('redacts a PuTTY .ppk private key block', () => {
+  const input =
+    'PuTTY-User-Key-File-3: ssh-rsa\nEncryption: none\nComment: rsa-key\nPublic-Lines: 6\nAAAA...\nPrivate-Lines: 14\nAAA...\nPrivate-MAC: 1234abcd5678ef9012345678abcdef1234567890';
+  const result = applyRedaction(input, CRYPTO_KEYS_RULES);
+  expect(result.redacted).toContain('[REDACTED:putty-private-key]');
+});
+
+test('redacts a PGP private key block', () => {
+  const input =
+    '-----BEGIN PGP PRIVATE KEY BLOCK-----\nlQOYBGAaaaaa\n-----END PGP PRIVATE KEY BLOCK-----';
+  const result = applyRedaction(input, CRYPTO_KEYS_RULES);
+  expect(result.redacted).toContain('[REDACTED:pgp-private-key-block]');
+});
+
+test('redacts a minisign secret key marker block', () => {
+  const input =
+    'untrusted comment: minisign encrypted secret key\nRWRTY0IyXdaZHUGQyN3ZXFwoq8eaR9eR3jtkAk5KSE3oTjKaBcBzRKjUwx9V';
+  const result = applyRedaction(input, CRYPTO_KEYS_RULES);
+  expect(result.redacted).toContain('[REDACTED:minisign-secret-key]');
+});

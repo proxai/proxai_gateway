@@ -1,0 +1,156 @@
+import { afterEach, beforeEach, expect, test } from 'bun:test';
+import type { Database } from 'bun:sqlite';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { statFile } from 'core/io/fs';
+import { sha256Hex, zstdDecompressSync } from 'core/utils';
+import {
+  countByStatus,
+  getCursor,
+  nextPendingBatch,
+  openInMemoryBufferDb,
+  totalPendingBytes,
+} from 'services/buffer';
+import { collectClaudeCodeFile } from 'sources/claude-code';
+import type { ClaudeCodeCollectorContext, DiscoveredClaudeCodeFile } from 'sources/claude-code';
+
+let dir: string;
+let buffer: Database;
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'proxai-test-claude-collect-'));
+  buffer = openInMemoryBufferDb();
+});
+
+afterEach(async () => {
+  buffer.close();
+  await rm(dir, { recursive: true, force: true });
+});
+
+async function makeFile(
+  content: string,
+  name = 'session.jsonl',
+): Promise<DiscoveredClaudeCodeFile> {
+  const path = join(dir, name);
+  await writeFile(path, content);
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('file missing after write');
+  return {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+}
+
+function ctx(b: Database): ClaudeCodeCollectorContext {
+  return { buffer: b, gatewayVersion: '@proxai/gateway 0.1.0' };
+}
+
+const DECODER = new TextDecoder();
+
+test('inserts a batch covering newly added complete lines', async () => {
+  const file = await makeFile('{"type":"user","message":{"version":"2.1.122"},"text":"hi"}\n');
+  const result = await collectClaudeCodeFile(file, ctx(buffer));
+  expect(result.capturedBatches).toBe(1);
+  expect(result.errors).toEqual([]);
+  expect(countByStatus(buffer).pending).toBe(1);
+  expect(totalPendingBytes(buffer)).toBeGreaterThan(0);
+});
+
+test('advances cursor to the safe end byte', async () => {
+  const content = '{"a":1}\n{"b":2}\n';
+  const file = await makeFile(content);
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const cursor = getCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.watermarkEnd).toBe(content.length);
+});
+
+test('does nothing on a second poll with no new bytes', async () => {
+  const file = await makeFile('{"a":1}\n');
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const second = await collectClaudeCodeFile(file, ctx(buffer));
+  expect(second.capturedBatches).toBe(0);
+  expect(countByStatus(buffer).pending).toBe(1);
+});
+
+test('holds back trailing partial line and only advances to last newline', async () => {
+  const file = await makeFile('{"a":1}\n{"b":');
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const cursor = getCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.watermarkEnd).toBe('{"a":1}\n'.length);
+});
+
+test('does not insert a batch when no complete line is present', async () => {
+  const file = await makeFile('{"a":');
+  const result = await collectClaudeCodeFile(file, ctx(buffer));
+  expect(result.capturedBatches).toBe(0);
+  expect(countByStatus(buffer).pending).toBe(0);
+});
+
+test('extracts agent_schema_version from message.version', async () => {
+  const file = await makeFile('{"type":"user","message":{"version":"2.1.122"},"text":"hi"}\n');
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const batch = nextPendingBatch(buffer);
+  expect(batch?.agentSchemaVersion).toBe('2.1.122');
+});
+
+test('falls back to "unknown" when message.version is missing', async () => {
+  const file = await makeFile('{"type":"user","text":"hi"}\n');
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const batch = nextPendingBatch(buffer);
+  expect(batch?.agentSchemaVersion).toBe('unknown');
+});
+
+test('redacts secrets from the body before storing', async () => {
+  const file = await makeFile(
+    '{"type":"user","text":"export OPENAI_KEY=sk-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQrSt"}\n',
+  );
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const batch = nextPendingBatch(buffer);
+  expect(batch).not.toBeNull();
+  const decompressed = DECODER.decode(zstdDecompressSync(batch!.body));
+  expect(decompressed).toContain('[REDACTED:openai-api-key]');
+  expect(decompressed).not.toContain('sk-AbCdEfGhIj');
+});
+
+test('records errors and does not advance cursor when the file is unreadable', async () => {
+  const fakeFile: DiscoveredClaudeCodeFile = {
+    sourcePath: join(dir, 'does-not-exist.jsonl'),
+    sourcePathHash: sha256Hex(join(dir, 'does-not-exist.jsonl')),
+    inode: 9999,
+    sizeBytes: 100,
+    lastModifiedMs: Date.now(),
+  };
+  const result = await collectClaudeCodeFile(fakeFile, ctx(buffer));
+  expect(result.errors.length).toBeGreaterThan(0);
+  expect(result.capturedBatches).toBe(0);
+});
+
+test('persists the wire-DTO fields needed by the uploader', async () => {
+  const file = await makeFile('{"type":"user","message":{"version":"2.1.122"}}\n');
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const batch = nextPendingBatch(buffer)!;
+  expect(batch.sourceApp).toBe('claude-code');
+  expect(batch.sourceKind).toBe('jsonl_append');
+  expect(batch.bodyFormat).toBe('jsonl');
+  expect(batch.bodyCompression).toBe('zstd');
+  expect(batch.watermarkKind).toBe('byte_range');
+  expect(batch.watermarkTable).toBeNull();
+  expect(batch.sourceInode).toBe(file.inode);
+  expect(batch.gatewayVersion).toBe('@proxai/gateway 0.1.0');
+  expect(batch.capturedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+});

@@ -45,3 +45,57 @@ test('does not redact short prefix-only strings', () => {
   const result = applyRedaction(input, LLM_PROVIDERS_RULES);
   expect(result.matchCount).toBe(0);
 });
+
+test('redacts a Cohere API key', () => {
+  const input = 'COHERE_API_KEY=co_AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMn';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:cohere-api-key]');
+});
+
+test('redacts an OpenRouter API key', () => {
+  const input = 'OPENROUTER_API_KEY=sk-or-v1-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOp';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:openrouter-api-key]');
+});
+
+test('redacts a Groq API key', () => {
+  const input = 'GROQ_API_KEY=gsk_AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOp';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:groq-api-key]');
+});
+
+test('redacts a Voyage AI API key', () => {
+  const input = 'VOYAGE_API_KEY=pa-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOp';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:voyage-api-key]');
+});
+
+test('redacts an xAI Grok API key', () => {
+  const input = 'XAI_API_KEY=xai-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIj';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:xai-grok-api-key]');
+});
+
+test('redacts a Fireworks AI API key', () => {
+  const input = 'FIREWORKS_API_KEY=fw_AbCdEfGhIjKlMnOpQrStUvWxYz';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:fireworks-api-key]');
+});
+
+test('redacts a Perplexity API key', () => {
+  const input = 'PPLX=pplx-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOp';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:perplexity-api-key]');
+});
+
+test('redacts a Mistral keyword-anchored API key', () => {
+  const input = 'MISTRAL_API_KEY=AbCdEfGhIjKlMnOpQrStUvWxYz123456';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:mistral-api-key]');
+});
+
+test('redacts a Together AI keyword-anchored API key', () => {
+  const input = 'TOGETHER_API_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:together-ai-api-key]');
+});

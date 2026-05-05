@@ -17,4 +17,41 @@ export const CONNECTION_STRINGS_RULES: readonly RedactionRule[] = [
     replacement: '$1[REDACTED:url-credentials]$2',
     stage: 2,
   },
+  {
+    id: 'extended-db-connection-password',
+    description:
+      'Password embedded in extended DB connection URL (kafka, cassandra, clickhouse, mssql, sqlserver, oracle, jdbc)',
+    pattern:
+      /\b((?:kafka|cassandra|clickhouse|mssql|sqlserver|oracle|jdbc:[a-z]+):\/\/[^:/\s]+:)[^@\s]+(@)/g,
+    replacement: '$1[REDACTED:extended-db-connection-password]$2',
+    stage: 1,
+  },
+  {
+    id: 'ldap-bind-password',
+    description: 'LDAP bind password (ldap:// URL with userinfo)',
+    pattern: /\b(ldaps?:\/\/[^:/\s]+:)[^@\s]+(@)/g,
+    replacement: '$1[REDACTED:ldap-bind-password]$2',
+    stage: 1,
+  },
+  {
+    id: 'mssql-server-connection-string-password',
+    description: 'MSSQL connection string Password= field (within a connection string)',
+    pattern: /(;\s*(?:Pwd|Password)\s*=\s*)[^;\n"']+(?=;|$|"|')/gi,
+    replacement: '$1[REDACTED:mssql-password]',
+    stage: 2,
+  },
+  {
+    id: 'jdbc-password-property',
+    description: 'JDBC URL with embedded password property (?password= or &password=)',
+    pattern: /([?&]password=)[^&\s"']{4,}/gi,
+    replacement: '$1[REDACTED:jdbc-password]',
+    stage: 1,
+  },
+  {
+    id: 'snowflake-connection-string-password',
+    description: 'Snowflake-style connection password attribute',
+    pattern: /\b(snowflake:\/\/[^:/\s]+:)[^@\s]+(@)/g,
+    replacement: '$1[REDACTED:snowflake-password]$2',
+    stage: 1,
+  },
 ];

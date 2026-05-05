@@ -1,0 +1,44 @@
+import { nextPendingBatch } from 'services/buffer';
+import { DEFAULT_MAX_BATCHES_PER_DRAIN } from 'services/uploader/uploader.constants.ts';
+import type {
+  DrainOptions,
+  DrainResult,
+  UploaderContext,
+} from 'services/uploader/uploader.types.ts';
+import { uploadBatch } from 'services/uploader/upload-batch.ts';
+
+export async function drainBuffer(
+  ctx: UploaderContext,
+  options: DrainOptions = {},
+): Promise<DrainResult> {
+  const cap = options.maxBatches ?? DEFAULT_MAX_BATCHES_PER_DRAIN;
+  const result: DrainResult = {
+    attempted: 0,
+    accepted: 0,
+    retriable: 0,
+    fatal: 0,
+    rateLimitedRetryAfterMs: null,
+  };
+
+  while (result.attempted < cap) {
+    const batch = nextPendingBatch(ctx.db);
+    if (batch === null) break;
+
+    const outcome = await uploadBatch(ctx, batch);
+    result.attempted++;
+
+    if (outcome.kind === 'accepted') {
+      result.accepted++;
+      continue;
+    }
+    if (outcome.kind === 'fatal') {
+      result.fatal++;
+      continue;
+    }
+    result.retriable++;
+    result.rateLimitedRetryAfterMs = outcome.retryAfterMs;
+    break;
+  }
+
+  return result;
+}

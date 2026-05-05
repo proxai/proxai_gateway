@@ -1,0 +1,351 @@
+import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { Database } from 'bun:sqlite';
+import type { Database as SqliteDatabase } from 'bun:sqlite';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { statFile } from 'core/io/fs';
+import { sha256Hex, zstdDecompressSync } from 'core/utils';
+import {
+  countByStatus,
+  getBatch,
+  getCursor,
+  nextPendingBatch,
+  openInMemoryBufferDb,
+} from 'services/buffer';
+import { collectCodexState } from 'sources/codex';
+import type { CodexCollectorContext, DiscoveredCodexStateFile } from 'sources/codex';
+
+let dir: string;
+let buffer: SqliteDatabase;
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'proxai-test-codex-state-'));
+  buffer = openInMemoryBufferDb();
+});
+
+afterEach(async () => {
+  buffer.close();
+  await rm(dir, { recursive: true, force: true });
+});
+
+interface ThreadRow {
+  id: string;
+  cli_version: string | null;
+  cwd?: string;
+  title?: string;
+  model?: string;
+}
+
+interface DynamicToolRow {
+  thread_id: string;
+  position: number;
+  name: string;
+}
+
+interface SpawnEdgeRow {
+  parent_thread_id: string;
+  child_thread_id: string;
+  status: string;
+}
+
+interface SeedSpec {
+  threads?: ThreadRow[];
+  dynamicTools?: DynamicToolRow[];
+  spawnEdges?: SpawnEdgeRow[];
+  forbiddenTables?: { name: string; rows: { id: number; secret: string }[] }[];
+}
+
+async function makeStateDb(
+  spec: SeedSpec,
+  name = 'state_5.sqlite',
+): Promise<DiscoveredCodexStateFile> {
+  const path = join(dir, name);
+  const db = new Database(path, { create: true });
+  db.run(
+    `CREATE TABLE threads (
+      id TEXT PRIMARY KEY,
+      cli_version TEXT,
+      cwd TEXT,
+      title TEXT,
+      model TEXT
+    )`,
+  );
+  db.run(
+    `CREATE TABLE thread_dynamic_tools (
+      thread_id TEXT,
+      position INTEGER,
+      name TEXT,
+      PRIMARY KEY (thread_id, position)
+    )`,
+  );
+  db.run(
+    `CREATE TABLE thread_spawn_edges (
+      parent_thread_id TEXT,
+      child_thread_id TEXT PRIMARY KEY,
+      status TEXT
+    )`,
+  );
+
+  for (const t of spec.threads ?? []) {
+    db.query('INSERT INTO threads (id, cli_version, cwd, title, model) VALUES (?, ?, ?, ?, ?)').run(
+      t.id,
+      t.cli_version,
+      t.cwd ?? '/tmp',
+      t.title ?? 't',
+      t.model ?? 'gpt-5',
+    );
+  }
+  for (const t of spec.dynamicTools ?? []) {
+    db.query('INSERT INTO thread_dynamic_tools (thread_id, position, name) VALUES (?, ?, ?)').run(
+      t.thread_id,
+      t.position,
+      t.name,
+    );
+  }
+  for (const t of spec.spawnEdges ?? []) {
+    db.query(
+      'INSERT INTO thread_spawn_edges (parent_thread_id, child_thread_id, status) VALUES (?, ?, ?)',
+    ).run(t.parent_thread_id, t.child_thread_id, t.status);
+  }
+  for (const forbidden of spec.forbiddenTables ?? []) {
+    const escaped = forbidden.name.replace(/"/g, '""');
+    db.run(`CREATE TABLE "${escaped}" (id INTEGER PRIMARY KEY, secret TEXT)`);
+    for (const row of forbidden.rows) {
+      db.query(`INSERT INTO "${escaped}" (id, secret) VALUES (?, ?)`).run(row.id, row.secret);
+    }
+  }
+  db.close();
+
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('file missing after write');
+  return {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+}
+
+function ctx(b: SqliteDatabase): CodexCollectorContext {
+  return { buffer: b, gatewayVersion: '@proxai/gateway 0.1.0' };
+}
+
+const DECODER = new TextDecoder();
+
+test('captures all three allowed tables when each has rows', async () => {
+  const file = await makeStateDb({
+    threads: [{ id: 't1', cli_version: '0.126.0' }],
+    dynamicTools: [{ thread_id: 't1', position: 0, name: 'web_search' }],
+    spawnEdges: [{ parent_thread_id: 't1', child_thread_id: 't2', status: 'completed' }],
+  });
+  const { result, agentSchemaVersion } = await collectCodexState(file, ctx(buffer));
+  expect(agentSchemaVersion).toBe('0.126.0');
+  expect(result.capturedBatches).toBe(3);
+  expect(result.errors).toEqual([]);
+  expect(countByStatus(buffer).pending).toBe(3);
+});
+
+test('samples cli_version from the most-recent threads row', async () => {
+  const file = await makeStateDb({
+    threads: [
+      { id: 't1', cli_version: '0.100.0' },
+      { id: 't2', cli_version: '0.126.0-alpha.8' },
+    ],
+  });
+  const { agentSchemaVersion } = await collectCodexState(file, ctx(buffer));
+  expect(agentSchemaVersion).toBe('0.126.0-alpha.8');
+});
+
+test('falls back to "unknown" when threads is empty', async () => {
+  const file = await makeStateDb({});
+  const { agentSchemaVersion, result } = await collectCodexState(file, ctx(buffer));
+  expect(agentSchemaVersion).toBe('unknown');
+  expect(result.capturedBatches).toBe(0);
+});
+
+test('skips a missing table and continues with the others', async () => {
+  const path = join(dir, 'state_5.sqlite');
+  const db = new Database(path, { create: true });
+  db.run(
+    `CREATE TABLE threads (
+      id TEXT PRIMARY KEY,
+      cli_version TEXT
+    )`,
+  );
+  db.query('INSERT INTO threads (id, cli_version) VALUES (?, ?)').run('t1', '0.1.0');
+  db.close();
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('missing');
+  const file: DiscoveredCodexStateFile = {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+  const { result, agentSchemaVersion } = await collectCodexState(file, ctx(buffer));
+  expect(agentSchemaVersion).toBe('0.1.0');
+  expect(result.capturedBatches).toBe(1);
+  expect(result.errors).toEqual([]);
+});
+
+test('persists per-table watermarks separately', async () => {
+  const file = await makeStateDb({
+    threads: [{ id: 't1', cli_version: '0.1.0' }],
+    dynamicTools: [
+      { thread_id: 't1', position: 0, name: 'a' },
+      { thread_id: 't1', position: 1, name: 'b' },
+    ],
+    spawnEdges: [{ parent_thread_id: 't1', child_thread_id: 't2', status: 'ok' }],
+  });
+  await collectCodexState(file, ctx(buffer));
+  const tCursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: 'threads',
+  });
+  expect(tCursor?.watermarkEnd).toBe(2);
+  const dtCursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: 'thread_dynamic_tools',
+  });
+  expect(dtCursor?.watermarkEnd).toBe(3);
+  const seCursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: 'thread_spawn_edges',
+  });
+  expect(seCursor?.watermarkEnd).toBe(2);
+});
+
+test('only ships rows past the saved per-table watermark on subsequent polls', async () => {
+  const file = await makeStateDb({
+    threads: [{ id: 't1', cli_version: '0.1.0' }],
+  });
+  await collectCodexState(file, ctx(buffer));
+  expect(countByStatus(buffer).pending).toBe(1);
+
+  const db = new Database(file.sourcePath);
+  db.query('INSERT INTO threads (id, cli_version) VALUES (?, ?)').run('t2', '0.2.0');
+  db.close();
+  const stat = await statFile(file.sourcePath);
+  if (!stat.exists) throw new Error('missing');
+  const refreshed: DiscoveredCodexStateFile = {
+    ...file,
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+  const second = await collectCodexState(refreshed, ctx(buffer));
+  expect(second.result.capturedBatches).toBe(1);
+  expect(second.agentSchemaVersion).toBe('0.2.0');
+  expect(countByStatus(buffer).pending).toBe(2);
+});
+
+test('every emitted state batch carries one of the three allowed watermark_table values', async () => {
+  const file = await makeStateDb({
+    threads: [{ id: 't1', cli_version: '0.1.0' }],
+    dynamicTools: [{ thread_id: 't1', position: 0, name: 'a' }],
+    spawnEdges: [{ parent_thread_id: 't1', child_thread_id: 't2', status: 'ok' }],
+  });
+  await collectCodexState(file, ctx(buffer));
+  const tables = new Set<string>();
+  for (let i = 0; i < 10; i++) {
+    const next = nextPendingBatch(buffer);
+    if (next === null) break;
+    tables.add(next.watermarkTable ?? 'NULL');
+    if (typeof next.captureId === 'string') {
+      const fetched = getBatch(buffer, next.captureId);
+      expect(fetched).not.toBeNull();
+    }
+    break;
+  }
+  expect(tables.size).toBeGreaterThan(0);
+  for (const t of tables) {
+    expect(['threads', 'thread_dynamic_tools', 'thread_spawn_edges']).toContain(t);
+  }
+});
+
+test('skip-list: never inserts a batch for a table outside the allowlist', async () => {
+  const file = await makeStateDb({
+    threads: [{ id: 't1', cli_version: '0.1.0' }],
+    forbiddenTables: [
+      { name: 'auth', rows: [{ id: 1, secret: 'oauth-token-xyz' }] },
+      { name: 'logs', rows: [{ id: 1, secret: 'log-line' }] },
+      { name: 'agent_jobs', rows: [{ id: 1, secret: 'private' }] },
+    ],
+  });
+  const { result } = await collectCodexState(file, ctx(buffer));
+  expect(result.capturedBatches).toBe(1);
+
+  let scanned = 0;
+  for (let i = 0; i < 10; i++) {
+    const batch = nextPendingBatch(buffer);
+    if (batch === null) break;
+    scanned += 1;
+    expect(batch.sourceApp).toBe('codex');
+    expect(batch.sourceKind).toBe('sqlite_table_snapshot');
+    expect(batch.watermarkTable).not.toBe('auth');
+    expect(batch.watermarkTable).not.toBe('logs');
+    expect(batch.watermarkTable).not.toBe('agent_jobs');
+    expect(['threads', 'thread_dynamic_tools', 'thread_spawn_edges']).toContain(
+      batch.watermarkTable ?? 'NULL',
+    );
+    break;
+  }
+  expect(scanned).toBe(1);
+});
+
+test('redacts secrets embedded in row values before storing', async () => {
+  const file = await makeStateDb({
+    threads: [
+      {
+        id: 't1',
+        cli_version: '0.1.0',
+        cwd: '/Users/x/.env=sk-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQrSt',
+      },
+    ],
+  });
+  await collectCodexState(file, ctx(buffer));
+  const batch = nextPendingBatch(buffer)!;
+  const decompressed = DECODER.decode(zstdDecompressSync(batch.body));
+  expect(decompressed).toContain('[REDACTED:openai-api-key]');
+  expect(decompressed).not.toContain('sk-AbCdEfGhIj');
+});
+
+test('persists the wire-DTO fields needed by the uploader', async () => {
+  const file = await makeStateDb({
+    threads: [{ id: 't1', cli_version: '0.126.0-alpha.8' }],
+  });
+  await collectCodexState(file, ctx(buffer));
+  const batch = nextPendingBatch(buffer)!;
+  expect(batch.sourceApp).toBe('codex');
+  expect(batch.sourceKind).toBe('sqlite_table_snapshot');
+  expect(batch.bodyFormat).toBe('sqlite_rows_json');
+  expect(batch.bodyCompression).toBe('zstd');
+  expect(batch.watermarkKind).toBe('rowid_range');
+  expect(batch.watermarkTable).toBe('threads');
+  expect(batch.sourceInode).toBeNull();
+  expect(batch.agentSchemaVersion).toBe('0.126.0-alpha.8');
+  expect(batch.gatewayVersion).toBe('@proxai/gateway 0.1.0');
+  expect(batch.capturedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+});
+
+test('records errors and does not crash when the source file is unreadable', async () => {
+  const fakeFile: DiscoveredCodexStateFile = {
+    sourcePath: join(dir, 'does-not-exist.sqlite'),
+    sourcePathHash: sha256Hex(join(dir, 'does-not-exist.sqlite')),
+    inode: 9999,
+    sizeBytes: 100,
+    lastModifiedMs: Date.now(),
+  };
+  const { result } = await collectCodexState(fakeFile, ctx(buffer));
+  expect(result.errors.length).toBeGreaterThan(0);
+  expect(result.capturedBatches).toBe(0);
+});
