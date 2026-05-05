@@ -1,0 +1,33 @@
+# Build output
+dist/
+*.tsbuildinfo
+
+# Dependencies
+node_modules/
+
+# Bun
+.bun/
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+logs/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Local environment
+.env
+.env.local
+.env.*.local
+
+# Local dev state (anything a developer might create when smoke-testing)
+.proxai/

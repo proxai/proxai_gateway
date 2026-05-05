@@ -71,7 +71,7 @@ bun rm -g @proxai/gateway              # Bun
 | Session and workspace metadata | Anything outside `~/.claude/`, `~/.codex/`, Cursor's data dir |
 | Git branch / repo for the session | Files you didn't open in a coding agent |
 
-The exact paths are listed in [`03_FLUSHING_ALGORITHM.md`](03_FLUSHING_ALGORITHM.md) §5–§7. Anything not on that list, the gateway never reads.
+The exact paths are listed in [`docs/03_FLUSHING_ALGORITHM.md`](docs/03_FLUSHING_ALGORITHM.md) §5–§7. Anything not on that list, the gateway never reads.
 
 ---
 
@@ -119,17 +119,21 @@ Total CPU per hour while you're working: under five seconds. The gateway will no
 
 ## Documentation
 
+All design documents live under [`docs/`](docs/). For contributors, the suggested reading order is `README.md` → `docs/01_INTRO.md` → `docs/nest-contract.md` → `docs/03_FLUSHING_ALGORITHM.md` → the rest as needed.
+
 | Doc | What's in it |
 |---|---|
-| [`01_INTRO.md`](01_INTRO.md) | Overall architecture and MVP scope |
-| [`02_CLI_DESIGN.md`](02_CLI_DESIGN.md) | Full CLI command reference |
-| [`03_FLUSHING_ALGORITHM.md`](03_FLUSHING_ALGORITHM.md) | Per-agent capture, watermarks, and the backend-upload DTO contract |
-| [`04_AGENT_CALL_RECORD.md`](04_AGENT_CALL_RECORD.md) | The typed record the backend produces from raw bytes |
-| [`05_AGENT_CALL_RECORD_MAPPING.md`](05_AGENT_CALL_RECORD_MAPPING.md) | Backend-side reference: how raw fields map to `AgentCallRecord` |
-| [`06_USER_EXPERIENCE.md`](06_USER_EXPERIENCE.md) | What the user sees and how messages should read |
-| [`07_MACOS_MVP.md`](07_MACOS_MVP.md) | macOS implementation details (launchd, file watching, gotchas) |
-
-If you're a contributor reading these in order: `README.md` → `01_INTRO.md` → `03_FLUSHING_ALGORITHM.md` → `04_AGENT_CALL_RECORD.md` → the rest as needed.
+| [`docs/01_INTRO.md`](docs/01_INTRO.md) | Overall architecture and MVP scope |
+| [`docs/02_CLI_DESIGN.md`](docs/02_CLI_DESIGN.md) | Full CLI command reference |
+| [`docs/03_FLUSHING_ALGORITHM.md`](docs/03_FLUSHING_ALGORITHM.md) | Per-agent capture, watermarks, and the backend-upload DTO contract |
+| [`docs/04_AGENT_CALL_RECORD.md`](docs/04_AGENT_CALL_RECORD.md) | The typed record the backend produces from raw bytes |
+| [`docs/05_AGENT_CALL_RECORD_MAPPING.md`](docs/05_AGENT_CALL_RECORD_MAPPING.md) | Backend-side reference: how raw fields map to `AgentCallRecord` |
+| [`docs/06_USER_EXPERIENCE.md`](docs/06_USER_EXPERIENCE.md) | What the user sees and how messages should read |
+| [`docs/07_MACOS_MVP.md`](docs/07_MACOS_MVP.md) | macOS implementation details (launchd, file watching, gotchas) |
+| [`docs/nest-contract.md`](docs/nest-contract.md) | Backend integration contract — wire DTO, watermark semantics, status-code action table, idempotency, kill switch |
+| [`docs/ALGORITHM_CLAUDE.md`](docs/ALGORITHM_CLAUDE.md) / [`docs/ALGORITHM_CURSOR.md`](docs/ALGORITHM_CURSOR.md) / [`docs/ALGORITHM_CODEX.md`](docs/ALGORITHM_CODEX.md) | Per-agent capture algorithm details |
+| [`docs/CAPTURE_TARGETS.md`](docs/CAPTURE_TARGETS.md) | What gets captured per agent |
+| [`docs/web_plugin/`](docs/web_plugin/) | Browser-extension companion (separate component, not part of the gateway CLI) |
 
 ---
 
@@ -144,7 +148,7 @@ If you're a contributor reading these in order: `README.md` → `01_INTRO.md` �
 | Distribution | Homebrew tap `proxai/tap/proxai-gateway`; npm meta-package `@proxai/gateway` (installable via `bun`, `pnpm`, `yarn`, `npm` — pulls the matching platform binary via `optionalDependencies`); signed binaries on GitHub Releases |
 | License | Apache 2.0 |
 
-Antigravity, Linux, Windows, menu-bar tray, native `.pkg` installer, signed code, optional HTTP-proxy capture mode — all post-MVP. See [`01_INTRO.md`](01_INTRO.md) §9 for the roadmap.
+Antigravity, Linux, Windows, menu-bar tray, native `.pkg` installer, signed code, optional HTTP-proxy capture mode — all post-MVP. See [`docs/01_INTRO.md`](docs/01_INTRO.md) §9 for the roadmap.
 
 ---
 
@@ -162,7 +166,7 @@ The redaction layer scans every captured record for known secret formats (Anthro
 **Does this slow my machine down?**
 Very unlikely to be detectable. The gateway uses `mtime` checks before reading anything, and a full poll cycle is under 200 ms. Sustained CPU is under five seconds per hour.
 
-**My company requires Full Disk Access pre-approval.** The installer probes for FDA at install time and prints clear instructions if it's needed. For MDM-managed deployments, see the Phase 3 roadmap in [`01_INTRO.md`](01_INTRO.md).
+**My company requires Full Disk Access pre-approval.** The installer probes for FDA at install time and prints clear instructions if it's needed. For MDM-managed deployments, see the Phase 3 roadmap in [`docs/01_INTRO.md`](docs/01_INTRO.md).
 
 **Where does my data go?**
 By default, to `nest.proxai.co`. Self-hosted backend mode is on the Phase 3 roadmap.
