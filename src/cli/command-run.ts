@@ -28,7 +28,7 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
     hostId: deps.config.account.hostId,
     endpoints: {
       ingest: deps.config.backend.ingestUrl,
-      health: deps.config.backend.healthUrl,
+      verifyKey: deps.config.backend.verifyKeyUrl,
     },
     gatewayVersion: deps.gatewayVersion,
   });

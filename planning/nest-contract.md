@@ -6,7 +6,7 @@ This is the **contract** the backend enforces. The gateway-side algorithms (`03_
 
 If you're changing gateway behavior that touches the wire format, idempotency, redaction, or the watermark, **read this first.** Most of the constraints below exist because of a real bug we've already paid for somewhere.
 
-> **Implementation status (as of doc v2.0):** the **health endpoint is live** in `proxai_nest`. The **raw-record upload endpoint is NOT yet live** — gateway code should be written against the contract below, but real uploads will only succeed once `POST /v1/raw_records` is wired up server-side. Gateway tests must mock the upload path.
+> **Implementation status (as of doc v2.1):** the **verify-key endpoint is live** in `proxai_nest`. The **raw-record upload endpoint is NOT yet live** — gateway code should be written against the contract below, but real uploads will only succeed once `POST /v1/raw_records` is wired up server-side. Gateway tests must mock the upload path.
 
 ---
 
@@ -14,10 +14,10 @@ If you're changing gateway behavior that touches the wire format, idempotency, r
 
 The backend exposes exactly two HTTP endpoints relevant to the gateway:
 
-1. **`GET /health`** — public, unauthenticated. Returns `{ status, checks }` so the gateway's `install` command can verify connectivity before writing config.
-2. **`POST /v1/raw_records`** — accepts a JSON envelope, decompresses the body, runs a defense-in-depth redaction pass, stores the bytes in S3, indexes the row in Postgres, enqueues a parse job, returns. Authenticated via the user's **ingestion key** in the `X-API-Key` header. Treated as **at-least-once with capture-id idempotency** — same `capture_id` retried any number of times yields exactly one stored row.
+1. **`GET /ingestion/verify-key`** — authenticated. The gateway hits this during `install` to validate that the user's ingestion key is real, active, and of type `INGESTION` before writing config. Returns `{ success: true, data: <ApiKey-without-id>, message }` on 200, or `403 Forbidden` if the key is missing/invalid/revoked/wrong-type.
+2. **`POST /v1/raw_records`** — accepts a JSON envelope, decompresses the body, runs a defense-in-depth redaction pass, stores the bytes in S3, indexes the row in Postgres, enqueues a parse job, returns. Authenticated via the same **ingestion key** in the `X-API-Key` header. Treated as **at-least-once with capture-id idempotency** — same `capture_id` retried any number of times yields exactly one stored row.
 
-There is no separate "validate API key" endpoint, no host-pinning endpoint, and no version-check endpoint. If the gateway needs to surface "is the server reachable" during install, it hits `/health`. The ingestion key is trusted at install time and validated implicitly by the first successful upload.
+There is no host-pinning endpoint and no version-check endpoint. The system-level `GET /health` (DB+Redis probe) exists on `proxai_nest` but is **infrastructure-only** — it's hit by Docker HEALTHCHECK / Better Stack Uptime / internal dashboards, never by the gateway. The customer-facing "is my install going to work" probe is `verify-key`.
 
 Everything beyond this paragraph is detail.
 
@@ -25,39 +25,39 @@ Everything beyond this paragraph is detail.
 
 ## 2. The endpoints
 
-### 2.1 Health check
+### 2.1 Key verification (install-time)
 
 ```
-GET /health
+GET /ingestion/verify-key
+X-API-Key: <ingestion-key>
 ```
 
-Public, no authentication required. Skipped by all rate-limiters server-side (`@SkipThrottle(SKIP_ALL_THROTTLERS)`) because Docker HEALTHCHECK and external uptime probes hit it constantly.
+Authenticated by the **ingestion key** in the `X-API-Key` header. The header value is the full key string, format `<random>-<datestr>-<random>` (three hyphen-separated parts). The backend looks up the key by signature hash, validates it's `state: ACTIVE` and `type: INGESTION`, and on success returns the key metadata.
 
 **Successful response (200):**
 
 ```json
 {
-  "status": "healthy",
-  "checks": {
-    "db": true,
-    "redis": true
-  }
+  "success": true,
+  "data": {
+    "keyName": "my-laptop",
+    "userId": "u_abc",
+    "key": "<key>",
+    "permission": "...",
+    "state": "ACTIVE",
+    "createdAt": "2026-04-15T...",
+    "lastUsed": "2026-05-05T...",
+    "type": "INGESTION"
+  },
+  "message": "Key verified successfully"
 }
 ```
 
-**Unhealthy response (503):**
+**Failure (403):** key is missing, malformed, revoked (`state: INACTIVE`), or wrong type (e.g. user pasted a SERVICE-type key by mistake). No body content the gateway needs to parse.
 
-```json
-{
-  "status": "unhealthy",
-  "checks": {
-    "db": true,
-    "redis": false
-  }
-}
-```
+The gateway calls this exclusively during `proxai-gateway install`: if 200 with `success: true`, install proceeds and writes config. On 403, install aborts with an "ingestion key rejected" error. On 5xx/network errors, install aborts with a transient-error message and the user can retry.
 
-The gateway uses this exclusively during `proxai-gateway install`: if 200 with `status === "healthy"`, the install proceeds and writes config. If anything else, install aborts. The health endpoint does NOT validate the user's ingestion key — that happens implicitly on the first upload.
+This endpoint is the customer-facing answer to "is my key going to work?" — it does NOT probe DB/Redis health (that's the operator's `GET /health`, which the gateway never calls).
 
 ### 2.2 Raw record upload (not yet live)
 
@@ -77,7 +77,7 @@ Authenticated via the user's INGESTION-type API key in the `X-API-Key` header. T
 
 The backend has an env-var kill switch. When the upload feature is disabled server-side, every `POST /v1/raw_records` request returns `503 Service Unavailable` with no further processing. The gateway should treat this exactly like a transient outage: retry with backoff, do not advance the watermark, do not pause the local buffer until the documented buffer-full threshold.
 
-This switch exists for fast rollback during incidents. It is set by the operator, not by the gateway. The `/health` endpoint is unaffected.
+This switch exists for fast rollback during incidents. It is set by the operator, not by the gateway. The `/ingestion/verify-key` endpoint is unaffected — the kill switch only gates uploads.
 
 ---
 
@@ -558,16 +558,19 @@ When in doubt, send a small diff and ship to dev/preview first. The backend has 
 
 ---
 
-**Document version:** 2.0
+**Document version:** 2.1
 **Last updated:** 2026-05-05
 **Backend implementation:** `proxai_nest`, ingestion module
 **Gateway implementation:** `@proxai/gateway`
 
-**Changelog from v1.0:**
+**Changelog from v2.0 → v2.1:**
+- Install flow now hits `GET /ingestion/verify-key` (customer-facing key check) instead of `GET /health` (operator-only DB/Redis probe). The gateway never calls `/health`. Customers shouldn't see infra health probes — they care about whether their key works.
+- Verify-key endpoint requires `X-API-Key` header and returns `{ success, data, message }` shape. 403 = key invalid/revoked/wrong-type.
+
+**Changelog from v1.0 → v2.0:**
 - Auth scheme: `Authorization: Bearer` → `X-API-Key`
 - Removed: dedicated `AGENT_GATEWAY` API-key type; replaced by reusing the user's existing **INGESTION-type** keys.
 - Removed: host pinning (`metadata.allowedHostIds`). `host_id` is still on the wire but not validated against an allowlist.
 - Removed: `POST /v1/auth/validate`, `PATCH /v1/api-keys/<key>/allowed-hosts`, `GET /v1/gateway/latest_version` endpoints.
-- Install flow: just hits `GET /health`; if 200/healthy, install succeeds. The ingestion key is validated implicitly on the first upload.
-- 403 semantics: now retriable (key-fix recoverable) instead of terminal-failed.
+- 403 semantics: now retriable (key-fix recoverable) instead of terminal-failed for the upload path.
 - `POST /v1/raw_records` is documented but **not yet live** server-side — gateway tests must mock the upload path.

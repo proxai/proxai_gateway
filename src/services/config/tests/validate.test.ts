@@ -3,11 +3,11 @@ import { expect, test } from 'bun:test';
 import { ValidationError } from 'core/utils';
 import {
   DEFAULT_BUFFER_MAX_BYTES,
-  DEFAULT_HEALTH_URL,
   DEFAULT_INGEST_URL,
   DEFAULT_POLL_INTERVAL_SEC,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
+  DEFAULT_VERIFY_KEY_URL,
   validateAndCoerce,
 } from 'services/config';
 
@@ -69,7 +69,7 @@ test('rejects non-numeric numeric fields', () => {
 test('applies defaults for missing optional sections', () => {
   const result = validateAndCoerce({ account: minimalAccount });
   expect(result.backend.ingestUrl).toBe(DEFAULT_INGEST_URL);
-  expect(result.backend.healthUrl).toBe(DEFAULT_HEALTH_URL);
+  expect(result.backend.verifyKeyUrl).toBe(DEFAULT_VERIFY_KEY_URL);
   expect(result.capture.pollIntervalSec).toBe(DEFAULT_POLL_INTERVAL_SEC);
   expect(result.capture.bufferMaxBytes).toBe(DEFAULT_BUFFER_MAX_BYTES);
   expect(result.logging.level).toBe('info');

@@ -1,7 +1,7 @@
 import type { InstallSource } from 'services/config/config.types.ts';
 
 export const DEFAULT_INGEST_URL = 'https://nest.proxai.co/v1/raw_records';
-export const DEFAULT_HEALTH_URL = 'https://nest.proxai.co/health';
+export const DEFAULT_VERIFY_KEY_URL = 'https://nest.proxai.co/ingestion/verify-key';
 
 export const DEFAULT_POLL_INTERVAL_SEC = 300;
 export const MIN_POLL_INTERVAL_SEC = 60;

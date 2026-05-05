@@ -1,6 +1,6 @@
 export interface HttpEndpoints {
   ingest: string;
-  health: string;
+  verifyKey: string;
 }
 
 export interface HttpClientOptions {
@@ -25,7 +25,7 @@ export interface UploadResult {
   idempotent: boolean;
 }
 
-export interface HealthResult {
-  status: 'healthy' | 'unhealthy';
-  checks: Record<string, boolean>;
+export interface VerifyKeyResult {
+  success: boolean;
+  message: string;
 }

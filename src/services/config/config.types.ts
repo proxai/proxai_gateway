@@ -11,7 +11,7 @@ export interface AccountConfig {
 
 export interface BackendConfig {
   ingestUrl: string;
-  healthUrl: string;
+  verifyKeyUrl: string;
 }
 
 export interface CaptureConfig {

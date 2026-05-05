@@ -27,7 +27,7 @@ function makeConfig(): GatewayConfig {
     },
     backend: {
       ingestUrl: 'https://api.example.com/v1/raw_records',
-      healthUrl: 'https://api.example.com/health',
+      verifyKeyUrl: 'https://api.example.com/ingestion/verify-key',
     },
     capture: {
       pollIntervalSec: 60,

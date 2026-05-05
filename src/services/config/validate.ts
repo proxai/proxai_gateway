@@ -4,11 +4,11 @@ import type { LogLevel } from 'core/log';
 import { ValidationError } from 'core/utils';
 import {
   DEFAULT_BUFFER_MAX_BYTES,
-  DEFAULT_HEALTH_URL,
   DEFAULT_INGEST_URL,
   DEFAULT_POLL_INTERVAL_SEC,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
+  DEFAULT_VERIFY_KEY_URL,
   MAX_POLL_INTERVAL_SEC,
   MIN_BUFFER_MAX_BYTES,
   MIN_POLL_INTERVAL_SEC,
@@ -49,7 +49,11 @@ function validateBackend(raw: unknown): BackendConfig {
   const r = optionalTable(raw, 'backend');
   return {
     ingestUrl: optionalString(r['ingest_url'], DEFAULT_INGEST_URL, 'backend.ingest_url'),
-    healthUrl: optionalString(r['health_url'], DEFAULT_HEALTH_URL, 'backend.health_url'),
+    verifyKeyUrl: optionalString(
+      r['verify_key_url'],
+      DEFAULT_VERIFY_KEY_URL,
+      'backend.verify_key_url',
+    ),
   };
 }
 

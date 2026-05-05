@@ -17,7 +17,7 @@ const VALID_SHA256 = 'a'.repeat(64);
 
 const endpoints: HttpEndpoints = {
   ingest: 'https://api.example.com/v1/raw_records',
-  health: 'https://api.example.com/health',
+  verifyKey: 'https://api.example.com/ingestion/verify-key',
 };
 
 interface MockCall {
@@ -227,44 +227,73 @@ describe('uploadRawRecord', () => {
   });
 });
 
-describe('checkHealth', () => {
-  test('returns parsed result on 200 (healthy)', async () => {
+describe('verifyKey', () => {
+  test('returns success on 200 with success: true', async () => {
     const client = createClient(
-      mockFetch(() => jsonResponse({ status: 'healthy', checks: { db: true, redis: true } })),
+      mockFetch(() =>
+        jsonResponse({
+          success: true,
+          data: { keyName: 'my-key', userId: 'u_1' },
+          message: 'Key verified successfully',
+        }),
+      ),
     );
-    const result = await client.checkHealth();
-    expect(result.status).toBe('healthy');
-    expect(result.checks.db).toBe(true);
-    expect(result.checks.redis).toBe(true);
+    const result = await client.verifyKey();
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Key verified successfully');
   });
 
-  test('GETs the health endpoint without API key', async () => {
+  test('returns success: false when server returns 200 with success: false', async () => {
+    const client = createClient(
+      mockFetch(() => jsonResponse({ success: false, message: 'expired' })),
+    );
+    const result = await client.verifyKey();
+    expect(result.success).toBe(false);
+    expect(result.message).toBe('expired');
+  });
+
+  test('GETs the verify-key endpoint and sends the X-API-Key header', async () => {
     const log: MockCall[] = [];
     const client = createClient(
-      mockFetch(() => jsonResponse({ status: 'healthy', checks: { db: true, redis: true } }), log),
+      mockFetch(() => jsonResponse({ success: true, message: 'Key verified successfully' }), log),
     );
-    await client.checkHealth();
-    expect(log[0]!.url).toBe(endpoints.health);
+    await client.verifyKey();
+    expect(log[0]!.url).toBe(endpoints.verifyKey);
     expect(log[0]!.init.method).toBe('GET');
     const headers = log[0]!.init.headers as Record<string, string>;
-    expect(headers['X-API-Key']).toBeUndefined();
-    expect(headers['Authorization']).toBeUndefined();
+    expect(headers['X-API-Key']).toBe('pxg-20260505-secret');
+  });
+
+  test('throws AuthError on 403 (invalid or revoked key)', async () => {
+    const client = createClient(mockFetch(() => emptyResponse(403)));
+    await expect(client.verifyKey()).rejects.toThrow(AuthError);
+  });
+
+  test('throws RetriableError on 503', async () => {
+    const client = createClient(mockFetch(() => emptyResponse(503)));
+    await expect(client.verifyKey()).rejects.toThrow(RetriableError);
   });
 
   test('hostIdentifier exposes hostId for telemetry consumers', () => {
     const client = createClient(mockFetch(() => emptyResponse(200)));
     expect(client.hostIdentifier).toBe('h_test');
   });
+
+  test('falls back to empty message when server omits it', async () => {
+    const client = createClient(mockFetch(() => jsonResponse({ success: true })));
+    const result = await client.verifyKey();
+    expect(result.message).toBe('');
+  });
 });
 
 describe('error response parsing', () => {
   test('throws FatalError on unparseable 200 body', async () => {
     const client = createClient(mockFetch(() => new Response('not json', { status: 200 })));
-    await expect(client.checkHealth()).rejects.toThrow(FatalError);
+    await expect(client.verifyKey()).rejects.toThrow(FatalError);
   });
 
   test('throws FatalError on empty 200 body', async () => {
     const client = createClient(mockFetch(() => emptyResponse(200)));
-    await expect(client.checkHealth()).rejects.toThrow(FatalError);
+    await expect(client.verifyKey()).rejects.toThrow(FatalError);
   });
 });

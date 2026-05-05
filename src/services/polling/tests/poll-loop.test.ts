@@ -38,7 +38,7 @@ function makeContext(sources: RegisteredSource[]): PollCycleContext {
       hostId: 'h_test',
       endpoints: {
         ingest: 'https://api.example.com/v1/raw_records',
-        health: 'https://api.example.com/health',
+        verifyKey: 'https://api.example.com/ingestion/verify-key',
       },
       fetch: fakeFetch(),
     }),

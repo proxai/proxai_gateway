@@ -20,11 +20,11 @@ import {
   HTTP_STATUS,
 } from 'services/http/http.constants.ts';
 import type {
-  HealthResult,
   HttpClientOptions,
   HttpEndpoints,
   RequestOptions,
   UploadResult,
+  VerifyKeyResult,
 } from 'services/http/http.types.ts';
 
 export class HttpClient {
@@ -48,11 +48,16 @@ export class HttpClient {
     return this.hostId;
   }
 
-  async checkHealth(): Promise<HealthResult> {
-    return this.request<HealthResult>({
+  async verifyKey(): Promise<VerifyKeyResult> {
+    const raw = await this.request<{ success: boolean; message?: string }>({
       method: 'GET',
-      url: this.endpoints.health,
+      url: this.endpoints.verifyKey,
+      withApiKey: true,
     });
+    return {
+      success: raw.success === true,
+      message: raw.message ?? '',
+    };
   }
 
   async uploadRawRecord(dto: RawRecordDTO): Promise<UploadResult> {

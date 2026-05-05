@@ -1,7 +1,7 @@
 import { ensureDir, setMode, writeAtomic } from 'core/io/fs';
 import { dirname } from 'node:path';
 
-import { GatewayError, generateUuidV7, nowIsoUtc } from 'core/utils';
+import { AuthError, GatewayError, generateUuidV7, nowIsoUtc } from 'core/utils';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import { buildLaunchdPlist } from 'cli/launchd-plist.ts';
@@ -9,11 +9,11 @@ import type { PromptSink } from 'cli/prompts.ts';
 import { buildSystemdUnit } from 'cli/systemd-unit.ts';
 import {
   DEFAULT_BUFFER_MAX_BYTES,
-  DEFAULT_HEALTH_URL,
   DEFAULT_INGEST_URL,
   DEFAULT_POLL_INTERVAL_SEC,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
+  DEFAULT_VERIFY_KEY_URL,
 } from 'services/config';
 import type { GatewayConfig, InstallSource } from 'services/config';
 import { writeConfigToFile } from 'services/config';
@@ -75,13 +75,21 @@ export async function runInstall(
 
   const http = deps.httpClientFactory(apiKey, hostId);
   try {
-    const health = await http.checkHealth();
-    if (health.status !== 'healthy') {
-      deps.output.error(`backend health check returned status: ${health.status}`);
-      return { exitCode: EXIT_CODE.error };
+    const verification = await http.verifyKey();
+    if (!verification.success) {
+      deps.output.error(
+        verification.message.length > 0
+          ? `ingestion key not accepted: ${verification.message}`
+          : 'ingestion key not accepted',
+      );
+      return { exitCode: EXIT_CODE.authError };
     }
   } catch (err) {
-    deps.output.error(formatError('health check failed', err));
+    if (err instanceof AuthError) {
+      deps.output.error('ingestion key rejected by server (invalid, revoked, or wrong type)');
+      return { exitCode: EXIT_CODE.authError };
+    }
+    deps.output.error(formatError('verify-key failed', err));
     return { exitCode: EXIT_CODE.error };
   }
 
@@ -89,7 +97,7 @@ export async function runInstall(
     account: { apiKey, hostId, installedAt, installSource },
     backend: {
       ingestUrl: DEFAULT_INGEST_URL,
-      healthUrl: DEFAULT_HEALTH_URL,
+      verifyKeyUrl: DEFAULT_VERIFY_KEY_URL,
     },
     capture: {
       pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
