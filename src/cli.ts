@@ -4,12 +4,12 @@ import { Command } from 'commander';
 import packageJson from '../package.json' with { type: 'json' };
 import { bufferDbPath, configDir, configFilePath, logDir, pausedSentinelPath } from 'core/io/fs';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
-import { runInstall } from 'cli/command-install.ts';
-import { runPause } from 'cli/command-pause.ts';
-import { runResume } from 'cli/command-resume.ts';
-import { runDaemon } from 'cli/command-run.ts';
-import { runStatus } from 'cli/command-status.ts';
-import { runUninstall } from 'cli/command-uninstall.ts';
+import { runInstall } from 'cli/commands/command-install.ts';
+import { runPause } from 'cli/commands/command-pause.ts';
+import { runResume } from 'cli/commands/command-resume.ts';
+import { runDaemon } from 'cli/commands/command-run.ts';
+import { runStatus } from 'cli/commands/command-status.ts';
+import { runUninstall } from 'cli/commands/command-uninstall.ts';
 import {
   defaultLaunchdPlistPath,
   defaultSystemdUnitPath,

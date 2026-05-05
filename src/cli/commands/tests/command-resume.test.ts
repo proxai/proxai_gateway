@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runResume } from 'cli/command-resume.ts';
+import { runResume } from 'cli/commands/command-resume.ts';
 import { captureOutput } from 'cli/output.ts';
 import { isPaused, pausePolling } from 'services/polling';
 

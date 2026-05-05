@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runUninstall } from 'cli/command-uninstall.ts';
+import { runUninstall } from 'cli/commands/command-uninstall.ts';
 import { captureOutput } from 'cli/output.ts';
 import { scriptedPrompts } from 'cli/prompts.ts';
 

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runDaemon } from 'cli/command-run.ts';
+import { runDaemon } from 'cli/commands/command-run.ts';
 import { captureOutput } from 'cli/output.ts';
 import type { GatewayConfig } from 'services/config';
 
