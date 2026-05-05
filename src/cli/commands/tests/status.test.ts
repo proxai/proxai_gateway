@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runStatus } from 'cli/commands/command-status.ts';
+import { runStatus } from 'cli/commands/status.ts';
 import { captureOutput } from 'cli/output.ts';
 import { generateUuidV7, zstdCompressSync } from 'core/utils';
 import { insertBatch, markBatchDone, markBatchFailed, openInMemoryBufferDb } from 'services/buffer';

@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runInstall } from 'cli/commands/command-install.ts';
+import { runInstall } from 'cli/commands/install.ts';
 import { captureOutput } from 'cli/output.ts';
 import { scriptedPrompts } from 'cli/prompts.ts';
 import { HttpClient } from 'services/http';
