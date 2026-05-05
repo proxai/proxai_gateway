@@ -17,7 +17,7 @@ import {
   inquirerPrompts,
 } from 'cli/index.ts';
 import { openBufferDb } from 'services/buffer';
-import { loadConfigFromFile } from 'services/config';
+import { defaultIngestUrl, defaultVerifyKeyUrl, loadConfigFromFile } from 'services/config';
 import type { InstallSource } from 'services/config';
 import { HttpClient } from 'services/http';
 
@@ -57,8 +57,8 @@ program
             apiKey,
             hostId,
             endpoints: {
-              ingest: 'https://nest.proxai.co/v1/raw_records',
-              verifyKey: 'https://nest.proxai.co/ingestion/verify-key',
+              ingest: defaultIngestUrl(),
+              verifyKey: defaultVerifyKeyUrl(),
             },
             gatewayVersion: `@proxai/gateway ${packageJson.version}`,
           }),

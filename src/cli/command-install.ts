@@ -9,11 +9,11 @@ import type { PromptSink } from 'cli/prompts.ts';
 import { buildSystemdUnit } from 'cli/systemd-unit.ts';
 import {
   DEFAULT_BUFFER_MAX_BYTES,
-  DEFAULT_INGEST_URL,
   DEFAULT_POLL_INTERVAL_SEC,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
-  DEFAULT_VERIFY_KEY_URL,
+  defaultIngestUrl,
+  defaultVerifyKeyUrl,
 } from 'services/config';
 import type { GatewayConfig, InstallSource } from 'services/config';
 import { writeConfigToFile } from 'services/config';
@@ -96,8 +96,8 @@ export async function runInstall(
   const config: GatewayConfig = {
     account: { apiKey, hostId, installedAt, installSource },
     backend: {
-      ingestUrl: DEFAULT_INGEST_URL,
-      verifyKeyUrl: DEFAULT_VERIFY_KEY_URL,
+      ingestUrl: defaultIngestUrl(),
+      verifyKeyUrl: defaultVerifyKeyUrl(),
     },
     capture: {
       pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
