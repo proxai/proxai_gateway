@@ -6,39 +6,78 @@ This is the **contract** the backend enforces. The gateway-side algorithms (`03_
 
 If you're changing gateway behavior that touches the wire format, idempotency, redaction, or the watermark, **read this first.** Most of the constraints below exist because of a real bug we've already paid for somewhere.
 
+> **Implementation status (as of doc v2.0):** the **health endpoint is live** in `proxai_nest`. The **raw-record upload endpoint is NOT yet live** — gateway code should be written against the contract below, but real uploads will only succeed once `POST /v1/raw_records` is wired up server-side. Gateway tests must mock the upload path.
+
 ---
 
-## 1. The endpoint, in one paragraph
+## 1. The two endpoints, in one paragraph
 
-The backend exposes a single endpoint, `POST /v1/raw_records`. It accepts a JSON envelope, decompresses the body, runs a defense-in-depth redaction pass, stores the bytes in S3, indexes the row in Postgres, enqueues a parse job, and returns. The gateway treats this endpoint as **at-least-once with capture-id idempotency** — same `capture_id` retried any number of times yields exactly one stored row.
+The backend exposes exactly two HTTP endpoints relevant to the gateway:
+
+1. **`GET /health`** — public, unauthenticated. Returns `{ status, checks }` so the gateway's `install` command can verify connectivity before writing config.
+2. **`POST /v1/raw_records`** — accepts a JSON envelope, decompresses the body, runs a defense-in-depth redaction pass, stores the bytes in S3, indexes the row in Postgres, enqueues a parse job, returns. Authenticated via the user's **ingestion key** in the `X-API-Key` header. Treated as **at-least-once with capture-id idempotency** — same `capture_id` retried any number of times yields exactly one stored row.
+
+There is no separate "validate API key" endpoint, no host-pinning endpoint, and no version-check endpoint. If the gateway needs to surface "is the server reachable" during install, it hits `/health`. The ingestion key is trusted at install time and validated implicitly by the first successful upload.
 
 Everything beyond this paragraph is detail.
 
 ---
 
-## 2. The endpoint
+## 2. The endpoints
+
+### 2.1 Health check
+
+```
+GET /health
+```
+
+Public, no authentication required. Skipped by all rate-limiters server-side (`@SkipThrottle(SKIP_ALL_THROTTLERS)`) because Docker HEALTHCHECK and external uptime probes hit it constantly.
+
+**Successful response (200):**
+
+```json
+{
+  "status": "healthy",
+  "checks": {
+    "db": true,
+    "redis": true
+  }
+}
+```
+
+**Unhealthy response (503):**
+
+```json
+{
+  "status": "unhealthy",
+  "checks": {
+    "db": true,
+    "redis": false
+  }
+}
+```
+
+The gateway uses this exclusively during `proxai-gateway install`: if 200 with `status === "healthy"`, the install proceeds and writes config. If anything else, install aborts. The health endpoint does NOT validate the user's ingestion key — that happens implicitly on the first upload.
+
+### 2.2 Raw record upload (not yet live)
 
 ```
 POST /v1/raw_records
 Content-Type: application/json
-Authorization: Bearer <api-key>
+X-API-Key: <ingestion-key>
 ```
 
-### 2.1 Authentication
+Authenticated via the user's INGESTION-type API key in the `X-API-Key` header. The header value is the full key string, format `<random>-<datestr>-<random>` (three hyphen-separated parts). The backend looks up the key by signature hash, validates it's `state: ACTIVE` and `type: INGESTION`, and binds the request to the key's owner.
 
-The API key is provisioned once at gateway install time. It is of type `AGENT_GATEWAY` (the backend has a separate API-key type for this surface; other types of keys are rejected with `403`).
+**Important:** the ingestion key is per-user, not per-host. A user may run the gateway on multiple machines, all with the same key. The DTO includes `host_id` for telemetry and analytics partitioning, but the backend does NOT validate `host_id` against any allowlist — it stores whatever the gateway sends and uses it as a per-host correlation key.
 
-**Critical:** the backend binds your `host_id` to the API key at issuance time. The key carries a `metadata.allowedHostIds: string[]`; every incoming DTO must have `dto.host_id ∈ allowedHostIds`, or the request is rejected with `403`.
+**Once the endpoint is live (not yet today):** if the key is missing, malformed, or revoked, the backend returns `403`. If it's accepted but the request fails downstream validation, see §3.2.
 
-This is a hard security boundary: the `host_id` is your file-identity partition key. If the backend trusted a gateway-supplied `host_id` blindly, any compromised key could poison another host's watermark and silently break ingestion for that host. The pinning closes that gap.
+### 2.3 Kill switch
 
-**Operational consequence:** if the gateway changes how it derives `host_id` (e.g. install salt rotation), the new value must be added to `allowedHostIds` on the key BEFORE the gateway starts sending it, or every request from that host will 403.
+The backend has an env-var kill switch. When the upload feature is disabled server-side, every `POST /v1/raw_records` request returns `503 Service Unavailable` with no further processing. The gateway should treat this exactly like a transient outage: retry with backoff, do not advance the watermark, do not pause the local buffer until the documented buffer-full threshold.
 
-### 2.2 Kill switch
-
-The backend has an env-var kill switch. When `AGENT_GATEWAY_RECEIVE_ENABLED=false`, every request returns `503 Service Unavailable` with no further processing. The gateway should treat this exactly like a transient outage: retry with backoff, do not advance the watermark, do not pause the local buffer until the documented buffer-full threshold.
-
-This switch exists for fast rollback during incidents. It is set by the operator, not by the gateway.
+This switch exists for fast rollback during incidents. It is set by the operator, not by the gateway. The `/health` endpoint is unaffected.
 
 ---
 
@@ -68,7 +107,7 @@ This switch exists for fast rollback during incidents. It is set by the operator
 | Field | Type | Required | Validation | Notes |
 |---|---|---|---|---|
 | `capture_id` | string (UUIDv7) | yes | RFC 4122 v7 | Primary idempotency key. See §5. |
-| `host_id` | string | yes | non-empty; must be in API key's `allowedHostIds` | See §2.1. |
+| `host_id` | string | yes | non-empty | Generated by the gateway at install time (UUIDv7). Used for per-host telemetry / partitioning. **NOT pinned to the ingestion key** — the backend records it as-is. |
 | `source_app` | enum | yes | `claude-code` \| `cursor` \| `codex` | Closed; new agents = new value, requires backend release. |
 | `source_kind` | enum | yes | `jsonl_append` \| `sqlite_kv_snapshot` \| `sqlite_table_snapshot` | Discriminator; see §4. |
 | `source_path` | string | yes | non-empty | Absolute path on host. |
@@ -87,7 +126,7 @@ This switch exists for fast rollback during incidents. It is set by the operator
 
 ### 3.2 What happens when validation fails
 
-Any DTO field failing validation produces `400 Bad Request` with a generic error message. The backend deliberately does NOT echo specific values back (e.g. it won't tell you "your `watermarkStart=42` is below `watermarkEnd=10`"); it logs the detail server-side and returns a generic message. This prevents the endpoint from being used as an oracle to probe other hosts' state.
+Any DTO field failing validation produces `400 Bad Request` with a generic error message. The backend deliberately does NOT echo specific values back; it logs the detail server-side and returns a generic message. This prevents the endpoint from being used as an oracle to probe other tenants' state.
 
 **Gateway action on 400:** mark the batch as `failed`, surface in `proxai-gateway status`, **do not retry, do not advance watermark.** A 400 means a real bug or schema drift on the gateway side; retrying produces the same result.
 
@@ -95,9 +134,9 @@ Any DTO field failing validation produces `400 Bad Request` with a generic error
 
 | Agent | Source of value | Example |
 |---|---|---|
-| Claude Code | `message.version` field sniffed from JSONL chunk; if no records this batch, last-seen value | `2.1.122` |
-| Cursor | `composerData._v + ':' + bubbleId._v` | `13:3` |
-| Codex | `threads.cli_version` | `0.126.0-alpha.8` |
+| Claude Code | Top-level `version` field on user/assistant/system/attachment lines (NOT `message.version` — that path is empty in real files); falls back to `"unknown"` | `2.1.122` |
+| Cursor | `composerData._v + ':' + bubbleId._v` from the first row of each prefix | `13:3` |
+| Codex | `threads.cli_version`, sampled once per state-collection cycle and threaded into the rollout pass | `0.126.0-alpha.8` |
 
 The backend stores it verbatim and uses it for parser dispatch. It does NOT validate the format beyond "non-empty string." If a parser becomes incompatible with a particular `agent_schema_version`, the backend handles that on its side; you don't need to coordinate.
 
@@ -162,7 +201,7 @@ Column names come from the SQLite schema. Schema drift (a new column appearing) 
 
 - **Generate `capture_id` ONCE per logical batch.** Persist it in your local upload state; reuse on every retry of the same batch.
 - **Never reuse a `capture_id` for a different batch.** If the body changes (e.g. you re-redact and recompose), generate a new `capture_id`.
-- **UUIDv7 is required**, not v4. The backend validates the version digit. v7 timestamps make ordering by id deterministic, useful for retroactive diagnostics. (Random ids would also be unique, but v7 lets us answer "when was this generated" without the timestamp field.)
+- **UUIDv7 is required**, not v4. The backend validates the version digit. v7 timestamps make ordering by id deterministic, useful for retroactive diagnostics.
 
 ### 5.2 What happens on duplicate
 
@@ -207,7 +246,7 @@ If `start > end`, the backend rejects with `400`. This is a defensive check: a b
 
 That is: if you ship `[100, 200)` for file F, the next batch for F must satisfy `watermark.start >= 200`.
 
-The backend's stateful parser maintains a per-file watermark cursor. The "have we processed this capture" gate is `MIN(last_processed_watermark) >= c.watermark_end`. If you ship overlapping or out-of-order ranges, the backend's monotonicity guard rejects with `400` and increments a `watermark_regression_total` metric. **It does NOT silently lose data** — that was the v2.7 fix — but it DOES require the gateway to recover.
+The backend's stateful parser maintains a per-file watermark cursor keyed by `(user_id, host_id, source_path_hash)` — `user_id` comes from the ingestion key, `host_id` from the DTO. The "have we processed this capture" gate is `MIN(last_processed_watermark) >= c.watermark_end`. If you ship overlapping or out-of-order ranges, the backend's monotonicity guard rejects with `400` and increments a `watermark_regression_total` metric. **It does NOT silently lose data** — that was the v2.7 fix — but it DOES require the gateway to recover.
 
 #### What to do when the source isn't naturally monotonic
 
@@ -278,7 +317,7 @@ Use zstd. The backend currently only accepts `body_compression: "zstd"` (CHECK e
 |---|---|---|
 | `200 OK` | Batch accepted (whether new or idempotent retry). | Mark batch `done`. Advance watermark. |
 | `400 Bad Request` | DTO validation failed, or watermark monotonicity violated, or table out of scope. Generic error message. | Mark batch `failed`. Surface in `proxai-gateway status`. **Do not retry, do not advance.** |
-| `403 Forbidden` | Auth failed: invalid key, key type wrong, or `host_id` not in `allowedHostIds`. | Mark batch `failed`. Surface as auth error; operator must update key issuance. **Do not retry as-is.** |
+| `403 Forbidden` | Auth failed: ingestion key missing, malformed, revoked (state INACTIVE), or wrong type (the user accidentally sent a SERVICE-type key). | Treat as **retriable** (key-fix recoverable): keep the batch pending and surface as auth error. Operator must rotate the key. **The gateway should NOT mark the batch failed** — once the key is fixed, the batch retries and succeeds. |
 | `408 Request Timeout` | zstd decompression exceeded 5s — likely a malformed body. | Mark batch `failed`. Surface as gateway bug; new `capture_id` won't help. |
 | `413 Payload Too Large` | Compressed > 2 MB OR decompressed > 10 MB. | Mark batch `failed`. Re-chunk and re-send with new `capture_id`s. |
 | `429 Too Many Requests` | Rate limit hit. | Backoff per the `Retry-After` header (or default 60s). Same `capture_id` retried. |
@@ -324,8 +363,8 @@ The system uses **defense in depth**: redaction runs on the gateway side AND aga
 
 Two stages on the gateway:
 
-1. **Write-time redaction.** Inline regex pass during the read step, using the `gitleaks` rule corpus + auth-header strip. Replaces matches with `[REDACTED:type]` BEFORE bytes leave the read function.
-2. **Upload-time redaction.** Independent regex pass with a different rule corpus (`detect-secrets`) before compression. Catches stage-1 bugs.
+1. **Write-time redaction.** Inline regex pass during the read step, using the gitleaks-style rule corpus + auth-header strip. Replaces matches with `[REDACTED:type]` BEFORE bytes leave the read function.
+2. **Upload-time redaction.** Independent regex pass with a different rule corpus (detect-secrets-style + keyword-anchored) before compression. Catches stage-1 bugs.
 
 ### 10.2 What the backend does
 
@@ -427,11 +466,11 @@ These are the bugs we've seen or anticipate. Avoiding them up-front saves real t
 **Cause:** ship-listed a Codex `state.sqlite` table outside `threads | thread_dynamic_tools | thread_spawn_edges`.
 **Fix:** the in-scope set is enforced both client-side (skip-list) and server-side (CHECK constraint). Add new tables only after backend coordination — they require parser support.
 
-### 12.7 `host_id` not in `allowedHostIds`
+### 12.7 Sending the wrong key type or a revoked key
 
-**Symptom:** every request from a particular host returns `403`.
-**Cause:** API key was issued without that `host_id` pinned, or the gateway changed `host_id` derivation.
-**Fix:** the operator updates the API key's `metadata.allowedHostIds` to include the new value. The backend re-reads metadata on every request, so no key rotation is needed.
+**Symptom:** every upload returns `403`; user reports "I just installed".
+**Cause:** the user supplied a SERVICE-type API key instead of an INGESTION key, or the key was revoked after install.
+**Fix:** the user creates a fresh INGESTION key in the dashboard and re-runs `proxai-gateway install`. Existing pending batches retry automatically once the new key is in place — the gateway treats 403 as retriable for exactly this reason.
 
 ### 12.8 Numeric precision overflow
 
@@ -519,7 +558,16 @@ When in doubt, send a small diff and ship to dev/preview first. The backend has 
 
 ---
 
-**Document version:** 1.0
-**Last updated:** 2026-05-04
-**Backend implementation:** `proxai_nest`, agent-gateway module
+**Document version:** 2.0
+**Last updated:** 2026-05-05
+**Backend implementation:** `proxai_nest`, ingestion module
 **Gateway implementation:** `@proxai/gateway`
+
+**Changelog from v1.0:**
+- Auth scheme: `Authorization: Bearer` → `X-API-Key`
+- Removed: dedicated `AGENT_GATEWAY` API-key type; replaced by reusing the user's existing **INGESTION-type** keys.
+- Removed: host pinning (`metadata.allowedHostIds`). `host_id` is still on the wire but not validated against an allowlist.
+- Removed: `POST /v1/auth/validate`, `PATCH /v1/api-keys/<key>/allowed-hosts`, `GET /v1/gateway/latest_version` endpoints.
+- Install flow: just hits `GET /health`; if 200/healthy, install succeeds. The ingestion key is validated implicitly on the first upload.
+- 403 semantics: now retriable (key-fix recoverable) instead of terminal-failed.
+- `POST /v1/raw_records` is documented but **not yet live** server-side — gateway tests must mock the upload path.

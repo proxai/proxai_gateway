@@ -3,12 +3,9 @@ import { DEFAULT_LOG_LEVEL, VALID_LOG_LEVELS } from 'core/log';
 import type { LogLevel } from 'core/log';
 import { ValidationError } from 'core/utils';
 import {
-  DEFAULT_ALLOWED_HOSTS_URL,
-  DEFAULT_AUTH_VALIDATE_URL,
   DEFAULT_BUFFER_MAX_BYTES,
   DEFAULT_HEALTH_URL,
   DEFAULT_INGEST_URL,
-  DEFAULT_LATEST_VERSION_URL,
   DEFAULT_POLL_INTERVAL_SEC,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
@@ -52,22 +49,7 @@ function validateBackend(raw: unknown): BackendConfig {
   const r = optionalTable(raw, 'backend');
   return {
     ingestUrl: optionalString(r['ingest_url'], DEFAULT_INGEST_URL, 'backend.ingest_url'),
-    authValidateUrl: optionalString(
-      r['auth_validate_url'],
-      DEFAULT_AUTH_VALIDATE_URL,
-      'backend.auth_validate_url',
-    ),
     healthUrl: optionalString(r['health_url'], DEFAULT_HEALTH_URL, 'backend.health_url'),
-    latestVersionUrl: optionalString(
-      r['latest_version_url'],
-      DEFAULT_LATEST_VERSION_URL,
-      'backend.latest_version_url',
-    ),
-    allowedHostsUrl: optionalString(
-      r['allowed_hosts_url'],
-      DEFAULT_ALLOWED_HOSTS_URL,
-      'backend.allowed_hosts_url',
-    ),
   };
 }
 

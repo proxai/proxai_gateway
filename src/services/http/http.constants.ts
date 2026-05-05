@@ -1,4 +1,4 @@
-export const HEADER_AUTHORIZATION = 'Authorization';
+export const HEADER_X_API_KEY = 'X-API-Key';
 export const HEADER_CONTENT_TYPE = 'Content-Type';
 export const HEADER_RETRY_AFTER = 'Retry-After';
 export const HEADER_USER_AGENT = 'User-Agent';
@@ -18,4 +18,5 @@ export const HTTP_STATUS = {
   requestTimeout: 408,
   payloadTooLarge: 413,
   tooManyRequests: 429,
+  serviceUnavailable: 503,
 } as const;

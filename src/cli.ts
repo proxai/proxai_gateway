@@ -26,8 +26,8 @@ program.name('proxai-gateway').description(packageJson.description).version(pack
 
 program
   .command('install')
-  .description('Install the gateway: validate API key, pin host, write config and service unit')
-  .option('--api-key <key>', 'API key (skip prompt)')
+  .description('Install the gateway: health-check the backend, write config and service unit')
+  .option('--api-key <key>', 'ingestion key (skip prompt)')
   .option('-y, --yes', 'overwrite an existing install without confirming')
   .option(
     '--install-source <source>',
@@ -58,10 +58,7 @@ program
             hostId,
             endpoints: {
               ingest: 'https://nest.proxai.co/v1/raw_records',
-              authValidate: 'https://nest.proxai.co/v1/auth/validate',
-              health: 'https://nest.proxai.co/v1/health',
-              latestVersion: 'https://nest.proxai.co/v1/gateway/latest_version',
-              allowedHosts: 'https://nest.proxai.co/v1/api-keys',
+              health: 'https://nest.proxai.co/health',
             },
             gatewayVersion: `@proxai/gateway ${packageJson.version}`,
           }),

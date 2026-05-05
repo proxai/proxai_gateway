@@ -20,10 +20,7 @@ export function serializeConfig(config: GatewayConfig): string {
     },
     backend: {
       ingest_url: config.backend.ingestUrl,
-      auth_validate_url: config.backend.authValidateUrl,
       health_url: config.backend.healthUrl,
-      latest_version_url: config.backend.latestVersionUrl,
-      allowed_hosts_url: config.backend.allowedHostsUrl,
     },
     capture: {
       poll_interval_sec: config.capture.pollIntervalSec,

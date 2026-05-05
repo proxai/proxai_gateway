@@ -1,19 +1,16 @@
 import { ensureDir, setMode, writeAtomic } from 'core/io/fs';
 import { dirname } from 'node:path';
 
-import { AuthError, GatewayError, generateUuidV7, nowIsoUtc } from 'core/utils';
+import { GatewayError, generateUuidV7, nowIsoUtc } from 'core/utils';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import { buildLaunchdPlist } from 'cli/launchd-plist.ts';
 import type { PromptSink } from 'cli/prompts.ts';
 import { buildSystemdUnit } from 'cli/systemd-unit.ts';
 import {
-  DEFAULT_ALLOWED_HOSTS_URL,
-  DEFAULT_AUTH_VALIDATE_URL,
   DEFAULT_BUFFER_MAX_BYTES,
   DEFAULT_HEALTH_URL,
   DEFAULT_INGEST_URL,
-  DEFAULT_LATEST_VERSION_URL,
   DEFAULT_POLL_INTERVAL_SEC,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
@@ -21,6 +18,8 @@ import {
 import type { GatewayConfig, InstallSource } from 'services/config';
 import { writeConfigToFile } from 'services/config';
 import { HttpClient } from 'services/http';
+
+const INGESTION_KEY_PATTERN = /^[A-Za-z0-9]+-\d{8,}-[A-Za-z0-9]+$/;
 
 export interface InstallCommandDeps {
   output: OutputSink;
@@ -41,6 +40,7 @@ export interface InstallCommandOptions {
   apiKey?: string;
   yes?: boolean;
   installSource?: InstallSource;
+  skipKeyFormatCheck?: boolean;
 }
 
 export async function runInstall(
@@ -59,9 +59,13 @@ export async function runInstall(
     }
   }
 
-  const apiKey = options.apiKey ?? (await deps.prompts.askApiKey());
-  if (apiKey.trim().length === 0) {
-    deps.output.error('API key is required');
+  const apiKey = (options.apiKey ?? (await deps.prompts.askApiKey())).trim();
+  if (apiKey.length === 0) {
+    deps.output.error('ingestion key is required');
+    return { exitCode: EXIT_CODE.validationError };
+  }
+  if (options.skipKeyFormatCheck !== true && !INGESTION_KEY_PATTERN.test(apiKey)) {
+    deps.output.error('ingestion key has invalid format (expected three hyphen-separated parts)');
     return { exitCode: EXIT_CODE.validationError };
   }
 
@@ -71,24 +75,13 @@ export async function runInstall(
 
   const http = deps.httpClientFactory(apiKey, hostId);
   try {
-    const validation = await http.validateApiKey();
-    if (!validation.valid) {
-      deps.output.error(`API key invalid: ${validation.error ?? 'unknown reason'}`);
-      return { exitCode: EXIT_CODE.authError };
+    const health = await http.checkHealth();
+    if (health.status !== 'healthy') {
+      deps.output.error(`backend health check returned status: ${health.status}`);
+      return { exitCode: EXIT_CODE.error };
     }
   } catch (err) {
-    if (err instanceof AuthError) {
-      deps.output.error('API key rejected by server');
-      return { exitCode: EXIT_CODE.authError };
-    }
-    deps.output.error(formatError('API key validation failed', err));
-    return { exitCode: EXIT_CODE.error };
-  }
-
-  try {
-    await http.pinAllowedHost();
-  } catch (err) {
-    deps.output.error(formatError('host pinning failed', err));
+    deps.output.error(formatError('health check failed', err));
     return { exitCode: EXIT_CODE.error };
   }
 
@@ -96,10 +89,7 @@ export async function runInstall(
     account: { apiKey, hostId, installedAt, installSource },
     backend: {
       ingestUrl: DEFAULT_INGEST_URL,
-      authValidateUrl: DEFAULT_AUTH_VALIDATE_URL,
       healthUrl: DEFAULT_HEALTH_URL,
-      latestVersionUrl: DEFAULT_LATEST_VERSION_URL,
-      allowedHostsUrl: DEFAULT_ALLOWED_HOSTS_URL,
     },
     capture: {
       pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,

@@ -20,10 +20,7 @@ const fullConfig: GatewayConfig = {
   },
   backend: {
     ingestUrl: 'https://nest.proxai.co/v1/raw_records',
-    authValidateUrl: 'https://nest.proxai.co/v1/auth/validate',
-    healthUrl: 'https://nest.proxai.co/v1/health',
-    latestVersionUrl: 'https://nest.proxai.co/v1/gateway/latest_version',
-    allowedHostsUrl: 'https://nest.proxai.co/v1/api-keys',
+    healthUrl: 'https://nest.proxai.co/health',
   },
   capture: {
     pollIntervalSec: 300,

@@ -10,8 +10,8 @@ export function inquirerPrompts(): PromptSink {
   return {
     askApiKey: () =>
       input({
-        message: 'Enter your ProxAI API key:',
-        validate: (v) => (v.trim().length > 0 ? true : 'API key is required'),
+        message: 'Enter your ProxAI ingestion key:',
+        validate: (v) => (v.trim().length > 0 ? true : 'ingestion key is required'),
       }),
     confirmOverwrite: (message) => confirm({ message, default: false }),
     confirmUninstall: (message) => confirm({ message, default: false }),

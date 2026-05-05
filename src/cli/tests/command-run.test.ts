@@ -27,10 +27,7 @@ function makeConfig(): GatewayConfig {
     },
     backend: {
       ingestUrl: 'https://api.example.com/v1/raw_records',
-      authValidateUrl: 'https://api.example.com/v1/auth/validate',
-      healthUrl: 'https://api.example.com/v1/health',
-      latestVersionUrl: 'https://api.example.com/v1/gateway/latest_version',
-      allowedHostsUrl: 'https://api.example.com/v1/api-keys',
+      healthUrl: 'https://api.example.com/health',
     },
     capture: {
       pollIntervalSec: 60,

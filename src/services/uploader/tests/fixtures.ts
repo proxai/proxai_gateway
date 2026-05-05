@@ -9,10 +9,7 @@ export const TEST_GATEWAY_VERSION = '@proxai/gateway 0.1.0';
 
 export const TEST_ENDPOINTS: HttpEndpoints = {
   ingest: 'https://api.example.com/v1/raw_records',
-  authValidate: 'https://api.example.com/v1/auth/validate',
-  health: 'https://api.example.com/v1/health',
-  latestVersion: 'https://api.example.com/v1/gateway/latest_version',
-  allowedHosts: 'https://api.example.com/v1/api-keys',
+  health: 'https://api.example.com/health',
 };
 
 export interface MockCall {

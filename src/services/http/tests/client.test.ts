@@ -17,10 +17,7 @@ const VALID_SHA256 = 'a'.repeat(64);
 
 const endpoints: HttpEndpoints = {
   ingest: 'https://api.example.com/v1/raw_records',
-  authValidate: 'https://api.example.com/v1/auth/validate',
-  health: 'https://api.example.com/v1/health',
-  latestVersion: 'https://api.example.com/v1/gateway/latest_version',
-  allowedHosts: 'https://api.example.com/v1/api-keys',
+  health: 'https://api.example.com/health',
 };
 
 interface MockCall {
@@ -44,7 +41,7 @@ function mockFetch(
 
 function createClient(fetchFn: typeof globalThis.fetch): HttpClient {
   return new HttpClient({
-    apiKey: 'pxg_test_key',
+    apiKey: 'pxg-20260505-secret',
     hostId: 'h_test',
     endpoints,
     fetch: fetchFn,
@@ -175,7 +172,7 @@ describe('uploadRawRecord', () => {
     await expect(client.uploadRawRecord(validDto())).rejects.toThrow(FatalError);
   });
 
-  test('sets Authorization header with bearer token', async () => {
+  test('sends X-API-Key header on upload', async () => {
     const log: MockCall[] = [];
     const client = createClient(
       mockFetch(
@@ -185,7 +182,8 @@ describe('uploadRawRecord', () => {
     );
     await client.uploadRawRecord(validDto());
     const headers = log[0]!.init.headers as Record<string, string>;
-    expect(headers['Authorization']).toBe('Bearer pxg_test_key');
+    expect(headers['X-API-Key']).toBe('pxg-20260505-secret');
+    expect(headers['Authorization']).toBeUndefined();
   });
 
   test('sets User-Agent header', async () => {
@@ -229,86 +227,33 @@ describe('uploadRawRecord', () => {
   });
 });
 
-describe('validateApiKey', () => {
-  test('returns parsed result on 200', async () => {
-    const client = createClient(
-      mockFetch(() => jsonResponse({ valid: true, account_email: 'a@b.co', error: null })),
-    );
-    const result = await client.validateApiKey();
-    expect(result.valid).toBe(true);
-    expect(result.accountEmail).toBe('a@b.co');
-    expect(result.error).toBeNull();
-  });
-
-  test('sends api_key in body', async () => {
-    const log: MockCall[] = [];
-    const client = createClient(
-      mockFetch(() => jsonResponse({ valid: true, account_email: 'a@b.co', error: null }), log),
-    );
-    await client.validateApiKey();
-    const body = JSON.parse(log[0]!.init.body as string);
-    expect(body.api_key).toBe('pxg_test_key');
-  });
-
-  test('throws AuthError on 403', async () => {
-    const client = createClient(mockFetch(() => emptyResponse(403)));
-    await expect(client.validateApiKey()).rejects.toThrow(AuthError);
-  });
-});
-
-describe('pinAllowedHost', () => {
-  test('PATCHes /v1/api-keys/<key>/allowed-hosts with host_id in body', async () => {
-    const log: MockCall[] = [];
-    const client = createClient(
-      mockFetch(() => jsonResponse({ allowed_host_ids: ['h_test'] }), log),
-    );
-    const result = await client.pinAllowedHost();
-    expect(result.allowedHostIds).toEqual(['h_test']);
-    expect(log[0]!.init.method).toBe('PATCH');
-    expect(log[0]!.url).toContain('pxg_test_key');
-    expect(log[0]!.url).toContain('/allowed-hosts');
-    const body = JSON.parse(log[0]!.init.body as string);
-    expect(body.host_id).toBe('h_test');
-  });
-
-  test('encodes special characters in api key path segment', async () => {
-    const log: MockCall[] = [];
-    const client = new HttpClient({
-      apiKey: 'pxg/key with space',
-      hostId: 'h_test',
-      endpoints,
-      fetch: mockFetch(() => jsonResponse({ allowed_host_ids: [] }), log),
-    });
-    await client.pinAllowedHost();
-    expect(log[0]!.url).toContain('pxg%2Fkey%20with%20space');
-  });
-});
-
 describe('checkHealth', () => {
-  test('returns parsed result on 200', async () => {
-    const client = createClient(mockFetch(() => jsonResponse({ ok: true, version: '1.0.0' })));
+  test('returns parsed result on 200 (healthy)', async () => {
+    const client = createClient(
+      mockFetch(() => jsonResponse({ status: 'healthy', checks: { db: true, redis: true } })),
+    );
     const result = await client.checkHealth();
-    expect(result.ok).toBe(true);
-    expect(result.version).toBe('1.0.0');
+    expect(result.status).toBe('healthy');
+    expect(result.checks.db).toBe(true);
+    expect(result.checks.redis).toBe(true);
   });
 
-  test('GETs the health endpoint', async () => {
+  test('GETs the health endpoint without API key', async () => {
     const log: MockCall[] = [];
-    const client = createClient(mockFetch(() => jsonResponse({ ok: true, version: '1.0.0' }), log));
+    const client = createClient(
+      mockFetch(() => jsonResponse({ status: 'healthy', checks: { db: true, redis: true } }), log),
+    );
     await client.checkHealth();
     expect(log[0]!.url).toBe(endpoints.health);
     expect(log[0]!.init.method).toBe('GET');
+    const headers = log[0]!.init.headers as Record<string, string>;
+    expect(headers['X-API-Key']).toBeUndefined();
+    expect(headers['Authorization']).toBeUndefined();
   });
-});
 
-describe('checkLatestVersion', () => {
-  test('returns parsed and translated result', async () => {
-    const client = createClient(
-      mockFetch(() => jsonResponse({ latest_version: '1.0.0', release_date: '2026-04-29' })),
-    );
-    const result = await client.checkLatestVersion();
-    expect(result.latestVersion).toBe('1.0.0');
-    expect(result.releaseDate).toBe('2026-04-29');
+  test('hostIdentifier exposes hostId for telemetry consumers', () => {
+    const client = createClient(mockFetch(() => emptyResponse(200)));
+    expect(client.hostIdentifier).toBe('h_test');
   });
 });
 

@@ -56,10 +56,10 @@ test('inquirerPrompts wires up askApiKey, confirmOverwrite, confirmUninstall to 
   const apiKey = await p.askApiKey();
   expect(apiKey).toBe('mocked-api-key');
   expect(inputCalls).toHaveLength(1);
-  expect(inputCalls[0]!.message).toBe('Enter your ProxAI API key:');
+  expect(inputCalls[0]!.message).toBe('Enter your ProxAI ingestion key:');
   const validate = inputCalls[0]!.validate!;
   expect(validate('valid-key')).toBe(true);
-  expect(validate('   ')).toBe('API key is required');
+  expect(validate('   ')).toBe('ingestion key is required');
 
   const overwrite = await p.confirmOverwrite('overwrite?');
   expect(overwrite).toBe(true);

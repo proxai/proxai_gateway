@@ -11,10 +11,7 @@ export interface AccountConfig {
 
 export interface BackendConfig {
   ingestUrl: string;
-  authValidateUrl: string;
   healthUrl: string;
-  latestVersionUrl: string;
-  allowedHostsUrl: string;
 }
 
 export interface CaptureConfig {

@@ -1,9 +1,6 @@
 export interface HttpEndpoints {
   ingest: string;
-  authValidate: string;
   health: string;
-  latestVersion: string;
-  allowedHosts: string;
 }
 
 export interface HttpClientOptions {
@@ -16,9 +13,10 @@ export interface HttpClientOptions {
 }
 
 export interface RequestOptions {
-  method: 'GET' | 'POST' | 'PATCH';
+  method: 'GET' | 'POST';
   url: string;
   body?: unknown;
+  withApiKey?: boolean;
 }
 
 export interface UploadResult {
@@ -27,22 +25,7 @@ export interface UploadResult {
   idempotent: boolean;
 }
 
-export interface ValidateApiKeyResult {
-  valid: boolean;
-  accountEmail: string | null;
-  error: string | null;
-}
-
-export interface PinAllowedHostResult {
-  allowedHostIds: string[];
-}
-
 export interface HealthResult {
-  ok: boolean;
-  version: string;
-}
-
-export interface LatestVersionResult {
-  latestVersion: string;
-  releaseDate: string;
+  status: 'healthy' | 'unhealthy';
+  checks: Record<string, boolean>;
 }

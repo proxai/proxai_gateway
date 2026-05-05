@@ -14,6 +14,8 @@ let configPath: string;
 let bufferDbPath: string;
 let logDir: string;
 
+const VALID_KEY = 'abc123-20260505-secret456';
+
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'proxai-cli-install-'));
   configPath = join(dir, 'config.toml');
@@ -26,10 +28,8 @@ afterEach(async () => {
 });
 
 interface MockHttpControl {
-  validateResponse: 'ok' | 'invalid' | 'auth-error' | 'network-error';
-  pinResponse: 'ok' | 'auth-error' | 'network-error';
-  validateCalls: number;
-  pinCalls: number;
+  healthResponse: 'healthy' | 'unhealthy' | 'service-unavailable' | 'network-error';
+  healthCalls: number;
 }
 
 function mockFactory(control: MockHttpControl): (apiKey: string, hostId: string) => HttpClient {
@@ -39,42 +39,26 @@ function mockFactory(control: MockHttpControl): (apiKey: string, hostId: string)
       hostId,
       endpoints: {
         ingest: 'https://api.example.com/v1/raw_records',
-        authValidate: 'https://api.example.com/v1/auth/validate',
-        health: 'https://api.example.com/v1/health',
-        latestVersion: 'https://api.example.com/v1/gateway/latest_version',
-        allowedHosts: 'https://api.example.com/v1/api-keys',
+        health: 'https://api.example.com/health',
       },
       fetch: (async (input: string | URL | Request) => {
         const url = typeof input === 'string' ? input : input.toString();
-        if (url.includes('auth/validate')) {
-          control.validateCalls++;
-          if (control.validateResponse === 'ok') {
+        if (url.includes('/health')) {
+          control.healthCalls++;
+          if (control.healthResponse === 'healthy') {
             return new Response(
-              JSON.stringify({ valid: true, account_email: 'a@b.co', error: null }),
+              JSON.stringify({ status: 'healthy', checks: { db: true, redis: true } }),
               { status: 200, headers: { 'Content-Type': 'application/json' } },
             );
           }
-          if (control.validateResponse === 'invalid') {
+          if (control.healthResponse === 'unhealthy') {
             return new Response(
-              JSON.stringify({ valid: false, account_email: null, error: 'expired' }),
+              JSON.stringify({ status: 'unhealthy', checks: { db: false, redis: true } }),
               { status: 200, headers: { 'Content-Type': 'application/json' } },
             );
           }
-          if (control.validateResponse === 'auth-error') {
-            return new Response('', { status: 403 });
-          }
-          throw new Error('boom');
-        }
-        if (url.includes('allowed-hosts')) {
-          control.pinCalls++;
-          if (control.pinResponse === 'ok') {
-            return new Response(JSON.stringify({ allowed_host_ids: [hostId] }), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-          if (control.pinResponse === 'auth-error') {
-            return new Response('', { status: 403 });
+          if (control.healthResponse === 'service-unavailable') {
+            return new Response('', { status: 503 });
           }
           throw new Error('boom');
         }
@@ -84,13 +68,7 @@ function mockFactory(control: MockHttpControl): (apiKey: string, hostId: string)
 }
 
 function newControl(overrides: Partial<MockHttpControl> = {}): MockHttpControl {
-  return {
-    validateResponse: 'ok',
-    pinResponse: 'ok',
-    validateCalls: 0,
-    pinCalls: 0,
-    ...overrides,
-  };
+  return { healthResponse: 'healthy', healthCalls: 0, ...overrides };
 }
 
 function deps(control: MockHttpControl): Parameters<typeof runInstall>[0] {
@@ -110,14 +88,13 @@ function deps(control: MockHttpControl): Parameters<typeof runInstall>[0] {
   };
 }
 
-test('writes a valid config and reports success on happy path', async () => {
+test('writes a valid config and reports success on healthy backend', async () => {
   const control = newControl();
-  const result = await runInstall(deps(control), { apiKey: 'pxg_abc' });
+  const result = await runInstall(deps(control), { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
-  expect(control.validateCalls).toBe(1);
-  expect(control.pinCalls).toBe(1);
+  expect(control.healthCalls).toBe(1);
   const config = await loadConfigFromFile(configPath);
-  expect(config.account.apiKey).toBe('pxg_abc');
+  expect(config.account.apiKey).toBe(VALID_KEY);
   expect(config.account.hostId).toBe('01943f5a-7b1c-7e92-9c01-a0f3b40d77e3');
   expect(config.account.installedAt).toBe('2026-04-29T10:42:00.123Z');
   expect(config.capture.bufferPath).toBe(bufferDbPath);
@@ -127,7 +104,7 @@ test('writes a launchd plist on darwin', async () => {
   const control = newControl();
   const d = deps(control);
   d.platform = 'darwin';
-  const result = await runInstall(d, { apiKey: 'pxg_abc' });
+  const result = await runInstall(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
   const unitContent = await Bun.file(d.serviceUnitPath as string).text();
   expect(unitContent).toContain('<plist');
@@ -138,7 +115,7 @@ test('writes a systemd unit on linux', async () => {
   const control = newControl();
   const d = deps(control);
   d.platform = 'linux';
-  const result = await runInstall(d, { apiKey: 'pxg_abc' });
+  const result = await runInstall(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
   const unitContent = await Bun.file(d.serviceUnitPath as string).text();
   expect(unitContent).toContain('[Service]');
@@ -148,80 +125,91 @@ test('writes a systemd unit on linux', async () => {
 test('skips service unit when serviceUnitPath is null', async () => {
   const control = newControl();
   const d = { ...deps(control), serviceUnitPath: null as string | null };
-  const result = await runInstall(d, { apiKey: 'pxg_abc' });
+  const result = await runInstall(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
 });
 
-test('returns validationError when API key is empty', async () => {
+test('returns validationError when ingestion key is empty', async () => {
   const control = newControl();
   const result = await runInstall(deps(control), { apiKey: '   ' });
   expect(result.exitCode).toBe(2);
-  expect(control.validateCalls).toBe(0);
+  expect(control.healthCalls).toBe(0);
 });
 
-test('returns authError when validate returns invalid', async () => {
-  const control = newControl({ validateResponse: 'invalid' });
-  const result = await runInstall(deps(control), { apiKey: 'pxg_abc' });
-  expect(result.exitCode).toBe(3);
+test('returns validationError when ingestion key has wrong format', async () => {
+  const control = newControl();
+  const result = await runInstall(deps(control), { apiKey: 'not-a-valid-key' });
+  expect(result.exitCode).toBe(2);
+  expect(control.healthCalls).toBe(0);
+});
+
+test('skipKeyFormatCheck bypasses the format gate', async () => {
+  const control = newControl();
+  const result = await runInstall(deps(control), {
+    apiKey: 'free-form-key',
+    skipKeyFormatCheck: true,
+  });
+  expect(result.exitCode).toBe(0);
+  expect(control.healthCalls).toBe(1);
+});
+
+test('returns error when health endpoint reports unhealthy', async () => {
+  const control = newControl({ healthResponse: 'unhealthy' });
+  const result = await runInstall(deps(control), { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(1);
+  expect(await Bun.file(configPath).exists()).toBe(false);
+});
+
+test('returns error when health endpoint returns 503', async () => {
+  const control = newControl({ healthResponse: 'service-unavailable' });
+  const result = await runInstall(deps(control), { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(1);
   expect(await Bun.file(configPath).exists()).toBe(false);
 });
 
-test('returns authError when validate returns 403', async () => {
-  const control = newControl({ validateResponse: 'auth-error' });
-  const result = await runInstall(deps(control), { apiKey: 'pxg_abc' });
-  expect(result.exitCode).toBe(3);
-});
-
-test('returns generic error when validate has network error', async () => {
-  const control = newControl({ validateResponse: 'network-error' });
-  const result = await runInstall(deps(control), { apiKey: 'pxg_abc' });
+test('returns error on network failure during health check', async () => {
+  const control = newControl({ healthResponse: 'network-error' });
+  const result = await runInstall(deps(control), { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(1);
-});
-
-test('returns generic error when pin host fails', async () => {
-  const control = newControl({ pinResponse: 'auth-error' });
-  const result = await runInstall(deps(control), { apiKey: 'pxg_abc' });
-  expect(result.exitCode).toBe(1);
-  expect(await Bun.file(configPath).exists()).toBe(false);
 });
 
 test('aborts when existing config and overwrite declined', async () => {
   await writeFile(configPath, 'existing');
   const control = newControl();
   const d = { ...deps(control), prompts: scriptedPrompts({ overwrite: false }) };
-  const result = await runInstall(d, { apiKey: 'pxg_abc' });
+  const result = await runInstall(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(5);
-  expect(control.validateCalls).toBe(0);
+  expect(control.healthCalls).toBe(0);
 });
 
 test('proceeds when existing config and overwrite confirmed', async () => {
   await writeFile(configPath, 'existing');
   const control = newControl();
   const d = { ...deps(control), prompts: scriptedPrompts({ overwrite: true }) };
-  const result = await runInstall(d, { apiKey: 'pxg_abc' });
+  const result = await runInstall(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
 });
 
 test('--yes skips overwrite prompt', async () => {
   await writeFile(configPath, 'existing');
   const control = newControl();
-  const result = await runInstall(deps(control), { apiKey: 'pxg_abc', yes: true });
+  const result = await runInstall(deps(control), { apiKey: VALID_KEY, yes: true });
   expect(result.exitCode).toBe(0);
 });
 
 test('uses askApiKey prompt when apiKey option not provided', async () => {
   const control = newControl();
-  const d = { ...deps(control), prompts: scriptedPrompts({ apiKey: 'pxg_from_prompt' }) };
+  const d = { ...deps(control), prompts: scriptedPrompts({ apiKey: VALID_KEY }) };
   const result = await runInstall(d, {});
   expect(result.exitCode).toBe(0);
   const config = await loadConfigFromFile(configPath);
-  expect(config.account.apiKey).toBe('pxg_from_prompt');
+  expect(config.account.apiKey).toBe(VALID_KEY);
 });
 
 test('honors installSource option', async () => {
   const control = newControl();
   const result = await runInstall(deps(control), {
-    apiKey: 'pxg_abc',
+    apiKey: VALID_KEY,
     installSource: 'brew',
   });
   expect(result.exitCode).toBe(0);
@@ -229,23 +217,22 @@ test('honors installSource option', async () => {
   expect(config.account.installSource).toBe('brew');
 });
 
-test('formatError falls back to String(err) when validate throws a non-Error value', async () => {
+test('formatError falls back to String(err) when health throws a non-Error value', async () => {
   const control = newControl();
   const baseDeps = deps(control);
   const output = captureOutput();
   const httpClientFactory = (() =>
     ({
-      validateApiKey: async () => {
+      checkHealth: async () => {
         throw 'plain-string-failure';
       },
-      pinAllowedHost: async () => ({ allowedHostIds: [] }),
     }) as unknown as HttpClient) as unknown as (apiKey: string, hostId: string) => HttpClient;
   const result = await runInstall(
     { ...baseDeps, output, httpClientFactory },
-    { apiKey: 'pxg_abc' },
+    { apiKey: VALID_KEY },
   );
   expect(result.exitCode).toBe(1);
   const errorLine = output.lines.find((l) => l.level === 'error');
-  expect(errorLine?.msg).toContain('API key validation failed');
+  expect(errorLine?.msg).toContain('health check failed');
   expect(errorLine?.msg).toContain('plain-string-failure');
 });
