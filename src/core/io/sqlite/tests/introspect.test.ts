@@ -1,0 +1,66 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { columnExists, listTables, openReadOnly, tableExists } from 'core/io/sqlite';
+import { seedTestDatabase } from 'core/io/sqlite/tests/fixtures.ts';
+
+let dir: string;
+let dbPath: string;
+
+beforeAll(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'proxai-test-sqlite-introspect-'));
+  dbPath = join(dir, 'src.sqlite');
+  seedTestDatabase(dbPath);
+});
+
+afterAll(async () => {
+  await rm(dir, { recursive: true, force: true });
+});
+
+test('tableExists returns true for an existing table', () => {
+  const db = openReadOnly(dbPath);
+  try {
+    expect(tableExists(db, 'thing')).toBe(true);
+  } finally {
+    db.close();
+  }
+});
+
+test('tableExists returns false for an unknown table', () => {
+  const db = openReadOnly(dbPath);
+  try {
+    expect(tableExists(db, 'missing')).toBe(false);
+  } finally {
+    db.close();
+  }
+});
+
+test('listTables returns user tables only (excludes sqlite_*)', () => {
+  const db = openReadOnly(dbPath);
+  try {
+    expect(listTables(db)).toEqual(['thing']);
+  } finally {
+    db.close();
+  }
+});
+
+test('columnExists detects existing columns', () => {
+  const db = openReadOnly(dbPath);
+  try {
+    expect(columnExists(db, 'thing', 'name')).toBe(true);
+    expect(columnExists(db, 'thing', 'id')).toBe(true);
+  } finally {
+    db.close();
+  }
+});
+
+test('columnExists returns false for missing columns', () => {
+  const db = openReadOnly(dbPath);
+  try {
+    expect(columnExists(db, 'thing', 'absent')).toBe(false);
+  } finally {
+    db.close();
+  }
+});

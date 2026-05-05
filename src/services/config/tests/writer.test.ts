@@ -1,0 +1,80 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { serializeConfig, writeConfigToFile, type GatewayConfig } from 'services/config';
+
+const fullConfig: GatewayConfig = {
+  account: {
+    apiKey: 'pxg_live_secret',
+    hostId: '01HZ-test-host',
+    installedAt: '2026-04-28T22:30:00Z',
+    installSource: 'bun',
+  },
+  backend: {
+    ingestUrl: 'https://nest.proxai.co/v1/raw_records',
+    authValidateUrl: 'https://nest.proxai.co/v1/auth/validate',
+    healthUrl: 'https://nest.proxai.co/v1/health',
+    latestVersionUrl: 'https://nest.proxai.co/v1/gateway/latest_version',
+    allowedHostsUrl: 'https://nest.proxai.co/v1/api-keys',
+  },
+  capture: {
+    pollIntervalSec: 300,
+    bufferPath: '/Users/test/.proxai/buffer.db',
+    bufferMaxBytes: 524_288_000,
+  },
+  logging: {
+    level: 'info',
+    logDir: '/Users/test/Library/Logs/proxai-gateway',
+  },
+  staleBinary: {
+    warnAfterDays: 90,
+    pauseAfterDays: 180,
+  },
+};
+
+let dir: string;
+
+beforeAll(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'proxai-test-config-writer-'));
+});
+
+afterAll(async () => {
+  await rm(dir, { recursive: true, force: true });
+});
+
+test('serializeConfig produces TOML with all five sections', () => {
+  const text = serializeConfig(fullConfig);
+  expect(text).toContain('[account]');
+  expect(text).toContain('[backend]');
+  expect(text).toContain('[capture]');
+  expect(text).toContain('[logging]');
+  expect(text).toContain('[stale_binary]');
+});
+
+test('serializeConfig translates camelCase keys to snake_case', () => {
+  const text = serializeConfig(fullConfig);
+  expect(text).toContain('api_key');
+  expect(text).toContain('host_id');
+  expect(text).toContain('installed_at');
+  expect(text).toContain('install_source');
+  expect(text).toContain('poll_interval_sec');
+  expect(text).toContain('buffer_max_bytes');
+  expect(text).toContain('warn_after_days');
+  expect(text).toContain('pause_after_days');
+});
+
+test('writeConfigToFile creates the file', async () => {
+  const filePath = join(dir, 'created.toml');
+  await writeConfigToFile(fullConfig, filePath);
+  expect(await Bun.file(filePath).exists()).toBe(true);
+});
+
+test('writeConfigToFile clamps mode to 0600 on Unix', async () => {
+  if (process.platform === 'win32') return;
+  const filePath = join(dir, 'mode.toml');
+  await writeConfigToFile(fullConfig, filePath);
+  const s = await stat(filePath);
+  expect(s.mode & 0o777).toBe(0o600);
+});

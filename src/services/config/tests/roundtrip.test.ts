@@ -43,44 +43,22 @@ const fullConfig: GatewayConfig = {
 let dir: string;
 
 beforeAll(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'proxai-test-config-'));
+  dir = await mkdtemp(join(tmpdir(), 'proxai-test-config-roundtrip-'));
 });
 
 afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-test('serialize -> parse round-trips a fully-populated config', () => {
+test('serializeConfig -> loadConfigFromString round-trips a fully-populated config', () => {
   const text = serializeConfig(fullConfig);
   const restored = loadConfigFromString(text);
   expect(restored).toEqual(fullConfig);
 });
 
-test('serialize produces valid TOML the validator accepts', () => {
-  const text = serializeConfig(fullConfig);
-  expect(text).toContain('[account]');
-  expect(text).toContain('[backend]');
-  expect(text).toContain('[capture]');
-  expect(text).toContain('[logging]');
-  expect(text).toContain('[stale_binary]');
-});
-
-test('writeConfigToFile -> loadConfigFromFile preserves config', async () => {
+test('writeConfigToFile -> loadConfigFromFile round-trips through disk', async () => {
   const filePath = join(dir, 'config.toml');
   await writeConfigToFile(fullConfig, filePath);
   const loaded = await loadConfigFromFile(filePath);
   expect(loaded).toEqual(fullConfig);
-});
-
-test('loadConfigFromString rejects malformed TOML', () => {
-  expect(() => loadConfigFromString('this is = not = valid')).toThrow();
-});
-
-test('loadConfigFromFile rejects missing file', async () => {
-  await expect(loadConfigFromFile(join(dir, 'no-such-file.toml'))).rejects.toThrow();
-});
-
-test('serialized output is accepted by the loader without throwing', () => {
-  const text = serializeConfig(fullConfig);
-  expect(() => loadConfigFromString(text)).not.toThrow();
 });

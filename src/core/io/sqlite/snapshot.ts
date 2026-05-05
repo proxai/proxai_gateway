@@ -10,7 +10,7 @@ export async function snapshotSqlite(sourcePath: string): Promise<Snapshot> {
   const tmpPath = join(tmpdir(), `proxai-snap-${randomUUID()}.sqlite`);
   const db = openReadOnly(sourcePath);
   try {
-    db.exec(`VACUUM INTO '${escapeSqliteString(tmpPath)}'`);
+    db.run(`VACUUM INTO '${escapeSqliteString(tmpPath)}'`);
   } finally {
     db.close();
   }

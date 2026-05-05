@@ -6,8 +6,8 @@ export function openReadOnly(path: string): Database {
 
 export function openReadWrite(path: string): Database {
   const db = new Database(path, { create: true });
-  db.exec('PRAGMA journal_mode = WAL;');
-  db.exec('PRAGMA synchronous = NORMAL;');
-  db.exec('PRAGMA foreign_keys = ON;');
+  db.run('PRAGMA journal_mode = WAL;');
+  db.run('PRAGMA synchronous = NORMAL;');
+  db.run('PRAGMA foreign_keys = ON;');
   return db;
 }
