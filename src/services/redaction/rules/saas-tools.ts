@@ -1,0 +1,103 @@
+import type { RedactionRule } from 'services/redaction/redaction.types.ts';
+
+export const SAAS_TOOLS_RULES: readonly RedactionRule[] = [
+  {
+    id: 'notion-token',
+    description: 'Notion integration secret (secret_)',
+    pattern: /\bsecret_[A-Za-z0-9]{43,}\b/g,
+    replacement: '[REDACTED:notion-token]',
+    stage: 1,
+  },
+  {
+    id: 'linear-api-key',
+    description: 'Linear API key (lin_api_)',
+    pattern: /\blin_api_[A-Za-z0-9]{32,}\b/g,
+    replacement: '[REDACTED:linear-api-key]',
+    stage: 1,
+  },
+  {
+    id: 'contentful-management-token',
+    description: 'Contentful Content Management API token (CFPAT-)',
+    pattern: /\bCFPAT-[A-Za-z0-9_-]{43,}\b/g,
+    replacement: '[REDACTED:contentful-management-token]',
+    stage: 1,
+  },
+  {
+    id: 'atlassian-api-token',
+    description: 'Atlassian API token (ATCT, ATATT)',
+    pattern: /\bAT(?:CT|ATT)[A-Za-z0-9_-]{32,}\b/g,
+    replacement: '[REDACTED:atlassian-api-token]',
+    stage: 1,
+  },
+  {
+    id: 'databricks-token',
+    description: 'Databricks personal access token (dapi)',
+    pattern: /\bdapi[a-fA-F0-9]{32,}\b/g,
+    replacement: '[REDACTED:databricks-token]',
+    stage: 1,
+  },
+  {
+    id: 'doppler-token',
+    description:
+      'Doppler service / personal token (dp.pt., dp.st., dp.sa., dp.scim., dp.ct., dp.audit.)',
+    pattern: /\bdp\.(?:pt|st|sa|scim|ct|audit)\.[A-Za-z0-9]{40,}\b/g,
+    replacement: '[REDACTED:doppler-token]',
+    stage: 1,
+  },
+  {
+    id: 'sentry-org-token',
+    description: 'Sentry organization access token (sntrys_)',
+    pattern: /\bsntrys_[A-Za-z0-9+/=_]{40,}\b/g,
+    replacement: '[REDACTED:sentry-org-token]',
+    stage: 1,
+  },
+  {
+    id: 'dynatrace-token',
+    description: 'Dynatrace API token (dt0c)',
+    pattern: /\bdt0c[A-Za-z0-9._-]{30,}\b/g,
+    replacement: '[REDACTED:dynatrace-token]',
+    stage: 1,
+  },
+  {
+    id: 'jfrog-api-key',
+    description: 'JFrog API key (AKCp)',
+    pattern: /\bAKCp[A-Za-z0-9_-]{70,}\b/g,
+    replacement: '[REDACTED:jfrog-api-key]',
+    stage: 1,
+  },
+  {
+    id: 'hashicorp-tf-api-token',
+    description: 'HashiCorp Terraform Cloud API token (X.atlasv1.Y)',
+    pattern: /\b[A-Za-z0-9]{14}\.atlasv1\.[A-Za-z0-9_-]{60,}\b/g,
+    replacement: '[REDACTED:hashicorp-tf-api-token]',
+    stage: 1,
+  },
+  {
+    id: 'figma-api-token',
+    description: 'Figma personal access token (figd_)',
+    pattern: /\bfigd_[A-Za-z0-9_-]{40,}\b/g,
+    replacement: '[REDACTED:figma-api-token]',
+    stage: 1,
+  },
+  {
+    id: 'dropbox-access-token',
+    description: 'Dropbox access token (sl.)',
+    pattern: /\bsl\.[A-Za-z0-9_-]{60,}\b/g,
+    replacement: '[REDACTED:dropbox-access-token]',
+    stage: 1,
+  },
+  {
+    id: 'hashicorp-vault-token',
+    description: 'HashiCorp Vault service / batch token (hvs., hvb.)',
+    pattern: /\bhv[bs]\.[A-Za-z0-9_-]{20,}\b/g,
+    replacement: '[REDACTED:hashicorp-vault-token]',
+    stage: 1,
+  },
+  {
+    id: 'sonarcloud-token',
+    description: 'SonarCloud user token (squ_)',
+    pattern: /\bsqu_[A-Za-z0-9]{40}\b/g,
+    replacement: '[REDACTED:sonarcloud-token]',
+    stage: 1,
+  },
+];
