@@ -7,11 +7,11 @@ import {
   DEFAULT_POLL_INTERVAL_SEC,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
-  defaultIngestUrl,
-  defaultVerifyKeyUrl,
   MAX_POLL_INTERVAL_SEC,
   MIN_BUFFER_MAX_BYTES,
   MIN_POLL_INTERVAL_SEC,
+  NEST_INGEST_URL,
+  NEST_VERIFY_KEY_URL,
   VALID_INSTALL_SOURCES,
 } from 'services/config/config.constants.ts';
 import type {
@@ -48,10 +48,10 @@ function validateAccount(raw: unknown): AccountConfig {
 function validateBackend(raw: unknown): BackendConfig {
   const r = optionalTable(raw, 'backend');
   return {
-    ingestUrl: optionalString(r['ingest_url'], defaultIngestUrl(), 'backend.ingest_url'),
+    ingestUrl: optionalString(r['ingest_url'], NEST_INGEST_URL, 'backend.ingest_url'),
     verifyKeyUrl: optionalString(
       r['verify_key_url'],
-      defaultVerifyKeyUrl(),
+      NEST_VERIFY_KEY_URL,
       'backend.verify_key_url',
     ),
   };

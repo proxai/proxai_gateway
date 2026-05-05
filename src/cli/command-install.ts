@@ -12,8 +12,8 @@ import {
   DEFAULT_POLL_INTERVAL_SEC,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
-  defaultIngestUrl,
-  defaultVerifyKeyUrl,
+  NEST_INGEST_URL,
+  NEST_VERIFY_KEY_URL,
 } from 'services/config';
 import type { GatewayConfig, InstallSource } from 'services/config';
 import { writeConfigToFile } from 'services/config';
@@ -96,8 +96,8 @@ export async function runInstall(
   const config: GatewayConfig = {
     account: { apiKey, hostId, installedAt, installSource },
     backend: {
-      ingestUrl: defaultIngestUrl(),
-      verifyKeyUrl: defaultVerifyKeyUrl(),
+      ingestUrl: NEST_INGEST_URL,
+      verifyKeyUrl: NEST_VERIFY_KEY_URL,
     },
     capture: {
       pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
