@@ -1,6 +1,51 @@
 # CLI Design — `proxai-gateway`
 
-The complete CLI surface for the gateway. Every command, parameter, and side effect — written so an engineer can implement against this without re-asking design questions.
+> **DEPRECATED** as of 2026-05-06.
+> This doc captured the planned CLI surface as of early 2026-04; the shipped
+> command surface is substantially different. See the project `README.md` for
+> the current authoritative surface, and `src/cli/commands/` for the
+> implementation.
+>
+> Specific items now stale:
+> - **Commands renamed / removed.** `install` → `setup`. `uninstall` removed (the
+>   policy is now: stop the service, remove the platform unit by hand, optionally
+>   delete `~/.proxai/`; documented in `README.md` "How do I uninstall?").
+>   `doctor` is not implemented. `run` is hidden (still the daemon entry, invoked
+>   by the platform service unit).
+> - **New commands shipped:** `start`, `stop`, `restart` (thin wrappers over
+>   launchctl / systemctl --user / schtasks), `backfill --since <Nd|Nmo|Ny>` for
+>   history older than the default 30-day initial-scan window, `tail` with
+>   `--lines / --follow / --source / --level / --since / --json` flags,
+>   `redaction list [--categories|--category <name>|--json]` and
+>   `redaction test <file> [--show-rules]`.
+> - **Auth flow:** `setup` calls `GET /ingestion/verify-key` (per
+>   `nest-contract.md` §2.1), not the obsolete `POST /v1/auth/validate`. The
+>   gateway uses `X-API-Key` headers, not `Authorization: Bearer`.
+> - **`host_id` is deterministic** (`sha256(machine_uuid + ':' + user_id)`),
+>   not a UUIDv7 minted at install. See `nest-contract.md` §5.4. The
+>   `[account].machine_id` field shown in §4 is now `[account].hostId` /
+>   `[account].userId`.
+> - **`bufferMaxBytes` is gone.** Replaced with `bufferSoftPauseBytes` /
+>   `bufferSoftResumeBytes` (default 700 MB / 600 MB hysteresis) and
+>   `receiptRetentionDays` / `failedRetentionDays` retention controls. See
+>   `src/services/config/config.types.ts`.
+> - **No `pause` / `resume` JSON-RPC over a Unix socket.** `pause` / `resume`
+>   simply touch / remove `~/.proxai/PAUSED`. `status` reads the buffer DB
+>   directly. `tail` reads the rotated log files directly via pino-roll output.
+>   No `~/.proxai/control.sock`.
+> - **Service-manager entry** is launchd on macOS, systemd user unit on Linux,
+>   per-user scheduled task on Windows — all shipped from day one (Linux and
+>   Windows are not Phase 2 / Phase 3).
+> - **No FDA probe / `--accept-warnings` flow.** `setup` is non-interactive when
+>   `--api-key` is passed; otherwise it prompts for the key (and double-prompts
+>   on overwrite).
+> - **Exit codes** in §8 are not the codes the implementation returns.
+>   Authoritative list is `src/cli/cli.constants.ts` (`EXIT_CODE`).
+>
+> Kept for archaeological value: the goals (one-command setup, idempotency, a
+> status command that answers "is this thing working?"), the tone of the install
+> consent flow, and the spirit of "don't lecture, three-line errors" — those
+> survived. The literal command surface did not.
 
 ---
 

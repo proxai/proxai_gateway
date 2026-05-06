@@ -1,16 +1,35 @@
 # User Experience — `proxai-gateway`
 
-> **⚠️ Tentative document — not a product spec.**
+> **DEPRECATED** as of 2026-05-06.
+> The doc was already self-flagged as tentative; the shipped UX has diverged on
+> commands, copy, and flows. Authoritative current surface: `README.md`. The
+> implementation is in `src/cli/` (output formatting in `src/cli/output.ts`,
+> per-command UX in `src/cli/commands/*.ts`).
 >
-> This is an early sketch of what the on-screen text and user flows *could* look like. It is **not** a commitment to build the product this way. Specific copy, command names, screen flows, error messages, and timing thresholds in this doc are starting-point proposals — meant to inform discussion, not to be implemented verbatim.
+> Specific items now stale:
+> - **Install flow** is `proxai-gateway setup` (not `install`), with no FDA probe
+>   screen, no smoke-test step, and no ASCII consent screen. `setup` prompts for
+>   the ingestion key, validates against `GET /ingestion/verify-key`, derives a
+>   stable `host_id`, writes `~/.proxai/config.toml`, and registers the platform
+>   service unit (launchd / systemd / scheduled task).
+> - **No `uninstall` command.** The README's "How do I uninstall?" section
+>   documents the manual three-step removal.
+> - **No `doctor` command.** Use `status` + `tail --level error --since 1h`.
+> - **`status` output** is currently a buffer-counts summary (pending / failed /
+>   delivered, last upload timestamp, sentinel state); the full multi-section
+>   "Active / Paused / Stopped / Degraded" copy in §3 is not what ships.
+> - **Update prompts (§5)** are not implemented — there's no "binary age" surface
+>   in `status` and no auto-pause-by-age. `staleBinary` is in config schema but
+>   the UI surface has not been built.
+> - **`tail`** is the structured log tailer (`pino-roll` daily-rotated JSONL),
+>   with `--lines / -f --follow / --source / --level / --since / --json` flags.
+>   The literal copy in this doc was never canonical.
 >
-> Treat everything here as one designer's first pass. The real product surface will be decided by:
-> - what real beta users actually struggle with,
-> - what the eng team finds practical to ship,
-> - what the marketing / brand voice ultimately settles on,
-> - what feedback comes from security review and customer pilots.
->
-> If you're an engineer reading this to implement: cross-check with the team before treating any specific phrasing or flow as final. The structure (what kinds of messages exist, what states need a UX) is more durable than the literal text.
+> Kept for archaeological value: §1 tone & voice (terse / helpful / honest;
+> ASCII status markers; lowercase status words; no emoji) — the brand-voice
+> guidance is still the bar. §8 style notes for engineers (specific numbers,
+> end errors with the next action, don't lecture, don't apologize) are also
+> still load-bearing.
 
 ---
 

@@ -1,8 +1,9 @@
 # Capture Targets — MVP
 
-The exact files the gateway reads for each agent. One page, no alternatives.
+> Last reviewed: 2026-05-06 — current with one update (see Codex section).
+> The exact files the gateway reads for each agent. One page, no alternatives.
 
-Three agents, two file types: append-only JSONL, and SQLite KV stores. Polled every 5 minutes.
+Three agents, two file types: append-only JSONL, and SQLite KV stores. Polled every 5 minutes (configurable via `pollIntervalSec`, default 300, range 60–3600).
 
 ---
 
@@ -92,7 +93,11 @@ JSONL is the source of truth; the SQLite sidecar joins extra metadata onto it.
 
 Track per-file byte offset.
 
-**`state_5.sqlite`**, table **`threads`** only — read-only. Provides `id`, `rollout_path` (joins back to the JSONL), `title`, `first_user_message`, `model`, `tokens_used`, `cwd`, `git_sha`, `git_branch`, `git_origin_url`. Useful for thread-level enrichment without parsing the full rollout.
+**`state_*.sqlite`** (highest-numbered match — `state_5.sqlite` over `state_4.sqlite`, etc.; the discovery rule is `^state_(\d+)\.sqlite$`). Read-only. Three tables in scope:
+
+- **`threads`** — thread metadata. `id`, `rollout_path` (joins back to the JSONL), `title`, `first_user_message`, `model`, `tokens_used`, `cwd`, `git_sha`, `git_branch`, `git_origin_url`, `cli_version`, `sandbox_policy`, `approval_mode`, `reasoning_effort`.
+- **`thread_dynamic_tools`** — per-thread dynamic tool inventory (name, description, schema, namespace).
+- **`thread_spawn_edges`** — parent → child thread relationships for sub-agent spawns.
 
 ### Skip
 
@@ -101,7 +106,7 @@ Track per-file byte offset.
 - `~/.codex/logs_2.sqlite` (application logs, not LLM payloads)
 - `~/.codex/cache/`, `~/.codex/models_cache.json`, `~/.codex/.codex-global-state.json*`
 - `~/.codex/memories/`, `~/.codex/skills/`, `~/.codex/plugins/`, `~/.codex/vendor_imports/` (user/extension content; out of v1 scope)
-- All other tables in `state_5.sqlite` (`agent_jobs`, `stage1_outputs`, `thread_dynamic_tools`, `thread_goals`, `jobs`, `backfill_state`, `agent_job_items`, `thread_spawn_edges`, `device_key_bindings`, `remote_control_enrollments`, `_sqlx_migrations`)
+- All other tables in `state_*.sqlite` — `agent_jobs`, `stage1_outputs`, `thread_goals`, `jobs`, `backfill_state`, `agent_job_items`, `device_key_bindings`, `remote_control_enrollments`, `_sqlx_migrations` (and any future tables not on the in-scope list above; the skip-list is enforced at the unit-test level — `nest-contract.md` §4.3 also rejects out-of-scope tables on the server side).
 
 ---
 

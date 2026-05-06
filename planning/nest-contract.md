@@ -10,12 +10,13 @@ If you're changing gateway behavior that touches the wire format, idempotency, r
 
 ---
 
-## 1. The two endpoints, in one paragraph
+## 1. The endpoints, in one paragraph
 
-The backend exposes exactly two HTTP endpoints relevant to the gateway:
+The backend exposes three HTTP endpoints relevant to the gateway:
 
-1. **`GET /ingestion/verify-key`** — authenticated. The gateway hits this during `install` to validate that the user's ingestion key is real, active, and of type `INGESTION` before writing config. Returns `{ success: true, data: <ApiKey-without-id>, message }` on 200, or `403 Forbidden` if the key is missing/invalid/revoked/wrong-type.
-2. **`POST /v1/raw_records`** — accepts a JSON envelope, decompresses the body, runs a defense-in-depth redaction pass, stores the bytes in S3, indexes the row in Postgres, enqueues a parse job, returns. Authenticated via the same **ingestion key** in the `X-API-Key` header. Treated as **at-least-once with capture-id idempotency** — same `capture_id` retried any number of times yields exactly one stored row.
+1. **`GET /ingestion/verify-key`** — authenticated. The gateway hits this during `setup` to validate that the user's ingestion key is real, active, and of type `INGESTION` before writing config. Returns `{ success: true, data: <ApiKey-without-id>, message }` on 200, or `403 Forbidden` if the key is missing/invalid/revoked/wrong-type. The response carries `data.userId`, which the gateway combines with the machine UUID to derive a stable `host_id` (see §5.4).
+2. **`POST /v1/raw_records`** — accepts a JSON envelope, decompresses the body, runs a defense-in-depth redaction pass, stores the bytes in S3, indexes the row in Postgres, enqueues a parse job, returns. Authenticated via the same **ingestion key** in the `X-API-Key` header. Treated as **at-least-once with capture-id idempotency** — same `capture_id` retried any number of times yields exactly one stored row. On watermark monotonicity rejection (§6.3) the 400 body is structured (`error: "watermark_regression"`) so the gateway can self-heal.
+3. **`GET /v1/watermarks?host_id=<host_id>`** — authenticated. Returns the server's known per-`(user_id, host_id)` watermark cursors so a fresh gateway instance can seed its local cursor table after a `~/.proxai` wipe. Read-only; one row per `(source_app, source_path_hash, watermark_table)`. Full spec lives in `~/Desktop/watermark_check.md`.
 
 There is no host-pinning endpoint and no version-check endpoint. The system-level `GET /health` (DB+Redis probe) exists on `proxai_nest` but is **infrastructure-only** — it's hit by Docker HEALTHCHECK / Better Stack Uptime / internal dashboards, never by the gateway. The customer-facing "is my install going to work" probe is `verify-key`.
 
@@ -55,7 +56,9 @@ Authenticated by the **ingestion key** in the `X-API-Key` header. The header val
 
 **Failure (403):** key is missing, malformed, revoked (`state: INACTIVE`), or wrong type (e.g. user pasted a SERVICE-type key by mistake). No body content the gateway needs to parse.
 
-The gateway calls this exclusively during `proxai-gateway install`: if 200 with `success: true`, install proceeds and writes config. On 403, install aborts with an "ingestion key rejected" error. On 5xx/network errors, install aborts with a transient-error message and the user can retry.
+The gateway calls this exclusively during `proxai-gateway setup`: if 200 with `success: true`, setup proceeds and writes config. On 403, setup aborts with an "ingestion key rejected" error. On 5xx/network errors, setup aborts with a transient-error message and the user can retry.
+
+The verified `data.userId` is also the input to stable `host_id` derivation (§5.4) — the gateway computes `sha256(machine_uuid + ':' + user_id)` once at setup and persists it to config, so reinstalls on the same machine produce the same `host_id` and resume against the same backend watermarks.
 
 This endpoint is the customer-facing answer to "is my key going to work?" — it does NOT probe DB/Redis health (that's the operator's `GET /health`, which the gateway never calls).
 
@@ -73,11 +76,45 @@ Authenticated via the user's INGESTION-type API key in the `X-API-Key` header. T
 
 **Once the endpoint is live (not yet today):** if the key is missing, malformed, or revoked, the backend returns `403`. If it's accepted but the request fails downstream validation, see §3.2.
 
-### 2.3 Kill switch
+### 2.3 Watermark sync (cold-start recovery)
+
+```
+GET /v1/watermarks?host_id=<host_id>
+X-API-Key: <ingestion-key>
+```
+
+Returns the server's known watermark cursors for the `(user_id, host_id)` pair so a fresh gateway instance can seed its local cursor table without triggering monotonicity violations on its first poll. Called once per daemon start when the local buffer's cursor table is empty (or, defensively, after a structured `watermark_regression` 400 — see §6.3).
+
+The full spec — request shape, response payload, error responses, gateway-side behavioral rules, integration test matrix — lives in `~/Desktop/watermark_check.md`. That doc is the backend coordination authority; this section just records the contract surface.
+
+Response shape (200):
+
+```json
+{
+  "host_id": "<64-char hex>",
+  "user_id": "u_42",
+  "watermarks": [
+    {
+      "source_app": "claude-code",
+      "source_path_hash": "<sha256>",
+      "watermark_kind": "byte_range",
+      "watermark_end": 12345,
+      "watermark_table": null,
+      "last_delivered_at": "2026-04-29T10:42:00.000Z"
+    }
+  ]
+}
+```
+
+Empty list (`watermarks: []` with status 200) is the valid first-install response. **Never returns 404 for "no watermarks"** — the empty array distinguishes from auth failure / endpoint disabled.
+
+The endpoint is read-only (no write side effects), uses the existing per-API-key throttler (§9), and reuses the `(user_id, host_id)` index that already exists for monotonicity checks. Performance is bounded — realistic upper bound is 50–500 rows per host.
+
+### 2.4 Kill switch
 
 The backend has an env-var kill switch. When the upload feature is disabled server-side, every `POST /v1/raw_records` request returns `503 Service Unavailable` with no further processing. The gateway should treat this exactly like a transient outage: retry with backoff, do not advance the watermark, do not pause the local buffer until the documented buffer-full threshold.
 
-This switch exists for fast rollback during incidents. It is set by the operator, not by the gateway. The `/ingestion/verify-key` endpoint is unaffected — the kill switch only gates uploads.
+This switch exists for fast rollback during incidents. It is set by the operator, not by the gateway. The `/ingestion/verify-key` and `/v1/watermarks` endpoints are unaffected — the kill switch only gates uploads.
 
 ---
 
@@ -107,7 +144,7 @@ This switch exists for fast rollback during incidents. It is set by the operator
 | Field | Type | Required | Validation | Notes |
 |---|---|---|---|---|
 | `capture_id` | string (UUIDv7) | yes | RFC 4122 v7 | Primary idempotency key. See §5. |
-| `host_id` | string | yes | non-empty | Generated by the gateway at install time (UUIDv7). Used for per-host telemetry / partitioning. **NOT pinned to the ingestion key** — the backend records it as-is. |
+| `host_id` | string | yes | non-empty (64-char lowercase hex) | Derived deterministically by the gateway at setup time as `sha256(machine_uuid + ':' + user_id)` (see §5.4). Same physical machine + same user = same `host_id` across reinstalls and key rotations. **NOT pinned to the ingestion key** — the backend records it as-is and uses it as the per-host correlation key in `(user_id, host_id, source_path_hash)` watermark cursors. |
 | `source_app` | enum | yes | `claude-code` \| `cursor` \| `codex` | Closed; new agents = new value, requires backend release. |
 | `source_kind` | enum | yes | `jsonl_append` \| `sqlite_kv_snapshot` \| `sqlite_table_snapshot` | Discriminator; see §4. |
 | `source_path` | string | yes | non-empty | Absolute path on host. |
@@ -126,9 +163,30 @@ This switch exists for fast rollback during incidents. It is set by the operator
 
 ### 3.2 What happens when validation fails
 
-Any DTO field failing validation produces `400 Bad Request` with a generic error message. The backend deliberately does NOT echo specific values back; it logs the detail server-side and returns a generic message. This prevents the endpoint from being used as an oracle to probe other tenants' state.
+Most DTO field failures produce `400 Bad Request` with a generic error message — the backend deliberately does NOT echo specific values back; it logs the detail server-side and returns a generic body. This prevents the endpoint from being used as an oracle to probe other tenants' state.
 
-**Gateway action on 400:** mark the batch as `failed`, surface in `proxai-gateway status`, **do not retry, do not advance watermark.** A 400 means a real bug or schema drift on the gateway side; retrying produces the same result.
+**The one exception: watermark monotonicity violations.** When a 400 is caused by `watermark.start < server's last_processed_watermark_end` for the batch's `(host_id, source_path_hash, watermark_table)`, the response body is structured and gateway-recoverable:
+
+```json
+{
+  "error": "watermark_regression",
+  "host_id": "...",
+  "source_path_hash": "...",
+  "current_server_watermark_end": 5000,
+  "submitted_watermark_start": 0,
+  "submitted_watermark_end": 1000,
+  "watermark_kind": "byte_range",
+  "watermark_table": null,
+  "message": "..."
+}
+```
+
+The `error: "watermark_regression"` discriminator is reserved for this case. Full spec is in `~/Desktop/watermark_check.md` §6.
+
+**Gateway action on 400:**
+
+- If the body's `error` is `"watermark_regression"`: read `current_server_watermark_end`, write it to the local cursor for that source, drop the rejected batch, continue from the corrected position on the next poll. Self-healing — no operator intervention.
+- Otherwise (generic 400): mark the batch as `failed`, surface in `proxai-gateway status`, **do not retry, do not advance watermark.** A generic 400 means a real bug or schema drift on the gateway side; retrying produces the same result.
 
 ### 3.3 `agent_schema_version` is per-agent and free-form
 
@@ -214,6 +272,32 @@ The backend does NOT verify that the body matches the original — it trusts tha
 
 If you have a legitimate reason to overwrite (e.g. you re-redacted with a newer rule corpus), generate a new `capture_id`.
 
+### 5.3 Cross-reinstall idempotency depends on stable `host_id`
+
+`capture_id` alone does not catch duplicates from a fresh reinstall (each reinstall mints new UUIDv7 ids). What catches them is the watermark monotonicity check, keyed by `(user_id, host_id, source_path_hash)`. For that key to remain stable across reinstalls, `host_id` must be derived deterministically — see §5.4.
+
+### 5.4 Stable `host_id` derivation
+
+The gateway derives `host_id` deterministically at setup time:
+
+```
+host_id = lowercase_hex(sha256(machine_uuid + ':' + user_id))
+```
+
+64-char lowercase hex output. `user_id` comes from the verified `data.userId` in the `GET /ingestion/verify-key` response. `machine_uuid` source per platform:
+
+- macOS: `IOPlatformUUID` (`ioreg -d2 -c IOPlatformExpertDevice`).
+- Linux: `/etc/machine-id` (systemd; falls back to `/var/lib/dbus/machine-id`).
+- Windows: `MachineGuid` from `HKLM\SOFTWARE\Microsoft\Cryptography`.
+
+Properties this gives the wire contract:
+
+- Same machine + same user → same `host_id` across reinstalls, key rotations, OS upgrades that preserve the machine UUID.
+- Same machine + different user → different `host_id` (the dashboard correctly partitions per-user).
+- Same user + different machine → different `host_id`.
+
+The backend treats `host_id` as opaque and does not validate the formula — but the property above is what makes `GET /v1/watermarks` (§2.3) usable for cold-start recovery: a clean reinstall computes the same `host_id`, queries the existing watermarks, seeds its cursor table, and continues without monotonicity violations.
+
 ---
 
 ## 6. The watermark — read this section twice
@@ -246,7 +330,11 @@ If `start > end`, the backend rejects with `400`. This is a defensive check: a b
 
 That is: if you ship `[100, 200)` for file F, the next batch for F must satisfy `watermark.start >= 200`.
 
-The backend's stateful parser maintains a per-file watermark cursor keyed by `(user_id, host_id, source_path_hash)` — `user_id` comes from the ingestion key, `host_id` from the DTO. The "have we processed this capture" gate is `MIN(last_processed_watermark) >= c.watermark_end`. If you ship overlapping or out-of-order ranges, the backend's monotonicity guard rejects with `400` and increments a `watermark_regression_total` metric. **It does NOT silently lose data** — that was the v2.7 fix — but it DOES require the gateway to recover.
+The backend's stateful parser maintains a per-file watermark cursor keyed by `(user_id, host_id, source_path_hash)` — `user_id` comes from the ingestion key, `host_id` from the DTO (deterministic per §5.4 so the same machine resumes against its own watermarks across reinstalls). The "have we processed this capture" gate is `MIN(last_processed_watermark) >= c.watermark_end`. If you ship overlapping or out-of-order ranges, the backend's monotonicity guard rejects with `400` and increments a `watermark_regression_total` metric. **It does NOT silently lose data** — that was the v2.7 fix — but it DOES require the gateway to recover.
+
+The 400 body for monotonicity violations is structured (`error: "watermark_regression"`) and carries `current_server_watermark_end` so the gateway can self-heal: write the server value to its local cursor, drop the rejected batch, retry from the corrected position. See §3.2 for the body shape and `~/Desktop/watermark_check.md` §6 for the full spec.
+
+The complementary cold-start flow (fresh install on a machine that previously shipped data) is handled by `GET /v1/watermarks` (§2.3): the gateway pulls the server-known cursors at daemon start and seeds its local table.
 
 #### What to do when the source isn't naturally monotonic
 
@@ -316,8 +404,9 @@ Use zstd. The backend currently only accepts `body_compression: "zstd"` (CHECK e
 | Code | Meaning | Gateway action |
 |---|---|---|
 | `200 OK` | Batch accepted (whether new or idempotent retry). | Mark batch `done`. Advance watermark. |
-| `400 Bad Request` | DTO validation failed, or watermark monotonicity violated, or table out of scope. Generic error message. | Mark batch `failed`. Surface in `proxai-gateway status`. **Do not retry, do not advance.** |
-| `403 Forbidden` | Auth failed: ingestion key missing, malformed, revoked (state INACTIVE), or wrong type (the user accidentally sent a SERVICE-type key). | Treat as **retriable** (key-fix recoverable): keep the batch pending and surface as auth error. Operator must rotate the key. **The gateway should NOT mark the batch failed** — once the key is fixed, the batch retries and succeeds. |
+| `400 Bad Request` (structured: `error: "watermark_regression"`) | Watermark monotonicity violated. Body carries `current_server_watermark_end` for the rejected `(host_id, source_path_hash, watermark_table)`. | **Self-heal:** write the server value to the local cursor, drop the rejected batch, retry from the corrected position on the next poll. No operator intervention. See §3.2 / §6.3. |
+| `400 Bad Request` (generic) | Other DTO validation failed, or table out of scope. Generic error message. | Mark batch `failed`. Surface in `proxai-gateway status`. **Do not retry, do not advance.** |
+| `403 Forbidden` | Auth failed: ingestion key missing, malformed, revoked (state INACTIVE), or wrong type (the user accidentally sent a SERVICE-type key). | Treat as **retriable** (key-fix recoverable): drop a `~/.proxai/AUTH_FAILED` sentinel, keep batches pending, surface as auth error. Operator must rotate the key (re-run `setup`). **The gateway does NOT mark the batch failed** — once the key is fixed, batches retry and succeed. |
 | `408 Request Timeout` | zstd decompression exceeded 5s — likely a malformed body. | Mark batch `failed`. Surface as gateway bug; new `capture_id` won't help. |
 | `413 Payload Too Large` | Compressed > 2 MB OR decompressed > 10 MB. | Mark batch `failed`. Re-chunk and re-send with new `capture_id`s. |
 | `429 Too Many Requests` | Rate limit hit. | Backoff per the `Retry-After` header (or default 60s). Same `capture_id` retried. |
@@ -335,7 +424,7 @@ Use zstd. The backend currently only accepts `body_compression: "zstd"` (CHECK e
 
 ### 8.3 Buffer-full behavior
 
-If the backend is unreachable for a sustained period, the local upload buffer fills. Per `01_INTRO.md` §3, a sentinel kill switch (`~/.proxai/PAUSED`) fires when the pending buffer exceeds the configured cap (default 500 MB). After this point the gateway should **stop reading new bytes from sources** until the buffer drains; the watermark stays put. This protects the user's disk from runaway gateway storage.
+If the backend is unreachable for a sustained period, the local upload buffer fills. The gateway uses a hysteresis-based sentinel — `~/.proxai/BUFFER_FULL` — driven by config fields `bufferSoftPauseBytes` (default 700 MB) and `bufferSoftResumeBytes` (default 600 MB). When pending bytes cross the pause threshold the sentinel is created and capture pauses; when they fall back below the resume threshold the sentinel is removed. The watermark stays put while paused. This is distinct from the user-controlled `~/.proxai/PAUSED` sentinel (toggled by the `pause`/`resume` CLI commands) and from `~/.proxai/AUTH_FAILED` (set on 403 / cleared on successful upload).
 
 ---
 
@@ -469,7 +558,7 @@ These are the bugs we've seen or anticipate. Avoiding them up-front saves real t
 
 **Symptom:** every upload returns `403`; user reports "I just installed".
 **Cause:** the user supplied a SERVICE-type API key instead of an INGESTION key, or the key was revoked after install.
-**Fix:** the user creates a fresh INGESTION key in the dashboard and re-runs `proxai-gateway install`. Existing pending batches retry automatically once the new key is in place — the gateway treats 403 as retriable for exactly this reason.
+**Fix:** the user creates a fresh INGESTION key in the dashboard and re-runs `proxai-gateway setup` (which double-confirms the new key when overwriting an existing config). Existing pending batches retry automatically once the new key is in place — the gateway treats 403 as retriable for exactly this reason and keeps an `AUTH_FAILED` sentinel until a successful upload clears it.
 
 ### 12.8 Numeric precision overflow
 
@@ -539,11 +628,12 @@ To save you a round-trip when reviewing a draft change, the most common 400 path
 - `source_app`, `source_kind`, `body_format`, `body_compression`, `watermark.kind` outside the closed enums
 - `(source_kind, body_format, watermark.kind)` triple not in §4 matrix
 - `watermark.start >= watermark.end` (DB CHECK)
-- `watermark.start` for this `(host_id, source_path_hash)` is less than the highest known `watermark.end` (monotonicity)
+- `watermark.start` for this `(host_id, source_path_hash)` is less than the highest known `watermark.end` (monotonicity) — **structured body, recoverable** (see §3.2)
 - For `sqlite_table_snapshot`: `watermark.table` missing or not in `[threads, thread_dynamic_tools, thread_spawn_edges]`
 - `body` not valid base64
 - `body` exceeds 2 MB compressed or 10 MB decompressed
 - `captured_at_utc` not valid ISO-8601 in UTC
+- `host_id` not 64-char lowercase hex (also applies to `GET /v1/watermarks?host_id=...`)
 
 ---
 
@@ -557,10 +647,17 @@ When in doubt, send a small diff and ship to dev/preview first. The backend has 
 
 ---
 
-**Document version:** 2.1
-**Last updated:** 2026-05-05
+**Document version:** 2.2
+**Last updated:** 2026-05-06
 **Backend implementation:** `proxai_nest`, ingestion module
 **Gateway implementation:** `@proxai/gateway`
+
+**Changelog from v2.1 → v2.2:**
+- Added §2.3 `GET /v1/watermarks?host_id=<host_id>` — cold-start recovery endpoint that returns the server-known watermark cursors for a `(user_id, host_id)` pair. Full spec lives in `~/Desktop/watermark_check.md`.
+- Watermark monotonicity 400s now carry a structured body (`error: "watermark_regression"` + `current_server_watermark_end` + scope details). Gateway self-heals by writing the server value to its local cursor — no operator intervention. See §3.2 and §6.3.
+- `host_id` is now derived deterministically from `(machine_uuid, user_id)` per §5.4 (`sha256(machine_uuid + ':' + user_id)`, 64-char lowercase hex). Same machine + same user produces the same `host_id` across reinstalls and key rotations, which is what makes `/v1/watermarks` recovery work.
+- Buffer-full behavior (§8.3) updated: hysteresis-based `BUFFER_FULL` sentinel driven by `bufferSoftPauseBytes` / `bufferSoftResumeBytes` (defaults 700 MB / 600 MB). Distinct from `PAUSED` (user toggle) and `AUTH_FAILED` (403-set).
+- 403 handling updated: gateway drops `~/.proxai/AUTH_FAILED`, keeps batches pending, requires re-running `setup` with a fresh key.
 
 **Changelog from v2.0 → v2.1:**
 - Install flow now hits `GET /ingestion/verify-key` (customer-facing key check) instead of `GET /health` (operator-only DB/Redis probe). The gateway never calls `/health`. Customers shouldn't see infra health probes — they care about whether their key works.

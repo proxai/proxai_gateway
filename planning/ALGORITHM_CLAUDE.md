@@ -1,5 +1,23 @@
 # Algorithms — Flushing, Parsing, Metadata
 
+> Last reviewed: 2026-05-06 — algorithm shape is current; gateway-side specifics
+> have moved on. This doc remains the right reference for the per-turn parsing
+> shape (one `AgentCallRecord` per `promptId`, `parent_turn_id` linked list,
+> compaction detected by content sniff). Backend-side algorithms are the
+> primary content. For the gateway-side capture mechanics, the authoritative
+> sources are now:
+> - `planning/nest-contract.md` (wire contract)
+> - `src/sources/claude-code/collect.ts` and `src/sources/claude-code/discover.ts`
+> - `planning/03_FLUSHING_ALGORITHM.md` (with its deprecation header noting the
+>   bits that have evolved)
+>
+> Specific items to interpret with care:
+> - The §3 gateway flushing algorithm is conceptually still right (per-file
+>   byte cursor, split at last newline, advance on success). The implementation
+>   detail "advance on capture-into-buffer rather than on server-accept" is in
+>   `planning/audit_crash_recovery.md`.
+> - `capture_id` is UUIDv7 (not deterministic UUIDv5 from position).
+
 **Status:** Draft v0.2 (grounded in real on-disk data from this machine)
 **Owner:** ProxAI
 **Last updated:** 2026-04-29

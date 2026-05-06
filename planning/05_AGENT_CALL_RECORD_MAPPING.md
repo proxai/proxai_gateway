@@ -1,5 +1,12 @@
 # AgentCallRecord Mapping — Claude Code, Cursor, Codex
 
+> Last reviewed: 2026-05-06 — still current.
+> Backend parser concerns; the gateway implements the raw-bytes side, which is
+> covered by `planning/nest-contract.md` (wire contract) and the
+> `planning/ALGORITHM_*.md` docs (per-source capture mechanics). This mapping
+> stays the authoritative recipe for translating gateway output into typed
+> `AgentCallRecord`s. No gateway-side edits required.
+
 **Status:** v0.1 (rewritten alongside the simplified `AgentCallRecord` schema)
 **Owner:** ProxAI
 **Audience:** backend parser engineers (eventually moves to `proxai_nest`).

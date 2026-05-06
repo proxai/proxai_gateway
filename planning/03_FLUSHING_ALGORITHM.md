@@ -1,5 +1,55 @@
 # Flushing Algorithm — Gateway-Side Capture & Shipping
 
+> **DEPRECATED** as of 2026-05-06.
+> The high-level algorithm — per-source watermark, redact, batch, ship — still
+> matches what the code does. Most concrete details have moved on. The
+> authoritative wire contract is now `planning/nest-contract.md`. The
+> per-source capture algorithms live in `planning/ALGORITHM_CLAUDE.md`,
+> `ALGORITHM_CURSOR.md`, and `ALGORITHM_CODEX.md` (see those for the up-to-date
+> capture mechanics). The implementation is in `src/sources/{claude-code,cursor,codex}/collect*.ts`
+> and `src/services/{buffer,uploader,polling}/`.
+>
+> Specific items now stale:
+> - **Auth scheme:** `X-API-Key`, not `Authorization: Bearer` (§3.1, §3.2). See
+>   `nest-contract.md` §2.
+> - **Redaction:** single-pass at capture time (13 categories, 100+ rules), not
+>   the "two-stage gateway redaction" described in §8. The buffered batch is
+>   already redacted; the upload step just base64-encodes the existing bytes.
+> - **`capture_id` is UUIDv7, not UUIDv5.** §9.1 proposes a deterministic
+>   uuidv5-of-position scheme; the shipped implementation uses UUIDv7 generated
+>   per batch. Crash-window duplicates are absorbed by server-side dedup on
+>   `(host_id, source_path_hash, watermark_kind, watermark_start, watermark_end,
+>   watermark_table)` — see `audit_crash_recovery.md` for the audit.
+> - **`host_id`:** deterministic per `nest-contract.md` §5.4
+>   (`sha256(machine_uuid + ':' + user_id)`), not "sha256 of machine UUID + install
+>   salt". Salt rotation in §11.3 is obsolete.
+> - **Buffer-full sentinel:** hysteresis-based `BUFFER_FULL` (default 700 MB
+>   pause / 600 MB resume), not `PAUSED` at >500 MB pending (§3.4). `PAUSED` is
+>   the user-controlled sentinel.
+> - **Vacuum / rowid regression detection:** the `#gen=N` source_path rotation
+>   pattern is implemented in `src/services/buffer/vacuum-detect.ts` and
+>   `src/sources/cursor/collect.ts`. It supersedes the "PK includes inode" trick
+>   in §6.7.
+> - **Initial-scan window cap:** the gateway only captures source files modified
+>   within the last `initialScanWindowDays` (default 30) on first contact;
+>   `proxai-gateway backfill --since <duration>` is the way to ingest older
+>   history.
+> - **`blob_snapshot` source kind (§5.6, §6.5, §8.3) was never shipped.** Tool
+>   results stay inline in the JSONL; `workspace.json` / `session_index.jsonl`
+>   are not separate captures. Backend support for `blob_snapshot` is also
+>   absent — the contract matrix in `nest-contract.md` §4 has only three
+>   variants (jsonl_append, sqlite_kv_snapshot, sqlite_table_snapshot).
+> - **§3.4 "200 OK on receive" reaction:** the cursor advances at
+>   capture-into-buffer time, not on server accept. The audit at
+>   `audit_crash_recovery.md` documents the rationale.
+>
+> Kept for archaeological value: the §2 architecture diagram, the §3.3
+> invariants table (linear-stream reconstruction, idempotency, schema-version
+> dispatch), the per-agent algorithm shapes in §5–§7, and the redaction
+> placement on the laptop — those are still right in spirit.
+
+---
+
 **Status:** v0.1
 **Owner:** ProxAI
 **Scope:** What the on-laptop gateway does. How it detects new data per agent, packages it, and sends it to the backend. **No parsing.** The gateway is a raw-bytes shipper.

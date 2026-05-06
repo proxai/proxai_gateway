@@ -1,6 +1,40 @@
 # ProxAI Gateway — Design
 
-**Status:** v0.3 (simplified for MVP)
+> **DEPRECATED** as of 2026-05-06.
+> This doc captured the design as of 2026-04-28; the implementation has since
+> diverged. See the project `README.md` for the current command surface and
+> `planning/nest-contract.md` for the wire contract. The browser/web-plugin
+> ambition is also out of scope — that work has split into its own track under
+> `planning/web_plugin/`.
+>
+> Specific items now stale:
+> - License is **MIT**, not Apache 2.0 (§1, §8.11, §9 Phase 0).
+> - Command surface is `setup` / `start` / `stop` / `restart` / `backfill` /
+>   `pause` / `resume` / `status` / `tail` / `redaction list|test`. There is no
+>   `install`, no `uninstall`, no `doctor` (§8.5).
+> - Redaction is **single-pass at capture time**, not "two-stage gateway redaction"
+>   (§3, §8.2). 13 categories, 100+ rules.
+> - `host_id` is derived as `sha256(machine_uuid + ':' + user_id)` (stable across
+>   reinstalls). The "fixed install-time salt" caveat in §11 is obsolete.
+> - Buffer cap is hysteresis-based (default 700 MB pause / 600 MB resume) with a
+>   `BUFFER_FULL` sentinel — not "500 MB soft cap with `PAUSED` sentinel" (§8.7).
+> - Linux + Windows are supported MVP-day-one (systemd / Windows scheduled task);
+>   they are not Phase 2 / Phase 3 (§8 Out, §9).
+> - Logging uses pino + pino-roll with daily rotation (90d / 5GB cap), not just
+>   "pino → JSON in platform log dir" (§6).
+> - Initial-scan window is capped (default 30 days) — `backfill --since` is the
+>   recovery path for older history.
+> - Vacuum-into rotation is detected via `#gen=N` source_path suffix (per
+>   `nest-contract.md` §6.3 / §12.4) — there's no separate "salt rotation" item.
+> - Stale-binary thresholds shipped as 30 / 60 days, not 90 / 180.
+>
+> Kept for archaeological value: the architecture split (gateway vs.
+> `proxai_nest`), the rationale for raw-bytes-only on the wire, the privacy
+> framing, and the per-agent capture summary table all remain accurate.
+
+---
+
+**Status:** v0.3 (simplified for MVP) — superseded by current code state.
 **Owner:** ProxAI
 **Last updated:** 2026-04-28
 

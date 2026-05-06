@@ -1,5 +1,12 @@
 # AgentCallRecord — Design
 
+> Last reviewed: 2026-05-06 — still current.
+> This is a backend-parser-shape spec; gateway code does not depend on the
+> typed `AgentCallRecord` (gateway ships raw bytes per `nest-contract.md`).
+> The DTO field references in §2.7 (`source_app`, `agent_schema_version`,
+> `source_path`, `captured_at_utc`, `gateway_version`) match the current wire
+> contract. No edits required.
+
 Source of truth: this document. Once code lands, the source of truth shifts to `proxai_nest/src/types/agent_call_record.ts` (or the equivalent Python types). Until then, this is the spec.
 
 This is the definitive reference for how an `AgentCallRecord` is shaped, how it relates to the SDK's `CallRecord` (`proxai/src/proxai/types.py`), and how the three coding agents (Claude Code, Cursor, Codex) map onto it. Read this before touching the gateway parsers, the backend ingester, or any analytics that consume agent traffic.

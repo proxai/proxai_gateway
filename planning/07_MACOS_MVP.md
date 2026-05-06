@@ -1,6 +1,40 @@
 # macOS MVP — Platform & Implementation Plan
 
-How the gateway runs on a Mac: installer, auto-start, file watching, and the macOS-specific sharp edges.
+> **DEPRECATED** as of 2026-05-06.
+> This doc framed the gateway as a macOS-first MVP with Linux + Windows in
+> later phases. The shipped implementation supports all three platforms from
+> day one. The current authoritative surface lives in:
+> - `README.md` for the install / lifecycle / paths story per platform.
+> - `src/cli/launchd-plist.ts` (macOS), `src/cli/systemd-unit.ts` (Linux),
+>   `src/cli/scheduled-task-xml.ts` (Windows), and `src/cli/service-manager.ts`
+>   (the platform-dispatching service control wrapper).
+> - `planning/nest-contract.md` for the wire contract.
+>
+> Specific items now stale:
+> - **Cross-platform support:** Linux (systemd user unit) and Windows
+>   (per-user scheduled task `ProxAIGateway`) are in the shipped surface, not
+>   "Phase 2 / Phase 3" (§1, §2, §8). Each platform has its own service unit
+>   templating and lifecycle wrapper.
+> - **Install flow is `proxai-gateway setup`**, not `install` (§3). The plist,
+>   systemd unit, and scheduled task are all written by `setup`. No FDA probe
+>   step in the shipped flow.
+> - **License is MIT**, not Apache 2.0.
+> - **Plist `ProgramArguments`** does not pass `run` as an argument — the
+>   daemon entrypoint is the hidden `run` subcommand, but the wrapper invocation
+>   pattern is more nuanced; see `src/cli/launchd-plist.ts` for the actual
+>   template.
+> - **No `uninstall` command.** Removal is documented in `README.md`.
+> - `proxai-gateway install/uninstall` shell snippets in §3 are inaccurate; use
+>   `setup` and the README's manual-removal steps.
+>
+> Kept for archaeological value: §7 macOS gotchas table (Full Disk Access,
+> Gatekeeper, sleep coalescing, network changes, disk-space soft cap, time
+> zone, APFS case-insensitivity) is still the right reference for
+> macOS-specific concerns. The build / ship strategy in §2 (npm meta-package
+> with optionalDependencies + Homebrew tap + GitHub Releases) is also still
+> the plan.
+
+---
 
 ## 1. Decisions
 

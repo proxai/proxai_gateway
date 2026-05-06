@@ -1,5 +1,17 @@
 # Cursor Algorithms — Flushing, Parsing, Metadata
 
+> Last reviewed: 2026-05-06 — algorithm shape is current. The gateway-side
+> implementation detail that has evolved: when SQLite VACUUM-INTO produces
+> rowid regression (Cursor compacted its state), the gateway re-keys the source
+> by appending a `#gen=N` suffix to `source_path` (per `nest-contract.md` §6.3
+> and `src/services/buffer/vacuum-detect.ts` / `src/sources/cursor/collect.ts`).
+> The new `source_path_hash` is a fresh stream from the backend's perspective,
+> watermarks restart from zero, and the old stream becomes inert. This pattern
+> is what keeps monotonicity intact when the underlying rowid space resets.
+>
+> Backend parsing (turn boundary, `bubbleId` filtering, `_v` versioning) is
+> still right and unchanged.
+
 **Status:** Draft v0.1 (grounded in real on-disk data from this machine; sample size is small — see §7)
 **Owner:** ProxAI
 **Last updated:** 2026-04-29

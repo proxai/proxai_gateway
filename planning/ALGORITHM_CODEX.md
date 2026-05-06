@@ -1,5 +1,23 @@
 # Codex Algorithms — Flushing, Parsing, Metadata
 
+> Last reviewed: 2026-05-06 — algorithm shape is current with two updates:
+>
+> 1. **Three sidecar tables in scope, not one.** The gateway captures
+>    `threads`, `thread_dynamic_tools`, and `thread_spawn_edges` from the
+>    `state_*.sqlite` sidecar. The contract enforces this set both client-side
+>    (skip-list in `src/sources/codex/codex.constants.ts`) and server-side
+>    (`nest-contract.md` §4 / §15 reject other tables with 400). Earlier docs
+>    that say "table `threads` only" are out of date.
+>
+> 2. **Vacuum-induced rowid regression** is detected at capture time and
+>    handled by re-keying the source via `#gen=N` suffix on `source_path` —
+>    same pattern as Cursor (see `src/services/buffer/vacuum-detect.ts`). The
+>    new `source_path_hash` is a fresh stream from the backend's perspective.
+>
+> Backend parsing (turn boundary on `task_started` → `task_complete`, sub-agent
+> edges from `thread_spawn_edges`, dynamic tool inventory from
+> `thread_dynamic_tools`) still matches what this doc describes.
+
 **Status:** Draft v0.1 (grounded in real on-disk data from this machine; sample size is small — see §7)
 **Owner:** ProxAI
 **Last updated:** 2026-04-29
