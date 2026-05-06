@@ -1,11 +1,13 @@
 import type { Database } from 'bun:sqlite';
 
+import type { Logger } from 'core/log';
 import type { HttpClient } from 'services/http';
 import type { DrainResult } from 'services/uploader';
 
 export interface SourcePollerContext {
   buffer: Database;
   gatewayVersion: string;
+  logger?: Logger;
 }
 
 export interface SourcePollerError {
@@ -35,6 +37,7 @@ export interface PollCycleContext {
   gatewayVersion: string;
   sources: readonly RegisteredSource[];
   pauseSentinelPath: string;
+  logger?: Logger;
 }
 
 export interface PollCycleResult {

@@ -1,13 +1,15 @@
 import { ensureDir } from 'core/io/fs';
 import { dirname } from 'node:path';
 
+import { createLogger, pruneLogDirectory } from 'core/log';
+import type { Logger } from 'core/log';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import { openBufferDb } from 'services/buffer';
 import type { GatewayConfig } from 'services/config';
 import { HttpClient } from 'services/http';
 import { buildDefaultSources, runPollLoop } from 'services/polling';
-import type { PollCycleResult, RegisteredSource } from 'services/polling';
+import type { PollCycleContext, PollCycleResult, RegisteredSource } from 'services/polling';
 
 export interface RunCommandDeps {
   output: OutputSink;
@@ -17,11 +19,30 @@ export interface RunCommandDeps {
   gatewayVersion: string;
   sources?: readonly RegisteredSource[];
   onCycleComplete?: (result: PollCycleResult) => void;
+  logger?: Logger;
 }
 
 export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
   await ensureDir(dirname(deps.config.capture.bufferPath));
   const buffer = openBufferDb(deps.config.capture.bufferPath);
+
+  const logger =
+    deps.logger ??
+    (await createLogger({
+      level: deps.config.logging.level,
+      logDir: deps.config.logging.logDir,
+      bindings: {
+        service: 'proxai-gateway',
+        version: deps.gatewayVersion,
+        host_id: deps.config.account.hostId,
+      },
+    }));
+
+  try {
+    await pruneLogDirectory(deps.config.logging.logDir);
+  } catch {
+    // best-effort startup pruning; do not block daemon on retention errors
+  }
 
   const http = new HttpClient({
     apiKey: deps.config.account.apiKey,
@@ -32,6 +53,15 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
     },
     gatewayVersion: deps.gatewayVersion,
   });
+
+  logger.info(
+    {
+      event: 'daemon.start',
+      poll_interval_sec: deps.config.capture.pollIntervalSec,
+      buffer_path: deps.config.capture.bufferPath,
+    },
+    'daemon starting',
+  );
 
   try {
     deps.output.info(
@@ -46,18 +76,18 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
       abortSignal: deps.abortSignal,
     };
     if (deps.onCycleComplete !== undefined) loopOptions.onCycleComplete = deps.onCycleComplete;
-    await runPollLoop(
-      {
-        buffer,
-        http,
-        hostId: deps.config.account.hostId,
-        gatewayVersion: deps.gatewayVersion,
-        sources: deps.sources ?? buildDefaultSources({}),
-        pauseSentinelPath: deps.pauseSentinelPath,
-      },
-      loopOptions,
-    );
+    const cycleCtx: PollCycleContext = {
+      buffer,
+      http,
+      hostId: deps.config.account.hostId,
+      gatewayVersion: deps.gatewayVersion,
+      sources: deps.sources ?? buildDefaultSources({}),
+      pauseSentinelPath: deps.pauseSentinelPath,
+      logger,
+    };
+    await runPollLoop(cycleCtx, loopOptions);
   } finally {
+    logger.info({ event: 'daemon.stop' }, 'daemon shutting down');
     buffer.close();
   }
 

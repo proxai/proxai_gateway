@@ -5,6 +5,7 @@ export const EXIT_CODE = {
   authError: 3,
   notInstalled: 4,
   alreadyInstalled: 5,
+  fileUnreadable: 7,
 } as const;
 
 export const LAUNCHD_LABEL = 'co.proxai.gateway';

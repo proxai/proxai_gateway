@@ -1,11 +1,13 @@
 import type { Database } from 'bun:sqlite';
 
+import type { Logger } from 'core/log';
 import type { HttpClient } from 'services/http';
 
 export interface UploaderContext {
   db: Database;
   http: HttpClient;
   hostId: string;
+  logger?: Logger;
 }
 
 export interface AcceptedOutcome {

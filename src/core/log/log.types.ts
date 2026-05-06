@@ -6,8 +6,19 @@ export type Logger = PinoLogger;
 
 export interface LoggerFactoryOptions {
   level?: LogLevel;
-  filePath?: string;
   pretty?: boolean;
   bindings?: Record<string, unknown> | null;
   destination?: DestinationStream;
+  logDir?: string;
+}
+
+export interface PruneLogDirectoryOptions {
+  retentionDays?: number;
+  totalSizeCapBytes?: number;
+}
+
+export interface PruneResult {
+  deletedFiles: string[];
+  retainedBytes: number;
+  retainedCount: number;
 }

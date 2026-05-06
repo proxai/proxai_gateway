@@ -3,12 +3,15 @@ import { Command } from 'commander';
 
 import packageJson from '../package.json' with { type: 'json' };
 import { bufferDbPath, configDir, configFilePath, logDir, pausedSentinelPath } from 'core/io/fs';
+import type { LogLevel } from 'core/log';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import { runInstall } from 'cli/commands/install.ts';
 import { runPause } from 'cli/commands/pause.ts';
+import { runRedactionTest } from 'cli/commands/redaction-test.ts';
 import { runResume } from 'cli/commands/resume.ts';
 import { runDaemon } from 'cli/commands/run.ts';
 import { runStatus } from 'cli/commands/status.ts';
+import { runTail } from 'cli/commands/tail.ts';
 import { runUninstall } from 'cli/commands/uninstall.ts';
 import {
   defaultLaunchdPlistPath,
@@ -133,6 +136,70 @@ program
       output: consoleOutput(),
       sentinelPath: pausedSentinelPath(),
     });
+    process.exit(result.exitCode);
+  });
+
+program
+  .command('tail')
+  .description('Show structured-log entries from the active log file')
+  .option('--lines <n>', 'number of lines to show', '50')
+  .option('-f, --follow', 'stream new entries until interrupted', false)
+  .option('--source <name>', 'filter to one collector (claude-code | cursor | codex)')
+  .option('--level <level>', 'minimum level (trace|debug|info|warn|error|fatal)')
+  .option('--since <duration>', 'limit to entries after now-duration (e.g. 1h, 24h, 30m, 7d)')
+  .option('--json', 'emit raw ndjson lines instead of pretty format', false)
+  .option('--config <path>', 'path to config.toml')
+  .action(
+    async (opts: {
+      lines?: string;
+      follow?: boolean;
+      source?: string;
+      level?: string;
+      since?: string;
+      json?: boolean;
+      config?: string;
+    }) => {
+      let dir = logDir();
+      try {
+        const config = await loadConfigFromFile(opts.config);
+        dir = config.logging.logDir;
+      } catch {
+        // fall back to default if config missing
+      }
+      const ctrl = new AbortController();
+      process.on('SIGINT', () => ctrl.abort());
+      process.on('SIGTERM', () => ctrl.abort());
+      const tailOptions: Parameters<typeof runTail>[1] = {};
+      if (opts.lines !== undefined) tailOptions.lines = Number(opts.lines);
+      if (opts.follow === true) tailOptions.follow = true;
+      if (opts.source !== undefined) tailOptions.source = opts.source;
+      if (opts.level !== undefined) tailOptions.level = opts.level as LogLevel;
+      if (opts.since !== undefined) tailOptions.since = opts.since;
+      if (opts.json === true) tailOptions.json = true;
+      const result = await runTail(
+        {
+          output: consoleOutput(),
+          logDir: dir,
+          abortSignal: ctrl.signal,
+          emit: (line) => console.log(line),
+        },
+        tailOptions,
+      );
+      process.exit(result.exitCode);
+    },
+  );
+
+program
+  .command('redaction-test <file>')
+  .description('Run the redaction pipeline against a file and print the redacted output')
+  .option('--show-rules', 'print which rules matched and how many times', false)
+  .action(async (filePath: string, opts: { showRules?: boolean }) => {
+    const options: Parameters<typeof runRedactionTest>[1] = { filePath };
+    if (opts.showRules === true) options.showRules = true;
+    const result = await runRedactionTest(
+      { output: consoleOutput(), emit: (line) => console.log(line) },
+      options,
+    );
     process.exit(result.exitCode);
   });
 

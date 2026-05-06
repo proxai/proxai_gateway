@@ -72,7 +72,7 @@ test('applies defaults for missing optional sections', () => {
   expect(result.backend.verifyKeyUrl).toBe(NEST_VERIFY_KEY_URL);
   expect(result.capture.pollIntervalSec).toBe(DEFAULT_POLL_INTERVAL_SEC);
   expect(result.capture.bufferMaxBytes).toBe(DEFAULT_BUFFER_MAX_BYTES);
-  expect(result.logging.level).toBe('info');
+  expect(result.logging.level).toBe('trace');
   expect(result.staleBinary.warnAfterDays).toBe(DEFAULT_STALE_WARN_DAYS);
   expect(result.staleBinary.pauseAfterDays).toBe(DEFAULT_STALE_PAUSE_DAYS);
 });

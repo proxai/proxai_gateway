@@ -1,13 +1,21 @@
 import { join } from 'node:path';
 
 import pino from 'pino';
+import pinoRoll from 'pino-roll';
 import pretty from 'pino-pretty';
 
-import { logDir } from 'core/io/fs';
-import { DEFAULT_LOG_LEVEL, STRUCTURED_LOG_FILENAME } from 'core/log/log.constants.ts';
+import { logDir as defaultLogDir } from 'core/io/fs';
+import {
+  DEFAULT_LOG_LEVEL,
+  LOG_RETENTION_DAYS,
+  STRUCTURED_LOG_BASENAME,
+  STRUCTURED_LOG_DATE_FORMAT,
+  STRUCTURED_LOG_EXTENSION,
+  STRUCTURED_LOG_FILENAME,
+} from 'core/log/log.constants.ts';
 import type { Logger, LoggerFactoryOptions } from 'core/log/log.types.ts';
 
-export function createLogger(options: LoggerFactoryOptions = {}): Logger {
+export async function createLogger(options: LoggerFactoryOptions = {}): Promise<Logger> {
   const level = options.level ?? DEFAULT_LOG_LEVEL;
   const base = options.bindings ?? null;
 
@@ -15,9 +23,17 @@ export function createLogger(options: LoggerFactoryOptions = {}): Logger {
     return pino({ level, base }, options.destination);
   }
 
-  if (options.filePath !== undefined) {
-    const dest = pino.destination({ dest: options.filePath, mkdir: true, sync: false });
-    return pino({ level, base }, dest);
+  if (options.logDir !== undefined) {
+    const stream = await pinoRoll({
+      file: join(options.logDir, STRUCTURED_LOG_BASENAME),
+      frequency: 'daily',
+      dateFormat: STRUCTURED_LOG_DATE_FORMAT,
+      extension: STRUCTURED_LOG_EXTENSION,
+      mkdir: true,
+      sync: true,
+      limit: { count: LOG_RETENTION_DAYS },
+    });
+    return pino({ level, base }, stream);
   }
 
   if (options.pretty === true) {
@@ -33,5 +49,5 @@ export function createLogger(options: LoggerFactoryOptions = {}): Logger {
 }
 
 export function defaultLogFilePath(): string {
-  return join(logDir(), STRUCTURED_LOG_FILENAME);
+  return join(defaultLogDir(), STRUCTURED_LOG_FILENAME);
 }
