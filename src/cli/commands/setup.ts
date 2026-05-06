@@ -30,7 +30,12 @@ import { loadConfigFromFile, writeConfigToFile } from 'services/config';
 import { HttpClient } from 'services/http';
 import { clearAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
 
-const INGESTION_KEY_PATTERN = /^[A-Za-z0-9]+-\d{8,}-[A-Za-z0-9]+$/;
+// Three hyphen-separated alphanumeric parts. Nest's key generator
+// (api-key-repository.service.ts) produces `<rand36>-<Date.now().toString(36)>-<rand36>`,
+// so the middle segment is base-36 (alphanumeric), NOT digits-only.
+// The minimum-length floors are sized to the smallest plausible
+// generator output and reject obvious typos early.
+const INGESTION_KEY_PATTERN = /^[A-Za-z0-9]{4,}-[A-Za-z0-9]{4,}-[A-Za-z0-9]{4,}$/;
 
 export interface SetupCommandDeps {
   output: OutputSink;

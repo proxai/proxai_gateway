@@ -7,6 +7,11 @@ node_modules/
 
 # Bun
 .bun/
+# `bun build --compile` writes intermediate artifacts at the repo root with
+# names like `.18ad1dffff93ff60-00000000.bun-build`. Per-build, machine-
+# specific, regenerated every compile — must never be committed.
+*.bun-build
+.*.bun-build
 
 # Test / coverage
 coverage/
