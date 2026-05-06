@@ -454,6 +454,105 @@ test('AuthError + verify-key throws AuthError → fatal, sentinel written', asyn
   }
 });
 
+test('AuthError + verify-key throws non-Error → retriable, log uses typeof and String(err)', async () => {
+  const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-upload-auth-'));
+  const sentinelPath = join(dirAuth, 'AUTH_FAILED');
+  try {
+    const batch = newClaudeCodeBatch('payload');
+    insertBatch(db, batch);
+    const stored = getBatch(db, batch.captureId)!;
+
+    // Build an HttpClient where verifyKey throws a non-Error value to
+    // exercise the `String(verifyErr)` and `typeof verifyErr` fallbacks.
+    const http = createTestHttpClient(mockFetch(() => emptyResponse(403)));
+    Object.defineProperty(http, 'verifyKey', {
+      value: async () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw 'string-thrown-not-error';
+      },
+    });
+
+    const loggedWarns: Array<{ obj: Record<string, unknown>; msg: string }> = [];
+    const fakeLogger = {
+      child: () => fakeLogger,
+      fatal: () => undefined,
+      error: () => undefined,
+      warn: (obj: Record<string, unknown>, msg: string) => {
+        loggedWarns.push({ obj, msg });
+      },
+      info: () => undefined,
+      debug: () => undefined,
+      trace: () => undefined,
+    };
+
+    const ctx: UploaderContext = {
+      db,
+      http,
+      hostId: TEST_HOST_ID,
+      authFailedSentinelPath: sentinelPath,
+      logger: fakeLogger as unknown as UploaderContext['logger'],
+    };
+    const outcome = await uploadBatch(ctx, stored);
+
+    expect(outcome.kind).toBe('retriable');
+    expect(getBatch(db, batch.captureId)!.status).toBe('pending');
+    expect(await Bun.file(sentinelPath).exists()).toBe(false);
+    const inconclusive = loggedWarns.find((w) => w.msg.includes('verify-key inconclusive'));
+    expect(inconclusive).toBeDefined();
+    expect(inconclusive?.obj['kind']).toBe('string');
+    expect(inconclusive?.obj['error']).toBe('string-thrown-not-error');
+  } finally {
+    await rm(dirAuth, { recursive: true, force: true });
+  }
+});
+
+test('AuthError + verify-key returns success: false → fatal even when sentinel write fails', async () => {
+  const batch = newClaudeCodeBatch('payload');
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+
+  // Pointing the sentinel path under a path that cannot be created (e.g.
+  // child of /dev/null) makes writeAuthFailedSentinel throw. With a logger
+  // attached, the classifier hits the inner log?.error branch.
+  const http = createTestHttpClient(
+    mockFetch((call) => {
+      if (call.url.includes('/ingestion/verify-key')) {
+        return jsonResponse({ success: false, message: 'revoked' });
+      }
+      return emptyResponse(401);
+    }),
+  );
+
+  const loggedErrors: Array<{ obj: unknown; msg: string }> = [];
+  const fakeLogger = {
+    child: () => fakeLogger,
+    fatal: () => undefined,
+    error: (obj: unknown, msg: string) => {
+      loggedErrors.push({ obj, msg });
+    },
+    warn: () => undefined,
+    info: () => undefined,
+    debug: () => undefined,
+    trace: () => undefined,
+  };
+
+  const ctx: UploaderContext = {
+    db,
+    http,
+    hostId: TEST_HOST_ID,
+    authFailedSentinelPath: '/dev/null/AUTH_FAILED',
+    logger: fakeLogger as unknown as UploaderContext['logger'],
+  };
+  const outcome = await uploadBatch(ctx, stored);
+
+  expect(outcome.kind).toBe('fatal');
+  if (outcome.kind === 'fatal') expect(outcome.error).toContain('ingestion key invalid');
+  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+  expect(loggedErrors.some((e) => e.msg.includes('failed to write AUTH_FAILED sentinel'))).toBe(
+    true,
+  );
+});
+
 test('AuthError without authFailedSentinelPath: still classifies, no sentinel side-effect', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);

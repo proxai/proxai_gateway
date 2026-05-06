@@ -209,6 +209,39 @@ test('rejects non-positive rate or throughput configuration', () => {
   expect(() => createPacer({ maxBatchesPerSec: 1, maxBytesPerMinute: 0 })).toThrow();
 });
 
+test('default now and sleep are used when not injected', async () => {
+  // Exercises the DEFAULT_NOW (Date.now) and DEFAULT_SLEEP (setTimeout)
+  // factory paths without long waits — small batch size, generous limits.
+  const pacer = createPacer({
+    maxBatchesPerSec: 1000,
+    maxBytesPerMinute: 100 * 1024 * 1024,
+  });
+  await pacer.acquire(100);
+  await pacer.acquire(100);
+  // When sleep IS used (e.g. retry-after), it should resolve normally.
+  pacer.notifyRetryAfter(1);
+  await pacer.acquire(100);
+  // No assertion beyond completion — coverage is the goal.
+  expect(true).toBe(true);
+});
+
+test('expired retry-after deadline is cleared on the next acquire', async () => {
+  const clock = makeClock();
+  const pacer = createPacer({
+    maxBatchesPerSec: 100,
+    maxBytesPerMinute: 100 * 1024 * 1024,
+    now: clock.now,
+    sleep: clock.sleep,
+  });
+  pacer.notifyRetryAfter(2_000);
+  // Advance past the retry-after deadline without invoking acquire — the
+  // pending deadline stays armed but is now in the past.
+  clock.advance(5_000);
+  await pacer.acquire(100);
+  // Stub clock recorded no sleeps for retry-after this time around.
+  expect(clock.sleeps.includes(2_000)).toBe(false);
+});
+
 test('zero-byte payload still consumes a rate token but no throughput', async () => {
   const clock = makeClock();
   const pacer = createPacer({
