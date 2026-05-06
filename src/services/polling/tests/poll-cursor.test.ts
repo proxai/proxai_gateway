@@ -104,3 +104,22 @@ test('aggregates per-file collect errors into result.errors', async () => {
   expect(result.filesProcessed).toBe(1);
   expect(result.errors.length).toBeGreaterThan(0);
 });
+
+test('initialScanWindowDays applies a now-N-day floor on a fresh buffer', async () => {
+  // No prior cursor exists for cursor; with initialScanWindowDays > 0,
+  // resolveMinimumMtime returns Date(now - 30d) and discover skips older
+  // files. We seed two dbs and backdate one.
+  const oldPath = await seedDb('workspaceStorage/old/state.vscdb', [
+    { key: 'composerData:abc', value: JSON.stringify({ _v: 13 }) },
+  ]);
+  await seedDb('globalStorage/state.vscdb', [
+    { key: 'composerData:xyz', value: JSON.stringify({ _v: 13 }) },
+  ]);
+  const { utimes } = await import('node:fs/promises');
+  const oldDate = new Date(Date.now() - 1000 * 60 * 60 * 24 * 365);
+  await utimes(oldPath, oldDate, oldDate);
+  const poller = makeCursorSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
+  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  // The old workspace file should be skipped; only globalStorage processed.
+  expect(result.filesProcessed).toBe(1);
+});

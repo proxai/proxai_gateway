@@ -316,3 +316,176 @@ test('cycle clears BUFFER_FULL sentinel when pending drops below resume threshol
   expect(result.drainResult).not.toBeNull();
   expect(await Bun.file(ctx.bufferFullSentinelPath).exists()).toBe(false);
 });
+
+interface FakeLogEntry {
+  level: 'info' | 'warn' | 'error';
+  obj: Record<string, unknown>;
+  msg: string;
+}
+
+function makeFakeLogger(entries: FakeLogEntry[]): PollCycleContext['logger'] {
+  const logger = {
+    child: () => logger,
+    fatal: () => undefined,
+    error: (obj: Record<string, unknown>, msg: string) => {
+      entries.push({ level: 'error', obj, msg });
+    },
+    warn: (obj: Record<string, unknown>, msg: string) => {
+      entries.push({ level: 'warn', obj, msg });
+    },
+    info: (obj: Record<string, unknown>, msg: string) => {
+      entries.push({ level: 'info', obj, msg });
+    },
+    debug: () => undefined,
+    trace: () => undefined,
+  };
+  return logger as unknown as PollCycleContext['logger'];
+}
+
+test('cycle logs soft_resume info at cycle-start when sentinel exists and pending is below resume', async () => {
+  const entries: FakeLogEntry[] = [];
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    logger: makeFakeLogger(entries),
+  };
+  ctx.bufferPolicy = {
+    receiptRetentionDays: 30,
+    failedRetentionDays: 30,
+    softPauseBytes: 1_000_000,
+    softResumeBytes: 500_000,
+  };
+  await Bun.write(
+    ctx.bufferFullSentinelPath,
+    '{"pending_bytes":1500000,"threshold":1000000,"set_at":"x"}',
+  );
+  await runPollCycle(ctx);
+  // Cycle-start clear path emits the "...sentinel cleared at cycle start" line.
+  expect(
+    entries.some(
+      (e) =>
+        e.level === 'info' &&
+        e.msg.includes('buffer pending pressure dropped') &&
+        e.msg.includes('cycle start'),
+    ),
+  ).toBe(true);
+});
+
+test('cycle logs post-drain soft_resume when a source writes the sentinel mid-cycle', async () => {
+  const entries: FakeLogEntry[] = [];
+  // Source poller that writes the BUFFER_FULL sentinel during its poll. After
+  // the source returns and drain runs, the post-drain pressure check sees
+  // shouldResume=true and wasFull=true, exercising lines 208-216.
+  let sentinelWriter: () => Promise<void> = async () => {};
+  const writerSource: RegisteredSource = {
+    name: 'writer',
+    poll: async () => {
+      await sentinelWriter();
+      return { filesProcessed: 0, capturedBatches: 0, capturedBytes: 0, errors: [] };
+    },
+  };
+  const ctx: PollCycleContext = {
+    ...makeContext([writerSource]),
+    logger: makeFakeLogger(entries),
+  };
+  ctx.bufferPolicy = {
+    receiptRetentionDays: 30,
+    failedRetentionDays: 30,
+    softPauseBytes: 1_000_000,
+    softResumeBytes: 500_000,
+  };
+  // Buffer is empty so pendingBytes=0 → shouldResume=true at the late check.
+  // The source writes the sentinel during its poll, before the late check.
+  sentinelWriter = async () => {
+    await Bun.write(
+      ctx.bufferFullSentinelPath,
+      '{"pending_bytes":1500000,"threshold":1000000,"set_at":"mid-cycle"}',
+    );
+  };
+  await runPollCycle(ctx);
+  expect(
+    entries.some(
+      (e) =>
+        e.level === 'info' &&
+        e.msg.includes('buffer pending pressure dropped') &&
+        !e.msg.includes('cycle start'),
+    ),
+  ).toBe(true);
+});
+
+function makeQueryThrowingBuffer(
+  realBuffer: Database,
+  shouldThrowOn: (sql: string) => boolean,
+): Database {
+  // Build an object that delegates every method to realBuffer except `query`,
+  // which throws when shouldThrowOn(sql) is true. Wraps method bindings so
+  // bun:sqlite's internal `this` is preserved.
+  const fake: Record<string, unknown> = {};
+  for (const key of Object.keys(realBuffer) as (keyof Database)[]) {
+    fake[key] = realBuffer[key];
+  }
+  for (const key of [
+    'query',
+    'run',
+    'prepare',
+    'transaction',
+    'exec',
+    'close',
+    'serialize',
+  ] as const) {
+    const original = (realBuffer as unknown as Record<string, unknown>)[key];
+    if (typeof original === 'function') {
+      fake[key] = (...args: unknown[]) => {
+        if (key === 'query' && typeof args[0] === 'string' && shouldThrowOn(args[0])) {
+          throw new Error('synthetic query failure');
+        }
+        return (original as Function).apply(realBuffer, args);
+      };
+    }
+  }
+  return fake as unknown as Database;
+}
+
+test('cycle logs prune_failed warn when pruneBuffer throws', async () => {
+  const entries: FakeLogEntry[] = [];
+  // Make the prune-stage transaction itself throw by intercepting db.transaction.
+  const fake: Record<string, unknown> = {};
+  for (const key of ['query', 'run', 'prepare', 'exec', 'close', 'serialize'] as const) {
+    const original = (buffer as unknown as Record<string, unknown>)[key];
+    if (typeof original === 'function') {
+      fake[key] = (...args: unknown[]) => (original as Function).apply(buffer, args);
+    }
+  }
+  let txCalls = 0;
+  fake['transaction'] = (fn: () => unknown) => {
+    txCalls++;
+    return () => {
+      if (txCalls === 1) throw new Error('synthetic prune transaction failure');
+      return fn();
+    };
+  };
+  const wrapped = fake as unknown as Database;
+
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    buffer: wrapped,
+    logger: makeFakeLogger(entries),
+  };
+  await runPollCycle(ctx);
+  expect(entries.some((e) => e.level === 'warn' && e.msg.includes('buffer prune failed'))).toBe(
+    true,
+  );
+});
+
+test('cycle logs pressure_failed warn when pressure check throws', async () => {
+  const entries: FakeLogEntry[] = [];
+  const wrapped = makeQueryThrowingBuffer(buffer, (sql) => sql.includes('SUM(LENGTH(body))'));
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    buffer: wrapped,
+    logger: makeFakeLogger(entries),
+  };
+  await runPollCycle(ctx);
+  expect(
+    entries.some((e) => e.level === 'warn' && e.msg.includes('buffer pressure check failed')),
+  ).toBe(true);
+});

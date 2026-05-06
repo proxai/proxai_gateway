@@ -158,3 +158,28 @@ test('state-only run still inserts batches from threads table', async () => {
   const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
   expect(result.capturedBatches).toBeGreaterThanOrEqual(1);
 });
+
+test('initialScanWindowDays applies a now-N-day floor on a fresh buffer', async () => {
+  // No prior cursor exists for codex, and we set initialScanWindowDays > 0,
+  // so resolveMinimumMtime returns a Date(now - 30d) and discover skips
+  // older files. We seed two rollouts: one mtime'd long ago, one recent.
+  const oldPath = await seedRollout('sessions/2020/01/01/rollout-old.jsonl', 'x\n');
+  const newPath = await seedRollout('sessions/2026/05/05/rollout-new.jsonl', 'y\n');
+  const { utimes } = await import('node:fs/promises');
+  const oldDate = new Date(Date.now() - 1000 * 60 * 60 * 24 * 365); // ~1 year ago
+  await utimes(oldPath, oldDate, oldDate);
+  await utimes(newPath, new Date(), new Date());
+  const poller = makeCodexSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
+  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  // The recent file should be captured; the year-old file should not.
+  expect(result.capturedBatches).toBeGreaterThanOrEqual(1);
+  const seenPaths = new Set<string>();
+  let row = nextPendingBatch(buffer);
+  while (row !== null) {
+    seenPaths.add(row.sourcePath);
+    markBatchDelivered(buffer, row, { idempotentOnServer: false });
+    row = nextPendingBatch(buffer);
+  }
+  expect(seenPaths.has(oldPath)).toBe(false);
+  expect(seenPaths.has(newPath)).toBe(true);
+});
