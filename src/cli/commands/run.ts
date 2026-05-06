@@ -5,10 +5,10 @@ import { createLogger, pruneLogDirectory } from 'core/log';
 import type { Logger } from 'core/log';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
-import { openBufferDb } from 'services/buffer';
+import { countCursors, openBufferDb } from 'services/buffer';
 import type { GatewayConfig } from 'services/config';
 import { HttpClient } from 'services/http';
-import { buildDefaultSources, runPollLoop } from 'services/polling';
+import { buildDefaultSources, runPollLoop, syncServerWatermarks } from 'services/polling';
 import type { PollCycleContext, PollCycleResult, RegisteredSource } from 'services/polling';
 
 export interface RunCommandDeps {
@@ -20,6 +20,7 @@ export interface RunCommandDeps {
   sources?: readonly RegisteredSource[];
   onCycleComplete?: (result: PollCycleResult) => void;
   logger?: Logger;
+  httpClient?: HttpClient;
 }
 
 export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
@@ -44,15 +45,18 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
     // best-effort startup pruning; do not block daemon on retention errors
   }
 
-  const http = new HttpClient({
-    apiKey: deps.config.account.apiKey,
-    hostId: deps.config.account.hostId,
-    endpoints: {
-      ingest: deps.config.backend.ingestUrl,
-      verifyKey: deps.config.backend.verifyKeyUrl,
-    },
-    gatewayVersion: deps.gatewayVersion,
-  });
+  const http =
+    deps.httpClient ??
+    new HttpClient({
+      apiKey: deps.config.account.apiKey,
+      hostId: deps.config.account.hostId,
+      endpoints: {
+        ingest: deps.config.backend.ingestUrl,
+        verifyKey: deps.config.backend.verifyKeyUrl,
+        watermarks: deps.config.backend.watermarksUrl,
+      },
+      gatewayVersion: deps.gatewayVersion,
+    });
 
   logger.info(
     {
@@ -62,6 +66,34 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
     },
     'daemon starting',
   );
+
+  // Pre-flight watermark sync. When the cursor table is empty (typical after
+  // a fresh install or buffer wipe), pull server-known positions to suppress
+  // duplicate captures from byte 0. Failures are logged but do not abort the
+  // daemon — the runtime regression-recovery path acts as a safety net.
+  if (countCursors(buffer) === 0) {
+    logger.info(
+      { event: 'watermark_sync.start', reason: 'fresh_buffer' },
+      'syncing watermarks from server',
+    );
+    try {
+      const syncResult = await syncServerWatermarks({ buffer, http, logger });
+      logger.info(
+        {
+          event: 'watermark_sync.complete',
+          fetched: syncResult.fetched,
+          applied: syncResult.applied,
+          skipped: syncResult.skipped,
+        },
+        'watermark sync complete',
+      );
+    } catch (err) {
+      logger.warn(
+        { event: 'watermark_sync.failed', error: (err as Error).message ?? String(err) },
+        'watermark sync failed; capture will start from zero',
+      );
+    }
+  }
 
   try {
     deps.output.info(

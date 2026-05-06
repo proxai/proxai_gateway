@@ -16,6 +16,7 @@ const fullConfig: GatewayConfig = {
   backend: {
     ingestUrl: 'https://nest.proxai.co/v1/raw_records',
     verifyKeyUrl: 'https://nest.proxai.co/ingestion/verify-key',
+    watermarksUrl: 'https://nest.proxai.co/v1/watermarks',
   },
   capture: {
     pollIntervalSec: 300,

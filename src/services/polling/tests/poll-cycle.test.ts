@@ -41,6 +41,7 @@ function makeContext(sources: RegisteredSource[]): PollCycleContext {
       endpoints: {
         ingest: 'https://api.example.com/v1/raw_records',
         verifyKey: 'https://api.example.com/ingestion/verify-key',
+        watermarks: 'https://api.example.com/v1/watermarks',
       },
       fetch: fakeFetch(),
     }),

@@ -20,9 +20,11 @@ import {
   HTTP_STATUS,
 } from 'services/http/http.constants.ts';
 import type {
+  FetchWatermarksResult,
   HttpClientOptions,
   HttpEndpoints,
   RequestOptions,
+  ServerWatermark,
   UploadResult,
   VerifyKeyResult,
 } from 'services/http/http.types.ts';
@@ -69,6 +71,29 @@ export class HttpClient {
       userId,
       keyName,
     };
+  }
+
+  async fetchWatermarks(): Promise<FetchWatermarksResult> {
+    const url = `${this.endpoints.watermarks}?host_id=${encodeURIComponent(this.hostId)}`;
+    const raw = await this.request<{
+      host_id?: unknown;
+      user_id?: unknown;
+      watermarks?: unknown;
+    }>({
+      method: 'GET',
+      url,
+      withApiKey: true,
+    });
+    const hostId = typeof raw.host_id === 'string' ? raw.host_id : '';
+    const userId = typeof raw.user_id === 'string' ? raw.user_id : '';
+    const watermarks: ServerWatermark[] = [];
+    if (Array.isArray(raw.watermarks)) {
+      for (const item of raw.watermarks) {
+        const parsed = parseServerWatermark(item);
+        if (parsed !== null) watermarks.push(parsed);
+      }
+    }
+    return { hostId, userId, watermarks };
   }
 
   async uploadRawRecord(dto: RawRecordDTO): Promise<UploadResult> {
@@ -141,6 +166,9 @@ export class HttpClient {
     if (status === HTTP_STATUS.badRequest) {
       throw new ValidationError(`server returned 400 ${response.statusText}`);
     }
+    if (status === HTTP_STATUS.unauthorized) {
+      throw new AuthError('server returned 401: ingestion key missing or invalid');
+    }
     if (status === HTTP_STATUS.forbidden) {
       throw new AuthError('server returned 403: ingestion key invalid or revoked');
     }
@@ -159,4 +187,43 @@ export class HttpClient {
     }
     throw new FatalError(`unexpected status: ${status.toString()}`);
   }
+}
+
+function parseServerWatermark(item: unknown): ServerWatermark | null {
+  if (item === null || typeof item !== 'object') return null;
+  const r = item as Record<string, unknown>;
+  const sourceApp = typeof r['source_app'] === 'string' ? r['source_app'] : null;
+  const sourcePathHash = typeof r['source_path_hash'] === 'string' ? r['source_path_hash'] : null;
+  const watermarkKindRaw = typeof r['watermark_kind'] === 'string' ? r['watermark_kind'] : null;
+  const watermarkEnd = typeof r['watermark_end'] === 'number' ? r['watermark_end'] : null;
+  const watermarkTableRaw = r['watermark_table'];
+  const watermarkTable =
+    watermarkTableRaw === null || watermarkTableRaw === undefined
+      ? null
+      : typeof watermarkTableRaw === 'string'
+        ? watermarkTableRaw
+        : null;
+  const lastDeliveredAt =
+    typeof r['last_delivered_at'] === 'string' ? r['last_delivered_at'] : null;
+
+  if (
+    sourceApp === null ||
+    sourcePathHash === null ||
+    watermarkKindRaw === null ||
+    watermarkEnd === null ||
+    lastDeliveredAt === null
+  ) {
+    return null;
+  }
+  if (watermarkKindRaw !== 'byte_range' && watermarkKindRaw !== 'rowid_range') {
+    return null;
+  }
+  return {
+    sourceApp,
+    sourcePathHash,
+    watermarkKind: watermarkKindRaw,
+    watermarkEnd,
+    watermarkTable,
+    lastDeliveredAt,
+  };
 }

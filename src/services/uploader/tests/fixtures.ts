@@ -10,6 +10,7 @@ export const TEST_GATEWAY_VERSION = '@proxai/gateway 0.1.0';
 export const TEST_ENDPOINTS: HttpEndpoints = {
   ingest: 'https://api.example.com/v1/raw_records',
   verifyKey: 'https://api.example.com/ingestion/verify-key',
+  watermarks: 'https://api.example.com/v1/watermarks',
 };
 
 export interface MockCall {

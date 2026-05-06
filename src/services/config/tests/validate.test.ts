@@ -8,6 +8,7 @@ import {
   DEFAULT_STALE_WARN_DAYS,
   NEST_INGEST_URL,
   NEST_VERIFY_KEY_URL,
+  NEST_WATERMARKS_URL,
   validateAndCoerce,
 } from 'services/config';
 
@@ -74,6 +75,7 @@ test('applies defaults for missing optional sections', () => {
   const result = validateAndCoerce({ account: minimalAccount });
   expect(result.backend.ingestUrl).toBe(NEST_INGEST_URL);
   expect(result.backend.verifyKeyUrl).toBe(NEST_VERIFY_KEY_URL);
+  expect(result.backend.watermarksUrl).toBe(NEST_WATERMARKS_URL);
   expect(result.capture.pollIntervalSec).toBe(DEFAULT_POLL_INTERVAL_SEC);
   expect(result.capture.bufferMaxBytes).toBe(DEFAULT_BUFFER_MAX_BYTES);
   expect(result.logging.level).toBe('trace');

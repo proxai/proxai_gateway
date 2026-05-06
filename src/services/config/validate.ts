@@ -12,6 +12,7 @@ import {
   MIN_POLL_INTERVAL_SEC,
   NEST_INGEST_URL,
   NEST_VERIFY_KEY_URL,
+  NEST_WATERMARKS_URL,
   VALID_INSTALL_SOURCES,
 } from 'services/config/config.constants.ts';
 import type {
@@ -54,6 +55,11 @@ function validateBackend(raw: unknown): BackendConfig {
       r['verify_key_url'],
       NEST_VERIFY_KEY_URL,
       'backend.verify_key_url',
+    ),
+    watermarksUrl: optionalString(
+      r['watermarks_url'],
+      NEST_WATERMARKS_URL,
+      'backend.watermarks_url',
     ),
   };
 }

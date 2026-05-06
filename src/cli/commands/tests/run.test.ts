@@ -5,7 +5,9 @@ import { join } from 'node:path';
 
 import { runDaemon } from 'cli/commands/run.ts';
 import { captureOutput } from 'cli/output.ts';
+import { countCursors, openBufferDb, setCursor } from 'services/buffer';
 import type { GatewayConfig } from 'services/config';
+import { HttpClient } from 'services/http';
 
 let dir: string;
 
@@ -29,6 +31,7 @@ function makeConfig(): GatewayConfig {
     backend: {
       ingestUrl: 'https://api.example.com/v1/raw_records',
       verifyKeyUrl: 'https://api.example.com/ingestion/verify-key',
+      watermarksUrl: 'https://api.example.com/v1/watermarks',
     },
     capture: {
       pollIntervalSec: 60,
@@ -38,6 +41,44 @@ function makeConfig(): GatewayConfig {
     logging: { level: 'info', logDir: join(dir, 'logs') },
     staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
   };
+}
+
+interface FetchLog {
+  watermarkCalls: number;
+}
+
+function mockHttp(
+  config: GatewayConfig,
+  watermarkResponder: () => Response,
+  log?: FetchLog,
+): HttpClient {
+  return new HttpClient({
+    apiKey: config.account.apiKey,
+    hostId: config.account.hostId,
+    endpoints: {
+      ingest: config.backend.ingestUrl,
+      verifyKey: config.backend.verifyKeyUrl,
+      watermarks: config.backend.watermarksUrl,
+    },
+    fetch: (async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/v1/watermarks')) {
+        if (log !== undefined) log.watermarkCalls++;
+        return watermarkResponder();
+      }
+      return new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof globalThis.fetch,
+  });
+}
+
+function emptyWatermarks(): Response {
+  return new Response(JSON.stringify({ host_id: 'h_test', user_id: 'u_test', watermarks: [] }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 test('starts the loop, runs at least one cycle, and exits cleanly on abort', async () => {
@@ -51,6 +92,7 @@ test('starts the loop, runs at least one cycle, and exits cleanly on abort', asy
     pauseSentinelPath: join(dir, 'PAUSED'),
     abortSignal: ctrl.signal,
     gatewayVersion: 'gw-test',
+    httpClient: mockHttp(config, emptyWatermarks),
     sources: [
       {
         name: 'noop',
@@ -85,7 +127,108 @@ test('exits immediately when abort signal is already aborted', async () => {
     pauseSentinelPath: join(dir, 'PAUSED'),
     abortSignal: ctrl.signal,
     gatewayVersion: 'gw-test',
+    httpClient: mockHttp(config, emptyWatermarks),
     sources: [],
+  });
+  expect(result.exitCode).toBe(0);
+});
+
+test('empty cursor table triggers a watermark sync; populated cursors are seeded', async () => {
+  const config = makeConfig();
+  const ctrl = new AbortController();
+  const out = captureOutput();
+  const log: FetchLog = { watermarkCalls: 0 };
+  const httpClient = mockHttp(
+    config,
+    () =>
+      new Response(
+        JSON.stringify({
+          host_id: 'h_test',
+          user_id: 'u_test',
+          watermarks: [
+            {
+              source_app: 'claude-code',
+              source_path_hash: 'aaaa',
+              watermark_kind: 'byte_range',
+              watermark_end: 1234,
+              watermark_table: null,
+              last_delivered_at: '2026-04-29T10:42:00Z',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    log,
+  );
+  const promise = runDaemon({
+    output: out,
+    config,
+    pauseSentinelPath: join(dir, 'PAUSED'),
+    abortSignal: ctrl.signal,
+    gatewayVersion: 'gw-test',
+    httpClient,
+    sources: [],
+    onCycleComplete: () => ctrl.abort(),
+  });
+  const result = await promise;
+  expect(result.exitCode).toBe(0);
+  expect(log.watermarkCalls).toBe(1);
+
+  // Verify the cursor landed in the buffer.
+  const buffer = openBufferDb(config.capture.bufferPath);
+  try {
+    expect(countCursors(buffer)).toBe(1);
+  } finally {
+    buffer.close();
+  }
+});
+
+test('non-empty cursor table skips the pre-flight sync', async () => {
+  const config = makeConfig();
+  // Pre-populate a cursor before the daemon starts so countCursors > 0.
+  const seed = openBufferDb(config.capture.bufferPath);
+  setCursor(seed, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'preexisting',
+    sourcePath: '/tmp/x.jsonl',
+    sourceInode: 12345,
+    watermarkTable: null,
+    watermarkEnd: 42,
+  });
+  seed.close();
+
+  const ctrl = new AbortController();
+  const out = captureOutput();
+  const log: FetchLog = { watermarkCalls: 0 };
+  const httpClient = mockHttp(config, emptyWatermarks, log);
+  const result = await runDaemon({
+    output: out,
+    config,
+    pauseSentinelPath: join(dir, 'PAUSED'),
+    abortSignal: ctrl.signal,
+    gatewayVersion: 'gw-test',
+    httpClient,
+    sources: [],
+    onCycleComplete: () => ctrl.abort(),
+  });
+  expect(result.exitCode).toBe(0);
+  expect(log.watermarkCalls).toBe(0);
+});
+
+test('watermark sync failure logs warn and does not abort the daemon', async () => {
+  const config = makeConfig();
+  const ctrl = new AbortController();
+  const out = captureOutput();
+  const httpClient = mockHttp(config, () => new Response('', { status: 503 }));
+  const result = await runDaemon({
+    output: out,
+    config,
+    pauseSentinelPath: join(dir, 'PAUSED'),
+    abortSignal: ctrl.signal,
+    gatewayVersion: 'gw-test',
+    httpClient,
+    sources: [],
+    onCycleComplete: () => ctrl.abort(),
   });
   expect(result.exitCode).toBe(0);
 });

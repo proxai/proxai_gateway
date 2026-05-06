@@ -18,6 +18,7 @@ const VALID_SHA256 = 'a'.repeat(64);
 const endpoints: HttpEndpoints = {
   ingest: 'https://api.example.com/v1/raw_records',
   verifyKey: 'https://api.example.com/ingestion/verify-key',
+  watermarks: 'https://api.example.com/v1/watermarks',
 };
 
 interface MockCall {

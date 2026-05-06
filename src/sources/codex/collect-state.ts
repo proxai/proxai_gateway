@@ -2,7 +2,7 @@ import type { Database } from 'bun:sqlite';
 
 import { openReadOnly, snapshotSqlite, tableExists } from 'core/io/sqlite';
 import { generateUuidV7, nowIsoUtc, zstdCompressSync } from 'core/utils';
-import { getCursor, insertBatch, setCursor } from 'services/buffer';
+import { getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import type { CodexTable } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
@@ -100,7 +100,7 @@ function collectOneTable(
 ): void {
   if (!tableExists(db, table)) return;
 
-  const cursor = getCursor(context.buffer, {
+  const cursor = getCursorWithFallback(context.buffer, {
     sourceApp: CODEX_SOURCE_APP,
     sourcePathHash: file.sourcePathHash,
     sourceInode: null,

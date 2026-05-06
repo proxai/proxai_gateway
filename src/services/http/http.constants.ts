@@ -14,6 +14,7 @@ export const HTTP_STATUS = {
   ok: 200,
   created: 201,
   badRequest: 400,
+  unauthorized: 401,
   forbidden: 403,
   requestTimeout: 408,
   payloadTooLarge: 413,

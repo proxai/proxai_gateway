@@ -76,3 +76,28 @@ export function setCursor(db: Database, input: SetCursorInput): void {
     input.consecutiveErrors ?? 0,
   );
 }
+
+/**
+ * Like `getCursor`, but if the exact (app, hash, inode, table) key misses,
+ * fall back to the same key with `sourceInode = NO_INODE_SENTINEL`.
+ *
+ * Rationale: the watermark-sync pre-flight seeds cursors with inode=0
+ * because the server doesn't track inode. When the source poller later
+ * discovers the file with a real inode, it uses this helper to inherit
+ * the synced position. The poller then writes a fresh cursor under its
+ * real inode via `setCursor`; the inode=0 placeholder remains as a
+ * harmless artifact.
+ */
+export function getCursorWithFallback(db: Database, key: CursorKey): CursorState | null {
+  const exact = getCursor(db, key);
+  if (exact !== null) return exact;
+  if ((key.sourceInode ?? NO_INODE_SENTINEL) === NO_INODE_SENTINEL) return null;
+  return getCursor(db, { ...key, sourceInode: NO_INODE_SENTINEL });
+}
+
+const COUNT_CURSORS_SQL = `SELECT COUNT(*) AS count FROM ${BUFFER_TABLES.cursors}`;
+
+export function countCursors(db: Database): number {
+  const row = db.query<{ count: number }, []>(COUNT_CURSORS_SQL).get();
+  return row?.count ?? 0;
+}

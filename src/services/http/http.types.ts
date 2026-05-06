@@ -1,6 +1,7 @@
 export interface HttpEndpoints {
   ingest: string;
   verifyKey: string;
+  watermarks: string;
 }
 
 export interface HttpClientOptions {
@@ -30,4 +31,19 @@ export interface VerifyKeyResult {
   message: string;
   userId: string | null;
   keyName: string | null;
+}
+
+export interface ServerWatermark {
+  sourceApp: string;
+  sourcePathHash: string;
+  watermarkKind: 'byte_range' | 'rowid_range';
+  watermarkEnd: number;
+  watermarkTable: string | null;
+  lastDeliveredAt: string;
+}
+
+export interface FetchWatermarksResult {
+  hostId: string;
+  userId: string;
+  watermarks: readonly ServerWatermark[];
 }

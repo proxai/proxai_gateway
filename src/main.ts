@@ -27,7 +27,12 @@ import { defaultScheduledTaskXmlPath } from 'cli/scheduled-task-xml.ts';
 import { getServiceManager } from 'cli/service-manager.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
 import { openBufferDb } from 'services/buffer';
-import { loadConfigFromFile, NEST_INGEST_URL, NEST_VERIFY_KEY_URL } from 'services/config';
+import {
+  loadConfigFromFile,
+  NEST_INGEST_URL,
+  NEST_VERIFY_KEY_URL,
+  NEST_WATERMARKS_URL,
+} from 'services/config';
 import type { InstallSource } from 'services/config';
 import { HttpClient } from 'services/http';
 
@@ -69,6 +74,7 @@ function buildSetupDeps(): SetupCommandDeps {
         endpoints: {
           ingest: NEST_INGEST_URL,
           verifyKey: NEST_VERIFY_KEY_URL,
+          watermarks: NEST_WATERMARKS_URL,
         },
         gatewayVersion: `@proxai/gateway ${packageJson.version}`,
       }),

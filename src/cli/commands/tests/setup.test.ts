@@ -60,6 +60,7 @@ function mockFactory(control: MockHttpControl): (apiKey: string, hostId: string)
       endpoints: {
         ingest: 'https://api.example.com/v1/raw_records',
         verifyKey: 'https://api.example.com/ingestion/verify-key',
+        watermarks: 'https://api.example.com/v1/watermarks',
       },
       fetch: (async (input: string | URL | Request) => {
         const url = typeof input === 'string' ? input : input.toString();
@@ -130,6 +131,7 @@ async function writeExistingConfig(
     backend: {
       ingestUrl: NEST_INGEST_URL,
       verifyKeyUrl: NEST_VERIFY_KEY_URL,
+      watermarksUrl: 'https://api.example.com/v1/watermarks',
     },
     capture: {
       pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,

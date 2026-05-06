@@ -1,6 +1,6 @@
 import { readJsonlRange } from 'core/io/jsonl';
 import { generateUuidV7, nowIsoUtc, zstdCompressSync } from 'core/utils';
-import { getCursor, insertBatch, setCursor } from 'services/buffer';
+import { getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import { applyRedaction } from 'services/redaction';
 import {
@@ -29,7 +29,7 @@ export async function collectClaudeCodeFile(
   };
 
   try {
-    const cursor = getCursor(context.buffer, {
+    const cursor = getCursorWithFallback(context.buffer, {
       sourceApp: CLAUDE_CODE_SOURCE_APP,
       sourcePathHash: file.sourcePathHash,
       sourceInode: file.inode,

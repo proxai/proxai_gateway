@@ -13,6 +13,7 @@ export interface AccountConfig {
 export interface BackendConfig {
   ingestUrl: string;
   verifyKeyUrl: string;
+  watermarksUrl: string;
 }
 
 export interface CaptureConfig {

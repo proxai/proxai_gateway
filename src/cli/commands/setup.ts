@@ -16,6 +16,7 @@ import {
   DEFAULT_STALE_WARN_DAYS,
   NEST_INGEST_URL,
   NEST_VERIFY_KEY_URL,
+  NEST_WATERMARKS_URL,
 } from 'services/config';
 import type { GatewayConfig, InstallSource } from 'services/config';
 import { loadConfigFromFile, writeConfigToFile } from 'services/config';
@@ -146,6 +147,7 @@ export async function runSetup(
     backend: {
       ingestUrl: NEST_INGEST_URL,
       verifyKeyUrl: NEST_VERIFY_KEY_URL,
+      watermarksUrl: NEST_WATERMARKS_URL,
     },
     capture: {
       pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
