@@ -8,6 +8,7 @@ import { serializeConfig, writeConfigToFile, type GatewayConfig } from 'services
 const fullConfig: GatewayConfig = {
   account: {
     apiKey: 'pxg_live_secret',
+    userId: 'u_1',
     hostId: '01HZ-test-host',
     installedAt: '2026-04-28T22:30:00Z',
     installSource: 'bun',
@@ -53,6 +54,7 @@ test('serializeConfig produces TOML with all five sections', () => {
 test('serializeConfig translates camelCase keys to snake_case', () => {
   const text = serializeConfig(fullConfig);
   expect(text).toContain('api_key');
+  expect(text).toContain('user_id');
   expect(text).toContain('host_id');
   expect(text).toContain('installed_at');
   expect(text).toContain('install_source');

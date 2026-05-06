@@ -241,15 +241,42 @@ describe('verifyKey', () => {
     const result = await client.verifyKey();
     expect(result.success).toBe(true);
     expect(result.message).toBe('Key verified successfully');
+    expect(result.userId).toBe('u_1');
+    expect(result.keyName).toBe('my-key');
   });
 
-  test('returns success: false when server returns 200 with success: false', async () => {
+  test('returns success: false with null userId when server returns 200 with success: false', async () => {
     const client = createClient(
       mockFetch(() => jsonResponse({ success: false, message: 'expired' })),
     );
     const result = await client.verifyKey();
     expect(result.success).toBe(false);
     expect(result.message).toBe('expired');
+    expect(result.userId).toBeNull();
+    expect(result.keyName).toBeNull();
+  });
+
+  test('returns null userId/keyName when data is missing on success', async () => {
+    const client = createClient(mockFetch(() => jsonResponse({ success: true, message: 'ok' })));
+    const result = await client.verifyKey();
+    expect(result.success).toBe(true);
+    expect(result.userId).toBeNull();
+    expect(result.keyName).toBeNull();
+  });
+
+  test('returns null userId when data.userId is not a string', async () => {
+    const client = createClient(
+      mockFetch(() =>
+        jsonResponse({
+          success: true,
+          data: { keyName: 'my-key', userId: 12345 },
+          message: 'ok',
+        }),
+      ),
+    );
+    const result = await client.verifyKey();
+    expect(result.userId).toBeNull();
+    expect(result.keyName).toBe('my-key');
   });
 
   test('GETs the verify-key endpoint and sends the X-API-Key header', async () => {

@@ -49,14 +49,25 @@ export class HttpClient {
   }
 
   async verifyKey(): Promise<VerifyKeyResult> {
-    const raw = await this.request<{ success: boolean; message?: string }>({
+    const raw = await this.request<{
+      success: boolean;
+      message?: string;
+      data?: { userId?: unknown; keyName?: unknown } | null;
+    }>({
       method: 'GET',
       url: this.endpoints.verifyKey,
       withApiKey: true,
     });
+    const data = raw.data;
+    const userId =
+      data !== null && data !== undefined && typeof data.userId === 'string' ? data.userId : null;
+    const keyName =
+      data !== null && data !== undefined && typeof data.keyName === 'string' ? data.keyName : null;
     return {
       success: raw.success === true,
       message: raw.message ?? '',
+      userId,
+      keyName,
     };
   }
 

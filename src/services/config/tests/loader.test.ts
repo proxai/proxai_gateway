@@ -8,6 +8,7 @@ import { loadConfigFromFile, loadConfigFromString } from 'services/config';
 const minimalToml = `
 [account]
 api_key = "k"
+user_id = "u_1"
 host_id = "h"
 installed_at = "2026-04-28T22:30:00Z"
 install_source = "bun"

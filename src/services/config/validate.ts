@@ -39,6 +39,7 @@ function validateAccount(raw: unknown): AccountConfig {
   const r = requireTable(raw, 'account');
   return {
     apiKey: requireString(r['api_key'], 'account.api_key'),
+    userId: requireString(r['user_id'], 'account.user_id'),
     hostId: requireString(r['host_id'], 'account.host_id'),
     installedAt: requireString(r['installed_at'], 'account.installed_at'),
     installSource: parseInstallSource(r['install_source']),

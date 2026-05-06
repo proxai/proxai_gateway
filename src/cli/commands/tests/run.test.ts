@@ -21,6 +21,7 @@ function makeConfig(): GatewayConfig {
   return {
     account: {
       apiKey: 'pxg_test',
+      userId: 'u_test',
       hostId: 'h_test',
       installedAt: '2026-04-29T10:42:00.123Z',
       installSource: 'github_release',

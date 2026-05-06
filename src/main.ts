@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import packageJson from '../package.json' with { type: 'json' };
 import { bufferDbPath, configFilePath, logDir, pausedSentinelPath } from 'core/io/fs';
 import type { LogLevel } from 'core/log';
+import { readMachineUuid } from 'core/system';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import { runSetup } from 'cli/commands/setup.ts';
 import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup.ts';
@@ -71,6 +72,7 @@ function buildSetupDeps(): SetupCommandDeps {
         },
         gatewayVersion: `@proxai/gateway ${packageJson.version}`,
       }),
+    readMachineUuid: () => readMachineUuid(),
     platform,
   };
   if (platform === 'win32') {

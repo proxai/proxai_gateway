@@ -6,6 +6,7 @@ import { validateAndCoerce } from 'services/config';
 const VALID_BASE = {
   account: {
     api_key: 'pxg_x',
+    user_id: 'u_x',
     host_id: 'h_x',
     installed_at: '2026-04-29T10:42:00.123Z',
     install_source: 'github_release',

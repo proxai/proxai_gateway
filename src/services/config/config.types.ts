@@ -4,6 +4,7 @@ export type InstallSource = 'bun' | 'pnpm' | 'yarn' | 'npm' | 'brew' | 'github_r
 
 export interface AccountConfig {
   apiKey: string;
+  userId: string;
   hostId: string;
   installedAt: string;
   installSource: InstallSource;

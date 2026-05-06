@@ -28,4 +28,6 @@ export interface UploadResult {
 export interface VerifyKeyResult {
   success: boolean;
   message: string;
+  userId: string | null;
+  keyName: string | null;
 }

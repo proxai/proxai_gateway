@@ -1,7 +1,8 @@
 import { ensureDir, setMode, writeAtomic } from 'core/io/fs';
 import { dirname } from 'node:path';
 
-import { AuthError, GatewayError, generateUuidV7, nowIsoUtc } from 'core/utils';
+import { deriveHostId, readMachineUuid } from 'core/system';
+import { AuthError, GatewayError, nowIsoUtc } from 'core/utils';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import { buildLaunchdPlist } from 'cli/launchd-plist.ts';
@@ -32,7 +33,7 @@ export interface SetupCommandDeps {
   programPath: string;
   configExists: () => Promise<boolean>;
   httpClientFactory: (apiKey: string, hostId: string) => HttpClient;
-  generateHostId?: () => string;
+  readMachineUuid?: () => Promise<string>;
   now?: () => string;
   platform: NodeJS.Platform;
   windowsUserId?: string;
@@ -78,21 +79,25 @@ export async function runSetup(
     return { exitCode: EXIT_CODE.validationError };
   }
 
-  let hostId: string;
   let installedAt: string;
   let installSource: InstallSource;
+  let previousHostId: string | null = null;
+  let previousUserId: string | null = null;
   if (isReplace) {
     const existing = await loadConfigFromFile(deps.configPath);
-    hostId = existing.account.hostId;
     installedAt = existing.account.installedAt;
     installSource = existing.account.installSource;
+    previousHostId = existing.account.hostId;
+    previousUserId = existing.account.userId;
   } else {
-    hostId = (deps.generateHostId ?? generateUuidV7)();
     installedAt = (deps.now ?? nowIsoUtc)();
     installSource = options.installSource ?? 'github_release';
   }
 
-  const http = deps.httpClientFactory(apiKey, hostId);
+  // verify-key does not consult host_id; pass an empty placeholder while we
+  // derive the real, stable id from the verified user id and the machine UUID.
+  const http = deps.httpClientFactory(apiKey, '');
+  let userId: string;
   try {
     const verification = await http.verifyKey();
     if (!verification.success) {
@@ -103,6 +108,11 @@ export async function runSetup(
       );
       return { exitCode: EXIT_CODE.authError };
     }
+    if (verification.userId === null || verification.userId.length === 0) {
+      deps.output.error('verify-key response missing user id; cannot derive stable host_id');
+      return { exitCode: EXIT_CODE.authError };
+    }
+    userId = verification.userId;
   } catch (err) {
     if (err instanceof AuthError) {
       deps.output.error('ingestion key rejected by server (invalid, revoked, or wrong type)');
@@ -112,8 +122,27 @@ export async function runSetup(
     return { exitCode: EXIT_CODE.error };
   }
 
+  let machineUuid: string;
+  try {
+    machineUuid = await (deps.readMachineUuid ?? readMachineUuid)();
+  } catch (err) {
+    deps.output.error(formatError('failed to read machine UUID', err));
+    return { exitCode: EXIT_CODE.error };
+  }
+  const hostId = deriveHostId(machineUuid, userId);
+
+  if (isReplace && previousHostId !== null && previousUserId !== null) {
+    if (previousUserId === userId && previousHostId === hostId) {
+      deps.output.info('host_id stable (same machine, same user)');
+    } else if (previousUserId !== userId) {
+      deps.output.info('host_id rederived for new user');
+    } else {
+      deps.output.info('host_id rederived from machine UUID');
+    }
+  }
+
   const config: GatewayConfig = {
-    account: { apiKey, hostId, installedAt, installSource },
+    account: { apiKey, userId, hostId, installedAt, installSource },
     backend: {
       ingestUrl: NEST_INGEST_URL,
       verifyKeyUrl: NEST_VERIFY_KEY_URL,

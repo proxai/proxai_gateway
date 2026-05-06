@@ -13,6 +13,7 @@ import {
 
 const minimalAccount = {
   api_key: 'pxg_live_test',
+  user_id: 'u_1',
   host_id: '01HZ-host-id',
   installed_at: '2026-04-28T22:30:00Z',
   install_source: 'bun',
@@ -30,7 +31,10 @@ test('requires the [account] section', () => {
 
 test('requires every account field', () => {
   expect(() => validateAndCoerce({ account: {} })).toThrow(/account\.api_key/);
-  expect(() => validateAndCoerce({ account: { api_key: 'k' } })).toThrow(/account\.host_id/);
+  expect(() => validateAndCoerce({ account: { api_key: 'k' } })).toThrow(/account\.user_id/);
+  expect(() => validateAndCoerce({ account: { api_key: 'k', user_id: 'u_1' } })).toThrow(
+    /account\.host_id/,
+  );
 });
 
 test('rejects empty strings as missing', () => {
@@ -108,6 +112,7 @@ test('expands ~/ in path fields', () => {
 test('camelCase output mirrors snake_case input', () => {
   const result = validateAndCoerce({ account: minimalAccount });
   expect(result.account.apiKey).toBe('pxg_live_test');
+  expect(result.account.userId).toBe('u_1');
   expect(result.account.hostId).toBe('01HZ-host-id');
   expect(result.account.installedAt).toBe('2026-04-28T22:30:00Z');
   expect(result.account.installSource).toBe('bun');

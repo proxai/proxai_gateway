@@ -14,6 +14,7 @@ export function serializeConfig(config: GatewayConfig): string {
   return stringifyToml({
     account: {
       api_key: config.account.apiKey,
+      user_id: config.account.userId,
       host_id: config.account.hostId,
       installed_at: config.account.installedAt,
       install_source: config.account.installSource,

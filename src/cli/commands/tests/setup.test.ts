@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { runSetup } from 'cli/commands/setup.ts';
 import { captureOutput } from 'cli/output.ts';
 import { scriptedPrompts } from 'cli/prompts.ts';
+import { deriveHostId } from 'core/system';
 import { HttpClient } from 'services/http';
 import {
   loadConfigFromFile,
@@ -18,6 +19,12 @@ import {
   DEFAULT_STALE_WARN_DAYS,
 } from 'services/config';
 import type { GatewayConfig } from 'services/config';
+
+const TEST_MACHINE_UUID = 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE';
+const TEST_USER_ID = 'u_1';
+const TEST_USER_ID_OTHER = 'u_2';
+const EXPECTED_HOST_ID = deriveHostId(TEST_MACHINE_UUID, TEST_USER_ID);
+const EXPECTED_HOST_ID_OTHER = deriveHostId(TEST_MACHINE_UUID, TEST_USER_ID_OTHER);
 
 let dir: string;
 let configPath: string;
@@ -41,6 +48,7 @@ afterEach(async () => {
 
 interface MockHttpControl {
   verifyResponse: 'accepted' | 'rejected' | 'forbidden' | 'service-unavailable' | 'network-error';
+  userId: string;
   verifyCalls: number;
 }
 
@@ -61,7 +69,7 @@ function mockFactory(control: MockHttpControl): (apiKey: string, hostId: string)
             return new Response(
               JSON.stringify({
                 success: true,
-                data: { keyName: 'my-key', userId: 'u_1' },
+                data: { keyName: 'my-key', userId: control.userId },
                 message: 'Key verified successfully',
               }),
               { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -87,7 +95,7 @@ function mockFactory(control: MockHttpControl): (apiKey: string, hostId: string)
 }
 
 function newControl(overrides: Partial<MockHttpControl> = {}): MockHttpControl {
-  return { verifyResponse: 'accepted', verifyCalls: 0, ...overrides };
+  return { verifyResponse: 'accepted', userId: TEST_USER_ID, verifyCalls: 0, ...overrides };
 }
 
 function deps(control: MockHttpControl): Parameters<typeof runSetup>[0] {
@@ -101,7 +109,7 @@ function deps(control: MockHttpControl): Parameters<typeof runSetup>[0] {
     programPath: '/usr/local/bin/proxai-gateway',
     configExists: () => Bun.file(configPath).exists(),
     httpClientFactory: mockFactory(control),
-    generateHostId: () => '01943f5a-7b1c-7e92-9c01-a0f3b40d77e3',
+    readMachineUuid: async () => TEST_MACHINE_UUID,
     now: () => '2026-04-29T10:42:00.123Z',
     platform: 'linux',
   };
@@ -113,7 +121,8 @@ async function writeExistingConfig(
   const config: GatewayConfig = {
     account: {
       apiKey: VALID_KEY,
-      hostId: '01943f5a-7b1c-7e92-9c01-a0f3b40d77e3',
+      userId: TEST_USER_ID,
+      hostId: EXPECTED_HOST_ID,
       installedAt: '2026-04-29T10:42:00.123Z',
       installSource: 'github_release',
       ...overrides,
@@ -143,7 +152,9 @@ test('writes a valid config and reports success when key is accepted', async () 
   expect(control.verifyCalls).toBe(1);
   const config = await loadConfigFromFile(configPath);
   expect(config.account.apiKey).toBe(VALID_KEY);
-  expect(config.account.hostId).toBe('01943f5a-7b1c-7e92-9c01-a0f3b40d77e3');
+  expect(config.account.userId).toBe(TEST_USER_ID);
+  expect(config.account.hostId).toBe(EXPECTED_HOST_ID);
+  expect(config.account.hostId).toMatch(/^[0-9a-f]{64}$/);
   expect(config.account.installedAt).toBe('2026-04-29T10:42:00.123Z');
   expect(config.capture.bufferPath).toBe(bufferDbPath);
 });
@@ -297,12 +308,16 @@ test('reports server-provided message when key is rejected with reason', async (
 });
 
 test('reports generic message when key is rejected without reason', async () => {
-  const control: MockHttpControl = { verifyResponse: 'accepted', verifyCalls: 0 };
+  const control: MockHttpControl = {
+    verifyResponse: 'accepted',
+    userId: TEST_USER_ID,
+    verifyCalls: 0,
+  };
   const baseDeps: Parameters<typeof runSetup>[0] = {
     ...deps(control),
     httpClientFactory: () =>
       ({
-        verifyKey: async () => ({ success: false, message: '' }),
+        verifyKey: async () => ({ success: false, message: '', userId: null, keyName: null }),
       }) as unknown as HttpClient,
   };
   const output = captureOutput();
@@ -310,6 +325,26 @@ test('reports generic message when key is rejected without reason', async () => 
   expect(result.exitCode).toBe(3);
   const errorLine = output.lines.find((l) => l.level === 'error');
   expect(errorLine?.msg).toBe('ingestion key not accepted');
+});
+
+test('returns authError when verify-key omits userId on success', async () => {
+  const baseDeps: Parameters<typeof runSetup>[0] = {
+    ...deps(newControl()),
+    httpClientFactory: () =>
+      ({
+        verifyKey: async () => ({
+          success: true,
+          message: 'ok',
+          userId: null,
+          keyName: 'my-key',
+        }),
+      }) as unknown as HttpClient,
+  };
+  const output = captureOutput();
+  const result = await runSetup({ ...baseDeps, output }, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(3);
+  const errorLine = output.lines.find((l) => l.level === 'error');
+  expect(errorLine?.msg).toContain('user id');
 });
 
 test('replaces api key when re-entry matches (interactive)', async () => {
@@ -334,11 +369,9 @@ test('aborts when re-entry does not match (existing config preserved)', async ()
   expect(config.account.apiKey).toBe(VALID_KEY);
 });
 
-test('preserves hostId / installedAt / installSource on replace', async () => {
-  const PRESERVED_HOST = '01943f5a-aaaa-bbbb-cccc-d0e1f2030405';
+test('preserves installedAt and installSource on replace; rederives host_id from same user', async () => {
   const PRESERVED_INSTALLED_AT = '2025-01-15T08:00:00.000Z';
   await writeExistingConfig({
-    hostId: PRESERVED_HOST,
     installedAt: PRESERVED_INSTALLED_AT,
     installSource: 'brew',
   });
@@ -348,19 +381,30 @@ test('preserves hostId / installedAt / installSource on replace', async () => {
   expect(result.exitCode).toBe(0);
   const config = await loadConfigFromFile(configPath);
   expect(config.account.apiKey).toBe(NEW_KEY);
-  expect(config.account.hostId).toBe(PRESERVED_HOST);
+  expect(config.account.userId).toBe(TEST_USER_ID);
+  expect(config.account.hostId).toBe(EXPECTED_HOST_ID);
   expect(config.account.installedAt).toBe(PRESERVED_INSTALLED_AT);
   expect(config.account.installSource).toBe('brew');
 });
 
+test('on replace, rederives host_id from new user_id', async () => {
+  await writeExistingConfig({ userId: TEST_USER_ID, hostId: EXPECTED_HOST_ID });
+  const control = newControl({ userId: TEST_USER_ID_OTHER });
+  const result = await runSetup(deps(control), { apiKey: NEW_KEY });
+  expect(result.exitCode).toBe(0);
+  const config = await loadConfigFromFile(configPath);
+  expect(config.account.userId).toBe(TEST_USER_ID_OTHER);
+  expect(config.account.hostId).toBe(EXPECTED_HOST_ID_OTHER);
+  expect(config.account.hostId).not.toBe(EXPECTED_HOST_ID);
+});
+
 test('scripted mode (--api-key) bypasses re-entry on existing config', async () => {
-  const PRESERVED_HOST = '01943f5a-aaaa-bbbb-cccc-d0e1f2030405';
-  await writeExistingConfig({ hostId: PRESERVED_HOST });
+  await writeExistingConfig();
   const control = newControl();
   const result = await runSetup(deps(control), { apiKey: NEW_KEY });
   expect(result.exitCode).toBe(0);
   expect(control.verifyCalls).toBe(1);
   const config = await loadConfigFromFile(configPath);
   expect(config.account.apiKey).toBe(NEW_KEY);
-  expect(config.account.hostId).toBe(PRESERVED_HOST);
+  expect(config.account.hostId).toBe(EXPECTED_HOST_ID);
 });

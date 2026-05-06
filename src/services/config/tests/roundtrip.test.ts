@@ -14,6 +14,7 @@ import {
 const fullConfig: GatewayConfig = {
   account: {
     apiKey: 'pxg_live_secret',
+    userId: 'u_1',
     hostId: '01HZ-test-host',
     installedAt: '2026-04-28T22:30:00Z',
     installSource: 'bun',
