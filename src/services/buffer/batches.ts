@@ -163,6 +163,10 @@ export function markBatchFailed(db: Database, captureId: string, error: string):
   db.query(MARK_FAILED_SQL).run(error, captureId);
 }
 
+export function deleteBatch(db: Database, captureId: string): void {
+  db.query(DELETE_BATCH_SQL).run(captureId);
+}
+
 export function recordRetriableFailure(db: Database, captureId: string, error: string): void {
   db.query(RECORD_RETRIABLE_SQL).run(error, captureId);
 }

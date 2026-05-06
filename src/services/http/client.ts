@@ -6,6 +6,7 @@ import {
   RateLimitError,
   RetriableError,
   ValidationError,
+  WatermarkRegressionError,
 } from 'core/utils';
 import { validateRawRecordDTO } from 'services/contract';
 import type { RawRecordDTO } from 'services/contract';
@@ -164,6 +165,15 @@ export class HttpClient {
       }
     }
     if (status === HTTP_STATUS.badRequest) {
+      const text = await response.text();
+      const regression = parseWatermarkRegression(text);
+      if (regression !== null) {
+        throw new WatermarkRegressionError(
+          `server reported watermark_regression at ${regression.currentServerWatermarkEnd.toString()}`,
+          regression.currentServerWatermarkEnd,
+          regression.sourcePathHash,
+        );
+      }
       throw new ValidationError(`server returned 400 ${response.statusText}`);
     }
     if (status === HTTP_STATUS.unauthorized) {
@@ -187,6 +197,26 @@ export class HttpClient {
     }
     throw new FatalError(`unexpected status: ${status.toString()}`);
   }
+}
+
+function parseWatermarkRegression(
+  text: string,
+): { currentServerWatermarkEnd: number; sourcePathHash: string } | null {
+  if (text.length === 0) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== 'object') return null;
+  const r = parsed as Record<string, unknown>;
+  if (r['error'] !== 'watermark_regression') return null;
+  const watermark = r['current_server_watermark_end'];
+  const hash = r['source_path_hash'];
+  if (typeof watermark !== 'number' || !Number.isFinite(watermark)) return null;
+  if (typeof hash !== 'string' || hash.length === 0) return null;
+  return { currentServerWatermarkEnd: watermark, sourcePathHash: hash };
 }
 
 function parseServerWatermark(item: unknown): ServerWatermark | null {

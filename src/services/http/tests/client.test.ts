@@ -7,6 +7,7 @@ import {
   RateLimitError,
   RetriableError,
   ValidationError,
+  WatermarkRegressionError,
 } from 'core/utils';
 import type { RawRecordDTO } from 'services/contract';
 import { HttpClient } from 'services/http';
@@ -114,6 +115,51 @@ describe('uploadRawRecord', () => {
   test('throws ValidationError on 400', async () => {
     const client = createClient(mockFetch(() => emptyResponse(400)));
     await expect(client.uploadRawRecord(validDto())).rejects.toThrow(ValidationError);
+  });
+
+  test('throws WatermarkRegressionError when 400 body is structured', async () => {
+    const client = createClient(
+      mockFetch(
+        () =>
+          new Response(
+            JSON.stringify({
+              error: 'watermark_regression',
+              current_server_watermark_end: 7777,
+              source_path_hash: 'h_abc',
+            }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } },
+          ),
+      ),
+    );
+    try {
+      await client.uploadRawRecord(validDto());
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(WatermarkRegressionError);
+      expect((err as WatermarkRegressionError).currentServerWatermarkEnd).toBe(7777);
+      expect((err as WatermarkRegressionError).sourcePathHash).toBe('h_abc');
+      // Subclass of ValidationError so existing classifiers still recognize it.
+      expect(err).toBeInstanceOf(ValidationError);
+    }
+  });
+
+  test('throws plain ValidationError when 400 body is not the regression shape', async () => {
+    const client = createClient(
+      mockFetch(
+        () =>
+          new Response(JSON.stringify({ error: 'something_else' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
+    );
+    try {
+      await client.uploadRawRecord(validDto());
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(ValidationError);
+      expect(err).not.toBeInstanceOf(WatermarkRegressionError);
+    }
   });
 
   test('throws AuthError on 403', async () => {

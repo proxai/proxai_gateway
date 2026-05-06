@@ -5,8 +5,15 @@ import {
   RateLimitError,
   RetriableError,
   ValidationError,
+  WatermarkRegressionError,
 } from 'core/utils';
-import { markBatchDelivered, markBatchFailed, recordRetriableFailure } from 'services/buffer';
+import {
+  deleteBatch,
+  markBatchDelivered,
+  markBatchFailed,
+  recordRetriableFailure,
+  setCursorFromRegression,
+} from 'services/buffer';
 import type { StoredBatch } from 'services/buffer';
 import type { RawRecordDTO } from 'services/contract';
 import { buildRawRecordDTO } from 'services/uploader/build-dto.ts';
@@ -34,12 +41,30 @@ export async function uploadBatch(
       idempotent: result.idempotent,
     };
   } catch (err) {
-    return classifyAndPersist(ctx, batch.captureId, err);
+    return classifyAndPersist(ctx, batch, err);
   }
 }
 
-function classifyAndPersist(ctx: UploaderContext, captureId: string, err: unknown): UploadOutcome {
+function classifyAndPersist(ctx: UploaderContext, batch: StoredBatch, err: unknown): UploadOutcome {
+  const captureId = batch.captureId;
   const log = ctx.logger?.child({ capture_id: captureId });
+  if (err instanceof WatermarkRegressionError) {
+    // Server already has data up to err.currentServerWatermarkEnd for this
+    // source_path_hash. Update our local cursor to match, drop the failed
+    // batch (it duplicates server state), and let the next cycle resume from
+    // the new cursor position forward.
+    setCursorFromRegression(ctx.db, batch, err.currentServerWatermarkEnd);
+    deleteBatch(ctx.db, captureId);
+    log?.info(
+      {
+        event: 'upload.watermark_recovered',
+        new_watermark_end: err.currentServerWatermarkEnd,
+        source_path_hash: err.sourcePathHash,
+      },
+      'watermark regression recovered from server state',
+    );
+    return { kind: 'recovered', captureId };
+  }
   if (err instanceof RateLimitError) {
     recordRetriableFailure(ctx.db, captureId, err.message);
     log?.warn(

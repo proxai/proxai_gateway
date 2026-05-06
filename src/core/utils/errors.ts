@@ -49,3 +49,24 @@ export class FatalError extends GatewayError {
     super('fatal', message, cause);
   }
 }
+
+/**
+ * Server reported that the upload's watermark range falls below the position
+ * it has already persisted (typically because the local cursor was wiped on
+ * reinstall). Carries the server's authoritative watermark so the gateway
+ * can reset its local cursor and drop the now-redundant batch.
+ */
+export class WatermarkRegressionError extends ValidationError {
+  readonly currentServerWatermarkEnd: number;
+  readonly sourcePathHash: string;
+  constructor(
+    message: string,
+    currentServerWatermarkEnd: number,
+    sourcePathHash: string,
+    cause?: unknown,
+  ) {
+    super(message, cause);
+    this.currentServerWatermarkEnd = currentServerWatermarkEnd;
+    this.sourcePathHash = sourcePathHash;
+  }
+}

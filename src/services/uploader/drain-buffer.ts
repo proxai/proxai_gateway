@@ -17,6 +17,7 @@ export async function drainBuffer(
     accepted: 0,
     retriable: 0,
     fatal: 0,
+    recovered: 0,
     rateLimitedRetryAfterMs: null,
   };
 
@@ -33,6 +34,10 @@ export async function drainBuffer(
     }
     if (outcome.kind === 'fatal') {
       result.fatal++;
+      continue;
+    }
+    if (outcome.kind === 'recovered') {
+      result.recovered++;
       continue;
     }
     result.retriable++;

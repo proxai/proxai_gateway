@@ -101,3 +101,30 @@ export function countCursors(db: Database): number {
   const row = db.query<{ count: number }, []>(COUNT_CURSORS_SQL).get();
   return row?.count ?? 0;
 }
+
+/**
+ * Reset the local cursor to the server's authoritative watermark after a
+ * 400 watermark_regression response. The next capture cycle resumes from
+ * `watermarkEnd` forward; the failed batch (which duplicated server state)
+ * is discarded by the caller.
+ */
+export function setCursorFromRegression(
+  db: Database,
+  batch: {
+    sourceApp: string;
+    sourcePath: string;
+    sourcePathHash: string;
+    sourceInode: number | null;
+    watermarkTable: string | null;
+  },
+  watermarkEnd: number,
+): void {
+  setCursor(db, {
+    sourceApp: batch.sourceApp as 'claude-code' | 'cursor' | 'codex',
+    sourcePathHash: batch.sourcePathHash,
+    sourcePath: batch.sourcePath,
+    sourceInode: batch.sourceInode,
+    watermarkTable: batch.watermarkTable,
+    watermarkEnd,
+  });
+}

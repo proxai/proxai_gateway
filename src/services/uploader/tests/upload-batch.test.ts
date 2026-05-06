@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
-import { getBatch, getReceipt, insertBatch, openInMemoryBufferDb } from 'services/buffer';
+import {
+  getBatch,
+  getCursor,
+  getReceipt,
+  insertBatch,
+  openInMemoryBufferDb,
+} from 'services/buffer';
 import { uploadBatch } from 'services/uploader';
 import type { UploaderContext } from 'services/uploader';
 import {
@@ -84,6 +90,63 @@ test('400 ValidationError marks batch failed (terminal)', async () => {
   expect(row.status).toBe('failed');
   expect(row.attempts).toBe(1);
   expect(row.lastError).not.toBeNull();
+});
+
+test('400 watermark_regression updates cursor, drops batch, returns recovered', async () => {
+  const batch = newClaudeCodeBatch('payload', { watermarkStart: 0, watermarkEnd: 100 });
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+
+  const ctx = ctxWith(
+    mockFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            error: 'watermark_regression',
+            current_server_watermark_end: 5000,
+            source_path_hash: stored.sourcePathHash,
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        ),
+    ),
+  );
+  const outcome = await uploadBatch(ctx, stored);
+
+  expect(outcome.kind).toBe('recovered');
+  if (outcome.kind === 'recovered') {
+    expect(outcome.captureId).toBe(batch.captureId);
+  }
+  // Failed batch is removed from the queue (no fatal row left behind).
+  expect(getBatch(db, batch.captureId)).toBeNull();
+  // No receipt is written either — recovery is not a delivery.
+  expect(getReceipt(db, batch.captureId)).toBeNull();
+  // Cursor is reset to the server's authoritative position.
+  const cursor = getCursor(db, {
+    sourceApp: stored.sourceApp,
+    sourcePathHash: stored.sourcePathHash,
+    sourceInode: stored.sourceInode,
+    watermarkTable: stored.watermarkTable,
+  });
+  expect(cursor?.watermarkEnd).toBe(5000);
+});
+
+test('400 with non-regression body falls through to plain ValidationError -> fatal', async () => {
+  const batch = newClaudeCodeBatch('payload');
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+
+  const ctx = ctxWith(
+    mockFetch(
+      () =>
+        new Response(JSON.stringify({ error: 'invalid_dto' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    ),
+  );
+  const outcome = await uploadBatch(ctx, stored);
+  expect(outcome.kind).toBe('fatal');
+  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
 });
 
 test('403 AuthError keeps batch pending (retriable)', async () => {

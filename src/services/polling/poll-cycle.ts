@@ -72,6 +72,7 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
       accepted: drainResult.accepted,
       retriable: drainResult.retriable,
       fatal: drainResult.fatal,
+      recovered: drainResult.recovered,
       retry_after_ms: drainResult.rateLimitedRetryAfterMs,
     },
     'buffer drain complete',

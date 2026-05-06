@@ -29,7 +29,12 @@ export interface FatalOutcome {
   error: string;
 }
 
-export type UploadOutcome = AcceptedOutcome | RetriableOutcome | FatalOutcome;
+export interface RecoveredOutcome {
+  kind: 'recovered';
+  captureId: string;
+}
+
+export type UploadOutcome = AcceptedOutcome | RetriableOutcome | FatalOutcome | RecoveredOutcome;
 
 export interface DrainOptions {
   maxBatches?: number;
@@ -40,5 +45,6 @@ export interface DrainResult {
   accepted: number;
   retriable: number;
   fatal: number;
+  recovered: number;
   rateLimitedRetryAfterMs: number | null;
 }
