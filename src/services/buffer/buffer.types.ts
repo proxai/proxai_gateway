@@ -45,12 +45,16 @@ export interface CursorState {
   watermarkEnd: number;
   lastPolledAt: string;
   consecutiveErrors: number;
+  lastSeenSizeBytes: number | null;
+  lastSeenPageCount: number | null;
 }
 
 export interface SetCursorInput extends CursorKey {
   sourcePath: string;
   watermarkEnd: number;
   consecutiveErrors?: number;
+  lastSeenSizeBytes?: number | null;
+  lastSeenPageCount?: number | null;
 }
 
 export interface NewReceipt {

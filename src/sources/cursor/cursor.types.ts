@@ -1,5 +1,7 @@
 import type { Database } from 'bun:sqlite';
 
+import type { Logger } from 'core/log';
+
 export interface DiscoveredCursorFile {
   sourcePath: string;
   sourcePathHash: string;
@@ -11,6 +13,7 @@ export interface DiscoveredCursorFile {
 export interface CursorCollectorContext {
   buffer: Database;
   gatewayVersion: string;
+  logger?: Logger;
 }
 
 export interface CursorCollectorResult {

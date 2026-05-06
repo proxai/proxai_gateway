@@ -8,15 +8,23 @@ import {
   NO_TABLE_SENTINEL,
 } from 'services/buffer/buffer.constants.ts';
 import type { CursorKey, CursorState, SetCursorInput } from 'services/buffer/buffer.types.ts';
+import type { SourceApp } from 'services/contract';
 
 interface CursorRow {
   watermark_end: number;
   last_polled_at: string;
   consecutive_errors: number;
+  last_seen_size_bytes: number | null;
+  last_seen_page_count: number | null;
 }
 
 const GET_CURSOR_SQL = `
-  SELECT ${CURSOR_COLS.watermarkEnd}, ${CURSOR_COLS.lastPolledAt}, ${CURSOR_COLS.consecutiveErrors}
+  SELECT
+    ${CURSOR_COLS.watermarkEnd},
+    ${CURSOR_COLS.lastPolledAt},
+    ${CURSOR_COLS.consecutiveErrors},
+    ${CURSOR_COLS.lastSeenSizeBytes},
+    ${CURSOR_COLS.lastSeenPageCount}
   FROM ${BUFFER_TABLES.cursors}
   WHERE ${CURSOR_COLS.sourceApp} = ?
     AND ${CURSOR_COLS.sourcePathHash} = ?
@@ -33,8 +41,10 @@ const UPSERT_CURSOR_SQL = `
     ${CURSOR_COLS.watermarkTable},
     ${CURSOR_COLS.watermarkEnd},
     ${CURSOR_COLS.lastPolledAt},
-    ${CURSOR_COLS.consecutiveErrors}
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ${CURSOR_COLS.consecutiveErrors},
+    ${CURSOR_COLS.lastSeenSizeBytes},
+    ${CURSOR_COLS.lastSeenPageCount}
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT (
     ${CURSOR_COLS.sourceApp},
     ${CURSOR_COLS.sourcePathHash},
@@ -44,7 +54,9 @@ const UPSERT_CURSOR_SQL = `
     ${CURSOR_COLS.sourcePath} = excluded.${CURSOR_COLS.sourcePath},
     ${CURSOR_COLS.watermarkEnd} = excluded.${CURSOR_COLS.watermarkEnd},
     ${CURSOR_COLS.lastPolledAt} = excluded.${CURSOR_COLS.lastPolledAt},
-    ${CURSOR_COLS.consecutiveErrors} = excluded.${CURSOR_COLS.consecutiveErrors}
+    ${CURSOR_COLS.consecutiveErrors} = excluded.${CURSOR_COLS.consecutiveErrors},
+    ${CURSOR_COLS.lastSeenSizeBytes} = excluded.${CURSOR_COLS.lastSeenSizeBytes},
+    ${CURSOR_COLS.lastSeenPageCount} = excluded.${CURSOR_COLS.lastSeenPageCount}
 `;
 
 export function getCursor(db: Database, key: CursorKey): CursorState | null {
@@ -61,6 +73,8 @@ export function getCursor(db: Database, key: CursorKey): CursorState | null {
     watermarkEnd: row.watermark_end,
     lastPolledAt: row.last_polled_at,
     consecutiveErrors: row.consecutive_errors,
+    lastSeenSizeBytes: row.last_seen_size_bytes,
+    lastSeenPageCount: row.last_seen_page_count,
   };
 }
 
@@ -74,6 +88,8 @@ export function setCursor(db: Database, input: SetCursorInput): void {
     input.watermarkEnd,
     nowIsoUtc(),
     input.consecutiveErrors ?? 0,
+    input.lastSeenSizeBytes ?? null,
+    input.lastSeenPageCount ?? null,
   );
 }
 
@@ -100,6 +116,24 @@ const COUNT_CURSORS_SQL = `SELECT COUNT(*) AS count FROM ${BUFFER_TABLES.cursors
 export function countCursors(db: Database): number {
   const row = db.query<{ count: number }, []>(COUNT_CURSORS_SQL).get();
   return row?.count ?? 0;
+}
+
+const HAS_CURSOR_FOR_APP_SQL = `
+  SELECT 1 FROM ${BUFFER_TABLES.cursors}
+  WHERE ${CURSOR_COLS.sourceApp} = ?
+  LIMIT 1
+`;
+
+/**
+ * Returns true when at least one cursor row exists for the given source app.
+ *
+ * Used by the polling layer to decide whether the initial-scan window
+ * should be enforced. If any cursors exist for the app, those cursors
+ * already establish the lower bound and the scan-window cap is skipped.
+ */
+export function hasAnyCursor(db: Database, sourceApp: SourceApp): boolean {
+  const row = db.query<{ '1': number }, [string]>(HAS_CURSOR_FOR_APP_SQL).get(sourceApp);
+  return row !== null;
 }
 
 /**

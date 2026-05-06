@@ -53,6 +53,8 @@ export const CURSOR_COLS = {
   watermarkEnd: 'watermark_end',
   lastPolledAt: 'last_polled_at',
   consecutiveErrors: 'consecutive_errors',
+  lastSeenSizeBytes: 'last_seen_size_bytes',
+  lastSeenPageCount: 'last_seen_page_count',
 } as const;
 
 export const RECEIPT_COLS = {
@@ -124,6 +126,8 @@ export const CURSOR_TABLE_DDL = `
     ${CURSOR_COLS.watermarkEnd} INTEGER NOT NULL DEFAULT 0,
     ${CURSOR_COLS.lastPolledAt} TEXT NOT NULL,
     ${CURSOR_COLS.consecutiveErrors} INTEGER NOT NULL DEFAULT 0,
+    ${CURSOR_COLS.lastSeenSizeBytes} INTEGER,
+    ${CURSOR_COLS.lastSeenPageCount} INTEGER,
     PRIMARY KEY (
       ${CURSOR_COLS.sourceApp},
       ${CURSOR_COLS.sourcePathHash},
@@ -131,6 +135,16 @@ export const CURSOR_TABLE_DDL = `
       ${CURSOR_COLS.watermarkTable}
     )
   )
+`;
+
+export const CURSOR_ALTER_ADD_LAST_SEEN_SIZE_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.cursors}
+    ADD COLUMN ${CURSOR_COLS.lastSeenSizeBytes} INTEGER
+`;
+
+export const CURSOR_ALTER_ADD_LAST_SEEN_PAGE_COUNT_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.cursors}
+    ADD COLUMN ${CURSOR_COLS.lastSeenPageCount} INTEGER
 `;
 
 export const RECEIPT_TABLE_DDL = `

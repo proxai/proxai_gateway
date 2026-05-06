@@ -1,8 +1,15 @@
 import type { Database } from 'bun:sqlite';
 
-import { openReadOnly, snapshotSqlite, tableExists } from 'core/io/sqlite';
-import { generateUuidV7, nowIsoUtc, zstdCompressSync } from 'core/utils';
-import { getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
+import { statFile } from 'core/io/fs';
+import { maxRowid, openReadOnly, pageCount, snapshotSqlite, tableExists } from 'core/io/sqlite';
+import {
+  generateUuidV7,
+  nextGenerationSuffix,
+  nowIsoUtc,
+  sha256Hex,
+  zstdCompressSync,
+} from 'core/utils';
+import { detectVacuum, getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import type { CodexTable } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
@@ -42,9 +49,29 @@ export async function collectCodexState(
     try {
       agentSchemaVersion = sampleCliVersion(db);
 
+      const sourceStat = await statFile(file.sourcePath);
+      const currentSizeBytes = sourceStat.exists ? sourceStat.size : 0;
+      const currentPageCount = pageCount(db);
+
+      // Vacuum is a file-level event in SQLite — when detected against ANY of
+      // the codex tables, all tables in the file have rotated together. We
+      // resolve the new source identity once up front so per-table cursors
+      // all migrate atomically.
+      const identity = resolveSourceIdentity(db, file, context, currentSizeBytes, currentPageCount);
+
       for (const table of CODEX_ALLOWED_STATE_TABLES) {
         try {
-          collectOneTable(db, file, context, table, agentSchemaVersion, result);
+          collectOneTable(
+            db,
+            file,
+            context,
+            table,
+            agentSchemaVersion,
+            result,
+            identity,
+            currentSizeBytes,
+            currentPageCount,
+          );
         } catch (err) {
           result.errors.push({
             sourcePath: file.sourcePath,
@@ -90,6 +117,76 @@ function sampleCliVersion(db: Database): string {
   }
 }
 
+interface SourceIdentity {
+  sourcePath: string;
+  sourcePathHash: string;
+  rotated: boolean;
+}
+
+/**
+ * Decides whether to keep the discovered (path, hash) or re-key under a fresh
+ * `#gen=N` suffix. Inspects every codex table's existing cursor for vacuum
+ * signals (size, page_count, rowid regression); the FIRST positive signal
+ * across any table forces the whole file to rotate.
+ */
+function resolveSourceIdentity(
+  db: Database,
+  file: DiscoveredCodexStateFile,
+  context: CodexCollectorContext,
+  currentSizeBytes: number,
+  currentPageCount: number,
+): SourceIdentity {
+  for (const table of CODEX_ALLOWED_STATE_TABLES) {
+    if (!tableExists(db, table)) continue;
+    let cursor;
+    try {
+      cursor = getCursorWithFallback(context.buffer, {
+        sourceApp: CODEX_SOURCE_APP,
+        sourcePathHash: file.sourcePathHash,
+        sourceInode: null,
+        watermarkTable: table,
+      });
+    } catch {
+      // Buffer DB unreachable. Skip vacuum detection here; the per-table loop
+      // will hit the same error and surface it as a table-scoped error.
+      continue;
+    }
+    if (cursor === null) continue;
+    const detection = detectVacuum({
+      cursorSizeBytes: cursor.lastSeenSizeBytes,
+      cursorPageCount: cursor.lastSeenPageCount,
+      cursorWatermarkEnd: cursor.watermarkEnd,
+      currentSizeBytes,
+      currentPageCount,
+      currentMaxRowid: maxRowid(db, table),
+    });
+    if (detection.vacuumed) {
+      const newPath = nextGenerationSuffix(file.sourcePath);
+      context.logger?.warn(
+        {
+          event: 'vacuum.detected',
+          source_app: CODEX_SOURCE_APP,
+          reason: detection.reason,
+          old_path: file.sourcePath,
+          new_path: newPath,
+          triggering_table: table,
+        },
+        'sqlite vacuum detected; re-keying source via #gen suffix',
+      );
+      return {
+        sourcePath: newPath,
+        sourcePathHash: sha256Hex(newPath),
+        rotated: true,
+      };
+    }
+  }
+  return {
+    sourcePath: file.sourcePath,
+    sourcePathHash: file.sourcePathHash,
+    rotated: false,
+  };
+}
+
 function collectOneTable(
   db: Database,
   file: DiscoveredCodexStateFile,
@@ -97,16 +194,24 @@ function collectOneTable(
   table: CodexTable,
   agentSchemaVersion: string,
   result: CodexCollectorResult,
+  identity: SourceIdentity,
+  currentSizeBytes: number,
+  currentPageCount: number,
 ): void {
   if (!tableExists(db, table)) return;
 
-  const cursor = getCursorWithFallback(context.buffer, {
-    sourceApp: CODEX_SOURCE_APP,
-    sourcePathHash: file.sourcePathHash,
-    sourceInode: null,
-    watermarkTable: table,
-  });
-  const lastMaxRowid = (cursor?.watermarkEnd ?? 1) - 1;
+  // After rotation, treat per-table cursor as absent — we want fresh
+  // watermark=0 under the new source identity. Before rotation, look up the
+  // existing cursor under the stable hash.
+  const priorCursor = identity.rotated
+    ? null
+    : getCursorWithFallback(context.buffer, {
+        sourceApp: CODEX_SOURCE_APP,
+        sourcePathHash: file.sourcePathHash,
+        sourceInode: null,
+        watermarkTable: table,
+      });
+  const lastMaxRowid = (priorCursor?.watermarkEnd ?? 1) - 1;
 
   const escaped = table.replace(/"/g, '""');
   const rows = db
@@ -115,7 +220,26 @@ function collectOneTable(
       [number]
     >(`SELECT rowid, * FROM "${escaped}" WHERE rowid > ? ORDER BY rowid ASC`)
     .all(lastMaxRowid);
-  if (rows.length === 0) return;
+  if (rows.length === 0) {
+    // No new rows under this (effective) identity. Refresh size/page_count on
+    // the existing cursor row so vacuum stays detectable next poll. We skip
+    // this when no prior cursor existed and we haven't rotated — creating an
+    // empty watermark=0 row on first contact would muddle the "first poll"
+    // semantics other code relies on.
+    if (priorCursor !== null) {
+      setCursor(context.buffer, {
+        sourceApp: CODEX_SOURCE_APP,
+        sourcePathHash: identity.sourcePathHash,
+        sourcePath: identity.sourcePath,
+        sourceInode: null,
+        watermarkTable: table,
+        watermarkEnd: priorCursor.watermarkEnd,
+        lastSeenSizeBytes: currentSizeBytes,
+        lastSeenPageCount: currentPageCount,
+      });
+    }
+    return;
+  }
 
   const jsonString = JSON.stringify(rows);
   const redaction = applyRedaction(jsonString);
@@ -130,8 +254,8 @@ function collectOneTable(
     captureId: generateUuidV7(),
     sourceApp: CODEX_SOURCE_APP,
     sourceKind: CODEX_STATE_SOURCE_KIND,
-    sourcePath: file.sourcePath,
-    sourcePathHash: file.sourcePathHash,
+    sourcePath: identity.sourcePath,
+    sourcePathHash: identity.sourcePathHash,
     sourceInode: null,
     watermarkKind: 'rowid_range',
     watermarkStart,
@@ -149,11 +273,13 @@ function collectOneTable(
 
   setCursor(context.buffer, {
     sourceApp: CODEX_SOURCE_APP,
-    sourcePathHash: file.sourcePathHash,
-    sourcePath: file.sourcePath,
+    sourcePathHash: identity.sourcePathHash,
+    sourcePath: identity.sourcePath,
     sourceInode: null,
     watermarkTable: table,
     watermarkEnd,
+    lastSeenSizeBytes: currentSizeBytes,
+    lastSeenPageCount: currentPageCount,
   });
 
   result.capturedBatches += 1;

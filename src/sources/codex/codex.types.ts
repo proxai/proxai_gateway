@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
 
+import type { Logger } from 'core/log';
 import type { CodexTable } from 'services/contract';
 
 export interface DiscoveredCodexRolloutFile {
@@ -21,6 +22,7 @@ export interface DiscoveredCodexStateFile {
 export interface CodexCollectorContext {
   buffer: Database;
   gatewayVersion: string;
+  logger?: Logger;
 }
 
 export interface CodexCollectorError {

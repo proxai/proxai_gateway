@@ -6,13 +6,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { statFile } from 'core/io/fs';
-import { sha256Hex, zstdDecompressSync } from 'core/utils';
+import { nextGenerationSuffix, sha256Hex, zstdDecompressSync } from 'core/utils';
 import {
   countByStatus,
   getBatch,
   getCursor,
   nextPendingBatch,
   openInMemoryBufferDb,
+  setCursor,
 } from 'services/buffer';
 import { collectCodexState } from 'sources/codex';
 import type { CodexCollectorContext, DiscoveredCodexStateFile } from 'sources/codex';
@@ -386,4 +387,131 @@ test('falls back to "unknown" when sampleCliVersion query throws on a malformed 
   };
   const { agentSchemaVersion } = await collectCodexState(file, ctx(buffer));
   expect(agentSchemaVersion).toBe('unknown');
+});
+
+test('a fresh poll persists last_seen_size_bytes and last_seen_page_count on each per-table cursor', async () => {
+  const file = await makeStateDb({
+    threads: [{ id: 't1', cli_version: '0.1.0' }],
+    dynamicTools: [{ thread_id: 't1', position: 0, name: 'a' }],
+    spawnEdges: [{ parent_thread_id: 't1', child_thread_id: 't2', status: 'ok' }],
+  });
+  await collectCodexState(file, ctx(buffer));
+  for (const table of ['threads', 'thread_dynamic_tools', 'thread_spawn_edges']) {
+    const c = getCursor(buffer, {
+      sourceApp: 'codex',
+      sourcePathHash: file.sourcePathHash,
+      sourceInode: null,
+      watermarkTable: table,
+    });
+    expect(c).not.toBeNull();
+    expect(c!.lastSeenSizeBytes).toBeGreaterThan(0);
+    expect(c!.lastSeenPageCount).toBeGreaterThan(0);
+  }
+});
+
+test('rowid regression on a single codex table re-keys the whole file under #gen=1', async () => {
+  // Pre-seed the threads cursor with a high watermark; the actual DB only
+  // has rowid 1, so currentMaxRowid + 1 < watermark_end → rotate.
+  const file = await makeStateDb({
+    threads: [{ id: 't1', cli_version: '0.1.0' }],
+    dynamicTools: [{ thread_id: 't1', position: 0, name: 'a' }],
+    spawnEdges: [{ parent_thread_id: 't1', child_thread_id: 't2', status: 'ok' }],
+  });
+  setCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourcePath: file.sourcePath,
+    sourceInode: null,
+    watermarkTable: 'threads',
+    watermarkEnd: 9999,
+    lastSeenSizeBytes: 99_000_000,
+    lastSeenPageCount: 24_000,
+  });
+
+  const { result } = await collectCodexState(file, ctx(buffer));
+  expect(result.capturedBatches).toBe(3);
+
+  const expectedNewPath = nextGenerationSuffix(file.sourcePath);
+  const expectedNewHash = sha256Hex(expectedNewPath);
+
+  // ALL three captured batches must use the rotated identity, not just the
+  // table that triggered the rotation.
+  const seenTables = new Set<string>();
+  for (let i = 0; i < 5; i++) {
+    const batch = nextPendingBatch(buffer);
+    if (batch === null) break;
+    expect(batch.sourcePath).toBe(expectedNewPath);
+    expect(batch.sourcePathHash).toBe(expectedNewHash);
+    expect(batch.watermarkStart).toBe(1);
+    seenTables.add(batch.watermarkTable ?? 'NULL');
+  }
+  expect(seenTables.has('threads')).toBe(true);
+
+  // New per-table cursors all live under the rotated hash.
+  for (const table of ['threads', 'thread_dynamic_tools', 'thread_spawn_edges']) {
+    const c = getCursor(buffer, {
+      sourceApp: 'codex',
+      sourcePathHash: expectedNewHash,
+      sourceInode: null,
+      watermarkTable: table,
+    });
+    expect(c).not.toBeNull();
+    expect(c!.watermarkEnd).toBeGreaterThan(0);
+  }
+
+  // Old threads cursor remains frozen at the seeded watermark.
+  const oldThreads = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: 'threads',
+  });
+  expect(oldThreads?.watermarkEnd).toBe(9999);
+});
+
+test('size_decreased signal on any tracked table re-keys the whole codex file', async () => {
+  const file = await makeStateDb({
+    threads: [{ id: 't1', cli_version: '0.1.0' }],
+  });
+  setCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourcePath: file.sourcePath,
+    sourceInode: null,
+    watermarkTable: 'threads',
+    watermarkEnd: 2,
+    lastSeenSizeBytes: 99_000_000,
+    lastSeenPageCount: 1,
+  });
+
+  const { result } = await collectCodexState(file, ctx(buffer));
+  expect(result.capturedBatches).toBe(1);
+  const batch = nextPendingBatch(buffer)!;
+  expect(batch.sourcePath).toBe(nextGenerationSuffix(file.sourcePath));
+  expect(batch.watermarkStart).toBe(1);
+});
+
+test('null last_seen columns on existing codex cursor do not trigger size/page_count rotation', async () => {
+  const file = await makeStateDb({
+    threads: [
+      { id: 't1', cli_version: '0.1.0' },
+      { id: 't2', cli_version: '0.2.0' },
+    ],
+  });
+  setCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourcePath: file.sourcePath,
+    sourceInode: null,
+    watermarkTable: 'threads',
+    watermarkEnd: 1, // captured up to rowid 0; rowid 1 and 2 are still ahead
+    lastSeenSizeBytes: null,
+    lastSeenPageCount: null,
+  });
+
+  await collectCodexState(file, ctx(buffer));
+  const batch = nextPendingBatch(buffer)!;
+  // No rotation expected: same hash carries through.
+  expect(batch.sourcePath).toBe(file.sourcePath);
+  expect(batch.sourcePathHash).toBe(file.sourcePathHash);
 });
