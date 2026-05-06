@@ -9,6 +9,16 @@ export const BUFFER_TABLES = {
   batches: 'upload_batches',
   cursors: 'source_cursors',
   receipts: 'upload_receipts',
+  metadata: 'buffer_metadata',
+} as const;
+
+export const METADATA_COLS = {
+  key: 'key',
+  value: 'value',
+} as const;
+
+export const METADATA_KEYS = {
+  lastPruneAt: 'last_prune_at',
 } as const;
 
 export const BATCH_COLS = {
@@ -145,4 +155,11 @@ export const RECEIPT_PATH_HASH_INDEX_DDL = `
 export const RECEIPT_DELIVERED_AT_INDEX_DDL = `
   CREATE INDEX IF NOT EXISTS ${BUFFER_INDEXES.receiptsDeliveredAt}
     ON ${BUFFER_TABLES.receipts} (${RECEIPT_COLS.deliveredAt})
+`;
+
+export const METADATA_TABLE_DDL = `
+  CREATE TABLE IF NOT EXISTS ${BUFFER_TABLES.metadata} (
+    ${METADATA_COLS.key} TEXT PRIMARY KEY NOT NULL,
+    ${METADATA_COLS.value} TEXT NOT NULL
+  )
 `;

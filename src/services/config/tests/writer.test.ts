@@ -21,7 +21,10 @@ const fullConfig: GatewayConfig = {
   capture: {
     pollIntervalSec: 300,
     bufferPath: '/Users/test/.proxai/buffer.db',
-    bufferMaxBytes: 524_288_000,
+    receiptRetentionDays: 30,
+    failedRetentionDays: 30,
+    bufferSoftPauseBytes: 700 * 1024 * 1024,
+    bufferSoftResumeBytes: 600 * 1024 * 1024,
   },
   logging: {
     level: 'info',
@@ -60,7 +63,10 @@ test('serializeConfig translates camelCase keys to snake_case', () => {
   expect(text).toContain('installed_at');
   expect(text).toContain('install_source');
   expect(text).toContain('poll_interval_sec');
-  expect(text).toContain('buffer_max_bytes');
+  expect(text).toContain('receipt_retention_days');
+  expect(text).toContain('failed_retention_days');
+  expect(text).toContain('buffer_soft_pause_bytes');
+  expect(text).toContain('buffer_soft_resume_bytes');
   expect(text).toContain('warn_after_days');
   expect(text).toContain('pause_after_days');
 });

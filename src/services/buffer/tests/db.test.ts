@@ -26,9 +26,18 @@ test('schema initialization creates the upload_receipts table', () => {
   expect(tableExists(db, BUFFER_TABLES.receipts)).toBe(true);
 });
 
-test('listTables shows the three buffer tables', () => {
+test('schema initialization creates the buffer_metadata table', () => {
+  expect(tableExists(db, BUFFER_TABLES.metadata)).toBe(true);
+});
+
+test('listTables shows the four buffer tables', () => {
   expect(listTables(db).toSorted()).toEqual(
-    [BUFFER_TABLES.batches, BUFFER_TABLES.cursors, BUFFER_TABLES.receipts].toSorted(),
+    [
+      BUFFER_TABLES.batches,
+      BUFFER_TABLES.cursors,
+      BUFFER_TABLES.receipts,
+      BUFFER_TABLES.metadata,
+    ].toSorted(),
   );
 });
 
@@ -38,6 +47,7 @@ test('opening twice produces equivalent schemas (CREATE IF NOT EXISTS)', () => {
     expect(tableExists(second, BUFFER_TABLES.batches)).toBe(true);
     expect(tableExists(second, BUFFER_TABLES.cursors)).toBe(true);
     expect(tableExists(second, BUFFER_TABLES.receipts)).toBe(true);
+    expect(tableExists(second, BUFFER_TABLES.metadata)).toBe(true);
   } finally {
     second.close();
   }

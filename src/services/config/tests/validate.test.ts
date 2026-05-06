@@ -2,8 +2,11 @@ import { expect, test } from 'bun:test';
 
 import { ValidationError } from 'core/utils';
 import {
-  DEFAULT_BUFFER_MAX_BYTES,
+  DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
+  DEFAULT_BUFFER_SOFT_RESUME_BYTES,
+  DEFAULT_FAILED_RETENTION_DAYS,
   DEFAULT_POLL_INTERVAL_SEC,
+  DEFAULT_RECEIPT_RETENTION_DAYS,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
   NEST_INGEST_URL,
@@ -77,7 +80,10 @@ test('applies defaults for missing optional sections', () => {
   expect(result.backend.verifyKeyUrl).toBe(NEST_VERIFY_KEY_URL);
   expect(result.backend.watermarksUrl).toBe(NEST_WATERMARKS_URL);
   expect(result.capture.pollIntervalSec).toBe(DEFAULT_POLL_INTERVAL_SEC);
-  expect(result.capture.bufferMaxBytes).toBe(DEFAULT_BUFFER_MAX_BYTES);
+  expect(result.capture.receiptRetentionDays).toBe(DEFAULT_RECEIPT_RETENTION_DAYS);
+  expect(result.capture.failedRetentionDays).toBe(DEFAULT_FAILED_RETENTION_DAYS);
+  expect(result.capture.bufferSoftPauseBytes).toBe(DEFAULT_BUFFER_SOFT_PAUSE_BYTES);
+  expect(result.capture.bufferSoftResumeBytes).toBe(DEFAULT_BUFFER_SOFT_RESUME_BYTES);
   expect(result.logging.level).toBe('trace');
   expect(result.staleBinary.warnAfterDays).toBe(DEFAULT_STALE_WARN_DAYS);
   expect(result.staleBinary.pauseAfterDays).toBe(DEFAULT_STALE_PAUSE_DAYS);
@@ -87,16 +93,46 @@ test('respects user-provided overrides', () => {
   const result = validateAndCoerce({
     account: minimalAccount,
     backend: { ingest_url: 'https://example.com/v1/raw_records' },
-    capture: { poll_interval_sec: 600, buffer_max_bytes: 100_000_000 },
+    capture: {
+      poll_interval_sec: 600,
+      receipt_retention_days: 7,
+      failed_retention_days: 14,
+      buffer_soft_pause_bytes: 100_000_000,
+      buffer_soft_resume_bytes: 50_000_000,
+    },
     logging: { level: 'debug' },
     stale_binary: { warn_after_days: 30, pause_after_days: 60 },
   });
   expect(result.backend.ingestUrl).toBe('https://example.com/v1/raw_records');
   expect(result.capture.pollIntervalSec).toBe(600);
-  expect(result.capture.bufferMaxBytes).toBe(100_000_000);
+  expect(result.capture.receiptRetentionDays).toBe(7);
+  expect(result.capture.failedRetentionDays).toBe(14);
+  expect(result.capture.bufferSoftPauseBytes).toBe(100_000_000);
+  expect(result.capture.bufferSoftResumeBytes).toBe(50_000_000);
   expect(result.logging.level).toBe('debug');
   expect(result.staleBinary.warnAfterDays).toBe(30);
   expect(result.staleBinary.pauseAfterDays).toBe(60);
+});
+
+test('rejects buffer_soft_resume_bytes >= buffer_soft_pause_bytes', () => {
+  expect(() =>
+    validateAndCoerce({
+      account: minimalAccount,
+      capture: {
+        buffer_soft_pause_bytes: 100,
+        buffer_soft_resume_bytes: 100,
+      },
+    }),
+  ).toThrow(/resume/);
+  expect(() =>
+    validateAndCoerce({
+      account: minimalAccount,
+      capture: {
+        buffer_soft_pause_bytes: 100,
+        buffer_soft_resume_bytes: 200,
+      },
+    }),
+  ).toThrow(/resume/);
 });
 
 test('expands ~/ in path fields', () => {

@@ -16,6 +16,7 @@ export interface RunCommandDeps {
   config: GatewayConfig;
   pauseSentinelPath: string;
   authFailedSentinelPath: string;
+  bufferFullSentinelPath: string;
   abortSignal: AbortSignal;
   gatewayVersion: string;
   sources?: readonly RegisteredSource[];
@@ -117,10 +118,17 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
       sources: deps.sources ?? buildDefaultSources({}),
       pauseSentinelPath: deps.pauseSentinelPath,
       authFailedSentinelPath: deps.authFailedSentinelPath,
+      bufferFullSentinelPath: deps.bufferFullSentinelPath,
       installedAt: deps.config.account.installedAt,
       staleBinary: {
         warnAfterDays: deps.config.staleBinary.warnAfterDays,
         pauseAfterDays: deps.config.staleBinary.pauseAfterDays,
+      },
+      bufferPolicy: {
+        receiptRetentionDays: deps.config.capture.receiptRetentionDays,
+        failedRetentionDays: deps.config.capture.failedRetentionDays,
+        softPauseBytes: deps.config.capture.bufferSoftPauseBytes,
+        softResumeBytes: deps.config.capture.bufferSoftResumeBytes,
       },
       logger,
     };

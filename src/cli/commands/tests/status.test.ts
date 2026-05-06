@@ -54,12 +54,18 @@ function batch(text = 'x'): NewBatch {
 test('reports active status with zero counts on empty buffer', async () => {
   const out = captureOutput();
   const sentinelPath = join(dir, 'PAUSED');
-  const result = await runStatus({ output: out, buffer, sentinelPath });
+  const bufferFullSentinelPath = join(dir, 'BUFFER_FULL');
+  const result = await runStatus({ output: out, buffer, sentinelPath, bufferFullSentinelPath });
   expect(result.exitCode).toBe(0);
   expect(out.lines.some((l) => l.msg.includes('active'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('pending: 0'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('delivered: 0'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('failed: 0'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('pending_bytes:'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('failed_bytes:'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('receipt_count: 0'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('buffer_full: no'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('last_prune_at:'))).toBe(true);
 });
 
 test('reports counts of each batch status', async () => {
@@ -77,17 +83,33 @@ test('reports counts of each batch status', async () => {
     output: out,
     buffer,
     sentinelPath: join(dir, 'PAUSED'),
+    bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
   });
   expect(result.exitCode).toBe(0);
   expect(out.lines.some((l) => l.msg.includes('pending: 1'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('delivered: 1'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('failed: 1'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('receipt_count: 1'))).toBe(true);
 });
 
 test('reports PAUSED when sentinel exists', async () => {
   const sentinelPath = join(dir, 'PAUSED');
   await pausePolling(sentinelPath, 'manual');
   const out = captureOutput();
-  await runStatus({ output: out, buffer, sentinelPath });
+  await runStatus({
+    output: out,
+    buffer,
+    sentinelPath,
+    bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
+  });
   expect(out.lines.some((l) => l.msg.includes('PAUSED'))).toBe(true);
+});
+
+test('reports buffer_full: yes when BUFFER_FULL sentinel exists', async () => {
+  const sentinelPath = join(dir, 'PAUSED');
+  const bufferFullSentinelPath = join(dir, 'BUFFER_FULL');
+  await Bun.write(bufferFullSentinelPath, '{"pending_bytes":1,"threshold":1,"set_at":"x"}');
+  const out = captureOutput();
+  await runStatus({ output: out, buffer, sentinelPath, bufferFullSentinelPath });
+  expect(out.lines.some((l) => l.msg.includes('buffer_full: yes'))).toBe(true);
 });

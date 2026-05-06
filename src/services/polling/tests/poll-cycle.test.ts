@@ -50,8 +50,15 @@ function makeContext(sources: RegisteredSource[]): PollCycleContext {
     sources,
     pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
+    bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     installedAt: new Date().toISOString(),
     staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
+    bufferPolicy: {
+      receiptRetentionDays: 30,
+      failedRetentionDays: 30,
+      softPauseBytes: 700 * 1024 * 1024,
+      softResumeBytes: 600 * 1024 * 1024,
+    },
   };
 }
 
@@ -215,4 +222,96 @@ test('AUTH_FAILED sentinel short-circuits the cycle before sources/drain', async
   expect(result.paused).toBe(false);
   expect(calls).toBe(0);
   expect(result.drainResult).toBeNull();
+});
+
+test('BUFFER_FULL sentinel short-circuits the cycle when pending still above resume threshold', async () => {
+  let calls = 0;
+  const ctx = makeContext([
+    {
+      name: 's',
+      poll: async () => {
+        calls++;
+        return { filesProcessed: 0, capturedBatches: 0, capturedBytes: 0, errors: [] };
+      },
+    },
+  ]);
+  ctx.bufferPolicy = {
+    receiptRetentionDays: 30,
+    failedRetentionDays: 30,
+    softPauseBytes: 100,
+    softResumeBytes: 50,
+  };
+  // Insert a pending batch above resumeBytes so recovery is not triggered.
+  insertBatch(
+    buffer,
+    batchWith('payload-large-enough-to-exceed-fifty-bytes-and-then-some-more-padding'),
+  );
+  await Bun.write(ctx.bufferFullSentinelPath, '{"pending_bytes":1,"threshold":1,"set_at":"x"}');
+  const result = await runPollCycle(ctx);
+  expect(result.bufferFull).toBe(true);
+  expect(result.paused).toBe(false);
+  expect(result.authFailed).toBe(false);
+  expect(calls).toBe(0);
+  expect(result.drainResult).toBeNull();
+  expect(result.pruneResult).toBeNull();
+  expect(result.pressureResult).not.toBeNull();
+  expect(await Bun.file(ctx.bufferFullSentinelPath).exists()).toBe(true);
+});
+
+test('cycle calls prune after drain and records prune result', async () => {
+  const ctx = makeContext([noopSource('s')]);
+  const result = await runPollCycle(ctx);
+  expect(result.pruneResult).not.toBeNull();
+  expect(result.pruneResult?.receiptsDeleted).toBe(0);
+  expect(result.pruneResult?.failedBatchesDeleted).toBe(0);
+});
+
+test('cycle writes BUFFER_FULL sentinel when pending exceeds pause threshold', async () => {
+  // Use a fetch that returns 503 so batches stay pending after drain.
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    http: new HttpClient({
+      apiKey: 'pxg_test',
+      hostId: 'h_test',
+      endpoints: {
+        ingest: 'https://api.example.com/v1/raw_records',
+        verifyKey: 'https://api.example.com/ingestion/verify-key',
+        watermarks: 'https://api.example.com/v1/watermarks',
+      },
+      fetch: (async () => new Response('', { status: 503 })) as unknown as typeof globalThis.fetch,
+    }),
+  };
+  ctx.bufferPolicy = {
+    receiptRetentionDays: 30,
+    failedRetentionDays: 30,
+    softPauseBytes: 10,
+    softResumeBytes: 5,
+  };
+  insertBatch(buffer, batchWith('this-is-much-larger-than-ten-bytes-padding-payload-foobarbaz'));
+  const result = await runPollCycle(ctx);
+  expect(result.bufferFull).toBe(false);
+  expect(result.pressureResult?.shouldPause).toBe(true);
+  expect(await Bun.file(ctx.bufferFullSentinelPath).exists()).toBe(true);
+});
+
+test('cycle clears BUFFER_FULL sentinel when pending drops below resume threshold', async () => {
+  const ctx = makeContext([noopSource('s')]);
+  ctx.bufferPolicy = {
+    receiptRetentionDays: 30,
+    failedRetentionDays: 30,
+    softPauseBytes: 1_000_000,
+    softResumeBytes: 500_000,
+  };
+  // Sentinel pre-exists; pending is 0 (well below 500_000) → cycle should
+  // detect recovery, clear the sentinel, and run normally.
+  await Bun.write(
+    ctx.bufferFullSentinelPath,
+    '{"pending_bytes":1500000,"threshold":1000000,"set_at":"x"}',
+  );
+  expect(await Bun.file(ctx.bufferFullSentinelPath).exists()).toBe(true);
+
+  const result = await runPollCycle(ctx);
+  expect(result.bufferFull).toBe(false);
+  expect(result.drainResult).not.toBeNull();
+  expect(await Bun.file(ctx.bufferFullSentinelPath).exists()).toBe(false);
 });

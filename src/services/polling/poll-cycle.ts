@@ -1,6 +1,13 @@
 import { nowIsoUtc } from 'core/utils';
+import { checkPendingPressure, pruneBuffer } from 'services/buffer';
+import type { PendingPressureResult, PruneResult } from 'services/buffer';
 import { drainBuffer } from 'services/uploader';
 import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
+import {
+  clearBufferFullSentinel,
+  isBufferFull,
+  writeBufferFullSentinel,
+} from 'services/polling/buffer-full-sentinel.ts';
 import { isPaused } from 'services/polling/pause-sentinel.ts';
 import { checkStaleBinary } from 'services/polling/stale-binary.ts';
 import type {
@@ -23,12 +30,59 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     return {
       paused: false,
       authFailed: true,
+      bufferFull: false,
       startedAt,
       completedAt,
       durationMs: Date.now() - startMs,
       sourceResults: {},
       drainResult: null,
+      pruneResult: null,
+      pressureResult: null,
     };
+  }
+
+  if (await isBufferFull(ctx.bufferFullSentinelPath)) {
+    // Sentinel is present. Attempt a cheap recovery: if pending pressure has
+    // dropped below the resume threshold, clear the sentinel and proceed with
+    // the cycle. Otherwise, short-circuit.
+    const recovery = checkPendingPressure({
+      db: ctx.buffer,
+      softPauseBytes: ctx.bufferPolicy.softPauseBytes,
+      softResumeBytes: ctx.bufferPolicy.softResumeBytes,
+    });
+    if (recovery.shouldResume) {
+      await clearBufferFullSentinel(ctx.bufferFullSentinelPath);
+      log?.info(
+        {
+          event: 'buffer.soft_resume',
+          pending_bytes: recovery.pendingBytes,
+          threshold: ctx.bufferPolicy.softResumeBytes,
+        },
+        'buffer pending pressure dropped below resume threshold; sentinel cleared at cycle start',
+      );
+    } else {
+      const completedAt = nowIsoUtc();
+      log?.warn(
+        {
+          event: 'cycle.buffer_full',
+          pending_bytes: recovery.pendingBytes,
+          threshold: ctx.bufferPolicy.softPauseBytes,
+        },
+        'poll cycle skipped: buffer-full sentinel present',
+      );
+      return {
+        paused: false,
+        authFailed: false,
+        bufferFull: true,
+        startedAt,
+        completedAt,
+        durationMs: Date.now() - startMs,
+        sourceResults: {},
+        drainResult: null,
+        pruneResult: null,
+        pressureResult: recovery,
+      };
+    }
   }
 
   const staleDeps: Parameters<typeof checkStaleBinary>[0] = {
@@ -46,11 +100,14 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     return {
       paused: true,
       authFailed: false,
+      bufferFull: false,
       startedAt,
       completedAt,
       durationMs: Date.now() - startMs,
       sourceResults: {},
       drainResult: null,
+      pruneResult: null,
+      pressureResult: null,
     };
   }
 
@@ -105,6 +162,63 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     'buffer drain complete',
   );
 
+  let pruneResult: PruneResult | null = null;
+  try {
+    const pruneInput: Parameters<typeof pruneBuffer>[0] = {
+      db: ctx.buffer,
+      receiptRetentionDays: ctx.bufferPolicy.receiptRetentionDays,
+      failedRetentionDays: ctx.bufferPolicy.failedRetentionDays,
+    };
+    if (log !== undefined) pruneInput.logger = log;
+    pruneResult = pruneBuffer(pruneInput);
+  } catch (err) {
+    log?.warn(
+      { event: 'buffer.prune_failed', error: (err as Error).message ?? String(err) },
+      'buffer prune failed; continuing cycle',
+    );
+  }
+
+  let pressureResult: PendingPressureResult | null = null;
+  try {
+    pressureResult = checkPendingPressure({
+      db: ctx.buffer,
+      softPauseBytes: ctx.bufferPolicy.softPauseBytes,
+      softResumeBytes: ctx.bufferPolicy.softResumeBytes,
+    });
+    if (pressureResult.shouldPause) {
+      await writeBufferFullSentinel(ctx.bufferFullSentinelPath, {
+        pendingBytes: pressureResult.pendingBytes,
+        threshold: ctx.bufferPolicy.softPauseBytes,
+      });
+      log?.warn(
+        {
+          event: 'buffer.soft_pause',
+          pending_bytes: pressureResult.pendingBytes,
+          threshold: ctx.bufferPolicy.softPauseBytes,
+        },
+        'buffer pending pressure exceeded soft-pause threshold; sentinel written',
+      );
+    } else if (pressureResult.shouldResume) {
+      const wasFull = await isBufferFull(ctx.bufferFullSentinelPath);
+      if (wasFull) {
+        await clearBufferFullSentinel(ctx.bufferFullSentinelPath);
+        log?.info(
+          {
+            event: 'buffer.soft_resume',
+            pending_bytes: pressureResult.pendingBytes,
+            threshold: ctx.bufferPolicy.softResumeBytes,
+          },
+          'buffer pending pressure dropped below resume threshold; sentinel cleared',
+        );
+      }
+    }
+  } catch (err) {
+    log?.warn(
+      { event: 'buffer.pressure_failed', error: (err as Error).message ?? String(err) },
+      'buffer pressure check failed; continuing cycle',
+    );
+  }
+
   const completedAt = nowIsoUtc();
   const durationMs = Date.now() - startMs;
   log?.info(
@@ -118,10 +232,13 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
   return {
     paused: false,
     authFailed: false,
+    bufferFull: false,
     startedAt,
     completedAt,
     durationMs,
     sourceResults,
     drainResult,
+    pruneResult,
+    pressureResult,
   };
 }

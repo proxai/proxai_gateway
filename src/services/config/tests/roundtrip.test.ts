@@ -27,7 +27,10 @@ const fullConfig: GatewayConfig = {
   capture: {
     pollIntervalSec: 300,
     bufferPath: '/Users/test/.proxai/buffer.db',
-    bufferMaxBytes: 524_288_000,
+    receiptRetentionDays: 30,
+    failedRetentionDays: 30,
+    bufferSoftPauseBytes: 700 * 1024 * 1024,
+    bufferSoftResumeBytes: 600 * 1024 * 1024,
   },
   logging: {
     level: 'info',

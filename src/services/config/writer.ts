@@ -27,7 +27,10 @@ export function serializeConfig(config: GatewayConfig): string {
     capture: {
       poll_interval_sec: config.capture.pollIntervalSec,
       buffer_path: config.capture.bufferPath,
-      buffer_max_bytes: config.capture.bufferMaxBytes,
+      receipt_retention_days: config.capture.receiptRetentionDays,
+      failed_retention_days: config.capture.failedRetentionDays,
+      buffer_soft_pause_bytes: config.capture.bufferSoftPauseBytes,
+      buffer_soft_resume_bytes: config.capture.bufferSoftResumeBytes,
     },
     logging: {
       level: config.logging.level,

@@ -3,5 +3,8 @@ export * from 'services/buffer/buffer.constants.ts';
 export * from 'services/buffer/buffer.types.ts';
 export * from 'services/buffer/cursors.ts';
 export * from 'services/buffer/db.ts';
+export * from 'services/buffer/metadata.ts';
+export * from 'services/buffer/pressure.ts';
+export * from 'services/buffer/prune.ts';
 export * from 'services/buffer/receipts.ts';
 export * from 'services/buffer/stats.ts';

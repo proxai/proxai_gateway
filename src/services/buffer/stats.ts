@@ -10,6 +10,12 @@ const TOTAL_PENDING_BYTES_SQL = `
   WHERE ${BATCH_COLS.status} = '${BATCH_STATUS.pending}'
 `;
 
+const TOTAL_FAILED_BYTES_SQL = `
+  SELECT COALESCE(SUM(LENGTH(${BATCH_COLS.body})), 0) AS total
+  FROM ${BUFFER_TABLES.batches}
+  WHERE ${BATCH_COLS.status} = '${BATCH_STATUS.failed}'
+`;
+
 const COUNT_BY_STATUS_SQL = `
   SELECT ${BATCH_COLS.status}, COUNT(*) AS count
   FROM ${BUFFER_TABLES.batches}
@@ -18,6 +24,11 @@ const COUNT_BY_STATUS_SQL = `
 
 export function totalPendingBytes(db: Database): number {
   const row = db.query<{ total: number }, []>(TOTAL_PENDING_BYTES_SQL).get();
+  return row?.total ?? 0;
+}
+
+export function totalFailedBytes(db: Database): number {
+  const row = db.query<{ total: number }, []>(TOTAL_FAILED_BYTES_SQL).get();
   return row?.total ?? 0;
 }
 

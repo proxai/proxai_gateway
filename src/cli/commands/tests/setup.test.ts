@@ -13,8 +13,11 @@ import {
   writeConfigToFile,
   NEST_INGEST_URL,
   NEST_VERIFY_KEY_URL,
-  DEFAULT_BUFFER_MAX_BYTES,
+  DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
+  DEFAULT_BUFFER_SOFT_RESUME_BYTES,
+  DEFAULT_FAILED_RETENTION_DAYS,
   DEFAULT_POLL_INTERVAL_SEC,
+  DEFAULT_RECEIPT_RETENTION_DAYS,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
 } from 'services/config';
@@ -137,7 +140,10 @@ async function writeExistingConfig(
     capture: {
       pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
       bufferPath: bufferDbPath,
-      bufferMaxBytes: DEFAULT_BUFFER_MAX_BYTES,
+      receiptRetentionDays: DEFAULT_RECEIPT_RETENTION_DAYS,
+      failedRetentionDays: DEFAULT_FAILED_RETENTION_DAYS,
+      bufferSoftPauseBytes: DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
+      bufferSoftResumeBytes: DEFAULT_BUFFER_SOFT_RESUME_BYTES,
     },
     logging: { level: 'info', logDir },
     staleBinary: {

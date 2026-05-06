@@ -48,6 +48,10 @@ export function authFailedSentinelPath(): string {
   return join(configDir(), 'AUTH_FAILED');
 }
 
+export function bufferFullSentinelPath(): string {
+  return join(configDir(), 'BUFFER_FULL');
+}
+
 export function consentSentinelPath(): string {
   return join(configDir(), 'CONSENT_ACCEPTED');
 }

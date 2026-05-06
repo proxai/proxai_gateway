@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite';
 
 import type { Logger } from 'core/log';
+import type { PendingPressureResult, PruneResult } from 'services/buffer';
 import type { HttpClient } from 'services/http';
 import type { DrainResult } from 'services/uploader';
 
@@ -35,6 +36,13 @@ export interface StaleBinaryThresholds {
   pauseAfterDays: number;
 }
 
+export interface BufferRetentionPolicy {
+  receiptRetentionDays: number;
+  failedRetentionDays: number;
+  softPauseBytes: number;
+  softResumeBytes: number;
+}
+
 export interface PollCycleContext {
   buffer: Database;
   http: HttpClient;
@@ -43,19 +51,24 @@ export interface PollCycleContext {
   sources: readonly RegisteredSource[];
   pauseSentinelPath: string;
   authFailedSentinelPath: string;
+  bufferFullSentinelPath: string;
   installedAt: string;
   staleBinary: StaleBinaryThresholds;
+  bufferPolicy: BufferRetentionPolicy;
   logger?: Logger;
 }
 
 export interface PollCycleResult {
   paused: boolean;
   authFailed: boolean;
+  bufferFull: boolean;
   startedAt: string;
   completedAt: string;
   durationMs: number;
   sourceResults: Record<string, SourcePollerResult>;
   drainResult: DrainResult | null;
+  pruneResult: PruneResult | null;
+  pressureResult: PendingPressureResult | null;
 }
 
 export interface PollLoopOptions {

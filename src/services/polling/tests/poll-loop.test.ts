@@ -48,8 +48,15 @@ function makeContext(sources: RegisteredSource[]): PollCycleContext {
     sources,
     pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
+    bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     installedAt: new Date().toISOString(),
     staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
+    bufferPolicy: {
+      receiptRetentionDays: 30,
+      failedRetentionDays: 30,
+      softPauseBytes: 700 * 1024 * 1024,
+      softResumeBytes: 600 * 1024 * 1024,
+    },
   };
 }
 

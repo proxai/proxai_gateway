@@ -19,7 +19,10 @@ export interface BackendConfig {
 export interface CaptureConfig {
   pollIntervalSec: number;
   bufferPath: string;
-  bufferMaxBytes: number;
+  receiptRetentionDays: number;
+  failedRetentionDays: number;
+  bufferSoftPauseBytes: number;
+  bufferSoftResumeBytes: number;
 }
 
 export interface LoggingConfig {

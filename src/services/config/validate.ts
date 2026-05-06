@@ -3,12 +3,14 @@ import { DEFAULT_LOG_LEVEL, VALID_LOG_LEVELS } from 'core/log';
 import type { LogLevel } from 'core/log';
 import { ValidationError } from 'core/utils';
 import {
-  DEFAULT_BUFFER_MAX_BYTES,
+  DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
+  DEFAULT_BUFFER_SOFT_RESUME_BYTES,
+  DEFAULT_FAILED_RETENTION_DAYS,
   DEFAULT_POLL_INTERVAL_SEC,
+  DEFAULT_RECEIPT_RETENTION_DAYS,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
   MAX_POLL_INTERVAL_SEC,
-  MIN_BUFFER_MAX_BYTES,
   MIN_POLL_INTERVAL_SEC,
   NEST_INGEST_URL,
   NEST_VERIFY_KEY_URL,
@@ -71,6 +73,23 @@ function validateCapture(raw: unknown): CaptureConfig {
     bufferPathRaw === undefined
       ? bufferDbPath()
       : expandHome(requireString(bufferPathRaw, 'capture.buffer_path'));
+  const bufferSoftPauseBytes = optionalNumber(
+    r['buffer_soft_pause_bytes'],
+    DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
+    'capture.buffer_soft_pause_bytes',
+    1,
+  );
+  const bufferSoftResumeBytes = optionalNumber(
+    r['buffer_soft_resume_bytes'],
+    DEFAULT_BUFFER_SOFT_RESUME_BYTES,
+    'capture.buffer_soft_resume_bytes',
+    0,
+  );
+  if (bufferSoftResumeBytes >= bufferSoftPauseBytes) {
+    throw new ValidationError(
+      'capture.buffer_soft_resume_bytes must be less than capture.buffer_soft_pause_bytes',
+    );
+  }
   return {
     pollIntervalSec: optionalNumber(
       r['poll_interval_sec'],
@@ -80,12 +99,20 @@ function validateCapture(raw: unknown): CaptureConfig {
       MAX_POLL_INTERVAL_SEC,
     ),
     bufferPath,
-    bufferMaxBytes: optionalNumber(
-      r['buffer_max_bytes'],
-      DEFAULT_BUFFER_MAX_BYTES,
-      'capture.buffer_max_bytes',
-      MIN_BUFFER_MAX_BYTES,
+    receiptRetentionDays: optionalNumber(
+      r['receipt_retention_days'],
+      DEFAULT_RECEIPT_RETENTION_DAYS,
+      'capture.receipt_retention_days',
+      0,
     ),
+    failedRetentionDays: optionalNumber(
+      r['failed_retention_days'],
+      DEFAULT_FAILED_RETENTION_DAYS,
+      'capture.failed_retention_days',
+      0,
+    ),
+    bufferSoftPauseBytes,
+    bufferSoftResumeBytes,
   };
 }
 

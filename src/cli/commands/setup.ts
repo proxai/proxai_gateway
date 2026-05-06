@@ -10,8 +10,11 @@ import type { PromptSink } from 'cli/prompts.ts';
 import { buildScheduledTaskXml, encodeScheduledTaskXml } from 'cli/scheduled-task-xml.ts';
 import { buildSystemdUnit } from 'cli/systemd-unit.ts';
 import {
-  DEFAULT_BUFFER_MAX_BYTES,
+  DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
+  DEFAULT_BUFFER_SOFT_RESUME_BYTES,
+  DEFAULT_FAILED_RETENTION_DAYS,
   DEFAULT_POLL_INTERVAL_SEC,
+  DEFAULT_RECEIPT_RETENTION_DAYS,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
   NEST_INGEST_URL,
@@ -154,7 +157,10 @@ export async function runSetup(
     capture: {
       pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
       bufferPath: deps.bufferDbPath,
-      bufferMaxBytes: DEFAULT_BUFFER_MAX_BYTES,
+      receiptRetentionDays: DEFAULT_RECEIPT_RETENTION_DAYS,
+      failedRetentionDays: DEFAULT_FAILED_RETENTION_DAYS,
+      bufferSoftPauseBytes: DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
+      bufferSoftResumeBytes: DEFAULT_BUFFER_SOFT_RESUME_BYTES,
     },
     logging: { level: 'info', logDir: deps.logDir },
     staleBinary: {

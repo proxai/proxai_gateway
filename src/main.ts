@@ -5,6 +5,7 @@ import packageJson from '../package.json' with { type: 'json' };
 import {
   authFailedSentinelPath,
   bufferDbPath,
+  bufferFullSentinelPath,
   configFilePath,
   logDir,
   pausedSentinelPath,
@@ -205,6 +206,7 @@ program
       config,
       pauseSentinelPath: pausedSentinelPath(),
       authFailedSentinelPath: authFailedSentinelPath(),
+      bufferFullSentinelPath: bufferFullSentinelPath(),
       abortSignal: ctrl.signal,
       gatewayVersion: `@proxai/gateway ${packageJson.version}`,
     });
@@ -229,6 +231,7 @@ program
         output: consoleOutput(),
         buffer,
         sentinelPath: pausedSentinelPath(),
+        bufferFullSentinelPath: bufferFullSentinelPath(),
       });
       process.exit(result.exitCode);
     } finally {
