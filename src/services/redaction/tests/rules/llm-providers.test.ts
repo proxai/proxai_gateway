@@ -99,3 +99,111 @@ test('redacts a Together AI keyword-anchored API key', () => {
   const result = applyRedaction(input, LLM_PROVIDERS_RULES);
   expect(result.redacted).toContain('[REDACTED:together-ai-api-key]');
 });
+
+test('redacts a Cerebras Cloud API key (csk-)', () => {
+  const input = 'CEREBRAS_API_KEY=csk-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMn';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:cerebras-api-key]');
+});
+
+test('redacts an Anyscale Endpoints API key (esecret_)', () => {
+  const input = 'ANYSCALE_API_KEY=esecret_AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIj';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:anyscale-api-key]');
+});
+
+test('redacts a RunPod API key (rpa_)', () => {
+  const input = 'RUNPOD_API_KEY=rpa_AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGh';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:runpod-api-key]');
+});
+
+test('redacts an NVIDIA NIM/NGC API key (nvapi-)', () => {
+  const input = 'NVIDIA_API_KEY=nvapi-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQr';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:nvidia-nim-api-key]');
+});
+
+test('redacts a DeepSeek API key (keyword-anchored)', () => {
+  const input = 'DEEPSEEK_API_KEY=sk-AbCdEfGhIjKlMnOpQrStUvWxYzAbCd';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:deepseek-api-key]');
+});
+
+test('redacts an Azure OpenAI API key (keyword-anchored)', () => {
+  const input = 'AZURE_OPENAI_API_KEY=0123456789abcdef0123456789abcdef';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:azure-openai-api-key]');
+});
+
+test('redacts a Google Gemini API key (keyword-anchored)', () => {
+  const input = 'GEMINI_API_KEY=AIzaSyAbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGh';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:gemini-api-key]');
+});
+
+test('redacts an AI21 Labs API key (keyword-anchored)', () => {
+  const input = 'AI21_API_KEY=AbCdEfGhIjKlMnOpQrStUvWxYz123456';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:ai21-api-key]');
+});
+
+test('redacts an Aleph Alpha API key (keyword-anchored)', () => {
+  const input = 'ALEPH_ALPHA_API_KEY=AbCdEfGhIjKlMnOpQrStUvWxYzAbCd';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:aleph-alpha-api-key]');
+});
+
+test('redacts a DeepInfra API key (keyword-anchored)', () => {
+  const input = 'DEEPINFRA_API_KEY=AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGh';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:deepinfra-api-key]');
+});
+
+test('redacts a Modal Labs API token (keyword-anchored)', () => {
+  const input = 'MODAL_TOKEN_SECRET=ak-AbCdEfGhIjKlMnOpQrStUv';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:modal-api-key]');
+});
+
+test('redacts a Lambda Labs API key (keyword-anchored)', () => {
+  const input = 'LAMBDA_LABS_API_KEY=secret_AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEf';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:lambda-labs-api-key]');
+});
+
+test('redacts a Baseten API key (keyword-anchored)', () => {
+  const input = 'BASETEN_API_KEY=Aabbccd.AbCdEfGhIjKlMnOpQrStUvWxYz';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:baseten-api-key]');
+});
+
+test('redacts a SambaNova API key (keyword-anchored)', () => {
+  const input = 'SAMBANOVA_API_KEY=AbCdEfGhIjKlMnOpQrStUvWxYzAbCd';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:sambanova-api-key]');
+});
+
+test('redacts a Lepton AI API token (keyword-anchored)', () => {
+  const input = 'LEPTON_API_TOKEN=AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEf';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:lepton-api-key]');
+});
+
+test('redacts an Inflection AI API key (keyword-anchored)', () => {
+  const input = 'INFLECTION_API_KEY=AbCdEfGhIjKlMnOpQrStUvWxYzAbCd';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:inflection-api-key]');
+});
+
+test('redacts a Novita AI API key (keyword-anchored)', () => {
+  const input = 'NOVITA_API_KEY=AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGh';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:novita-api-key]');
+});
+
+test('redacts a Hyperbolic AI API key (keyword-anchored)', () => {
+  const input = 'HYPERBOLIC_API_KEY=AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEf';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:hyperbolic-api-key]');
+});
