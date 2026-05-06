@@ -44,6 +44,10 @@ export function pausedSentinelPath(): string {
   return join(configDir(), 'PAUSED');
 }
 
+export function authFailedSentinelPath(): string {
+  return join(configDir(), 'AUTH_FAILED');
+}
+
 export function consentSentinelPath(): string {
   return join(configDir(), 'CONSENT_ACCEPTED');
 }

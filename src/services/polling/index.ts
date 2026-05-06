@@ -1,3 +1,4 @@
+export * from 'services/polling/auth-failed-sentinel.ts';
 export * from 'services/polling/default-sources.ts';
 export * from 'services/polling/pause-sentinel.ts';
 export * from 'services/polling/poll-claude-code.ts';

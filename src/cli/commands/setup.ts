@@ -21,6 +21,7 @@ import {
 import type { GatewayConfig, InstallSource } from 'services/config';
 import { loadConfigFromFile, writeConfigToFile } from 'services/config';
 import { HttpClient } from 'services/http';
+import { clearAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
 
 const INGESTION_KEY_PATTERN = /^[A-Za-z0-9]+-\d{8,}-[A-Za-z0-9]+$/;
 
@@ -30,6 +31,7 @@ export interface SetupCommandDeps {
   configPath: string;
   bufferDbPath: string;
   logDir: string;
+  authFailedSentinelPath: string;
   serviceUnitPath: string | null;
   programPath: string;
   configExists: () => Promise<boolean>;
@@ -164,6 +166,10 @@ export async function runSetup(
   await ensureDir(dirname(deps.configPath));
   await writeConfigToFile(config, deps.configPath);
   await ensureDir(deps.logDir);
+
+  // Successful verify-key implies the new key is valid. Clear any previous
+  // halt sentinel so a halted daemon resumes on its next cycle.
+  await clearAuthFailedSentinel(deps.authFailedSentinelPath);
 
   if (deps.serviceUnitPath !== null) {
     await ensureDir(dirname(deps.serviceUnitPath));

@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   getBatch,
@@ -149,12 +152,19 @@ test('400 with non-regression body falls through to plain ValidationError -> fat
   expect(getBatch(db, batch.captureId)!.status).toBe('failed');
 });
 
-test('403 AuthError keeps batch pending (retriable)', async () => {
+test('403 AuthError + verify-key success keeps batch pending (transient)', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
   const stored = getBatch(db, batch.captureId)!;
 
-  const ctx = ctxWith(mockFetch(() => emptyResponse(403)));
+  const ctx = ctxWith(
+    mockFetch((call) => {
+      if (call.url.includes('/ingestion/verify-key')) {
+        return jsonResponse({ success: true, data: { userId: 'u_test' }, message: 'ok' });
+      }
+      return emptyResponse(403);
+    }),
+  );
   const outcome = await uploadBatch(ctx, stored);
 
   expect(outcome.kind).toBe('retriable');
@@ -308,4 +318,154 @@ test('unknown error with a falsy message falls back to String(err)', async () =>
   const outcome = await uploadBatch(ctx, stored);
   expect(outcome.kind).toBe('fatal');
   expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+});
+
+test('AuthError + verify-key returns success: false → fatal, sentinel written', async () => {
+  const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-upload-auth-'));
+  const sentinelPath = join(dirAuth, 'AUTH_FAILED');
+  try {
+    const batch = newClaudeCodeBatch('payload');
+    insertBatch(db, batch);
+    const stored = getBatch(db, batch.captureId)!;
+
+    const ctx: UploaderContext = {
+      db,
+      http: createTestHttpClient(
+        mockFetch((call) => {
+          if (call.url.includes('/ingestion/verify-key')) {
+            return jsonResponse({
+              success: false,
+              message: 'key expired',
+              data: null,
+            });
+          }
+          return emptyResponse(401);
+        }),
+      ),
+      hostId: TEST_HOST_ID,
+      authFailedSentinelPath: sentinelPath,
+    };
+    const outcome = await uploadBatch(ctx, stored);
+
+    expect(outcome.kind).toBe('fatal');
+    if (outcome.kind === 'fatal') expect(outcome.error).toContain('ingestion key invalid');
+    const row = getBatch(db, batch.captureId)!;
+    expect(row.status).toBe('failed');
+    expect(await Bun.file(sentinelPath).exists()).toBe(true);
+    const payload = JSON.parse(await Bun.file(sentinelPath).text()) as Record<string, unknown>;
+    expect(payload['reason']).toBe('key expired');
+    expect(typeof payload['detected_at']).toBe('string');
+  } finally {
+    await rm(dirAuth, { recursive: true, force: true });
+  }
+});
+
+test('AuthError + verify-key returns success: true → retriable, no sentinel', async () => {
+  const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-upload-auth-'));
+  const sentinelPath = join(dirAuth, 'AUTH_FAILED');
+  try {
+    const batch = newClaudeCodeBatch('payload');
+    insertBatch(db, batch);
+    const stored = getBatch(db, batch.captureId)!;
+
+    const ctx: UploaderContext = {
+      db,
+      http: createTestHttpClient(
+        mockFetch((call) => {
+          if (call.url.includes('/ingestion/verify-key')) {
+            return jsonResponse({
+              success: true,
+              data: { userId: 'u_test', keyName: 'k' },
+              message: 'ok',
+            });
+          }
+          return emptyResponse(403);
+        }),
+      ),
+      hostId: TEST_HOST_ID,
+      authFailedSentinelPath: sentinelPath,
+    };
+    const outcome = await uploadBatch(ctx, stored);
+
+    expect(outcome.kind).toBe('retriable');
+    const row = getBatch(db, batch.captureId)!;
+    expect(row.status).toBe('pending');
+    expect(await Bun.file(sentinelPath).exists()).toBe(false);
+  } finally {
+    await rm(dirAuth, { recursive: true, force: true });
+  }
+});
+
+test('AuthError + verify-key throws RetriableError → retriable, no sentinel', async () => {
+  const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-upload-auth-'));
+  const sentinelPath = join(dirAuth, 'AUTH_FAILED');
+  try {
+    const batch = newClaudeCodeBatch('payload');
+    insertBatch(db, batch);
+    const stored = getBatch(db, batch.captureId)!;
+
+    const ctx: UploaderContext = {
+      db,
+      http: createTestHttpClient(
+        mockFetch((call) => {
+          if (call.url.includes('/ingestion/verify-key')) {
+            // 503 maps to RetriableError inside the HTTP client
+            return emptyResponse(503);
+          }
+          return emptyResponse(401);
+        }),
+      ),
+      hostId: TEST_HOST_ID,
+      authFailedSentinelPath: sentinelPath,
+    };
+    const outcome = await uploadBatch(ctx, stored);
+
+    expect(outcome.kind).toBe('retriable');
+    const row = getBatch(db, batch.captureId)!;
+    expect(row.status).toBe('pending');
+    expect(await Bun.file(sentinelPath).exists()).toBe(false);
+  } finally {
+    await rm(dirAuth, { recursive: true, force: true });
+  }
+});
+
+test('AuthError + verify-key throws AuthError → fatal, sentinel written', async () => {
+  const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-upload-auth-'));
+  const sentinelPath = join(dirAuth, 'AUTH_FAILED');
+  try {
+    const batch = newClaudeCodeBatch('payload');
+    insertBatch(db, batch);
+    const stored = getBatch(db, batch.captureId)!;
+
+    const ctx: UploaderContext = {
+      db,
+      http: createTestHttpClient(mockFetch(() => emptyResponse(403))),
+      hostId: TEST_HOST_ID,
+      authFailedSentinelPath: sentinelPath,
+    };
+    const outcome = await uploadBatch(ctx, stored);
+
+    expect(outcome.kind).toBe('fatal');
+    if (outcome.kind === 'fatal') expect(outcome.error).toContain('ingestion key invalid');
+    expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+    expect(await Bun.file(sentinelPath).exists()).toBe(true);
+  } finally {
+    await rm(dirAuth, { recursive: true, force: true });
+  }
+});
+
+test('AuthError without authFailedSentinelPath: still classifies, no sentinel side-effect', async () => {
+  const batch = newClaudeCodeBatch('payload');
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+
+  const ctx: UploaderContext = {
+    db,
+    http: createTestHttpClient(mockFetch(() => emptyResponse(403))),
+    hostId: TEST_HOST_ID,
+  };
+  const outcome = await uploadBatch(ctx, stored);
+
+  // verifyKey also gets 403 → AuthError → fatal, but no sentinel path so nothing on disk.
+  expect(outcome.kind).toBe('fatal');
 });

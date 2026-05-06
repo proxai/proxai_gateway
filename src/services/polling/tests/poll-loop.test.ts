@@ -47,6 +47,7 @@ function makeContext(sources: RegisteredSource[]): PollCycleContext {
     gatewayVersion: 'gw-0.1',
     sources,
     pauseSentinelPath: join(dir, 'PAUSED'),
+    authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     installedAt: new Date().toISOString(),
     staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
   };

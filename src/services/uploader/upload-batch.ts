@@ -16,6 +16,7 @@ import {
 } from 'services/buffer';
 import type { StoredBatch } from 'services/buffer';
 import type { RawRecordDTO } from 'services/contract';
+import { writeAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
 import { buildRawRecordDTO } from 'services/uploader/build-dto.ts';
 import type { UploadOutcome, UploaderContext } from 'services/uploader/uploader.types.ts';
 
@@ -45,7 +46,11 @@ export async function uploadBatch(
   }
 }
 
-function classifyAndPersist(ctx: UploaderContext, batch: StoredBatch, err: unknown): UploadOutcome {
+async function classifyAndPersist(
+  ctx: UploaderContext,
+  batch: StoredBatch,
+  err: unknown,
+): Promise<UploadOutcome> {
   const captureId = batch.captureId;
   const log = ctx.logger?.child({ capture_id: captureId });
   if (err instanceof WatermarkRegressionError) {
@@ -73,7 +78,10 @@ function classifyAndPersist(ctx: UploaderContext, batch: StoredBatch, err: unkno
     );
     return { kind: 'retriable', captureId, error: err.message, retryAfterMs: err.retryAfterMs };
   }
-  if (err instanceof AuthError || err instanceof RetriableError || err instanceof NetworkError) {
+  if (err instanceof AuthError) {
+    return handleAuthError(ctx, batch, err);
+  }
+  if (err instanceof RetriableError || err instanceof NetworkError) {
     recordRetriableFailure(ctx.db, captureId, err.message);
     log?.warn(
       { event: 'upload.retriable', kind: err.constructor.name, error: err.message },
@@ -92,5 +100,76 @@ function classifyAndPersist(ctx: UploaderContext, batch: StoredBatch, err: unkno
   const message = `unknown error: ${(err as Error).message ?? String(err)}`;
   markBatchFailed(ctx.db, captureId, message);
   log?.error({ event: 'upload.unknown_error', error: message }, 'upload failed (unknown)');
+  return { kind: 'fatal', captureId, error: message };
+}
+
+async function handleAuthError(
+  ctx: UploaderContext,
+  batch: StoredBatch,
+  authErr: AuthError,
+): Promise<UploadOutcome> {
+  const captureId = batch.captureId;
+  const log = ctx.logger?.child({ capture_id: captureId });
+
+  // Reactive verify-key disambiguates "transient 401/403" from "key actually
+  // revoked". One extra request per failed upload — never recurses on the
+  // verify-key call itself.
+  let verification;
+  try {
+    verification = await ctx.http.verifyKey();
+  } catch (verifyErr) {
+    if (verifyErr instanceof AuthError) {
+      return finalizeAuthFailure(ctx, batch, 'verify-key threw AuthError');
+    }
+    // 5xx, network failure, etc. — cannot confirm the key is bad, so retry.
+    recordRetriableFailure(ctx.db, captureId, authErr.message);
+    log?.warn(
+      {
+        event: 'upload.auth_unconfirmed',
+        kind: verifyErr instanceof Error ? verifyErr.constructor.name : typeof verifyErr,
+        error: verifyErr instanceof Error ? verifyErr.message : String(verifyErr),
+      },
+      'upload auth error; verify-key inconclusive, treating as retriable',
+    );
+    return { kind: 'retriable', captureId, error: authErr.message, retryAfterMs: null };
+  }
+
+  if (!verification.success) {
+    const reason = verification.message.length > 0 ? verification.message : 'key not accepted';
+    return finalizeAuthFailure(ctx, batch, reason);
+  }
+
+  // verify-key reports success — the upload's 401/403 was transient.
+  recordRetriableFailure(ctx.db, captureId, authErr.message);
+  log?.warn(
+    { event: 'upload.auth_transient', error: authErr.message },
+    'upload auth error; verify-key still success, treating as retriable',
+  );
+  return { kind: 'retriable', captureId, error: authErr.message, retryAfterMs: null };
+}
+
+async function finalizeAuthFailure(
+  ctx: UploaderContext,
+  batch: StoredBatch,
+  reason: string,
+): Promise<UploadOutcome> {
+  const captureId = batch.captureId;
+  const log = ctx.logger?.child({ capture_id: captureId });
+  const message = 'ingestion key invalid';
+  markBatchFailed(ctx.db, captureId, message);
+  if (ctx.authFailedSentinelPath !== undefined) {
+    try {
+      await writeAuthFailedSentinel(ctx.authFailedSentinelPath, reason);
+    } catch (writeErr) {
+      log?.error(
+        {
+          event: 'auth.sentinel_write_failed',
+          error: writeErr instanceof Error ? writeErr.message : String(writeErr),
+        },
+        'failed to write AUTH_FAILED sentinel',
+      );
+    }
+  }
+  log?.fatal({ event: 'auth.invalid', reason, capture_id: captureId }, 'ingestion key invalid');
   return { kind: 'fatal', captureId, error: message };
 }

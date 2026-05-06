@@ -49,6 +49,7 @@ function makeContext(sources: RegisteredSource[]): PollCycleContext {
     gatewayVersion: 'gw-0.1',
     sources,
     pauseSentinelPath: join(dir, 'PAUSED'),
+    authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     installedAt: new Date().toISOString(),
     staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
   };
@@ -195,4 +196,23 @@ test('stale binary in warning window does not pause; sources still run', async (
   expect(result.paused).toBe(false);
   expect(calls).toBe(1);
   expect(await Bun.file(join(dir, 'PAUSED')).exists()).toBe(false);
+});
+
+test('AUTH_FAILED sentinel short-circuits the cycle before sources/drain', async () => {
+  let calls = 0;
+  const ctx = makeContext([
+    {
+      name: 's',
+      poll: async () => {
+        calls++;
+        return { filesProcessed: 0, capturedBatches: 0, capturedBytes: 0, errors: [] };
+      },
+    },
+  ]);
+  await Bun.write(ctx.authFailedSentinelPath, '{"reason":"halt","detected_at":"x"}');
+  const result = await runPollCycle(ctx);
+  expect(result.authFailed).toBe(true);
+  expect(result.paused).toBe(false);
+  expect(calls).toBe(0);
+  expect(result.drainResult).toBeNull();
 });

@@ -15,6 +15,7 @@ export interface RunCommandDeps {
   output: OutputSink;
   config: GatewayConfig;
   pauseSentinelPath: string;
+  authFailedSentinelPath: string;
   abortSignal: AbortSignal;
   gatewayVersion: string;
   sources?: readonly RegisteredSource[];
@@ -115,6 +116,7 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
       gatewayVersion: deps.gatewayVersion,
       sources: deps.sources ?? buildDefaultSources({}),
       pauseSentinelPath: deps.pauseSentinelPath,
+      authFailedSentinelPath: deps.authFailedSentinelPath,
       installedAt: deps.config.account.installedAt,
       staleBinary: {
         warnAfterDays: deps.config.staleBinary.warnAfterDays,

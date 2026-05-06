@@ -2,7 +2,13 @@
 import { Command } from 'commander';
 
 import packageJson from '../package.json' with { type: 'json' };
-import { bufferDbPath, configFilePath, logDir, pausedSentinelPath } from 'core/io/fs';
+import {
+  authFailedSentinelPath,
+  bufferDbPath,
+  configFilePath,
+  logDir,
+  pausedSentinelPath,
+} from 'core/io/fs';
 import type { LogLevel } from 'core/log';
 import { readMachineUuid } from 'core/system';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
@@ -64,6 +70,7 @@ function buildSetupDeps(): SetupCommandDeps {
     configPath: configFilePath(),
     bufferDbPath: bufferDbPath(),
     logDir: logDir(),
+    authFailedSentinelPath: authFailedSentinelPath(),
     serviceUnitPath: platformServiceUnitPath(platform),
     programPath: process.argv[1] ?? 'proxai-gateway',
     configExists: () => Bun.file(configFilePath()).exists(),
@@ -197,6 +204,7 @@ program
       output: consoleOutput(),
       config,
       pauseSentinelPath: pausedSentinelPath(),
+      authFailedSentinelPath: authFailedSentinelPath(),
       abortSignal: ctrl.signal,
       gatewayVersion: `@proxai/gateway ${packageJson.version}`,
     });

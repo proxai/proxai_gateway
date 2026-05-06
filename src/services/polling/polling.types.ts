@@ -42,6 +42,7 @@ export interface PollCycleContext {
   gatewayVersion: string;
   sources: readonly RegisteredSource[];
   pauseSentinelPath: string;
+  authFailedSentinelPath: string;
   installedAt: string;
   staleBinary: StaleBinaryThresholds;
   logger?: Logger;
@@ -49,6 +50,7 @@ export interface PollCycleContext {
 
 export interface PollCycleResult {
   paused: boolean;
+  authFailed: boolean;
   startedAt: string;
   completedAt: string;
   durationMs: number;

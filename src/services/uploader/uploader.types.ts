@@ -7,6 +7,7 @@ export interface UploaderContext {
   db: Database;
   http: HttpClient;
   hostId: string;
+  authFailedSentinelPath?: string;
   logger?: Logger;
 }
 

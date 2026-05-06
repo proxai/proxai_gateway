@@ -106,6 +106,7 @@ function deps(control: MockHttpControl): Parameters<typeof runSetup>[0] {
     configPath,
     bufferDbPath,
     logDir,
+    authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     serviceUnitPath: join(dir, 'service.unit'),
     programPath: '/usr/local/bin/proxai-gateway',
     configExists: () => Bun.file(configPath).exists(),
@@ -421,3 +422,23 @@ test.skipIf(process.platform === 'win32')(
     expect(stats.mode & 0o777).toBe(0o600);
   },
 );
+
+test('successful setup clears a pre-existing AUTH_FAILED sentinel', async () => {
+  const control = newControl();
+  const d = deps(control);
+  // Pre-write the sentinel as if a prior daemon halted on revoked key.
+  await Bun.write(d.authFailedSentinelPath, '{"reason":"prior halt","detected_at":"x"}');
+  expect(await Bun.file(d.authFailedSentinelPath).exists()).toBe(true);
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(await Bun.file(d.authFailedSentinelPath).exists()).toBe(false);
+});
+
+test('failed setup (auth rejected) does not clear AUTH_FAILED sentinel', async () => {
+  const control = newControl({ verifyResponse: 'rejected' });
+  const d = deps(control);
+  await Bun.write(d.authFailedSentinelPath, '{"reason":"prior halt","detected_at":"x"}');
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(3);
+  expect(await Bun.file(d.authFailedSentinelPath).exists()).toBe(true);
+});

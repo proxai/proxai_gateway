@@ -1,5 +1,6 @@
 import { nowIsoUtc } from 'core/utils';
 import { drainBuffer } from 'services/uploader';
+import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 import { isPaused } from 'services/polling/pause-sentinel.ts';
 import { checkStaleBinary } from 'services/polling/stale-binary.ts';
 import type {
@@ -16,6 +17,20 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
 
   log?.info({ event: 'cycle.start', started_at: startedAt }, 'poll cycle started');
 
+  if (await isAuthFailed(ctx.authFailedSentinelPath)) {
+    const completedAt = nowIsoUtc();
+    log?.warn({ event: 'cycle.auth_failed' }, 'poll cycle skipped: auth-failed sentinel present');
+    return {
+      paused: false,
+      authFailed: true,
+      startedAt,
+      completedAt,
+      durationMs: Date.now() - startMs,
+      sourceResults: {},
+      drainResult: null,
+    };
+  }
+
   const staleDeps: Parameters<typeof checkStaleBinary>[0] = {
     installedAt: ctx.installedAt,
     warnAfterDays: ctx.staleBinary.warnAfterDays,
@@ -30,6 +45,7 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     log?.info({ event: 'cycle.paused' }, 'poll cycle skipped: paused sentinel present');
     return {
       paused: true,
+      authFailed: false,
       startedAt,
       completedAt,
       durationMs: Date.now() - startMs,
@@ -72,6 +88,7 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     db: ctx.buffer,
     http: ctx.http,
     hostId: ctx.hostId,
+    authFailedSentinelPath: ctx.authFailedSentinelPath,
   };
   if (log !== undefined) uploaderCtx.logger = log;
   const drainResult = await drainBuffer(uploaderCtx);
@@ -100,6 +117,7 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
   );
   return {
     paused: false,
+    authFailed: false,
     startedAt,
     completedAt,
     durationMs,
