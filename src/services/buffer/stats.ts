@@ -2,6 +2,7 @@ import type { Database } from 'bun:sqlite';
 
 import { BATCH_COLS, BATCH_STATUS, BUFFER_TABLES } from 'services/buffer/buffer.constants.ts';
 import type { BatchStatus, BufferCounts } from 'services/buffer/buffer.types.ts';
+import { countReceipts } from 'services/buffer/receipts.ts';
 
 const TOTAL_PENDING_BYTES_SQL = `
   SELECT COALESCE(SUM(LENGTH(${BATCH_COLS.body})), 0) AS total
@@ -22,9 +23,13 @@ export function totalPendingBytes(db: Database): number {
 
 export function countByStatus(db: Database): BufferCounts {
   const rows = db.query<{ status: string; count: number }, []>(COUNT_BY_STATUS_SQL).all();
-  const counts: BufferCounts = { pending: 0, done: 0, failed: 0 };
+  const counts: BufferCounts = { pending: 0, failed: 0, delivered: 0 };
   for (const row of rows) {
-    counts[row.status as BatchStatus] = row.count;
+    const status = row.status as BatchStatus;
+    if (status === 'pending' || status === 'failed') {
+      counts[status] = row.count;
+    }
   }
+  counts.delivered = countReceipts(db);
   return counts;
 }

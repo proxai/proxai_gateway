@@ -6,7 +6,7 @@ import type {
   WatermarkKind,
 } from 'services/contract';
 
-export type BatchStatus = 'pending' | 'done' | 'failed';
+export type BatchStatus = 'pending' | 'failed';
 
 export interface NewBatch {
   captureId: string;
@@ -53,8 +53,22 @@ export interface SetCursorInput extends CursorKey {
   consecutiveErrors?: number;
 }
 
+export interface NewReceipt {
+  captureId: string;
+  sourceApp: SourceApp;
+  sourcePathHash: string;
+  watermarkKind: WatermarkKind;
+  watermarkStart: number;
+  watermarkEnd: number;
+  watermarkTable: string | null;
+  deliveredAt: string;
+  idempotentOnServer: boolean;
+}
+
+export interface StoredReceipt extends NewReceipt {}
+
 export interface BufferCounts {
   pending: number;
-  done: number;
   failed: number;
+  delivered: number;
 }

@@ -20,7 +20,7 @@ export async function runStatus(deps: StatusCommandDeps): Promise<CommandResult>
   deps.output.info(
     `pending: ${counts.pending.toString()} batch(es), ${pendingBytes.toString()} bytes`,
   );
-  deps.output.info(`done: ${counts.done.toString()}`);
+  deps.output.info(`delivered: ${counts.delivered.toString()}`);
   deps.output.info(`failed: ${counts.failed.toString()}`);
 
   return { exitCode: EXIT_CODE.ok };

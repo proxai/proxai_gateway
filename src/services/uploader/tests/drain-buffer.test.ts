@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
-import { getBatch, insertBatch, openInMemoryBufferDb } from 'services/buffer';
+import { getBatch, getReceipt, insertBatch, openInMemoryBufferDb } from 'services/buffer';
 import { drainBuffer } from 'services/uploader';
 import type { UploaderContext } from 'services/uploader';
 import {
@@ -67,7 +67,8 @@ test('drains all pending batches when server accepts each', async () => {
   expect(result.attempted).toBe(3);
   expect(result.accepted).toBe(3);
   for (const id of ids) {
-    expect(getBatch(db, id)!.status).toBe('done');
+    expect(getBatch(db, id)).toBeNull();
+    expect(getReceipt(db, id)).not.toBeNull();
   }
 });
 
@@ -87,7 +88,8 @@ test('stops on first retriable outcome, leaves later batches pending', async () 
   expect(result.attempted).toBe(2);
   expect(result.accepted).toBe(1);
   expect(result.retriable).toBe(1);
-  expect(getBatch(db, ids[0]!)!.status).toBe('done');
+  expect(getBatch(db, ids[0]!)).toBeNull();
+  expect(getReceipt(db, ids[0]!)).not.toBeNull();
   expect(getBatch(db, ids[1]!)!.status).toBe('pending');
   expect(getBatch(db, ids[2]!)!.status).toBe('pending');
 });
@@ -106,9 +108,11 @@ test('continues past fatal outcomes', async () => {
   expect(result.attempted).toBe(3);
   expect(result.accepted).toBe(2);
   expect(result.fatal).toBe(1);
-  expect(getBatch(db, ids[0]!)!.status).toBe('done');
+  expect(getBatch(db, ids[0]!)).toBeNull();
+  expect(getReceipt(db, ids[0]!)).not.toBeNull();
   expect(getBatch(db, ids[1]!)!.status).toBe('failed');
-  expect(getBatch(db, ids[2]!)!.status).toBe('done');
+  expect(getBatch(db, ids[2]!)).toBeNull();
+  expect(getReceipt(db, ids[2]!)).not.toBeNull();
 });
 
 test('honors maxBatches cap', async () => {

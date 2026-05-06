@@ -6,7 +6,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { zstdDecompressSync } from 'core/utils';
-import { countByStatus, nextPendingBatch, openInMemoryBufferDb } from 'services/buffer';
+import {
+  countByStatus,
+  markBatchDelivered,
+  nextPendingBatch,
+  openInMemoryBufferDb,
+} from 'services/buffer';
 import { makeCodexSourcePoller } from 'services/polling/poll-codex.ts';
 
 let dir: string;
@@ -88,7 +93,7 @@ test('processes state then rollouts and threads cli_version through', async () =
       foundRolloutWithVersion = true;
     }
     DECODER.decode(zstdDecompressSync(row.body));
-    buffer.run(`UPDATE upload_batches SET status='done' WHERE capture_id='${row.captureId}'`);
+    markBatchDelivered(buffer, row, { idempotentOnServer: false });
     row = nextPendingBatch(buffer);
   }
   expect(foundRolloutWithVersion).toBe(true);

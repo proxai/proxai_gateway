@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
-import { getBatch, insertBatch, openInMemoryBufferDb } from 'services/buffer';
+import { getBatch, getReceipt, insertBatch, openInMemoryBufferDb } from 'services/buffer';
 import { uploadBatch } from 'services/uploader';
 import type { UploaderContext } from 'services/uploader';
 import {
@@ -27,7 +27,7 @@ function ctxWith(fetchFn: typeof globalThis.fetch): UploaderContext {
   return { db, http: createTestHttpClient(fetchFn), hostId: TEST_HOST_ID };
 }
 
-test('accepted upload marks batch done and returns idempotent flag', async () => {
+test('accepted upload writes receipt, deletes batch row, returns idempotent flag', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
   const stored = getBatch(db, batch.captureId)!;
@@ -44,10 +44,19 @@ test('accepted upload marks batch done and returns idempotent flag', async () =>
     expect(outcome.captureId).toBe(batch.captureId);
     expect(outcome.idempotent).toBe(false);
   }
-  expect(getBatch(db, batch.captureId)!.status).toBe('done');
+  expect(getBatch(db, batch.captureId)).toBeNull();
+  const receipt = getReceipt(db, batch.captureId);
+  expect(receipt).not.toBeNull();
+  expect(receipt!.sourceApp).toBe(stored.sourceApp);
+  expect(receipt!.sourcePathHash).toBe(stored.sourcePathHash);
+  expect(receipt!.watermarkKind).toBe(stored.watermarkKind);
+  expect(receipt!.watermarkStart).toBe(stored.watermarkStart);
+  expect(receipt!.watermarkEnd).toBe(stored.watermarkEnd);
+  expect(receipt!.watermarkTable).toBe(stored.watermarkTable);
+  expect(receipt!.idempotentOnServer).toBe(false);
 });
 
-test('propagates idempotent: true from server', async () => {
+test('propagates idempotent: true from server into receipt', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
   const stored = getBatch(db, batch.captureId)!;
@@ -59,6 +68,7 @@ test('propagates idempotent: true from server', async () => {
   );
   const outcome = await uploadBatch(ctx, stored);
   if (outcome.kind === 'accepted') expect(outcome.idempotent).toBe(true);
+  expect(getReceipt(db, batch.captureId)!.idempotentOnServer).toBe(true);
 });
 
 test('400 ValidationError marks batch failed (terminal)', async () => {

@@ -6,7 +6,7 @@ import {
   RetriableError,
   ValidationError,
 } from 'core/utils';
-import { markBatchDone, markBatchFailed, recordRetriableFailure } from 'services/buffer';
+import { markBatchDelivered, markBatchFailed, recordRetriableFailure } from 'services/buffer';
 import type { StoredBatch } from 'services/buffer';
 import type { RawRecordDTO } from 'services/contract';
 import { buildRawRecordDTO } from 'services/uploader/build-dto.ts';
@@ -26,7 +26,7 @@ export async function uploadBatch(
   log?.debug({ event: 'upload.start', attempts: batch.attempts }, 'upload started');
   try {
     const result = await ctx.http.uploadRawRecord(dto);
-    markBatchDone(ctx.db, batch.captureId);
+    markBatchDelivered(ctx.db, batch, { idempotentOnServer: result.idempotent });
     log?.info({ event: 'upload.accepted', idempotent: result.idempotent }, 'upload accepted');
     return {
       kind: 'accepted',

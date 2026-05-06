@@ -3,8 +3,9 @@ import type { Database } from 'bun:sqlite';
 
 import {
   countByStatus,
+  getBatch,
   insertBatch,
-  markBatchDone,
+  markBatchDelivered,
   markBatchFailed,
   openInMemoryBufferDb,
   totalPendingBytes,
@@ -31,12 +32,12 @@ test('totalPendingBytes sums body sizes for pending batches', () => {
   expect(totalPendingBytes(db)).toBe(300);
 });
 
-test('totalPendingBytes excludes done batches', () => {
+test('totalPendingBytes excludes delivered batches', () => {
   const a = newBatch({ body: new Uint8Array(100) });
   const b = newBatch({ body: new Uint8Array(200) });
   insertBatch(db, a);
   insertBatch(db, b);
-  markBatchDone(db, a.captureId);
+  markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
   expect(totalPendingBytes(db)).toBe(200);
 });
 
@@ -50,17 +51,17 @@ test('totalPendingBytes excludes failed batches', () => {
 });
 
 test('countByStatus reports zero buckets when empty', () => {
-  expect(countByStatus(db)).toEqual({ pending: 0, done: 0, failed: 0 });
+  expect(countByStatus(db)).toEqual({ pending: 0, failed: 0, delivered: 0 });
 });
 
-test('countByStatus reports one of each status', () => {
+test('countByStatus reports one of each bucket', () => {
   const a = newBatch();
   const b = newBatch();
   const c = newBatch();
   insertBatch(db, a);
   insertBatch(db, b);
   insertBatch(db, c);
-  markBatchDone(db, a.captureId);
+  markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
   markBatchFailed(db, b.captureId, 'err');
-  expect(countByStatus(db)).toEqual({ pending: 1, done: 1, failed: 1 });
+  expect(countByStatus(db)).toEqual({ pending: 1, failed: 1, delivered: 1 });
 });

@@ -6,6 +6,9 @@ import {
   BATCH_STATUS_INDEX_DDL,
   BATCH_TABLE_DDL,
   CURSOR_TABLE_DDL,
+  RECEIPT_DELIVERED_AT_INDEX_DDL,
+  RECEIPT_PATH_HASH_INDEX_DDL,
+  RECEIPT_TABLE_DDL,
 } from 'services/buffer/buffer.constants.ts';
 
 export function openBufferDb(path: string): Database {
@@ -26,4 +29,7 @@ function initializeSchema(db: Database): void {
   db.run(BATCH_STATUS_INDEX_DDL);
   db.run(BATCH_PATH_HASH_INDEX_DDL);
   db.run(CURSOR_TABLE_DDL);
+  db.run(RECEIPT_TABLE_DDL);
+  db.run(RECEIPT_PATH_HASH_INDEX_DDL);
+  db.run(RECEIPT_DELIVERED_AT_INDEX_DDL);
 }

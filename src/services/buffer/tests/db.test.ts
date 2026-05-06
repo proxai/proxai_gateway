@@ -22,9 +22,13 @@ test('schema initialization creates the source_cursors table', () => {
   expect(tableExists(db, BUFFER_TABLES.cursors)).toBe(true);
 });
 
-test('listTables shows only the two buffer tables', () => {
+test('schema initialization creates the upload_receipts table', () => {
+  expect(tableExists(db, BUFFER_TABLES.receipts)).toBe(true);
+});
+
+test('listTables shows the three buffer tables', () => {
   expect(listTables(db).toSorted()).toEqual(
-    [BUFFER_TABLES.batches, BUFFER_TABLES.cursors].toSorted(),
+    [BUFFER_TABLES.batches, BUFFER_TABLES.cursors, BUFFER_TABLES.receipts].toSorted(),
   );
 });
 
@@ -33,6 +37,7 @@ test('opening twice produces equivalent schemas (CREATE IF NOT EXISTS)', () => {
   try {
     expect(tableExists(second, BUFFER_TABLES.batches)).toBe(true);
     expect(tableExists(second, BUFFER_TABLES.cursors)).toBe(true);
+    expect(tableExists(second, BUFFER_TABLES.receipts)).toBe(true);
   } finally {
     second.close();
   }

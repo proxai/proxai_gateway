@@ -7,7 +7,13 @@ import { join } from 'node:path';
 import { runStatus } from 'cli/commands/status.ts';
 import { captureOutput } from 'cli/output.ts';
 import { generateUuidV7, zstdCompressSync } from 'core/utils';
-import { insertBatch, markBatchDone, markBatchFailed, openInMemoryBufferDb } from 'services/buffer';
+import {
+  getBatch,
+  insertBatch,
+  markBatchDelivered,
+  markBatchFailed,
+  openInMemoryBufferDb,
+} from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import { pausePolling } from 'services/polling';
 
@@ -52,7 +58,7 @@ test('reports active status with zero counts on empty buffer', async () => {
   expect(result.exitCode).toBe(0);
   expect(out.lines.some((l) => l.msg.includes('active'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('pending: 0'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('done: 0'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('delivered: 0'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('failed: 0'))).toBe(true);
 });
 
@@ -63,7 +69,7 @@ test('reports counts of each batch status', async () => {
   insertBatch(buffer, a);
   insertBatch(buffer, b);
   insertBatch(buffer, c);
-  markBatchDone(buffer, b.captureId);
+  markBatchDelivered(buffer, getBatch(buffer, b.captureId)!, { idempotentOnServer: false });
   markBatchFailed(buffer, c.captureId, 'oops');
 
   const out = captureOutput();
@@ -74,7 +80,7 @@ test('reports counts of each batch status', async () => {
   });
   expect(result.exitCode).toBe(0);
   expect(out.lines.some((l) => l.msg.includes('pending: 1'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('done: 1'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('delivered: 1'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('failed: 1'))).toBe(true);
 });
 

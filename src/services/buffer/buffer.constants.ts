@@ -1,6 +1,6 @@
 import type { BatchStatus } from 'services/buffer/buffer.types.ts';
 
-export const VALID_BATCH_STATUSES: readonly BatchStatus[] = ['pending', 'done', 'failed'];
+export const VALID_BATCH_STATUSES: readonly BatchStatus[] = ['pending', 'failed'];
 
 export const NO_INODE_SENTINEL = 0;
 export const NO_TABLE_SENTINEL = '';
@@ -8,6 +8,7 @@ export const NO_TABLE_SENTINEL = '';
 export const BUFFER_TABLES = {
   batches: 'upload_batches',
   cursors: 'source_cursors',
+  receipts: 'upload_receipts',
 } as const;
 
 export const BATCH_COLS = {
@@ -44,14 +45,27 @@ export const CURSOR_COLS = {
   consecutiveErrors: 'consecutive_errors',
 } as const;
 
+export const RECEIPT_COLS = {
+  captureId: 'capture_id',
+  sourceApp: 'source_app',
+  sourcePathHash: 'source_path_hash',
+  watermarkKind: 'watermark_kind',
+  watermarkStart: 'watermark_start',
+  watermarkEnd: 'watermark_end',
+  watermarkTable: 'watermark_table',
+  deliveredAt: 'delivered_at',
+  idempotentOnServer: 'idempotent_on_server',
+} as const;
+
 export const BUFFER_INDEXES = {
   batchesStatusCreated: 'idx_upload_batches_status_created',
   batchesPathHash: 'idx_upload_batches_path_hash',
+  receiptsPathHash: 'idx_upload_receipts_path_hash',
+  receiptsDeliveredAt: 'idx_upload_receipts_delivered_at',
 } as const;
 
 export const BATCH_STATUS = {
   pending: 'pending',
-  done: 'done',
   failed: 'failed',
 } as const;
 
@@ -107,4 +121,28 @@ export const CURSOR_TABLE_DDL = `
       ${CURSOR_COLS.watermarkTable}
     )
   )
+`;
+
+export const RECEIPT_TABLE_DDL = `
+  CREATE TABLE IF NOT EXISTS ${BUFFER_TABLES.receipts} (
+    ${RECEIPT_COLS.captureId} TEXT PRIMARY KEY NOT NULL,
+    ${RECEIPT_COLS.sourceApp} TEXT NOT NULL,
+    ${RECEIPT_COLS.sourcePathHash} TEXT NOT NULL,
+    ${RECEIPT_COLS.watermarkKind} TEXT NOT NULL,
+    ${RECEIPT_COLS.watermarkStart} INTEGER NOT NULL,
+    ${RECEIPT_COLS.watermarkEnd} INTEGER NOT NULL,
+    ${RECEIPT_COLS.watermarkTable} TEXT,
+    ${RECEIPT_COLS.deliveredAt} TEXT NOT NULL,
+    ${RECEIPT_COLS.idempotentOnServer} INTEGER NOT NULL DEFAULT 0
+  )
+`;
+
+export const RECEIPT_PATH_HASH_INDEX_DDL = `
+  CREATE INDEX IF NOT EXISTS ${BUFFER_INDEXES.receiptsPathHash}
+    ON ${BUFFER_TABLES.receipts} (${RECEIPT_COLS.sourcePathHash})
+`;
+
+export const RECEIPT_DELIVERED_AT_INDEX_DDL = `
+  CREATE INDEX IF NOT EXISTS ${BUFFER_INDEXES.receiptsDeliveredAt}
+    ON ${BUFFER_TABLES.receipts} (${RECEIPT_COLS.deliveredAt})
 `;

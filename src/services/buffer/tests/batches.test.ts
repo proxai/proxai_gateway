@@ -3,10 +3,12 @@ import type { Database } from 'bun:sqlite';
 
 import { generateUuidV7 } from 'core/utils';
 import {
+  countReceipts,
   dropOldestPending,
   getBatch,
+  getReceipt,
   insertBatch,
-  markBatchDone,
+  markBatchDelivered,
   markBatchFailed,
   nextPendingBatch,
   openInMemoryBufferDb,
@@ -69,15 +71,72 @@ test('nextPendingBatch returns null when nothing pending', () => {
   expect(nextPendingBatch(db)).toBeNull();
   const batch = newBatch();
   insertBatch(db, batch);
-  markBatchDone(db, batch.captureId);
+  const stored = getBatch(db, batch.captureId)!;
+  markBatchDelivered(db, stored, { idempotentOnServer: false });
   expect(nextPendingBatch(db)).toBeNull();
 });
 
-test('markBatchDone advances status', () => {
+test('markBatchDelivered deletes the batch row', () => {
   const batch = newBatch();
   insertBatch(db, batch);
-  markBatchDone(db, batch.captureId);
-  expect(getBatch(db, batch.captureId)!.status).toBe('done');
+  const stored = getBatch(db, batch.captureId)!;
+  markBatchDelivered(db, stored, { idempotentOnServer: false });
+  expect(getBatch(db, batch.captureId)).toBeNull();
+});
+
+test('markBatchDelivered inserts a receipt row with derived fields', () => {
+  const batch = newBatch();
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+  markBatchDelivered(db, stored, {
+    idempotentOnServer: false,
+    deliveredAt: '2026-05-06T12:00:00.000Z',
+  });
+
+  const receipt = getReceipt(db, batch.captureId);
+  expect(receipt).not.toBeNull();
+  expect(receipt!.captureId).toBe(batch.captureId);
+  expect(receipt!.sourceApp).toBe(batch.sourceApp);
+  expect(receipt!.sourcePathHash).toBe(batch.sourcePathHash);
+  expect(receipt!.watermarkKind).toBe(batch.watermarkKind);
+  expect(receipt!.watermarkStart).toBe(batch.watermarkStart);
+  expect(receipt!.watermarkEnd).toBe(batch.watermarkEnd);
+  expect(receipt!.watermarkTable).toBe(batch.watermarkTable);
+  expect(receipt!.deliveredAt).toBe('2026-05-06T12:00:00.000Z');
+  expect(receipt!.idempotentOnServer).toBe(false);
+});
+
+test('markBatchDelivered persists idempotentOnServer: true', () => {
+  const batch = newBatch();
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+  markBatchDelivered(db, stored, { idempotentOnServer: true });
+
+  const receipt = getReceipt(db, batch.captureId)!;
+  expect(receipt.idempotentOnServer).toBe(true);
+});
+
+test('markBatchDelivered transaction is atomic on duplicate receipt', () => {
+  const batch = newBatch();
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+  // Pre-populate the receipts table with a row keyed on batch.captureId so the
+  // INSERT inside markBatchDelivered fails. The transaction should roll back the
+  // DELETE, leaving the original batch row untouched.
+  markBatchDelivered(db, stored, { idempotentOnServer: false });
+  // Reinstate the batch row to simulate a duplicate-receipt situation.
+  insertBatch(db, batch);
+  expect(getBatch(db, batch.captureId)).not.toBeNull();
+
+  const second = getBatch(db, batch.captureId)!;
+  expect(() => {
+    markBatchDelivered(db, second, { idempotentOnServer: false });
+  }).toThrow();
+
+  // Batch row stays intact because the DELETE was rolled back together with the
+  // failed INSERT.
+  expect(getBatch(db, batch.captureId)).not.toBeNull();
+  expect(countReceipts(db)).toBe(1);
 });
 
 test('markBatchFailed sets status, error, attempts', () => {
@@ -113,12 +172,12 @@ test('dropOldestPending removes oldest pending and returns its id', async () => 
   expect(getBatch(db, b.captureId)).not.toBeNull();
 });
 
-test('dropOldestPending skips done and failed batches', () => {
+test('dropOldestPending skips delivered (already-removed) and failed batches', () => {
   const a = newBatch();
   const b = newBatch();
   insertBatch(db, a);
   insertBatch(db, b);
-  markBatchDone(db, a.captureId);
+  markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
 
   expect(dropOldestPending(db)).toBe(b.captureId);
 });

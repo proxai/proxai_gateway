@@ -3,6 +3,7 @@ import type { Database } from 'bun:sqlite';
 import { nowIsoUtc } from 'core/utils';
 import { BATCH_COLS, BATCH_STATUS, BUFFER_TABLES } from 'services/buffer/buffer.constants.ts';
 import type { BatchStatus, NewBatch, StoredBatch } from 'services/buffer/buffer.types.ts';
+import { insertReceipt } from 'services/buffer/receipts.ts';
 import type {
   BodyCompression,
   BodyFormat,
@@ -67,9 +68,8 @@ const NEXT_PENDING_SQL = `
   LIMIT 1
 `;
 
-const MARK_DONE_SQL = `
-  UPDATE ${BUFFER_TABLES.batches}
-  SET ${BATCH_COLS.status} = '${BATCH_STATUS.done}'
+const DELETE_BATCH_SQL = `
+  DELETE FROM ${BUFFER_TABLES.batches}
   WHERE ${BATCH_COLS.captureId} = ?
 `;
 
@@ -131,8 +131,32 @@ export function nextPendingBatch(db: Database): StoredBatch | null {
   return row === null ? null : rowToBatch(row);
 }
 
-export function markBatchDone(db: Database, captureId: string): void {
-  db.query(MARK_DONE_SQL).run(captureId);
+export interface MarkBatchDeliveredInput {
+  idempotentOnServer: boolean;
+  deliveredAt?: string;
+}
+
+export function markBatchDelivered(
+  db: Database,
+  batch: StoredBatch,
+  input: MarkBatchDeliveredInput,
+): void {
+  const deliveredAt = input.deliveredAt ?? nowIsoUtc();
+  const tx = db.transaction(() => {
+    insertReceipt(db, {
+      captureId: batch.captureId,
+      sourceApp: batch.sourceApp,
+      sourcePathHash: batch.sourcePathHash,
+      watermarkKind: batch.watermarkKind,
+      watermarkStart: batch.watermarkStart,
+      watermarkEnd: batch.watermarkEnd,
+      watermarkTable: batch.watermarkTable,
+      deliveredAt,
+      idempotentOnServer: input.idempotentOnServer,
+    });
+    db.query(DELETE_BATCH_SQL).run(batch.captureId);
+  });
+  tx();
 }
 
 export function markBatchFailed(db: Database, captureId: string, error: string): void {
