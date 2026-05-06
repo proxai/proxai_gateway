@@ -1,5 +1,6 @@
 export * from 'core/utils/backoff.ts';
 export * from 'core/utils/compress.ts';
+export * from 'core/utils/duration.ts';
 export * from 'core/utils/errors.ts';
 export * from 'core/utils/hash.ts';
 export * from 'core/utils/source-path.ts';

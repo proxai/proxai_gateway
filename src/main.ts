@@ -15,6 +15,7 @@ import { readMachineUuid } from 'core/system';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import { runSetup } from 'cli/commands/setup.ts';
 import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup.ts';
+import { runBackfill } from 'cli/commands/backfill.ts';
 import { runPause } from 'cli/commands/pause.ts';
 import { runRedactionList, runRedactionTest } from 'cli/commands/redaction.ts';
 import { runRestart } from 'cli/commands/restart.ts';
@@ -210,6 +211,38 @@ program
       abortSignal: ctrl.signal,
       gatewayVersion: `@proxai/gateway ${packageJson.version}`,
     });
+    process.exit(result.exitCode);
+  });
+
+program
+  .command('backfill')
+  .description('Run a single capture cycle ingesting history older than the default 30-day window')
+  .requiredOption('--since <duration>', 'lookback window: Nd (days), Nmo (months), or Ny (years)')
+  .option('--config <path>', 'path to config.toml')
+  .action(async (opts: { since: string; config?: string }) => {
+    const config = await loadConfigFromFile(opts.config);
+    const platform = process.platform;
+    const unitPath = platformServiceUnitPath(platform);
+    const sm =
+      unitPath !== null
+        ? getServiceManager({
+            platform,
+            unitPath,
+            programPath: process.argv[1] ?? 'proxai-gateway',
+          })
+        : null;
+    const result = await runBackfill(
+      {
+        output: consoleOutput(),
+        config,
+        pauseSentinelPath: pausedSentinelPath(),
+        authFailedSentinelPath: authFailedSentinelPath(),
+        bufferFullSentinelPath: bufferFullSentinelPath(),
+        gatewayVersion: `@proxai/gateway ${packageJson.version}`,
+        ...(sm !== null ? { isDaemonRunning: () => sm.isRunning() } : {}),
+      },
+      { since: opts.since },
+    );
     process.exit(result.exitCode);
   });
 
