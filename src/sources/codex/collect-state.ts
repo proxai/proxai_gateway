@@ -5,7 +5,7 @@ import { generateUuidV7, nowIsoUtc, zstdCompressSync } from 'core/utils';
 import { getCursor, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import type { CodexTable } from 'services/contract';
-import { applyStage1 } from 'services/redaction';
+import { applyRedaction } from 'services/redaction';
 import {
   CODEX_ALLOWED_STATE_TABLES,
   CODEX_BODY_COMPRESSION,
@@ -118,7 +118,7 @@ function collectOneTable(
   if (rows.length === 0) return;
 
   const jsonString = JSON.stringify(rows);
-  const redaction = applyStage1(jsonString);
+  const redaction = applyRedaction(jsonString);
   const compressed = zstdCompressSync(redaction.redacted);
 
   const firstRow = rows[0]!;

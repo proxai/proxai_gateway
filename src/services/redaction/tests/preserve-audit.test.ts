@@ -9,7 +9,6 @@ test('returns findings when a rule pattern matches a fixture', () => {
     description: 'matches the literal "secret"',
     pattern: /secret/g,
     replacement: '[REDACTED]',
-    stage: 1,
   };
   const findings = auditRulesAgainstFixtures([rule], ['this has a secret in it']);
   expect(findings).toHaveLength(1);
@@ -23,7 +22,6 @@ test('returns multiple findings when a rule matches multiple times', () => {
     description: 'matches "x"',
     pattern: /x/g,
     replacement: '[X]',
-    stage: 1,
   };
   const findings = auditRulesAgainstFixtures([rule], ['xxx']);
   expect(findings).toHaveLength(3);
@@ -35,7 +33,6 @@ test('returns empty when no rule matches any fixture', () => {
     description: '',
     pattern: /never-found/g,
     replacement: 'x',
-    stage: 1,
   };
   expect(auditRulesAgainstFixtures([rule], ['hello world'])).toEqual([]);
 });

@@ -42,7 +42,3 @@ export const ALL_RULES: readonly RedactionRule[] = [
   ...CONNECTION_STRINGS_RULES,
   ...KEYWORD_SECRET_RULES,
 ];
-
-export const STAGE_1_RULES: readonly RedactionRule[] = ALL_RULES.filter((r) => r.stage === 1);
-
-export const STAGE_2_RULES: readonly RedactionRule[] = ALL_RULES.filter((r) => r.stage === 2);

@@ -113,7 +113,7 @@ test('body is base64-encoded recompressed bytes that decode back to redacted tex
   expect(decompressed).toBe('hello world payload');
 });
 
-test('applies Stage 2 redaction (TRAVIS_TOKEN keyword-anchored secret)', () => {
+test('does not redact at upload-time (redaction is single-pass at capture)', () => {
   const text = 'TRAVIS_TOKEN=AbCdEfGhIjKlMnOpQrStUv';
   const batch = newClaudeCodeBatch(text);
   insertBatch(db, batch);
@@ -122,8 +122,17 @@ test('applies Stage 2 redaction (TRAVIS_TOKEN keyword-anchored secret)', () => {
   const dto = buildRawRecordDTO(stored, TEST_HOST_ID);
   const decoded = Buffer.from(dto.body, 'base64');
   const decompressed = new TextDecoder().decode(zstdDecompressSync(decoded));
-  expect(decompressed).toContain('[REDACTED:travis-ci-token]');
-  expect(decompressed).not.toContain('AbCdEfGhIjKlMnOpQrStUv');
+  expect(decompressed).toBe('TRAVIS_TOKEN=AbCdEfGhIjKlMnOpQrStUv');
+});
+
+test('emits the buffered body bytes verbatim as base64 (no decompress/recompress round-trip)', () => {
+  const batch = newClaudeCodeBatch('hello payload');
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+
+  const dto = buildRawRecordDTO(stored, TEST_HOST_ID);
+  const decoded = Buffer.from(dto.body, 'base64');
+  expect(decoded).toEqual(Buffer.from(stored.body));
 });
 
 test('does not mutate the stored batch (body bytes unchanged)', () => {

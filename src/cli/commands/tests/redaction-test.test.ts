@@ -47,7 +47,7 @@ test('emits original content when nothing matches', async () => {
   expect(lines[0]).toBe('just a plain log file with no secrets');
 });
 
-test('--show-rules prints per-stage rule summary', async () => {
+test('--show-rules prints rule hit summary', async () => {
   const fakeKey = 'sk-' + 'a'.repeat(48);
   const filePath = await seed('input.txt', `key=${fakeKey}`);
   const lines: string[] = [];
@@ -57,9 +57,7 @@ test('--show-rules prints per-stage rule summary', async () => {
   );
   expect(result.exitCode).toBe(0);
   const joined = lines.join('\n');
-  expect(joined).toContain('Stage 1 (write-time)');
-  expect(joined).toContain('Stage 2 (upload-time)');
-  expect(joined).toContain('Total:');
+  expect(joined).toContain('Rules matched:');
   expect(joined).toContain('--- redacted output ---');
 });
 
@@ -76,7 +74,10 @@ test('--show-rules prints "no rules matched" when nothing fires at a stage', asy
 
 test('returns fileUnreadable exit code when file is missing', async () => {
   const out = captureOutput();
-  const result = await runRedactionTest({ output: out }, { filePath: join(dir, 'missing.txt') });
+  const result = await runRedactionTest(
+    { output: out, emit: () => undefined },
+    { filePath: join(dir, 'missing.txt') },
+  );
   expect(result.exitCode).toBe(7);
   expect(out.lines.some((l) => l.msg.includes('file not found'))).toBe(true);
 });

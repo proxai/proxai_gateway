@@ -13,6 +13,4 @@ export {
   PAYMENT_RULES,
   SAAS_TOOLS_RULES,
   SOURCE_CONTROL_RULES,
-  STAGE_1_RULES,
-  STAGE_2_RULES,
 } from 'services/redaction/rules';

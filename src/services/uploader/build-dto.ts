@@ -1,13 +1,8 @@
-import { zstdCompressSync, zstdDecompressSync } from 'core/utils';
 import type { StoredBatch } from 'services/buffer';
 import type { RawRecordDTO, Watermark } from 'services/contract';
-import { applyStage2 } from 'services/redaction';
 
 export function buildRawRecordDTO(batch: StoredBatch, hostId: string): RawRecordDTO {
-  const decoded = new TextDecoder().decode(zstdDecompressSync(batch.body));
-  const { redacted } = applyStage2(decoded);
-  const recompressed = zstdCompressSync(redacted);
-  const body = Buffer.from(recompressed).toString('base64');
+  const body = Buffer.from(batch.body).toString('base64');
 
   return {
     capture_id: batch.captureId,

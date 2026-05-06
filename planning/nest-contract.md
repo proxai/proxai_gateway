@@ -359,23 +359,22 @@ When throttled, the backend returns `429` with a `Retry-After` header. Honor it.
 
 The system uses **defense in depth**: redaction runs on the gateway side AND again on the backend.
 
-### 10.1 What the gateway does (per `01_INTRO.md` §3 / `03_FLUSHING_ALGORITHM.md` §8)
+### 10.1 What the gateway does
 
-Two stages on the gateway:
+**Single pass at capture time.** When source bytes are read off disk (Claude Code JSONL, Cursor `cursorDiskKV`, Codex rollout/state), the gateway runs the full redaction rule corpus once, replaces matches with `[REDACTED:type]`, then compresses and stores. The buffered batch is **already-redacted bytes** — the same bytes the wire DTO carries (modulo base64).
 
-1. **Write-time redaction.** Inline regex pass during the read step, using the gitleaks-style rule corpus + auth-header strip. Replaces matches with `[REDACTED:type]` BEFORE bytes leave the read function.
-2. **Upload-time redaction.** Independent regex pass with a different rule corpus (detect-secrets-style + keyword-anchored) before compression. Catches stage-1 bugs.
+There is no second redaction pass at upload time. The buffer is the canonical redacted form; upload just base64-encodes it.
 
 ### 10.2 What the backend does
 
-3. **Receive-time redaction (Stage 3).** Third pass on receive, before S3 PUT. Catches stale-client rules — an old gateway version that hasn't picked up new redaction patterns.
+**Receive-time redaction (server-side defense-in-depth).** The backend runs the rule corpus a second time on receive, before the S3 PUT. This catches stale-client drift — an old gateway version that doesn't know about a newer rule yet.
 
-The backend emits a metric (`agent_gateway_redaction_stage3_caught_total{rule_name}`) every time Stage 3 finds anything. **A non-zero rate is a signal that the gateway's redaction has drifted relative to the backend.** This is your early-warning system: fix the gateway redaction module, ship a release.
+The backend emits a metric (`agent_gateway_redaction_caught_total{rule_name}`) every time the server-side pass finds anything. **A non-zero rate is a signal that the gateway's rule corpus has drifted relative to the backend.** Early-warning system: bump the gateway's bundled rules and ship a release.
 
 ### 10.3 What this means for you
 
-- The backend assumes you've redacted before sending. **It will not parse your bytes if they fail Stage 3 with content the backend considers obviously sensitive** — but it will accept them, store them in S3 (post-Stage-3), and emit the metric. The metric is the contract.
-- Stale gateway redaction is a quality issue, not a security incident: bytes ARE redacted by the time they hit S3. But the slower you fix it, the higher the operational burden on the backend (more Stage 3 catches = more disk churn + alert noise).
+- The backend assumes you've redacted before sending. **It will not parse your bytes if they fail the server-side pass with content the backend considers obviously sensitive** — but it will accept them, store them in S3 (post-server-pass), and emit the metric. The metric is the contract.
+- Stale gateway redaction is a quality issue, not a security incident: bytes ARE redacted by the time they hit S3. But the slower you fix it, the higher the operational burden on the backend (more server-side catches = more disk churn + alert noise).
 - The redaction-rules corpus is intended to be kept in sync. The backend tracks drift via a monthly diff cron; if drift exceeds a threshold, expect coordination outreach.
 
 ### 10.4 What you SHOULDN'T redact away

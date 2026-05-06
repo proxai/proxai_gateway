@@ -2,7 +2,7 @@ import { openReadOnly, snapshotSqlite, tableExists } from 'core/io/sqlite';
 import { generateUuidV7, nowIsoUtc, zstdCompressSync } from 'core/utils';
 import { getCursor, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
-import { applyStage1 } from 'services/redaction';
+import { applyRedaction } from 'services/redaction';
 import {
   CURSOR_BODY_COMPRESSION,
   CURSOR_BODY_FORMAT,
@@ -76,7 +76,7 @@ export async function collectCursorFile(
       }));
 
       const jsonString = JSON.stringify(kvRows);
-      const redaction = applyStage1(jsonString);
+      const redaction = applyRedaction(jsonString);
       const agentSchemaVersion = extractAgentSchemaVersion(kvRows);
       const compressed = zstdCompressSync(redaction.redacted);
 

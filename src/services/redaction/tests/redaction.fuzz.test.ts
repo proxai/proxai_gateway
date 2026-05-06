@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { applyAllRedaction } from 'services/redaction';
+import { applyRedaction } from 'services/redaction';
 
 interface PositiveFixture {
   label: string;
@@ -262,7 +262,7 @@ const negativeFixtures: string[] = [
 describe('redaction fuzz harness — positive corpus (must redact)', () => {
   for (const fix of positiveFixtures) {
     test(fix.label, () => {
-      const result = applyAllRedaction(fix.input);
+      const result = applyRedaction(fix.input);
       if (!result.redacted.includes(fix.mustContain)) {
         throw new Error(
           `expected "${fix.mustContain}" in redacted output for label "${fix.label}".\n  input:    ${fix.input}\n  redacted: ${result.redacted}`,
@@ -276,7 +276,7 @@ describe('redaction fuzz harness — positive corpus (must redact)', () => {
 describe('redaction fuzz harness — negative corpus (must NOT redact)', () => {
   for (const fix of negativeFixtures) {
     test(`leaves untouched: ${fix.slice(0, 70)}`, () => {
-      const result = applyAllRedaction(fix);
+      const result = applyRedaction(fix);
       if (result.matchCount > 0) {
         throw new Error(
           `unexpected redaction for negative fixture.\n  input:    ${fix}\n  redacted: ${result.redacted}\n  hits: ${JSON.stringify(result.ruleHits)}`,

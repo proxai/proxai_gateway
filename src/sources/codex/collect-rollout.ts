@@ -2,7 +2,7 @@ import { readJsonlRange } from 'core/io/jsonl';
 import { generateUuidV7, nowIsoUtc, zstdCompressSync } from 'core/utils';
 import { getCursor, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
-import { applyStage1 } from 'services/redaction';
+import { applyRedaction } from 'services/redaction';
 import {
   CODEX_BODY_COMPRESSION,
   CODEX_ROLLOUT_BODY_FORMAT,
@@ -46,7 +46,7 @@ export async function collectCodexRollout(
     }
 
     const text = new TextDecoder('utf-8', { fatal: false }).decode(range.bytes);
-    const redaction = applyStage1(text);
+    const redaction = applyRedaction(text);
     const compressed = zstdCompressSync(redaction.redacted);
 
     const batch: NewBatch = {

@@ -166,21 +166,6 @@ test('network failure -> retriable, pending, attempts++', async () => {
   expect(row.attempts).toBe(1);
 });
 
-test('build-dto failure on corrupt zstd body marks batch failed', async () => {
-  const batch = newClaudeCodeBatch('payload', {
-    body: new Uint8Array([0xff, 0xff, 0xff, 0xff]),
-  });
-  insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
-
-  const ctx = ctxWith(mockFetch(() => emptyResponse(200)));
-  const outcome = await uploadBatch(ctx, stored);
-
-  expect(outcome.kind).toBe('fatal');
-  if (outcome.kind === 'fatal') expect(outcome.error).toContain('dto build failed');
-  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
-});
-
 test('uploaded body is base64-encoded recompressed payload', async () => {
   const batch = newClaudeCodeBatch('hello upload');
   insertBatch(db, batch);

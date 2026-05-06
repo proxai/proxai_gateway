@@ -21,15 +21,7 @@ export async function uploadBatch(
     source_app: batch.sourceApp,
   });
 
-  let dto: RawRecordDTO;
-  try {
-    dto = buildRawRecordDTO(batch, ctx.hostId);
-  } catch (err) {
-    const message = `dto build failed: ${(err as Error).message}`;
-    markBatchFailed(ctx.db, batch.captureId, message);
-    log?.error({ event: 'upload.dto_build_failed', error: message }, 'dto build failed');
-    return { kind: 'fatal', captureId: batch.captureId, error: message };
-  }
+  const dto: RawRecordDTO = buildRawRecordDTO(batch, ctx.hostId);
 
   log?.debug({ event: 'upload.start', attempts: batch.attempts }, 'upload started');
   try {

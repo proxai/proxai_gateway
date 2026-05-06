@@ -2,7 +2,7 @@ import { readJsonlRange } from 'core/io/jsonl';
 import { generateUuidV7, nowIsoUtc, zstdCompressSync } from 'core/utils';
 import { getCursor, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
-import { applyStage1 } from 'services/redaction';
+import { applyRedaction } from 'services/redaction';
 import {
   CLAUDE_CODE_BODY_COMPRESSION,
   CLAUDE_CODE_BODY_FORMAT,
@@ -48,7 +48,7 @@ export async function collectClaudeCodeFile(
     }
 
     const text = DECODER.decode(range.bytes);
-    const redaction = applyStage1(text);
+    const redaction = applyRedaction(text);
     const agentSchemaVersion = extractAgentSchemaVersion(redaction.redacted);
     const compressed = zstdCompressSync(redaction.redacted);
 
