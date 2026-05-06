@@ -1,6 +1,7 @@
 import { stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { setMode } from 'core/io/fs';
 import {
   LOG_RETENTION_DAYS,
   LOG_TOTAL_SIZE_CAP_BYTES,
@@ -47,6 +48,17 @@ export async function pruneLogDirectory(
     deleted.push(oldest.path);
     totalSize -= oldest.size;
   }
+
+  // Tighten mode on every retained log file. Catches files created before the
+  // logger started chmod'ing on roll, and re-applies if anything externally
+  // relaxed permissions. setMode is a no-op on win32.
+  await Promise.all(
+    files.map((f) =>
+      setMode(f.path, 0o600).catch(() => {
+        // best-effort hardening; missing/unstattable files are skipped
+      }),
+    ),
+  );
 
   return {
     deletedFiles: deleted,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -410,3 +410,14 @@ test('scripted mode (--api-key) bypasses re-entry on existing config', async () 
   expect(config.account.apiKey).toBe(NEW_KEY);
   expect(config.account.hostId).toBe(EXPECTED_HOST_ID);
 });
+
+test.skipIf(process.platform === 'win32')(
+  'writes config.toml with mode 0600 (owner-only) on POSIX',
+  async () => {
+    const control = newControl();
+    const result = await runSetup(deps(control), { apiKey: VALID_KEY });
+    expect(result.exitCode).toBe(0);
+    const stats = await stat(configPath);
+    expect(stats.mode & 0o777).toBe(0o600);
+  },
+);

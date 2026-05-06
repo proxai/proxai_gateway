@@ -2,6 +2,7 @@ import { unlink } from 'node:fs/promises';
 
 import { writeAtomic } from 'core/io/fs/atomic.ts';
 import type { SentinelHandle } from 'core/io/fs/fs.types.ts';
+import { setMode } from 'core/io/fs/mode.ts';
 
 export function sentinelHandle(path: string): SentinelHandle {
   return {
@@ -11,7 +12,12 @@ export function sentinelHandle(path: string): SentinelHandle {
       if (!(await f.exists())) return '';
       return f.text();
     },
-    write: (body: string) => writeAtomic(path, body),
+    write: async (body: string) => {
+      await writeAtomic(path, body);
+      // Sentinels (PAUSED, AUTH_FAILED, CONSENT_ACCEPTED, ...) may carry
+      // operator-supplied context. Treat as private to the gateway owner.
+      await setMode(path, 0o600);
+    },
     remove: async () => {
       await unlink(path).catch((err: unknown) => {
         if ((err as NodeJS.ErrnoException | undefined)?.code !== 'ENOENT') throw err;
