@@ -39,6 +39,12 @@ export interface TailCommandDeps {
    * midnight. Production callers should not set this.
    */
   pathProvider?: () => string;
+  /**
+   * @internal Test seam. Defaults to `POLL_INTERVAL_MS` (200 ms). Tests
+   * inject a small value (e.g. 1 ms) so `--follow` assertions don't pay
+   * real wall-clock latency. Production callers should not set this.
+   */
+  pollIntervalMs?: number;
 }
 
 export interface TailCommandOptions {
@@ -88,8 +94,9 @@ export async function runTail(
     return { exitCode: EXIT_CODE.ok };
   }
 
+  const pollIntervalMs = deps.pollIntervalMs ?? POLL_INTERVAL_MS;
   while (deps.abortSignal === undefined || !deps.abortSignal.aborted) {
-    await sleep(POLL_INTERVAL_MS, deps.abortSignal);
+    await sleep(pollIntervalMs, deps.abortSignal);
     if (deps.abortSignal !== undefined && deps.abortSignal.aborted) break;
 
     const currentPath = resolvePath();

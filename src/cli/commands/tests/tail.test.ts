@@ -148,12 +148,18 @@ test('--follow emits new lines and stops on abort', async () => {
   const lines: string[] = [];
 
   const promise = runTail(
-    { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l), abortSignal: ctrl.signal },
+    {
+      output: captureOutput(),
+      logDir: dir,
+      emit: (l) => lines.push(l),
+      abortSignal: ctrl.signal,
+      pollIntervalMs: 1,
+    },
     { follow: true, json: true },
   );
-  await Bun.sleep(50);
+  await Bun.sleep(10);
   await Bun.write(todaysLogPath(dir), `${makeLine(30, 'first')}\n${makeLine(30, 'second')}\n`);
-  await Bun.sleep(400);
+  await Bun.sleep(20);
   ctrl.abort();
   const result = await promise;
 
@@ -182,10 +188,11 @@ test('--follow handles missing log file gracefully (exits cleanly on abort)', as
       logDir: dir,
       emit: (l) => lines.push(l),
       abortSignal: ctrl.signal,
+      pollIntervalMs: 1,
     },
     { follow: true, json: true },
   );
-  await Bun.sleep(300);
+  await Bun.sleep(20);
   ctrl.abort();
   const result = await promise;
   expect(result.exitCode).toBe(0);
