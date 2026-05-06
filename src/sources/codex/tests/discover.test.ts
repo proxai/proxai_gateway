@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -96,4 +96,43 @@ test('discoverCodexStateSqlite ignores files that do not match state_<N>.sqlite'
   const found = await discoverCodexStateSqlite(dir);
   expect(found).not.toBeNull();
   expect(found!.sourcePath).toBe(join(dir, 'state_5.sqlite'));
+});
+
+test('discoverCodexRolloutFiles skips rollouts older than minimumMtime', async () => {
+  await mkdir(join(dir, 'sessions', '2024', '01', '01'), { recursive: true });
+  const oldPath = join(dir, 'sessions', '2024', '01', '01', 'rollout-old.jsonl');
+  await writeFile(oldPath, '{"a":1}\n');
+  const oldEpoch = new Date('2024-01-01T00:00:00Z');
+  await utimes(oldPath, oldEpoch, oldEpoch);
+
+  await mkdir(join(dir, 'sessions', '2026', '04', '29'), { recursive: true });
+  const newPath = join(dir, 'sessions', '2026', '04', '29', 'rollout-fresh.jsonl');
+  await writeFile(newPath, '{"b":2}\n');
+
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const found = await discoverCodexRolloutFiles(dir, { minimumMtime: cutoff });
+  expect(found).toHaveLength(1);
+  expect(found[0]!.sourcePath).toBe(newPath);
+});
+
+test('discoverCodexRolloutFiles with null minimumMtime returns all files', async () => {
+  await mkdir(join(dir, 'sessions', '2024', '01', '01'), { recursive: true });
+  const oldPath = join(dir, 'sessions', '2024', '01', '01', 'rollout-old.jsonl');
+  await writeFile(oldPath, '{"a":1}\n');
+  const oldEpoch = new Date('2024-01-01T00:00:00Z');
+  await utimes(oldPath, oldEpoch, oldEpoch);
+
+  const found = await discoverCodexRolloutFiles(dir, { minimumMtime: null });
+  expect(found).toHaveLength(1);
+});
+
+test('discoverCodexStateSqlite returns null when state file mtime is below cap', async () => {
+  const statePath = join(dir, 'state_5.sqlite');
+  await writeFile(statePath, 'placeholder');
+  const oldEpoch = new Date('2024-01-01T00:00:00Z');
+  await utimes(statePath, oldEpoch, oldEpoch);
+
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const found = await discoverCodexStateSqlite(dir, { minimumMtime: cutoff });
+  expect(found).toBeNull();
 });

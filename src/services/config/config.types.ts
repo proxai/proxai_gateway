@@ -23,6 +23,10 @@ export interface CaptureConfig {
   failedRetentionDays: number;
   bufferSoftPauseBytes: number;
   bufferSoftResumeBytes: number;
+  initialScanWindowDays: number;
+  uploadMaxBatchesPerSec: number;
+  uploadMaxBytesPerMinute: number;
+  uploadBackoffOn429Multiplier: number;
 }
 
 export interface LoggingConfig {

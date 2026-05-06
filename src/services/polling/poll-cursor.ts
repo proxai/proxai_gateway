@@ -1,4 +1,6 @@
 import { collectCursorFile, defaultCursorUserRoot, discoverCursorFiles } from 'sources/cursor';
+import { hasAnyCursor } from 'services/buffer';
+import { SOURCE_NAME_CURSOR } from 'services/polling/polling.constants.ts';
 import type {
   SourcePoller,
   SourcePollerContext,
@@ -7,14 +9,20 @@ import type {
 
 export interface CursorSourcePollerOptions {
   baseDir?: string;
+  initialScanWindowDays?: number;
 }
 
 export function makeCursorSourcePoller(options: CursorSourcePollerOptions = {}): SourcePoller {
   const baseDir = options.baseDir ?? defaultCursorUserRoot();
-  return (ctx) => pollCursor(ctx, baseDir);
+  const initialScanWindowDays = options.initialScanWindowDays;
+  return (ctx) => pollCursor(ctx, baseDir, initialScanWindowDays);
 }
 
-async function pollCursor(ctx: SourcePollerContext, baseDir: string): Promise<SourcePollerResult> {
+async function pollCursor(
+  ctx: SourcePollerContext,
+  baseDir: string,
+  initialScanWindowDays: number | undefined,
+): Promise<SourcePollerResult> {
   const result: SourcePollerResult = {
     filesProcessed: 0,
     capturedBatches: 0,
@@ -22,9 +30,11 @@ async function pollCursor(ctx: SourcePollerContext, baseDir: string): Promise<So
     errors: [],
   };
 
+  const minimumMtime = resolveMinimumMtime(ctx, initialScanWindowDays);
+
   let files;
   try {
-    files = await discoverCursorFiles(baseDir);
+    files = await discoverCursorFiles(baseDir, { minimumMtime });
   } catch (err) {
     result.errors.push({
       sourcePath: baseDir,
@@ -44,4 +54,14 @@ async function pollCursor(ctx: SourcePollerContext, baseDir: string): Promise<So
   }
 
   return result;
+}
+
+function resolveMinimumMtime(
+  ctx: SourcePollerContext,
+  initialScanWindowDays: number | undefined,
+): Date | null {
+  if (ctx.minimumMtimeOverride !== undefined) return ctx.minimumMtimeOverride;
+  if (initialScanWindowDays === undefined || initialScanWindowDays <= 0) return null;
+  if (hasAnyCursor(ctx.buffer, SOURCE_NAME_CURSOR)) return null;
+  return new Date(Date.now() - initialScanWindowDays * 24 * 60 * 60 * 1000);
 }

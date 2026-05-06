@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
-import { getCursor, openInMemoryBufferDb, setCursor, type CursorKey } from 'services/buffer';
+import {
+  getCursor,
+  hasAnyCursor,
+  openInMemoryBufferDb,
+  setCursor,
+  type CursorKey,
+} from 'services/buffer';
 
 let db: Database;
 
@@ -131,4 +137,38 @@ test('null inode and null table map to sentinels in storage', () => {
     watermarkTable: null,
   });
   expect(state?.watermarkEnd).toBe(50);
+});
+
+test('hasAnyCursor returns false on an empty cursor table', () => {
+  expect(hasAnyCursor(db, 'claude-code')).toBe(false);
+  expect(hasAnyCursor(db, 'cursor')).toBe(false);
+  expect(hasAnyCursor(db, 'codex')).toBe(false);
+});
+
+test('hasAnyCursor returns true once a cursor exists for the app', () => {
+  setCursor(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'a'.repeat(64),
+    sourcePath: '/path',
+    sourceInode: 1,
+    watermarkTable: null,
+    watermarkEnd: 100,
+  });
+  expect(hasAnyCursor(db, 'claude-code')).toBe(true);
+  // unrelated apps still report no cursor
+  expect(hasAnyCursor(db, 'cursor')).toBe(false);
+  expect(hasAnyCursor(db, 'codex')).toBe(false);
+});
+
+test('hasAnyCursor scopes to source app, not to a specific path', () => {
+  setCursor(db, {
+    sourceApp: 'cursor',
+    sourcePathHash: 'a'.repeat(64),
+    sourcePath: '/some/state.vscdb',
+    sourceInode: null,
+    watermarkTable: null,
+    watermarkEnd: 5,
+  });
+  expect(hasAnyCursor(db, 'cursor')).toBe(true);
+  expect(hasAnyCursor(db, 'claude-code')).toBe(false);
 });

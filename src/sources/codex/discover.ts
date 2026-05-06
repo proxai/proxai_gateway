@@ -17,10 +17,22 @@ export function defaultCodexHome(): string {
   return join(homedir(), CODEX_HOME_SUBPATH);
 }
 
+export interface DiscoverCodexOptions {
+  /**
+   * Skip files whose mtime is older than this Date. When `null` or omitted,
+   * no cap is applied. The poller passes a value only on a fresh install
+   * (no cursors yet); once cursors exist, those positions become the lower
+   * bound and the cap is skipped.
+   */
+  minimumMtime?: Date | null;
+}
+
 export async function discoverCodexRolloutFiles(
   baseDir: string = defaultCodexHome(),
+  options: DiscoverCodexOptions = {},
 ): Promise<DiscoveredCodexRolloutFile[]> {
   const found: DiscoveredCodexRolloutFile[] = [];
+  const minMtimeMs = options.minimumMtime?.getTime() ?? null;
 
   const baseStat = await statFile(baseDir);
   if (!baseStat.exists) return found;
@@ -30,6 +42,7 @@ export async function discoverCodexRolloutFiles(
     const sourcePath = join(baseDir, relativePath);
     const stat = await statFile(sourcePath);
     if (!stat.exists) continue;
+    if (minMtimeMs !== null && stat.mtimeMs < minMtimeMs) continue;
     found.push({
       sourcePath,
       sourcePathHash: sha256Hex(sourcePath),
@@ -44,9 +57,11 @@ export async function discoverCodexRolloutFiles(
 
 export async function discoverCodexStateSqlite(
   baseDir: string = defaultCodexHome(),
+  options: DiscoverCodexOptions = {},
 ): Promise<DiscoveredCodexStateFile | null> {
   const baseStat = await statFile(baseDir);
   if (!baseStat.exists) return null;
+  const minMtimeMs = options.minimumMtime?.getTime() ?? null;
 
   const glob = new Bun.Glob(CODEX_STATE_GLOB);
   const candidates: string[] = [];
@@ -61,6 +76,7 @@ export async function discoverCodexStateSqlite(
   const sourcePath = join(baseDir, highest);
   const stat = await statFile(sourcePath);
   if (!stat.exists) return null;
+  if (minMtimeMs !== null && stat.mtimeMs < minMtimeMs) return null;
 
   return {
     sourcePath,

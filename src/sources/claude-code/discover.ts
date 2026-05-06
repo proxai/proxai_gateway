@@ -13,10 +13,22 @@ export function defaultClaudeCodeProjectsRoot(): string {
   return join(homedir(), CLAUDE_CODE_PROJECTS_SUBPATH);
 }
 
+export interface DiscoverClaudeCodeOptions {
+  /**
+   * Skip files whose mtime is older than this Date. When `null` or omitted,
+   * no cap is applied. The poller passes a value only on a fresh install
+   * (no cursors yet); once cursors exist, those positions become the lower
+   * bound and the cap is skipped.
+   */
+  minimumMtime?: Date | null;
+}
+
 export async function discoverClaudeCodeFiles(
   baseDir: string = defaultClaudeCodeProjectsRoot(),
+  options: DiscoverClaudeCodeOptions = {},
 ): Promise<DiscoveredClaudeCodeFile[]> {
   const found: DiscoveredClaudeCodeFile[] = [];
+  const minMtimeMs = options.minimumMtime?.getTime() ?? null;
 
   if (!(await Bun.file(baseDir).exists())) {
     const stat = await statFile(baseDir);
@@ -29,6 +41,7 @@ export async function discoverClaudeCodeFiles(
     const sourcePath = join(baseDir, relativePath);
     const stat = await statFile(sourcePath);
     if (!stat.exists) continue;
+    if (minMtimeMs !== null && stat.mtimeMs < minMtimeMs) continue;
 
     found.push({
       sourcePath,

@@ -16,10 +16,14 @@ import {
   DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
   DEFAULT_BUFFER_SOFT_RESUME_BYTES,
   DEFAULT_FAILED_RETENTION_DAYS,
+  DEFAULT_INITIAL_SCAN_WINDOW_DAYS,
   DEFAULT_POLL_INTERVAL_SEC,
   DEFAULT_RECEIPT_RETENTION_DAYS,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
+  DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
+  DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
+  DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
 } from 'services/config';
 import type { GatewayConfig } from 'services/config';
 
@@ -144,6 +148,10 @@ async function writeExistingConfig(
       failedRetentionDays: DEFAULT_FAILED_RETENTION_DAYS,
       bufferSoftPauseBytes: DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
       bufferSoftResumeBytes: DEFAULT_BUFFER_SOFT_RESUME_BYTES,
+      initialScanWindowDays: DEFAULT_INITIAL_SCAN_WINDOW_DAYS,
+      uploadMaxBatchesPerSec: DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
+      uploadMaxBytesPerMinute: DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
+      uploadBackoffOn429Multiplier: DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
     },
     logging: { level: 'info', logDir },
     staleBinary: {

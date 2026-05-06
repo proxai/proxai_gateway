@@ -12,27 +12,33 @@ export interface DefaultSourcesOptions {
   claudeCodeBaseDir?: string;
   cursorBaseDir?: string;
   codexBaseDir?: string;
+  initialScanWindowDays?: number;
 }
 
 export function buildDefaultSources(options: DefaultSourcesOptions = {}): RegisteredSource[] {
+  const window = options.initialScanWindowDays;
   return [
     {
       name: SOURCE_NAME_CLAUDE_CODE,
-      poll: makeClaudeCodeSourcePoller(
-        options.claudeCodeBaseDir !== undefined ? { baseDir: options.claudeCodeBaseDir } : {},
-      ),
+      poll: makeClaudeCodeSourcePoller(buildPollerOptions(options.claudeCodeBaseDir, window)),
     },
     {
       name: SOURCE_NAME_CURSOR,
-      poll: makeCursorSourcePoller(
-        options.cursorBaseDir !== undefined ? { baseDir: options.cursorBaseDir } : {},
-      ),
+      poll: makeCursorSourcePoller(buildPollerOptions(options.cursorBaseDir, window)),
     },
     {
       name: SOURCE_NAME_CODEX,
-      poll: makeCodexSourcePoller(
-        options.codexBaseDir !== undefined ? { baseDir: options.codexBaseDir } : {},
-      ),
+      poll: makeCodexSourcePoller(buildPollerOptions(options.codexBaseDir, window)),
     },
   ];
+}
+
+function buildPollerOptions(
+  baseDir: string | undefined,
+  initialScanWindowDays: number | undefined,
+): { baseDir?: string; initialScanWindowDays?: number } {
+  const out: { baseDir?: string; initialScanWindowDays?: number } = {};
+  if (baseDir !== undefined) out.baseDir = baseDir;
+  if (initialScanWindowDays !== undefined) out.initialScanWindowDays = initialScanWindowDays;
+  return out;
 }

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { countByStatus, openInMemoryBufferDb } from 'services/buffer';
+import { countByStatus, openInMemoryBufferDb, setCursor } from 'services/buffer';
 import { makeClaudeCodeSourcePoller } from 'services/polling/poll-claude-code.ts';
 
 let dir: string;
@@ -96,4 +96,82 @@ test('aggregates per-file collect errors into result.errors', async () => {
   const result = await poller({ buffer: closedBuffer, gatewayVersion: 'gw-0.1' });
   expect(result.filesProcessed).toBe(1);
   expect(result.errors.length).toBeGreaterThan(0);
+});
+
+test('initial-scan window: skips files older than cap when no cursors exist', async () => {
+  const oldPath = await seedSession('proj', 'old.jsonl', '{"type":"user","text":"old"}\n');
+  await seedSession('proj', 'fresh.jsonl', '{"type":"user","text":"fresh"}\n');
+  const oldEpoch = new Date('2024-01-01T00:00:00Z');
+  await utimes(oldPath, oldEpoch, oldEpoch);
+
+  const poller = makeClaudeCodeSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
+  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  // Only the fresh file is discovered and captured.
+  expect(result.filesProcessed).toBe(1);
+  expect(result.capturedBatches).toBe(1);
+});
+
+test('initial-scan window: cap skipped once cursors exist for the app', async () => {
+  const oldPath = await seedSession('proj', 'old.jsonl', '{"type":"user","text":"old"}\n');
+  await seedSession('proj', 'fresh.jsonl', '{"type":"user","text":"fresh"}\n');
+  const oldEpoch = new Date('2024-01-01T00:00:00Z');
+  await utimes(oldPath, oldEpoch, oldEpoch);
+
+  // Seed an unrelated cursor — sufficient to mark "claude-code has cursors".
+  setCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'b'.repeat(64),
+    sourcePath: '/unrelated.jsonl',
+    sourceInode: 999,
+    watermarkTable: null,
+    watermarkEnd: 1,
+  });
+
+  const poller = makeClaudeCodeSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
+  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  // Both old and fresh files are discovered and captured.
+  expect(result.filesProcessed).toBe(2);
+  expect(result.capturedBatches).toBe(2);
+});
+
+test('initial-scan window: minimumMtimeOverride forces an explicit cap', async () => {
+  const oldPath = await seedSession('proj', 'old.jsonl', '{"type":"user","text":"old"}\n');
+  await seedSession('proj', 'fresh.jsonl', '{"type":"user","text":"fresh"}\n');
+  const oldEpoch = new Date('2024-01-01T00:00:00Z');
+  await utimes(oldPath, oldEpoch, oldEpoch);
+
+  // Even with cursors present (cap normally suppressed), the override wins.
+  setCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'b'.repeat(64),
+    sourcePath: '/unrelated.jsonl',
+    sourceInode: 999,
+    watermarkTable: null,
+    watermarkEnd: 1,
+  });
+
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const poller = makeClaudeCodeSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    minimumMtimeOverride: cutoff,
+  });
+  expect(result.filesProcessed).toBe(1);
+  expect(result.capturedBatches).toBe(1);
+});
+
+test('initial-scan window: minimumMtimeOverride=null disables the cap on a fresh buffer', async () => {
+  const oldPath = await seedSession('proj', 'old.jsonl', '{"type":"user","text":"old"}\n');
+  await seedSession('proj', 'fresh.jsonl', '{"type":"user","text":"fresh"}\n');
+  const oldEpoch = new Date('2024-01-01T00:00:00Z');
+  await utimes(oldPath, oldEpoch, oldEpoch);
+
+  const poller = makeClaudeCodeSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    minimumMtimeOverride: null,
+  });
+  expect(result.filesProcessed).toBe(2);
 });

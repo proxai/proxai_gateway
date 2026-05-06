@@ -120,6 +120,9 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
       gatewayVersion: ctx.gatewayVersion,
     };
     if (sourceLog !== undefined) sourceCtx.logger = sourceLog;
+    if (ctx.minimumMtimeOverride !== undefined) {
+      sourceCtx.minimumMtimeOverride = ctx.minimumMtimeOverride;
+    }
     const result = await source.poll(sourceCtx);
     sourceResults[source.name] = result;
     sourceLog?.info(
@@ -148,6 +151,7 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     authFailedSentinelPath: ctx.authFailedSentinelPath,
   };
   if (log !== undefined) uploaderCtx.logger = log;
+  if (ctx.pacer !== undefined) uploaderCtx.pacer = ctx.pacer;
   const drainResult = await drainBuffer(uploaderCtx);
   log?.info(
     {

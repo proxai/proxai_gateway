@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -77,4 +77,32 @@ test('returns sha256 source_path_hash matching the absolute path', async () => {
 
   const found = await discoverCursorFiles(dir);
   expect(found[0]!.sourcePathHash).toMatch(/^[a-f0-9]{64}$/);
+});
+
+test('skips files older than minimumMtime, keeps newer ones', async () => {
+  await mkdir(join(dir, 'globalStorage'), { recursive: true });
+  const oldPath = join(dir, 'globalStorage', 'state.vscdb');
+  await writeFile(oldPath, 'old');
+  const oldEpoch = new Date('2024-01-01T00:00:00Z');
+  await utimes(oldPath, oldEpoch, oldEpoch);
+
+  await mkdir(join(dir, 'workspaceStorage', 'ws-fresh'), { recursive: true });
+  const newPath = join(dir, 'workspaceStorage', 'ws-fresh', 'state.vscdb');
+  await writeFile(newPath, 'new');
+
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const found = await discoverCursorFiles(dir, { minimumMtime: cutoff });
+  expect(found).toHaveLength(1);
+  expect(found[0]!.sourcePath).toBe(newPath);
+});
+
+test('null minimumMtime means no cap (all files included)', async () => {
+  await mkdir(join(dir, 'globalStorage'), { recursive: true });
+  const oldPath = join(dir, 'globalStorage', 'state.vscdb');
+  await writeFile(oldPath, 'old');
+  const oldEpoch = new Date('2024-01-01T00:00:00Z');
+  await utimes(oldPath, oldEpoch, oldEpoch);
+
+  const found = await discoverCursorFiles(dir, { minimumMtime: null });
+  expect(found).toHaveLength(1);
 });

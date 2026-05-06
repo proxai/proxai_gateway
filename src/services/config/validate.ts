@@ -6,10 +6,14 @@ import {
   DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
   DEFAULT_BUFFER_SOFT_RESUME_BYTES,
   DEFAULT_FAILED_RETENTION_DAYS,
+  DEFAULT_INITIAL_SCAN_WINDOW_DAYS,
   DEFAULT_POLL_INTERVAL_SEC,
   DEFAULT_RECEIPT_RETENTION_DAYS,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
+  DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
+  DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
+  DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
   MAX_POLL_INTERVAL_SEC,
   MIN_POLL_INTERVAL_SEC,
   NEST_INGEST_URL,
@@ -113,6 +117,30 @@ function validateCapture(raw: unknown): CaptureConfig {
     ),
     bufferSoftPauseBytes,
     bufferSoftResumeBytes,
+    initialScanWindowDays: optionalNumber(
+      r['initial_scan_window_days'],
+      DEFAULT_INITIAL_SCAN_WINDOW_DAYS,
+      'capture.initial_scan_window_days',
+      0,
+    ),
+    uploadMaxBatchesPerSec: optionalNumber(
+      r['upload_max_batches_per_sec'],
+      DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
+      'capture.upload_max_batches_per_sec',
+      Number.MIN_VALUE,
+    ),
+    uploadMaxBytesPerMinute: optionalNumber(
+      r['upload_max_bytes_per_minute'],
+      DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
+      'capture.upload_max_bytes_per_minute',
+      1,
+    ),
+    uploadBackoffOn429Multiplier: optionalNumber(
+      r['upload_backoff_on_429_multiplier'],
+      DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
+      'capture.upload_backoff_on_429_multiplier',
+      1,
+    ),
   };
 }
 

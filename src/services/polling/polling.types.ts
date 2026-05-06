@@ -3,12 +3,18 @@ import type { Database } from 'bun:sqlite';
 import type { Logger } from 'core/log';
 import type { PendingPressureResult, PruneResult } from 'services/buffer';
 import type { HttpClient } from 'services/http';
-import type { DrainResult } from 'services/uploader';
+import type { DrainResult, Pacer } from 'services/uploader';
 
 export interface SourcePollerContext {
   buffer: Database;
   gatewayVersion: string;
   logger?: Logger;
+  /**
+   * Optional explicit lower bound on file mtime. When set, overrides the
+   * poller's cursor-based decision to apply (or skip) the initial-scan
+   * window. Used by the `backfill` command to ingest extended history.
+   */
+  minimumMtimeOverride?: Date | null;
 }
 
 export interface SourcePollerError {
@@ -43,6 +49,10 @@ export interface BufferRetentionPolicy {
   softResumeBytes: number;
 }
 
+export interface CapturePolicy {
+  initialScanWindowDays: number;
+}
+
 export interface PollCycleContext {
   buffer: Database;
   http: HttpClient;
@@ -55,7 +65,15 @@ export interface PollCycleContext {
   installedAt: string;
   staleBinary: StaleBinaryThresholds;
   bufferPolicy: BufferRetentionPolicy;
+  capturePolicy: CapturePolicy;
+  pacer?: Pacer;
   logger?: Logger;
+  /**
+   * If set, overrides the per-source cursor-based decision and forces this
+   * exact `Date` (or `null` for no cap) on every source's discover phase.
+   * Used by the `backfill` command for opt-in extended history ingest.
+   */
+  minimumMtimeOverride?: Date | null;
 }
 
 export interface PollCycleResult {

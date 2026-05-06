@@ -10,6 +10,7 @@ import type { GatewayConfig } from 'services/config';
 import { HttpClient } from 'services/http';
 import { buildDefaultSources, runPollLoop, syncServerWatermarks } from 'services/polling';
 import type { PollCycleContext, PollCycleResult, RegisteredSource } from 'services/polling';
+import { createPacer } from 'services/uploader';
 
 export interface RunCommandDeps {
   output: OutputSink;
@@ -110,12 +111,24 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
       abortSignal: deps.abortSignal,
     };
     if (deps.onCycleComplete !== undefined) loopOptions.onCycleComplete = deps.onCycleComplete;
+    // Per-daemon pacer: rate-limit state must accumulate across drain calls so
+    // a sustained 429 streak applies the right backoff regardless of where in
+    // the poll cycle the throttling started.
+    const pacer = createPacer({
+      maxBatchesPerSec: deps.config.capture.uploadMaxBatchesPerSec,
+      maxBytesPerMinute: deps.config.capture.uploadMaxBytesPerMinute,
+      backoffMultiplier: deps.config.capture.uploadBackoffOn429Multiplier,
+    });
     const cycleCtx: PollCycleContext = {
       buffer,
       http,
       hostId: deps.config.account.hostId,
       gatewayVersion: deps.gatewayVersion,
-      sources: deps.sources ?? buildDefaultSources({}),
+      sources:
+        deps.sources ??
+        buildDefaultSources({
+          initialScanWindowDays: deps.config.capture.initialScanWindowDays,
+        }),
       pauseSentinelPath: deps.pauseSentinelPath,
       authFailedSentinelPath: deps.authFailedSentinelPath,
       bufferFullSentinelPath: deps.bufferFullSentinelPath,
@@ -130,6 +143,10 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
         softPauseBytes: deps.config.capture.bufferSoftPauseBytes,
         softResumeBytes: deps.config.capture.bufferSoftResumeBytes,
       },
+      capturePolicy: {
+        initialScanWindowDays: deps.config.capture.initialScanWindowDays,
+      },
+      pacer,
       logger,
     };
     await runPollLoop(cycleCtx, loopOptions);

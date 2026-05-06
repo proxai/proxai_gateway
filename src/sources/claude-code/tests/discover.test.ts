@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -72,4 +72,45 @@ test('returns sha256 source_path_hash matching the absolute path', async () => {
 
   const found = await discoverClaudeCodeFiles(dir);
   expect(found[0]!.sourcePathHash).toMatch(/^[a-f0-9]{64}$/);
+});
+
+test('skips files older than minimumMtime, keeps newer ones', async () => {
+  await mkdir(join(dir, 'project-a'), { recursive: true });
+  const oldPath = join(dir, 'project-a', 'old.jsonl');
+  const newPath = join(dir, 'project-a', 'new.jsonl');
+  await writeFile(oldPath, '{"a":1}\n');
+  await writeFile(newPath, '{"b":2}\n');
+
+  const oldEpoch = new Date('2024-01-01T00:00:00Z');
+  const newEpoch = new Date();
+  await utimes(oldPath, oldEpoch, oldEpoch);
+  await utimes(newPath, newEpoch, newEpoch);
+
+  // 30 days ago — old file (2024) is well before; new file is now
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const found = await discoverClaudeCodeFiles(dir, { minimumMtime: cutoff });
+  expect(found).toHaveLength(1);
+  expect(found[0]!.sourcePath).toBe(newPath);
+});
+
+test('null minimumMtime means no cap (all files included)', async () => {
+  await mkdir(join(dir, 'project-a'), { recursive: true });
+  const oldPath = join(dir, 'project-a', 'old.jsonl');
+  await writeFile(oldPath, '{"a":1}\n');
+  const oldEpoch = new Date('2024-01-01T00:00:00Z');
+  await utimes(oldPath, oldEpoch, oldEpoch);
+
+  const found = await discoverClaudeCodeFiles(dir, { minimumMtime: null });
+  expect(found).toHaveLength(1);
+});
+
+test('omitting options means no cap (defaults preserved)', async () => {
+  await mkdir(join(dir, 'project-a'), { recursive: true });
+  const oldPath = join(dir, 'project-a', 'old.jsonl');
+  await writeFile(oldPath, '{"a":1}\n');
+  const oldEpoch = new Date('2024-01-01T00:00:00Z');
+  await utimes(oldPath, oldEpoch, oldEpoch);
+
+  const found = await discoverClaudeCodeFiles(dir);
+  expect(found).toHaveLength(1);
 });

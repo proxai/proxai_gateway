@@ -57,6 +57,7 @@ function makeContext(sources: RegisteredSource[]): PollCycleContext {
       softPauseBytes: 700 * 1024 * 1024,
       softResumeBytes: 600 * 1024 * 1024,
     },
+    capturePolicy: { initialScanWindowDays: 30 },
   };
 }
 
