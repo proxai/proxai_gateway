@@ -25,6 +25,9 @@ export async function drainBuffer(
     const batch = nextPendingBatch(ctx.db);
     if (batch === null) break;
 
+    if (ctx.pacer !== undefined) {
+      await ctx.pacer.acquire(batch.body.byteLength);
+    }
     const outcome = await uploadBatch(ctx, batch);
     result.attempted++;
 
@@ -39,6 +42,12 @@ export async function drainBuffer(
     if (outcome.kind === 'recovered') {
       result.recovered++;
       continue;
+    }
+    if (ctx.pacer !== undefined) {
+      if (outcome.retryAfterMs !== null && outcome.retryAfterMs > 0) {
+        ctx.pacer.notifyRetryAfter(outcome.retryAfterMs);
+        ctx.pacer.notify429();
+      }
     }
     result.retriable++;
     result.rateLimitedRetryAfterMs = outcome.retryAfterMs;

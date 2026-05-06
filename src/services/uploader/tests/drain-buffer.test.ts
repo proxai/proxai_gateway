@@ -3,7 +3,7 @@ import type { Database } from 'bun:sqlite';
 
 import { getBatch, getReceipt, insertBatch, openInMemoryBufferDb } from 'services/buffer';
 import { drainBuffer } from 'services/uploader';
-import type { UploaderContext } from 'services/uploader';
+import type { Pacer, UploaderContext } from 'services/uploader';
 import {
   createTestHttpClient,
   emptyResponse,
@@ -157,4 +157,88 @@ test('drains in oldest-first order', async () => {
   );
   await drainBuffer(ctx);
   expect(order).toEqual(ids);
+});
+
+interface RecordedAcquire {
+  bytes: number;
+}
+
+interface PacerSpy {
+  pacer: Pacer;
+  acquires: RecordedAcquire[];
+  retryAfters: number[];
+  notify429Count: { value: number };
+}
+
+function makePacerSpy(): PacerSpy {
+  const acquires: RecordedAcquire[] = [];
+  const retryAfters: number[] = [];
+  const notify429Count = { value: 0 };
+  const pacer: Pacer = {
+    acquire: async (bytes: number) => {
+      acquires.push({ bytes });
+    },
+    notifyRetryAfter: (ms: number) => {
+      retryAfters.push(ms);
+    },
+    notify429: () => {
+      notify429Count.value++;
+    },
+  };
+  return { pacer, acquires, retryAfters, notify429Count };
+}
+
+test('pacer.acquire is called once per batch with the body byte length', async () => {
+  await insertN(3);
+  const spy = makePacerSpy();
+  const ctx: UploaderContext = {
+    db,
+    http: createTestHttpClient(
+      mockFetch((call) => {
+        const parsed = JSON.parse(call.init.body as string);
+        return jsonResponse({
+          capture_id: parsed.capture_id,
+          accepted: true,
+          idempotent: false,
+        });
+      }),
+    ),
+    hostId: TEST_HOST_ID,
+    pacer: spy.pacer,
+  };
+  await drainBuffer(ctx);
+  expect(spy.acquires.length).toBe(3);
+  for (const a of spy.acquires) {
+    expect(a.bytes).toBeGreaterThan(0);
+  }
+});
+
+test('rate-limited response triggers notifyRetryAfter and notify429', async () => {
+  await insertN(2);
+  const spy = makePacerSpy();
+  const ctx: UploaderContext = {
+    db,
+    http: createTestHttpClient(mockFetch(() => emptyResponse(429, { 'Retry-After': '15' }))),
+    hostId: TEST_HOST_ID,
+    pacer: spy.pacer,
+  };
+  const result = await drainBuffer(ctx);
+  expect(result.retriable).toBe(1);
+  expect(spy.retryAfters).toEqual([15_000]);
+  expect(spy.notify429Count.value).toBe(1);
+});
+
+test('non-429 retriable failures do not trigger notify429', async () => {
+  await insertN(1);
+  const spy = makePacerSpy();
+  const ctx: UploaderContext = {
+    db,
+    http: createTestHttpClient(mockFetch(() => emptyResponse(503))),
+    hostId: TEST_HOST_ID,
+    pacer: spy.pacer,
+  };
+  const result = await drainBuffer(ctx);
+  expect(result.retriable).toBe(1);
+  expect(spy.retryAfters).toEqual([]);
+  expect(spy.notify429Count.value).toBe(0);
 });

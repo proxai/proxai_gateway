@@ -2,6 +2,7 @@ import type { Database } from 'bun:sqlite';
 
 import type { Logger } from 'core/log';
 import type { HttpClient } from 'services/http';
+import type { Pacer } from 'services/uploader/pacer.ts';
 
 export interface UploaderContext {
   db: Database;
@@ -9,6 +10,7 @@ export interface UploaderContext {
   hostId: string;
   authFailedSentinelPath?: string;
   logger?: Logger;
+  pacer?: Pacer;
 }
 
 export interface AcceptedOutcome {
