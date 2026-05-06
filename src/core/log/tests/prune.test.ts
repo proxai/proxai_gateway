@@ -89,3 +89,23 @@ test('day count and size cap work together', async () => {
   expect(result.retainedCount).toBeLessThanOrEqual(7);
   expect(result.retainedBytes).toBeLessThanOrEqual(2000);
 });
+
+test.skipIf(process.platform === 'win32')(
+  'skips matched names whose stat() throws (broken symlink)',
+  async () => {
+    const { symlink } = await import('node:fs/promises');
+    // Create a broken symlink whose name matches the structured-log pattern.
+    // readdir will return it but stat() throws ENOENT — the catch should
+    // skip it without aborting the scan.
+    const linkPath = join(dir, 'structured.2026-05-01.1.log');
+    await symlink('/nonexistent/target/path', linkPath);
+    await seed('structured.2026-05-02.1.log', 100);
+    const result = await pruneLogDirectory(dir, {
+      retentionDays: 100,
+      totalSizeCapBytes: 100_000,
+    });
+    // Only the real file remains in retainedCount; the broken symlink is
+    // silently skipped during the scan.
+    expect(result.retainedCount).toBe(1);
+  },
+);

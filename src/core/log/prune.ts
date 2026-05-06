@@ -54,6 +54,7 @@ export async function pruneLogDirectory(
   // relaxed permissions. setMode is a no-op on win32.
   await Promise.all(
     files.map((f) =>
+      /* c8 ignore next 3 */ // best-effort hardening: catch fires only when chmod fails (e.g. file removed during scan); not exercisable deterministically in tests
       setMode(f.path, 0o600).catch(() => {
         // best-effort hardening; missing/unstattable files are skipped
       }),

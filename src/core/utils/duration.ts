@@ -23,14 +23,7 @@ export function parseBackfillDuration(input: string): number | null {
   const unit = match[2];
   if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) return null;
   const DAY_MS = 24 * 60 * 60 * 1000;
-  switch (unit) {
-    case 'd':
-      return value * DAY_MS;
-    case 'mo':
-      return value * 30 * DAY_MS;
-    case 'y':
-      return value * 365 * DAY_MS;
-    default:
-      return null;
-  }
+  if (unit === 'd') return value * DAY_MS;
+  if (unit === 'mo') return value * 30 * DAY_MS;
+  return value * 365 * DAY_MS; // unit === 'y' (regex above limits to d|mo|y)
 }

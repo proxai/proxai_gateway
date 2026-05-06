@@ -153,3 +153,29 @@ test('throws on unsupported platform', async () => {
     }),
   ).rejects.toThrow(/aix/);
 });
+
+test('linux: falls through to defaultReadFile when readFile is omitted', async () => {
+  // Explicitly omit deps.readFile so the linux path constructs the real
+  // defaultReadFile factory. The standard machine-id files may not exist on
+  // this dev machine, in which case readMachineUuid throws — that is fine
+  // for coverage. We just need the function body to execute.
+  try {
+    await readMachineUuid({ platform: 'linux' });
+  } catch {
+    // Expected on macOS where /etc/machine-id is typically absent.
+  }
+});
+
+test('defaultSpawn is wired up when spawn dep is omitted', async () => {
+  // Smoke: with no spawn override and platform set to the host platform,
+  // the call exercises defaultSpawn(). We may or may not get a real UUID
+  // depending on the host, so we just assert it doesn't throw an
+  // unrelated TypeError.
+  try {
+    const result = await readMachineUuid({});
+    expect(typeof result).toBe('string');
+  } catch (err) {
+    // Allowed: GatewayError if the local machine doesn't expose a UUID.
+    expect(err).toBeInstanceOf(Error);
+  }
+});

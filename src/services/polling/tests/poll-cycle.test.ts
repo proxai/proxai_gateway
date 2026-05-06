@@ -323,7 +323,7 @@ interface FakeLogEntry {
   msg: string;
 }
 
-function makeFakeLogger(entries: FakeLogEntry[]): PollCycleContext['logger'] {
+function makeFakeLogger(entries: FakeLogEntry[]): NonNullable<PollCycleContext['logger']> {
   const logger = {
     child: () => logger,
     fatal: () => undefined,
@@ -339,7 +339,7 @@ function makeFakeLogger(entries: FakeLogEntry[]): PollCycleContext['logger'] {
     debug: () => undefined,
     trace: () => undefined,
   };
-  return logger as unknown as PollCycleContext['logger'];
+  return logger as unknown as NonNullable<PollCycleContext['logger']>;
 }
 
 test('cycle logs soft_resume info at cycle-start when sentinel exists and pending is below resume', async () => {
@@ -420,8 +420,8 @@ function makeQueryThrowingBuffer(
   // which throws when shouldThrowOn(sql) is true. Wraps method bindings so
   // bun:sqlite's internal `this` is preserved.
   const fake: Record<string, unknown> = {};
-  for (const key of Object.keys(realBuffer) as (keyof Database)[]) {
-    fake[key] = realBuffer[key];
+  for (const key of Object.keys(realBuffer)) {
+    fake[key] = (realBuffer as unknown as Record<string, unknown>)[key];
   }
   for (const key of [
     'query',

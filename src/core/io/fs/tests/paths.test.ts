@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test';
 import { homedir } from 'node:os';
 
 import {
+  authFailedSentinelPath,
   bufferDbPath,
+  bufferFullSentinelPath,
   configDir,
   configFilePath,
   consentSentinelPath,
@@ -29,6 +31,10 @@ test('derived paths live under configDir', () => {
   expect(configFilePath().startsWith(root)).toBe(true);
   expect(pausedSentinelPath().startsWith(root)).toBe(true);
   expect(consentSentinelPath().startsWith(root)).toBe(true);
+  expect(authFailedSentinelPath().startsWith(root)).toBe(true);
+  expect(bufferFullSentinelPath().startsWith(root)).toBe(true);
+  expect(authFailedSentinelPath()).toContain('AUTH_FAILED');
+  expect(bufferFullSentinelPath()).toContain('BUFFER_FULL');
 });
 
 test('expandHome expands leading ~/', () => {

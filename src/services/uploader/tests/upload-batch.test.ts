@@ -490,7 +490,7 @@ test('AuthError + verify-key throws non-Error → retriable, log uses typeof and
       http,
       hostId: TEST_HOST_ID,
       authFailedSentinelPath: sentinelPath,
-      logger: fakeLogger as unknown as UploaderContext['logger'],
+      logger: fakeLogger as unknown as NonNullable<UploaderContext['logger']>,
     };
     const outcome = await uploadBatch(ctx, stored);
 
@@ -541,7 +541,7 @@ test('AuthError + verify-key returns success: false → fatal even when sentinel
     http,
     hostId: TEST_HOST_ID,
     authFailedSentinelPath: '/dev/null/AUTH_FAILED',
-    logger: fakeLogger as unknown as UploaderContext['logger'],
+    logger: fakeLogger as unknown as NonNullable<UploaderContext['logger']>,
   };
   const outcome = await uploadBatch(ctx, stored);
 

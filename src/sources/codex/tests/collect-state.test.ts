@@ -515,3 +515,51 @@ test('null last_seen columns on existing codex cursor do not trigger size/page_c
   expect(batch.sourcePath).toBe(file.sourcePath);
   expect(batch.sourcePathHash).toBe(file.sourcePathHash);
 });
+
+test('second poll with no new rows refreshes lastSeenSize/PageCount on the existing cursor', async () => {
+  // First poll inserts the rows and creates per-table cursors with their
+  // current size/page_count.
+  const file = await makeStateDb({
+    threads: [{ id: 't1', cli_version: '0.1.0' }],
+    dynamicTools: [{ thread_id: 't1', position: 0, name: 'a' }],
+  });
+  await collectCodexState(file, ctx(buffer));
+
+  const before = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: 'threads',
+  });
+  expect(before).not.toBeNull();
+  const beforeWatermark = before!.watermarkEnd;
+  expect(beforeWatermark).toBeGreaterThan(0);
+
+  // Pad the same db with a no-op page change so size/page_count differs on
+  // second poll without affecting any tracked table's rowids.
+  const db = new Database(file.sourcePath);
+  db.run('CREATE TABLE __padding (k TEXT)');
+  for (let i = 0; i < 100; i++) {
+    db.run(`INSERT INTO __padding (k) VALUES ('${'x'.repeat(64)}-${i.toString()}')`);
+  }
+  db.close();
+
+  const refreshed = await statFile(file.sourcePath);
+  const refreshedFile: DiscoveredCodexStateFile = {
+    ...file,
+    sizeBytes: refreshed.exists ? refreshed.size : file.sizeBytes,
+  };
+
+  await collectCodexState(refreshedFile, ctx(buffer));
+
+  const after = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: 'threads',
+  });
+  expect(after).not.toBeNull();
+  // Watermark unchanged (no new rowids), but size/page-count refreshed.
+  expect(after!.watermarkEnd).toBe(beforeWatermark);
+  expect(after!.lastSeenSizeBytes).not.toBe(before!.lastSeenSizeBytes);
+});

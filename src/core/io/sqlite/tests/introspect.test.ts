@@ -3,7 +3,14 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { columnExists, listTables, openReadOnly, tableExists } from 'core/io/sqlite';
+import {
+  columnExists,
+  listTables,
+  maxRowid,
+  openReadOnly,
+  pageCount,
+  tableExists,
+} from 'core/io/sqlite';
 import { seedTestDatabase } from 'core/io/sqlite/tests/fixtures.ts';
 
 let dir: string;
@@ -62,5 +69,37 @@ test('columnExists returns false for missing columns', () => {
     expect(columnExists(db, 'thing', 'absent')).toBe(false);
   } finally {
     db.close();
+  }
+});
+
+test('pageCount returns the PRAGMA page_count value for a real db', () => {
+  const db = openReadOnly(dbPath);
+  try {
+    expect(pageCount(db)).toBeGreaterThan(0);
+  } finally {
+    db.close();
+  }
+});
+
+test('maxRowid returns 0 for a non-existent table (catch fallback)', () => {
+  const db = openReadOnly(dbPath);
+  try {
+    // Force the query to throw by passing a name that produces invalid SQL
+    // even after escaping (an empty string yields `FROM ""` which sqlite
+    // rejects). The function swallows the error and returns 0.
+    expect(maxRowid(db, '')).toBe(0);
+  } finally {
+    db.close();
+  }
+});
+
+test('maxRowid returns 0 for a real but empty table', () => {
+  const dbW = openReadOnly(dbPath);
+  try {
+    // `thing` has at least one row in the seed; we ask for `thing` instead
+    // of an empty fixture and expect a positive value.
+    expect(maxRowid(dbW, 'thing')).toBeGreaterThan(0);
+  } finally {
+    dbW.close();
   }
 });

@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import type { Database } from 'bun:sqlite';
+import { Database } from 'bun:sqlite';
+import type { Database as SqliteDatabase } from 'bun:sqlite';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { listTables, tableExists } from 'core/io/sqlite';
-import { BUFFER_TABLES, openInMemoryBufferDb } from 'services/buffer';
+import { columnExists, listTables, tableExists } from 'core/io/sqlite';
+import { BUFFER_TABLES, openBufferDb, openInMemoryBufferDb } from 'services/buffer';
 
-let db: Database;
+let db: SqliteDatabase;
 
 beforeEach(() => {
   db = openInMemoryBufferDb();
@@ -50,5 +54,40 @@ test('opening twice produces equivalent schemas (CREATE IF NOT EXISTS)', () => {
     expect(tableExists(second, BUFFER_TABLES.metadata)).toBe(true);
   } finally {
     second.close();
+  }
+});
+
+test('migrates pre-existing buffer DB by adding last_seen_size_bytes / last_seen_page_count', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'proxai-buffer-migrate-'));
+  try {
+    const path = join(dir, 'old-buffer.db');
+    // Hand-create a DB with the pre-vacuum-detection cursors schema (no
+    // last_seen_size_bytes, no last_seen_page_count).
+    const seed = new Database(path, { create: true });
+    seed.run(
+      `CREATE TABLE source_cursors (
+         source_app TEXT NOT NULL,
+         source_path_hash TEXT NOT NULL,
+         source_path TEXT NOT NULL,
+         source_inode INTEGER NOT NULL DEFAULT -1,
+         watermark_table TEXT NOT NULL DEFAULT '__none__',
+         watermark_end INTEGER NOT NULL DEFAULT 0,
+         last_polled_at TEXT NOT NULL,
+         consecutive_errors INTEGER NOT NULL DEFAULT 0,
+         PRIMARY KEY (source_app, source_path_hash, source_inode, watermark_table)
+       )`,
+    );
+    seed.close();
+
+    // Re-open via openBufferDb so the migration runs.
+    const opened = openBufferDb(path);
+    try {
+      expect(columnExists(opened, BUFFER_TABLES.cursors, 'last_seen_size_bytes')).toBe(true);
+      expect(columnExists(opened, BUFFER_TABLES.cursors, 'last_seen_page_count')).toBe(true);
+    } finally {
+      opened.close();
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });
