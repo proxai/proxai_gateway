@@ -26,8 +26,8 @@ export const DEFAULT_FAILED_RETENTION_DAYS = 30;
 export const DEFAULT_BUFFER_SOFT_PAUSE_BYTES = 700 * 1024 * 1024;
 export const DEFAULT_BUFFER_SOFT_RESUME_BYTES = 600 * 1024 * 1024;
 
-export const DEFAULT_STALE_WARN_DAYS = 90;
-export const DEFAULT_STALE_PAUSE_DAYS = 180;
+export const DEFAULT_STALE_WARN_DAYS = 30;
+export const DEFAULT_STALE_PAUSE_DAYS = 60;
 
 export const VALID_INSTALL_SOURCES: readonly InstallSource[] = [
   'bun',
