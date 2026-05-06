@@ -179,3 +179,37 @@ test('persists the wire-DTO fields needed by the uploader', async () => {
   expect(batch.gatewayVersion).toBe('@proxai/gateway 0.1.0');
   expect(batch.capturedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 });
+
+test('resets watermark when source_inode changes (file rotated/replaced)', async () => {
+  // First poll: capture a complete line under inode A and advance the cursor.
+  const file = await makeFile('{"a":1}\n');
+  const first = await collectClaudeCodeFile(file, ctx(buffer));
+  expect(first.capturedBatches).toBe(1);
+
+  // Same path, same hash, but a NEW inode (file replaced or rotated). The
+  // file's bytes now reflect fresh, never-seen-before content.
+  const newContent = '{"b":2}\n';
+  await writeFile(file.sourcePath, newContent);
+  const rotated = { ...file, inode: file.inode + 1, sizeBytes: newContent.length };
+
+  const second = await collectClaudeCodeFile(rotated, ctx(buffer));
+  expect(second.capturedBatches).toBe(1);
+  expect(countByStatus(buffer).pending).toBe(2);
+
+  // The watermark from inode A must not carry over: the new inode's cursor
+  // starts the range at 0 and ends at the full size of the new bytes.
+  const cursorOld = getCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  const cursorNew = getCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: rotated.inode,
+    watermarkTable: null,
+  });
+  expect(cursorOld?.watermarkEnd).toBe('{"a":1}\n'.length);
+  expect(cursorNew?.watermarkEnd).toBe(newContent.length);
+});
