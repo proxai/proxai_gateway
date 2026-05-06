@@ -484,3 +484,458 @@ test('unsupported platform throws clear error', () => {
     }),
   ).toThrow(/unsupported platform/);
 });
+
+test('default spawn factory is wired up when deps.spawn is omitted', async () => {
+  // Exercises the defaultSpawn() function — spawns a real command. Use the
+  // current platform; isRegistered makes a single cheap query that returns a
+  // boolean regardless of whether the service is registered.
+  const sm = getServiceManager({
+    platform: process.platform,
+    unitPath: '/tmp/proxai-coverage-nonexistent.unit',
+    programPath: '/usr/local/bin/proxai-gateway',
+  });
+  const result = await sm.isRegistered();
+  expect(typeof result).toBe('boolean');
+});
+
+// ---------- darwin error branches ----------
+
+test('darwin: ensureRegistered surfaces stderr when bootstrap fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === 'print') return { exitCode: 1 };
+    if (argv[1] === 'bootstrap') return { exitCode: 5, stderr: 'invalid plist' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/x.plist',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.ensureRegistered()).rejects.toThrow(/invalid plist/);
+});
+
+test('darwin: ensureRegistered falls back to stdout when stderr is empty', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === 'print') return { exitCode: 1 };
+    if (argv[1] === 'bootstrap')
+      return { exitCode: 5, stderr: '   ', stdout: 'fallback-stdout-msg' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/x.plist',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.ensureRegistered()).rejects.toThrow(/fallback-stdout-msg/);
+});
+
+test('darwin: start bootstraps when not registered, then kicks', async () => {
+  const argvSeq: string[] = [];
+  const { spawn } = mockSpawn((argv) => {
+    argvSeq.push(argv[1] ?? '');
+    if (argv[1] === 'print') return { exitCode: 1 };
+    if (argv[1] === 'bootstrap') return { exitCode: 0 };
+    if (argv[1] === 'kickstart') return { exitCode: 0 };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/x.plist',
+    programPath: '/p',
+    spawn,
+  });
+  await sm.start();
+  expect(argvSeq).toEqual(['print', 'bootstrap', 'kickstart']);
+});
+
+test('darwin: start surfaces error when bootstrap fails before kickstart', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === 'print') return { exitCode: 1 };
+    if (argv[1] === 'bootstrap') return { exitCode: 9, stderr: 'plist locked' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/x.plist',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.start()).rejects.toThrow(/plist locked/);
+});
+
+test('darwin: start surfaces error when kickstart fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === 'print') return { exitCode: 0 };
+    if (argv[1] === 'kickstart') return { exitCode: 7, stderr: 'no such service' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/x.plist',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.start()).rejects.toThrow(/no such service/);
+});
+
+test('darwin: stop surfaces error when bootout fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === 'print') return { exitCode: 0 };
+    if (argv[1] === 'bootout') return { exitCode: 13, stderr: 'unable' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/x.plist',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.stop()).rejects.toThrow(/unable/);
+});
+
+test('darwin: restart bootstraps then kicks with -k when not registered', async () => {
+  const argvSeq: string[] = [];
+  const { spawn } = mockSpawn((argv) => {
+    argvSeq.push((argv[1] ?? '') + (argv[2] === '-k' ? '/-k' : ''));
+    if (argv[1] === 'print') return { exitCode: 1 };
+    if (argv[1] === 'bootstrap') return { exitCode: 0 };
+    if (argv[1] === 'kickstart') return { exitCode: 0 };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/x.plist',
+    programPath: '/p',
+    spawn,
+  });
+  await sm.restart();
+  expect(argvSeq).toEqual(['print', 'bootstrap', 'kickstart/-k']);
+});
+
+test('darwin: restart surfaces error when bootstrap fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === 'print') return { exitCode: 1 };
+    if (argv[1] === 'bootstrap') return { exitCode: 4, stderr: 'oops' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/x.plist',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.restart()).rejects.toThrow(/oops/);
+});
+
+test('darwin: restart surfaces error when kickstart -k fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === 'print') return { exitCode: 0 };
+    if (argv[1] === 'kickstart') return { exitCode: 8, stderr: 'kick-failed' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/x.plist',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.restart()).rejects.toThrow(/kick-failed/);
+});
+
+// ---------- linux error branches ----------
+
+test('linux: ensureRegistered surfaces stderr when daemon-reload fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[2] === 'daemon-reload') return { exitCode: 7, stderr: 'reload broken' };
+    return { exitCode: 0 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.ensureRegistered()).rejects.toThrow(/reload broken/);
+});
+
+test('linux: ensureRegistered surfaces stderr when enable fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[2] === 'daemon-reload') return { exitCode: 0 };
+    if (argv[2] === 'is-enabled') return { exitCode: 1 };
+    if (argv[2] === 'enable') return { exitCode: 5, stderr: 'enable broken' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.ensureRegistered()).rejects.toThrow(/enable broken/);
+});
+
+test('linux: start surfaces stderr when daemon-reload fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[2] === 'daemon-reload') return { exitCode: 6, stderr: 'reload-fail' };
+    return { exitCode: 0 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.start()).rejects.toThrow(/reload-fail/);
+});
+
+test('linux: start enables unit and surfaces stderr when enable fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[2] === 'daemon-reload') return { exitCode: 0 };
+    if (argv[2] === 'is-enabled') return { exitCode: 1 };
+    if (argv[2] === 'enable') return { exitCode: 4, stderr: 'unit-disabled' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.start()).rejects.toThrow(/unit-disabled/);
+});
+
+test('linux: start surfaces stderr when start fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[2] === 'daemon-reload') return { exitCode: 0 };
+    if (argv[2] === 'is-enabled') return { exitCode: 0 };
+    if (argv[2] === 'start') return { exitCode: 3, stderr: 'cannot-start' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.start()).rejects.toThrow(/cannot-start/);
+});
+
+test('linux: restart surfaces stderr when daemon-reload fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[2] === 'daemon-reload') return { exitCode: 6, stderr: 'reload-fail' };
+    return { exitCode: 0 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.restart()).rejects.toThrow(/reload-fail/);
+});
+
+test('linux: restart enables unit when not enabled and surfaces enable failure', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[2] === 'daemon-reload') return { exitCode: 0 };
+    if (argv[2] === 'is-enabled') return { exitCode: 1 };
+    if (argv[2] === 'enable') return { exitCode: 5, stderr: 'enable-broken' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.restart()).rejects.toThrow(/enable-broken/);
+});
+
+test('linux: restart surfaces stderr when restart command fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[2] === 'daemon-reload') return { exitCode: 0 };
+    if (argv[2] === 'is-enabled') return { exitCode: 0 };
+    if (argv[2] === 'restart') return { exitCode: 7, stderr: 'restart-fail' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.restart()).rejects.toThrow(/restart-fail/);
+});
+
+test('linux: start runs enable then start when unit is not yet enabled', async () => {
+  const argvSeq: string[] = [];
+  const { spawn } = mockSpawn((argv) => {
+    argvSeq.push(argv[2] ?? '');
+    if (argv[2] === 'daemon-reload') return { exitCode: 0 };
+    if (argv[2] === 'is-enabled') return { exitCode: 1 };
+    if (argv[2] === 'enable') return { exitCode: 0 };
+    if (argv[2] === 'start') return { exitCode: 0 };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await sm.start();
+  expect(argvSeq).toEqual(['daemon-reload', 'is-enabled', 'enable', 'start']);
+});
+
+test('linux: restart runs enable then restart when unit is not yet enabled', async () => {
+  const argvSeq: string[] = [];
+  const { spawn } = mockSpawn((argv) => {
+    argvSeq.push(argv[2] ?? '');
+    if (argv[2] === 'daemon-reload') return { exitCode: 0 };
+    if (argv[2] === 'is-enabled') return { exitCode: 1 };
+    if (argv[2] === 'enable') return { exitCode: 0 };
+    if (argv[2] === 'restart') return { exitCode: 0 };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await sm.restart();
+  expect(argvSeq).toEqual(['daemon-reload', 'is-enabled', 'enable', 'restart']);
+});
+
+test('linux: errors fall back to stdout when stderr is empty', async () => {
+  const { spawn } = mockSpawn(() => ({
+    exitCode: 5,
+    stderr: '   ',
+    stdout: 'stdout-fallback-message',
+  }));
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.stop()).rejects.toThrow(/stdout-fallback-message/);
+});
+
+// ---------- win32 error branches ----------
+
+test('win32: ensureRegistered surfaces stderr when /Create fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === '/Query') return { exitCode: 1 };
+    if (argv[1] === '/Create') return { exitCode: 9, stderr: 'create-failed' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await expect(sm.ensureRegistered()).rejects.toThrow(/create-failed/);
+});
+
+test('win32: start creates the task when missing and surfaces failure', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === '/Query') return { exitCode: 1 };
+    if (argv[1] === '/Create') return { exitCode: 4, stderr: 'create-failed' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await expect(sm.start()).rejects.toThrow(/create-failed/);
+});
+
+test('win32: start succeeds when task missing then created', async () => {
+  const argvSeq: string[] = [];
+  const { spawn } = mockSpawn((argv) => {
+    argvSeq.push(argv[1] ?? '');
+    if (argv[1] === '/Query') return { exitCode: 1 };
+    if (argv[1] === '/Create') return { exitCode: 0 };
+    if (argv[1] === '/Run') return { exitCode: 0 };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await sm.start();
+  expect(argvSeq).toEqual(['/Query', '/Create', '/Run']);
+});
+
+test('win32: restart creates task when missing and surfaces /Create failure', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === '/Query') return { exitCode: 1 };
+    if (argv[1] === '/Create') return { exitCode: 7, stderr: 'create-restart-failed' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await expect(sm.restart()).rejects.toThrow(/create-restart-failed/);
+});
+
+test('win32: restart creates task when missing then ends and runs', async () => {
+  const argvSeq: string[] = [];
+  const { spawn } = mockSpawn((argv) => {
+    argvSeq.push(argv[1] ?? '');
+    if (argv[1] === '/Query') return { exitCode: 1 };
+    if (argv[1] === '/Create') return { exitCode: 0 };
+    if (argv[1] === '/End') return { exitCode: 0 };
+    if (argv[1] === '/Run') return { exitCode: 0 };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await sm.restart();
+  expect(argvSeq).toEqual(['/Query', '/Create', '/End', '/Run']);
+});
+
+test('win32: restart surfaces /Run failure', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === '/Query') return { exitCode: 0 };
+    if (argv[1] === '/End') return { exitCode: 0 };
+    if (argv[1] === '/Run') return { exitCode: 6, stderr: 'run-failed' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await expect(sm.restart()).rejects.toThrow(/run-failed/);
+});
+
+test('win32: errors fall back to stdout when stderr is empty', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === '/Query') return { exitCode: 1 };
+    if (argv[1] === '/Create') return { exitCode: 5, stderr: '   ', stdout: 'win-stdout-fallback' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await expect(sm.ensureRegistered()).rejects.toThrow(/win-stdout-fallback/);
+});
