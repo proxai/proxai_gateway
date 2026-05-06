@@ -2,7 +2,7 @@
   "name": "@proxai/gateway",
   "version": "0.1.0",
   "description": "ProxAI Gateway — captures coding-agent activity (Claude Code, Cursor, Codex) and ships it to ProxAI's backend with on-device secret redaction.",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "type": "module",
   "private": true,
   "engines": {
