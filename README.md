@@ -1,186 +1,102 @@
 # ProxAI Gateway
 
-A macOS background service that captures the LLM activity of your coding agents — Claude Code, Cursor, and Codex — and ships it to your ProxAI dashboard.
+ProxAI Gateway is a managed, on-device service that captures your coding-agent activity (Claude Code, Cursor, Codex), redacts secrets locally, and ships the redacted records to ProxAI.
 
-It reads each agent's local transcript files directly. **No network proxy. No root certificate. No traffic interception.** Secret redaction runs on your laptop before any byte leaves it.
+## What it does
 
-Open source (Apache 2.0).
+- Captures prompts, responses, tool calls, and per-turn token counts from Claude Code, Cursor, and Codex by reading their on-disk transcript files. No proxy, no root CA, no traffic interception.
+- Redacts API keys, tokens, and known secret formats on-device, in a single pass at capture time, before any byte is buffered or uploaded.
+- Runs as a managed background service: launchd on macOS, systemd on Linux, Windows Task Scheduler on Windows. Starts at login; survives reboots.
+- Observable from the command line: `status` for liveness, `tail` for recent activity, `redaction list` and `redaction test` for what the redactor will and will not strip.
 
----
+## Installation
 
-## Quickstart
+ProxAI Gateway ships as a single self-contained native binary. You do not need Bun, Node, or any other runtime installed.
 
-ProxAI Gateway ships as a single self-contained native binary per OS / arch. **You do not need Bun, Node, or any other runtime installed.** Pick whichever channel is most convenient — they all deliver the same compiled binary:
+### macOS
 
 ```sh
-# Homebrew (macOS, Linux)
+# Homebrew (coming soon)
 brew install proxai/tap/proxai-gateway
 
-# Bun
-bun add -g @proxai/gateway
-
-# pnpm
-pnpm add -g @proxai/gateway
-
-# Yarn
-yarn global add @proxai/gateway
-
-# npm
+# npm (works today)
 npm install -g @proxai/gateway
 ```
 
-Or download the binary for your OS / arch directly from [GitHub Releases](https://github.com/proxai/proxai-gateway/releases) and drop it on your `PATH`.
+The binary registers itself as a launchd user agent at `~/Library/LaunchAgents/co.proxai.gateway.plist` during `proxai-gateway setup`. The agent is loaded at every login.
 
-Then:
-
-```sh
-proxai-gateway install
-proxai-gateway status
-```
-
-`install` is interactive: it asks for your ProxAI API key, walks you through macOS Full Disk Access if needed, and registers a launchd LaunchAgent so the service starts at every login.
-
-To stop capturing for a meeting:
+### Linux
 
 ```sh
-proxai-gateway pause
-proxai-gateway resume
+npm install -g @proxai/gateway
 ```
 
-To remove it entirely (the second command matches whichever package manager you used above):
+The binary registers itself as a systemd user unit at `~/.config/systemd/user/proxai-gateway.service` during `proxai-gateway setup`. Lingering must be enabled (`loginctl enable-linger`) for the service to run when no user session is active; the setup command will print instructions if needed.
+
+### Windows
 
 ```sh
-proxai-gateway uninstall
-
-bun rm -g @proxai/gateway              # Bun
-# or: pnpm rm -g @proxai/gateway
-# or: yarn global remove @proxai/gateway
-# or: npm uninstall -g @proxai/gateway
-# or: brew uninstall proxai/tap/proxai-gateway
+npm install -g @proxai/gateway
 ```
 
----
+The binary registers itself as a per-user scheduled task named `ProxAIGateway` during `proxai-gateway setup`. The task triggers at logon.
 
-## What it captures
+## First-time setup
 
-| Captured | Not captured |
-|---|---|
-| Your prompts to coding agents | Provider API keys (redacted before storage) |
-| Assistant responses (text, tool calls, tool results) | OS keychain, password manager |
-| Per-turn token counts and timestamps | Other apps' data |
-| Session and workspace metadata | Anything outside `~/.claude/`, `~/.codex/`, Cursor's data dir |
-| Git branch / repo for the session | Files you didn't open in a coding agent |
+Run once after install:
 
-The exact paths are listed in [`docs/03_FLUSHING_ALGORITHM.md`](docs/03_FLUSHING_ALGORITHM.md) §5–§7. Anything not on that list, the gateway never reads.
-
----
-
-## Privacy and control
-
-Designed to be auditable, not asked-to-be-trusted.
-
-- **Three-stage secret redaction**, all client-side. The first two stages run in the gateway before captures are persisted; the third runs on the backend. Rules are based on the open-source `gitleaks` and `detect-secrets` corpora.
-- **Verify what gets redacted** on any file:
-  ```sh
-  proxai-gateway redaction-test path/to/file.jsonl
-  ```
-- **Pause instantly** without uninstalling — `proxai-gateway pause`, or just touch `~/.proxai/PAUSED`.
-- **Local capture log** at `~/Library/Logs/proxai-gateway/` — every captured record is recorded, in your file system, before it goes anywhere.
-- **No proxy, no root CA**, ever. The gateway only reads files; it does not intercept network traffic.
-- **Open source.** Audit any line.
-
-If something looks wrong, run `proxai-gateway doctor` to dump diagnostic state (safe to share — no captured content, no API key).
-
----
-
-## How it works
-
-Every five minutes, the gateway:
-
-1. Checks the modification time of each agent's transcript files. If nothing changed, skip.
-2. For changed files, reads only the new bytes (JSONL append, or new SQLite rows).
-3. Applies redaction rules locally to strip API keys, auth tokens, and known secret formats.
-4. Buffers the redacted bytes in a local SQLite database (`~/.proxai/buffer.db`) until upload.
-5. POSTs to the ProxAI backend over HTTPS. Retries with exponential backoff on failure.
-
-```
-   coding agents             gateway (this repo)            ProxAI backend
-   ──────────────            ───────────────────            ──────────────
-   Claude Code   ┐
-   Cursor        ┼──▶  read transcripts ──▶ redact ──▶ buffer ──▶ HTTPS POST
-   Codex         ┘
+```sh
+proxai-gateway setup
 ```
 
-Parsing into structured records (the `CallRecord` shape) happens on the backend, not on your laptop. Schema fixes ship server-side; the laptop binary stays small and stable.
+This prompts for your ProxAI ingestion key, writes `~/.proxai/config.toml` (mode `0600` on POSIX), and registers the platform service unit. The daemon is started immediately on completion.
 
-Total CPU per hour while you're working: under five seconds. The gateway will not appear in Activity Monitor's "Apps using significant energy" list.
+If you re-run `setup` and a config already exists, you must enter the new ingestion key twice (double-entry confirmation) before the existing config is overwritten. To bypass the prompt non-interactively, pass `--api-key <key>`.
 
----
+## Lifecycle
 
-## Documentation
+```sh
+proxai-gateway start      # start the service if stopped
+proxai-gateway stop       # stop the service (capture pauses, no data loss)
+proxai-gateway restart    # stop then start
+```
 
-All design documents live under [`docs/`](docs/). For contributors, the suggested reading order is `README.md` → `docs/01_INTRO.md` → `docs/nest-contract.md` → `docs/03_FLUSHING_ALGORITHM.md` → the rest as needed.
+`start`/`stop`/`restart` are thin wrappers over the platform service manager (launchctl / systemctl --user / schtasks).
 
-| Doc | What's in it |
-|---|---|
-| [`docs/01_INTRO.md`](docs/01_INTRO.md) | Overall architecture and MVP scope |
-| [`docs/02_CLI_DESIGN.md`](docs/02_CLI_DESIGN.md) | Full CLI command reference |
-| [`docs/03_FLUSHING_ALGORITHM.md`](docs/03_FLUSHING_ALGORITHM.md) | Per-agent capture, watermarks, and the backend-upload DTO contract |
-| [`docs/04_AGENT_CALL_RECORD.md`](docs/04_AGENT_CALL_RECORD.md) | The typed record the backend produces from raw bytes |
-| [`docs/05_AGENT_CALL_RECORD_MAPPING.md`](docs/05_AGENT_CALL_RECORD_MAPPING.md) | Backend-side reference: how raw fields map to `AgentCallRecord` |
-| [`docs/06_USER_EXPERIENCE.md`](docs/06_USER_EXPERIENCE.md) | What the user sees and how messages should read |
-| [`docs/07_MACOS_MVP.md`](docs/07_MACOS_MVP.md) | macOS implementation details (launchd, file watching, gotchas) |
-| [`docs/nest-contract.md`](docs/nest-contract.md) | Backend integration contract — wire DTO, watermark semantics, status-code action table, idempotency, kill switch |
-| [`docs/ALGORITHM_CLAUDE.md`](docs/ALGORITHM_CLAUDE.md) / [`docs/ALGORITHM_CURSOR.md`](docs/ALGORITHM_CURSOR.md) / [`docs/ALGORITHM_CODEX.md`](docs/ALGORITHM_CODEX.md) | Per-agent capture algorithm details |
-| [`docs/CAPTURE_TARGETS.md`](docs/CAPTURE_TARGETS.md) | What gets captured per agent |
-| [`docs/web_plugin/`](docs/web_plugin/) | Browser-extension companion (separate component, not part of the gateway CLI) |
+## Inspecting activity
 
----
+```sh
+proxai-gateway status                  # daemon liveness + last upload time
+proxai-gateway tail                    # follow the structured log
+proxai-gateway tail --since 1h         # show entries from the last hour, then follow
+proxai-gateway tail --level warn       # filter to warn and above
+```
 
-## Status
+`--since` accepts `Nm`, `Nh`, `Nd`. `--level` accepts `debug`, `info`, `warn`, `error`. The two flags compose.
 
-| | |
-|---|---|
-| Platforms (MVP `install` flow) | macOS (Apple Silicon and Intel) |
-| Platforms (binaries shipped) | macOS arm64 / x64, Linux x64 / arm64, Windows x64 / arm64 — all from the same build pipeline; Linux and Windows `install` flows land in later phases |
-| Agents | Claude Code, Cursor, Codex |
-| Runtime on the user's machine | None — the binary is fully self-contained (Bun runtime + JS bundled in by `bun build --compile`) |
-| Distribution | Homebrew tap `proxai/tap/proxai-gateway`; npm meta-package `@proxai/gateway` (installable via `bun`, `pnpm`, `yarn`, `npm` — pulls the matching platform binary via `optionalDependencies`); signed binaries on GitHub Releases |
-| License | Apache 2.0 |
+## Redaction
 
-Antigravity, Linux, Windows, menu-bar tray, native `.pkg` installer, signed code, optional HTTP-proxy capture mode — all post-MVP. See [`docs/01_INTRO.md`](docs/01_INTRO.md) §9 for the roadmap.
+```sh
+proxai-gateway redaction list                 # all enabled redaction rules
+proxai-gateway redaction list --categories    # rules grouped by category
+proxai-gateway redaction test <file>          # run rules against a file, show what would be replaced
+```
 
----
+Redaction is single-pass and runs at the moment of capture, before the record is written to the local buffer. Rules cover the common provider-key formats (Anthropic, OpenAI, Google, AWS, GitHub PATs, Stripe, JWTs, GCP service accounts) plus the `gitleaks` and `detect-secrets` corpora. Matches are replaced with `[REDACTED:type]`. The backend re-runs redaction on receive as defense in depth.
 
-## Frequently asked
+## Troubleshooting
 
-**Is this a keylogger?**
-No. The gateway reads only the transcript files that the coding agents themselves write to disk — files you can `cat` yourself. It does not intercept keystrokes, network traffic, or any other process's memory.
+**Daemon will not start.** Run `proxai-gateway status` for the unit state and last-known error. If the daemon is failing on startup, `proxai-gateway tail --level error --since 1h` will show recent stack traces. On macOS, ensure the launchd plist is loaded: `launchctl print gui/$(id -u)/co.proxai.gateway`.
 
-**Can I see exactly what's being uploaded?**
-Yes. Run `proxai-gateway tail` to see what's been captured recently, or open `~/Library/Logs/proxai-gateway/structured.log` directly. Run `proxai-gateway redaction-test <file>` to see what redaction does to any file.
+**Ingestion key rejected.** The backend returned 401/403 for the configured key. Re-run `proxai-gateway setup` with a fresh key from the ProxAI dashboard. The setup command will detect the existing config and require double-entry of the new key.
 
-**What if I paste an API key into a coding agent?**
-The redaction layer scans every captured record for known secret formats (Anthropic, OpenAI, Google, AWS, GitHub PATs, Stripe keys, JWTs, GCP service accounts, and the rest of the `gitleaks` corpus). Matches are replaced with `[REDACTED:type]` before the record is buffered, let alone uploaded. The backend re-redacts on receive as defense in depth. If a redaction rule misses, please open an issue.
+**How do I uninstall?** There is no `uninstall` command — by policy, captured records remain in the local buffer and on the backend per ProxAI's data-retention terms. To stop and remove the gateway manually:
 
-**Does this slow my machine down?**
-Very unlikely to be detectable. The gateway uses `mtime` checks before reading anything, and a full poll cycle is under 200 ms. Sustained CPU is under five seconds per hour.
-
-**My company requires Full Disk Access pre-approval.** The installer probes for FDA at install time and prints clear instructions if it's needed. For MDM-managed deployments, see the Phase 3 roadmap in [`docs/01_INTRO.md`](docs/01_INTRO.md).
-
-**Where does my data go?**
-By default, to `nest.proxai.co`. Self-hosted backend mode is on the Phase 3 roadmap.
-
----
-
-## Contributing
-
-The repository follows the conventions of the wider ProxAI codebase. See `CONTRIBUTING.md` (forthcoming).
-
-For bug reports, redaction-rule additions, or feature ideas, open an issue.
-
----
+1. `proxai-gateway stop`
+2. Remove the platform service unit (`~/Library/LaunchAgents/co.proxai.gateway.plist` on macOS, `~/.config/systemd/user/proxai-gateway.service` on Linux, the `ProxAIGateway` scheduled task on Windows).
+3. Delete `~/.proxai/` to remove the local buffer, config, and sentinels.
+4. Uninstall the package (`npm uninstall -g @proxai/gateway` or `brew uninstall proxai/tap/proxai-gateway`).
 
 ## License
 
-[Apache 2.0](LICENSE).
+MIT. See [`LICENSE`](LICENSE).

@@ -1,0 +1,37 @@
+# Belt-and-suspenders alongside the `files` allowlist in package.json.
+# Anything matched here is never published, regardless of `files`.
+
+# Planning / design notes
+planning/
+
+# Build driver and other dev tooling
+scripts/
+
+# Tests live next to source; never publish them
+**/tests/
+**/*.test.ts
+
+# Tooling configs
+tsconfig.json
+.oxlintrc.json
+.prettierignore
+prettier.config.mjs
+bunfig.toml
+
+# CI
+.github/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Runtime / coverage / local state
+coverage/
+.nyc_output/
+.proxai/
+.claude/
+
+# Lockfiles (consumers don't need them)
+bun.lock
+bun.lockb
