@@ -1,34 +1,29 @@
-import { confirm, input } from '@inquirer/prompts';
+import { input } from '@inquirer/prompts';
 
 export interface PromptSink {
-  askApiKey(): Promise<string>;
-  confirmOverwrite(message: string): Promise<boolean>;
-  confirmUninstall(message: string): Promise<boolean>;
+  askApiKey(message?: string): Promise<string>;
 }
 
 export function inquirerPrompts(): PromptSink {
   return {
-    askApiKey: () =>
+    askApiKey: (message) =>
       input({
-        message: 'Enter your ProxAI ingestion key:',
+        message: message ?? 'Enter your ProxAI ingestion key:',
         validate: (v) => (v.trim().length > 0 ? true : 'ingestion key is required'),
       }),
-    confirmOverwrite: (message) => confirm({ message, default: false }),
-    confirmUninstall: (message) => confirm({ message, default: false }),
   };
 }
 
-export function scriptedPrompts(answers: {
-  apiKey?: string;
-  overwrite?: boolean;
-  uninstall?: boolean;
-}): PromptSink {
+export function scriptedPrompts(answers: { apiKey?: string; apiKeys?: string[] }): PromptSink {
+  const queue: string[] = [
+    ...(answers.apiKeys ?? []),
+    ...(answers.apiKey !== undefined ? [answers.apiKey] : []),
+  ];
   return {
     askApiKey: async () => {
-      if (answers.apiKey === undefined) throw new Error('scripted prompt: no apiKey provided');
-      return answers.apiKey;
+      const next = queue.shift();
+      if (next === undefined) throw new Error('scripted prompt: no apiKey provided');
+      return next;
     },
-    confirmOverwrite: async () => answers.overwrite ?? false,
-    confirmUninstall: async () => answers.uninstall ?? false,
   };
 }

@@ -1,13 +1,23 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runInstall } from 'cli/commands/install.ts';
+import { runSetup } from 'cli/commands/setup.ts';
 import { captureOutput } from 'cli/output.ts';
 import { scriptedPrompts } from 'cli/prompts.ts';
 import { HttpClient } from 'services/http';
-import { loadConfigFromFile } from 'services/config';
+import {
+  loadConfigFromFile,
+  writeConfigToFile,
+  NEST_INGEST_URL,
+  NEST_VERIFY_KEY_URL,
+  DEFAULT_BUFFER_MAX_BYTES,
+  DEFAULT_POLL_INTERVAL_SEC,
+  DEFAULT_STALE_PAUSE_DAYS,
+  DEFAULT_STALE_WARN_DAYS,
+} from 'services/config';
+import type { GatewayConfig } from 'services/config';
 
 let dir: string;
 let configPath: string;
@@ -15,9 +25,11 @@ let bufferDbPath: string;
 let logDir: string;
 
 const VALID_KEY = 'abc123-20260505-secret456';
+const NEW_KEY = 'def789-20260601-newsecret123';
+const OTHER_KEY = 'xyz000-20260701-mismatchkey99';
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'proxai-cli-install-'));
+  dir = await mkdtemp(join(tmpdir(), 'proxai-cli-setup-'));
   configPath = join(dir, 'config.toml');
   bufferDbPath = join(dir, 'buffer.db');
   logDir = join(dir, 'logs');
@@ -78,7 +90,7 @@ function newControl(overrides: Partial<MockHttpControl> = {}): MockHttpControl {
   return { verifyResponse: 'accepted', verifyCalls: 0, ...overrides };
 }
 
-function deps(control: MockHttpControl): Parameters<typeof runInstall>[0] {
+function deps(control: MockHttpControl): Parameters<typeof runSetup>[0] {
   return {
     output: captureOutput(),
     prompts: scriptedPrompts({}),
@@ -95,9 +107,38 @@ function deps(control: MockHttpControl): Parameters<typeof runInstall>[0] {
   };
 }
 
+async function writeExistingConfig(
+  overrides: Partial<GatewayConfig['account']> = {},
+): Promise<void> {
+  const config: GatewayConfig = {
+    account: {
+      apiKey: VALID_KEY,
+      hostId: '01943f5a-7b1c-7e92-9c01-a0f3b40d77e3',
+      installedAt: '2026-04-29T10:42:00.123Z',
+      installSource: 'github_release',
+      ...overrides,
+    },
+    backend: {
+      ingestUrl: NEST_INGEST_URL,
+      verifyKeyUrl: NEST_VERIFY_KEY_URL,
+    },
+    capture: {
+      pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
+      bufferPath: bufferDbPath,
+      bufferMaxBytes: DEFAULT_BUFFER_MAX_BYTES,
+    },
+    logging: { level: 'info', logDir },
+    staleBinary: {
+      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
+      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
+    },
+  };
+  await writeConfigToFile(config, configPath);
+}
+
 test('writes a valid config and reports success when key is accepted', async () => {
   const control = newControl();
-  const result = await runInstall(deps(control), { apiKey: VALID_KEY });
+  const result = await runSetup(deps(control), { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
   expect(control.verifyCalls).toBe(1);
   const config = await loadConfigFromFile(configPath);
@@ -111,7 +152,7 @@ test('writes a launchd plist on darwin', async () => {
   const control = newControl();
   const d = deps(control);
   d.platform = 'darwin';
-  const result = await runInstall(d, { apiKey: VALID_KEY });
+  const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
   const unitContent = await Bun.file(d.serviceUnitPath as string).text();
   expect(unitContent).toContain('<plist');
@@ -122,7 +163,7 @@ test('writes a systemd unit on linux', async () => {
   const control = newControl();
   const d = deps(control);
   d.platform = 'linux';
-  const result = await runInstall(d, { apiKey: VALID_KEY });
+  const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
   const unitContent = await Bun.file(d.serviceUnitPath as string).text();
   expect(unitContent).toContain('[Service]');
@@ -132,27 +173,27 @@ test('writes a systemd unit on linux', async () => {
 test('skips service unit when serviceUnitPath is null', async () => {
   const control = newControl();
   const d = { ...deps(control), serviceUnitPath: null as string | null };
-  const result = await runInstall(d, { apiKey: VALID_KEY });
+  const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
 });
 
 test('returns validationError when ingestion key is empty', async () => {
   const control = newControl();
-  const result = await runInstall(deps(control), { apiKey: '   ' });
+  const result = await runSetup(deps(control), { apiKey: '   ' });
   expect(result.exitCode).toBe(2);
   expect(control.verifyCalls).toBe(0);
 });
 
 test('returns validationError when ingestion key has wrong format', async () => {
   const control = newControl();
-  const result = await runInstall(deps(control), { apiKey: 'not-a-valid-key' });
+  const result = await runSetup(deps(control), { apiKey: 'not-a-valid-key' });
   expect(result.exitCode).toBe(2);
   expect(control.verifyCalls).toBe(0);
 });
 
 test('skipKeyFormatCheck bypasses the format gate', async () => {
   const control = newControl();
-  const result = await runInstall(deps(control), {
+  const result = await runSetup(deps(control), {
     apiKey: 'free-form-key',
     skipKeyFormatCheck: true,
   });
@@ -162,58 +203,34 @@ test('skipKeyFormatCheck bypasses the format gate', async () => {
 
 test('returns authError when verify-key returns success: false', async () => {
   const control = newControl({ verifyResponse: 'rejected' });
-  const result = await runInstall(deps(control), { apiKey: VALID_KEY });
+  const result = await runSetup(deps(control), { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(3);
   expect(await Bun.file(configPath).exists()).toBe(false);
 });
 
 test('returns authError when verify-key returns 403', async () => {
   const control = newControl({ verifyResponse: 'forbidden' });
-  const result = await runInstall(deps(control), { apiKey: VALID_KEY });
+  const result = await runSetup(deps(control), { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(3);
   expect(await Bun.file(configPath).exists()).toBe(false);
 });
 
 test('returns generic error when verify-key returns 503', async () => {
   const control = newControl({ verifyResponse: 'service-unavailable' });
-  const result = await runInstall(deps(control), { apiKey: VALID_KEY });
+  const result = await runSetup(deps(control), { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(1);
 });
 
 test('returns generic error on network failure during verify-key', async () => {
   const control = newControl({ verifyResponse: 'network-error' });
-  const result = await runInstall(deps(control), { apiKey: VALID_KEY });
+  const result = await runSetup(deps(control), { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(1);
-});
-
-test('aborts when existing config and overwrite declined', async () => {
-  await writeFile(configPath, 'existing');
-  const control = newControl();
-  const d = { ...deps(control), prompts: scriptedPrompts({ overwrite: false }) };
-  const result = await runInstall(d, { apiKey: VALID_KEY });
-  expect(result.exitCode).toBe(5);
-  expect(control.verifyCalls).toBe(0);
-});
-
-test('proceeds when existing config and overwrite confirmed', async () => {
-  await writeFile(configPath, 'existing');
-  const control = newControl();
-  const d = { ...deps(control), prompts: scriptedPrompts({ overwrite: true }) };
-  const result = await runInstall(d, { apiKey: VALID_KEY });
-  expect(result.exitCode).toBe(0);
-});
-
-test('--yes skips overwrite prompt', async () => {
-  await writeFile(configPath, 'existing');
-  const control = newControl();
-  const result = await runInstall(deps(control), { apiKey: VALID_KEY, yes: true });
-  expect(result.exitCode).toBe(0);
 });
 
 test('uses askApiKey prompt when apiKey option not provided', async () => {
   const control = newControl();
   const d = { ...deps(control), prompts: scriptedPrompts({ apiKey: VALID_KEY }) };
-  const result = await runInstall(d, {});
+  const result = await runSetup(d, {});
   expect(result.exitCode).toBe(0);
   const config = await loadConfigFromFile(configPath);
   expect(config.account.apiKey).toBe(VALID_KEY);
@@ -221,7 +238,7 @@ test('uses askApiKey prompt when apiKey option not provided', async () => {
 
 test('honors installSource option', async () => {
   const control = newControl();
-  const result = await runInstall(deps(control), {
+  const result = await runSetup(deps(control), {
     apiKey: VALID_KEY,
     installSource: 'brew',
   });
@@ -240,10 +257,7 @@ test('formatError falls back to String(err) when verify-key throws a non-Error v
         throw 'plain-string-failure';
       },
     }) as unknown as HttpClient) as unknown as (apiKey: string, hostId: string) => HttpClient;
-  const result = await runInstall(
-    { ...baseDeps, output, httpClientFactory },
-    { apiKey: VALID_KEY },
-  );
+  const result = await runSetup({ ...baseDeps, output, httpClientFactory }, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(1);
   const errorLine = output.lines.find((l) => l.level === 'error');
   expect(errorLine?.msg).toContain('verify-key failed');
@@ -254,7 +268,7 @@ test('reports server-provided message when key is rejected with reason', async (
   const control = newControl({ verifyResponse: 'rejected' });
   const baseDeps = deps(control);
   const output = captureOutput();
-  const result = await runInstall({ ...baseDeps, output }, { apiKey: VALID_KEY });
+  const result = await runSetup({ ...baseDeps, output }, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(3);
   const errorLine = output.lines.find((l) => l.level === 'error');
   expect(errorLine?.msg).toContain('key expired');
@@ -262,7 +276,7 @@ test('reports server-provided message when key is rejected with reason', async (
 
 test('reports generic message when key is rejected without reason', async () => {
   const control: MockHttpControl = { verifyResponse: 'accepted', verifyCalls: 0 };
-  const baseDeps: Parameters<typeof runInstall>[0] = {
+  const baseDeps: Parameters<typeof runSetup>[0] = {
     ...deps(control),
     httpClientFactory: () =>
       ({
@@ -270,8 +284,61 @@ test('reports generic message when key is rejected without reason', async () => 
       }) as unknown as HttpClient,
   };
   const output = captureOutput();
-  const result = await runInstall({ ...baseDeps, output }, { apiKey: VALID_KEY });
+  const result = await runSetup({ ...baseDeps, output }, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(3);
   const errorLine = output.lines.find((l) => l.level === 'error');
   expect(errorLine?.msg).toBe('ingestion key not accepted');
+});
+
+test('replaces api key when re-entry matches (interactive)', async () => {
+  await writeExistingConfig();
+  const control = newControl();
+  const d = { ...deps(control), prompts: scriptedPrompts({ apiKeys: [NEW_KEY, NEW_KEY] }) };
+  const result = await runSetup(d, {});
+  expect(result.exitCode).toBe(0);
+  expect(control.verifyCalls).toBe(1);
+  const config = await loadConfigFromFile(configPath);
+  expect(config.account.apiKey).toBe(NEW_KEY);
+});
+
+test('aborts when re-entry does not match (existing config preserved)', async () => {
+  await writeExistingConfig();
+  const control = newControl();
+  const d = { ...deps(control), prompts: scriptedPrompts({ apiKeys: [NEW_KEY, OTHER_KEY] }) };
+  const result = await runSetup(d, {});
+  expect(result.exitCode).toBe(5);
+  expect(control.verifyCalls).toBe(0);
+  const config = await loadConfigFromFile(configPath);
+  expect(config.account.apiKey).toBe(VALID_KEY);
+});
+
+test('preserves hostId / installedAt / installSource on replace', async () => {
+  const PRESERVED_HOST = '01943f5a-aaaa-bbbb-cccc-d0e1f2030405';
+  const PRESERVED_INSTALLED_AT = '2025-01-15T08:00:00.000Z';
+  await writeExistingConfig({
+    hostId: PRESERVED_HOST,
+    installedAt: PRESERVED_INSTALLED_AT,
+    installSource: 'brew',
+  });
+  const control = newControl();
+  const d = { ...deps(control), prompts: scriptedPrompts({ apiKeys: [NEW_KEY, NEW_KEY] }) };
+  const result = await runSetup(d, {});
+  expect(result.exitCode).toBe(0);
+  const config = await loadConfigFromFile(configPath);
+  expect(config.account.apiKey).toBe(NEW_KEY);
+  expect(config.account.hostId).toBe(PRESERVED_HOST);
+  expect(config.account.installedAt).toBe(PRESERVED_INSTALLED_AT);
+  expect(config.account.installSource).toBe('brew');
+});
+
+test('scripted mode (--api-key) bypasses re-entry on existing config', async () => {
+  const PRESERVED_HOST = '01943f5a-aaaa-bbbb-cccc-d0e1f2030405';
+  await writeExistingConfig({ hostId: PRESERVED_HOST });
+  const control = newControl();
+  const result = await runSetup(deps(control), { apiKey: NEW_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(control.verifyCalls).toBe(1);
+  const config = await loadConfigFromFile(configPath);
+  expect(config.account.apiKey).toBe(NEW_KEY);
+  expect(config.account.hostId).toBe(PRESERVED_HOST);
 });

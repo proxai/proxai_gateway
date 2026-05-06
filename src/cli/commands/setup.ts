@@ -16,12 +16,12 @@ import {
   NEST_VERIFY_KEY_URL,
 } from 'services/config';
 import type { GatewayConfig, InstallSource } from 'services/config';
-import { writeConfigToFile } from 'services/config';
+import { loadConfigFromFile, writeConfigToFile } from 'services/config';
 import { HttpClient } from 'services/http';
 
 const INGESTION_KEY_PATTERN = /^[A-Za-z0-9]+-\d{8,}-[A-Za-z0-9]+$/;
 
-export interface InstallCommandDeps {
+export interface SetupCommandDeps {
   output: OutputSink;
   prompts: PromptSink;
   configPath: string;
@@ -36,30 +36,37 @@ export interface InstallCommandDeps {
   platform: NodeJS.Platform;
 }
 
-export interface InstallCommandOptions {
+export interface SetupCommandOptions {
   apiKey?: string;
-  yes?: boolean;
   installSource?: InstallSource;
   skipKeyFormatCheck?: boolean;
 }
 
-export async function runInstall(
-  deps: InstallCommandDeps,
-  options: InstallCommandOptions = {},
+export async function runSetup(
+  deps: SetupCommandDeps,
+  options: SetupCommandOptions = {},
 ): Promise<CommandResult> {
-  if (await deps.configExists()) {
-    if (options.yes !== true) {
-      const overwrite = await deps.prompts.confirmOverwrite(
-        `${deps.configPath} already exists. Overwrite?`,
-      );
-      if (!overwrite) {
-        deps.output.warn('install aborted (existing config preserved)');
+  const isReplace = await deps.configExists();
+
+  let apiKey: string;
+  if (isReplace) {
+    if (options.apiKey !== undefined) {
+      apiKey = options.apiKey.trim();
+    } else {
+      deps.output.warn('an ingestion key is already configured for this machine');
+      deps.output.info('to replace it, type the new ingestion key, then re-enter it to confirm');
+      const first = (await deps.prompts.askApiKey()).trim();
+      const second = (await deps.prompts.askApiKey('Type the same key again to confirm:')).trim();
+      if (first !== second) {
+        deps.output.warn('entries did not match; existing key preserved');
         return { exitCode: EXIT_CODE.alreadyInstalled };
       }
+      apiKey = first;
     }
+  } else {
+    apiKey = (options.apiKey ?? (await deps.prompts.askApiKey())).trim();
   }
 
-  const apiKey = (options.apiKey ?? (await deps.prompts.askApiKey())).trim();
   if (apiKey.length === 0) {
     deps.output.error('ingestion key is required');
     return { exitCode: EXIT_CODE.validationError };
@@ -69,9 +76,19 @@ export async function runInstall(
     return { exitCode: EXIT_CODE.validationError };
   }
 
-  const hostId = (deps.generateHostId ?? generateUuidV7)();
-  const installedAt = (deps.now ?? nowIsoUtc)();
-  const installSource: InstallSource = options.installSource ?? 'github_release';
+  let hostId: string;
+  let installedAt: string;
+  let installSource: InstallSource;
+  if (isReplace) {
+    const existing = await loadConfigFromFile(deps.configPath);
+    hostId = existing.account.hostId;
+    installedAt = existing.account.installedAt;
+    installSource = existing.account.installSource;
+  } else {
+    hostId = (deps.generateHostId ?? generateUuidV7)();
+    installedAt = (deps.now ?? nowIsoUtc)();
+    installSource = options.installSource ?? 'github_release';
+  }
 
   const http = deps.httpClientFactory(apiKey, hostId);
   try {
@@ -123,11 +140,13 @@ export async function runInstall(
         : buildSystemdUnit({ programPath: deps.programPath });
     await writeAtomic(deps.serviceUnitPath, unit);
     await setMode(deps.serviceUnitPath, 0o644);
-    deps.output.info(`service unit: ${deps.serviceUnitPath}`);
   }
 
-  deps.output.success(`installed (host_id: ${hostId})`);
-  deps.output.info(`config: ${deps.configPath}`);
+  if (isReplace) {
+    deps.output.success(`replaced (host_id: ${hostId})`);
+  } else {
+    deps.output.success(`installed (host_id: ${hostId})`);
+  }
   return { exitCode: EXIT_CODE.ok };
 }
 

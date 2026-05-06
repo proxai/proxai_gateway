@@ -2,17 +2,16 @@
 import { Command } from 'commander';
 
 import packageJson from '../package.json' with { type: 'json' };
-import { bufferDbPath, configDir, configFilePath, logDir, pausedSentinelPath } from 'core/io/fs';
+import { bufferDbPath, configFilePath, logDir, pausedSentinelPath } from 'core/io/fs';
 import type { LogLevel } from 'core/log';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
-import { runInstall } from 'cli/commands/install.ts';
+import { runSetup } from 'cli/commands/setup.ts';
 import { runPause } from 'cli/commands/pause.ts';
 import { runRedactionList, runRedactionTest } from 'cli/commands/redaction.ts';
 import { runResume } from 'cli/commands/resume.ts';
 import { runDaemon } from 'cli/commands/run.ts';
 import { runStatus } from 'cli/commands/status.ts';
 import { runTail } from 'cli/commands/tail.ts';
-import { runUninstall } from 'cli/commands/uninstall.ts';
 import {
   defaultLaunchdPlistPath,
   defaultSystemdUnitPath,
@@ -28,16 +27,17 @@ const program = new Command();
 program.name('proxai-gateway').description(packageJson.description).version(packageJson.version);
 
 program
-  .command('install')
-  .description('Install the gateway: verify the ingestion key, write config and service unit')
+  .command('setup')
+  .description(
+    'Configure the gateway: verify the ingestion key, write config and service unit. Re-running replaces the existing key.',
+  )
   .option('--api-key <key>', 'ingestion key (skip prompt)')
-  .option('-y, --yes', 'overwrite an existing install without confirming')
   .option(
     '--install-source <source>',
     'install source (bun|pnpm|yarn|npm|brew|github_release)',
     'github_release',
   )
-  .action(async (opts: { apiKey?: string; yes?: boolean; installSource: string }) => {
+  .action(async (opts: { apiKey?: string; installSource: string }) => {
     const platform = process.platform;
     const serviceUnitPath =
       platform === 'darwin'
@@ -45,7 +45,7 @@ program
         : platform === 'linux'
           ? defaultSystemdUnitPath()
           : null;
-    const result = await runInstall(
+    const result = await runSetup(
       {
         output: consoleOutput(),
         prompts: inquirerPrompts(),
@@ -67,13 +67,13 @@ program
           }),
         platform,
       },
-      buildInstallOptions(opts),
+      buildSetupOptions(opts),
     );
     process.exit(result.exitCode);
   });
 
 program
-  .command('run')
+  .command('run', { hidden: true })
   .description('Run the gateway daemon (poll + ship loop)')
   .option('--config <path>', 'path to config.toml')
   .action(async (opts: { config?: string }) => {
@@ -225,39 +225,13 @@ redaction
     process.exit(result.exitCode);
   });
 
-program
-  .command('uninstall')
-  .description('Remove all gateway state')
-  .option('-y, --yes', 'skip confirm prompt')
-  .action(async (opts: { yes?: boolean }) => {
-    const platform = process.platform;
-    const serviceUnitPath =
-      platform === 'darwin'
-        ? defaultLaunchdPlistPath()
-        : platform === 'linux'
-          ? defaultSystemdUnitPath()
-          : null;
-    const result = await runUninstall(
-      {
-        output: consoleOutput(),
-        prompts: inquirerPrompts(),
-        configDir: configDir(),
-        serviceUnitPath,
-        configExists: () => Bun.file(configFilePath()).exists(),
-      },
-      opts.yes === true ? { yes: true } : {},
-    );
-    process.exit(result.exitCode);
-  });
-
 program.parseAsync().catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err));
   process.exit(EXIT_CODE.error);
 });
 
-function buildInstallOptions(opts: { apiKey?: string; yes?: boolean; installSource: string }): {
+function buildSetupOptions(opts: { apiKey?: string; installSource: string }): {
   apiKey?: string;
-  yes?: boolean;
   installSource?: InstallSource;
 } {
   const VALID = ['bun', 'pnpm', 'yarn', 'npm', 'brew', 'github_release'] as const;
@@ -265,10 +239,9 @@ function buildInstallOptions(opts: { apiKey?: string; yes?: boolean; installSour
   const installSource = (VALID as readonly string[]).includes(opts.installSource)
     ? (opts.installSource as Source)
     : ('github_release' as Source);
-  const out: { apiKey?: string; yes?: boolean; installSource?: InstallSource } = {
+  const out: { apiKey?: string; installSource?: InstallSource } = {
     installSource,
   };
   if (opts.apiKey !== undefined) out.apiKey = opts.apiKey;
-  if (opts.yes !== undefined) out.yes = opts.yes;
   return out;
 }
