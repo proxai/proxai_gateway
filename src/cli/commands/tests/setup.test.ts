@@ -170,6 +170,28 @@ test('writes a systemd unit on linux', async () => {
   expect(unitContent).toContain('ExecStart=/usr/local/bin/proxai-gateway');
 });
 
+test('writes a scheduled-task XML on win32 with the configured user id', async () => {
+  const control = newControl();
+  const d = deps(control);
+  d.platform = 'win32';
+  d.windowsUserId = 'MYDOMAIN\\testuser';
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+  // UTF-16 encoded — read as bytes and decode.
+  const bytes = await Bun.file(d.serviceUnitPath as string).bytes();
+  // Verify BOM + UTF-16LE.
+  expect(bytes[0]).toBe(0xff);
+  expect(bytes[1]).toBe(0xfe);
+  const unitContent = Buffer.from(
+    bytes.buffer,
+    bytes.byteOffset + 2,
+    bytes.byteLength - 2,
+  ).toString('utf16le');
+  expect(unitContent).toContain('<Task ');
+  expect(unitContent).toContain('MYDOMAIN\\testuser');
+  expect(unitContent).toContain('<Command>/usr/local/bin/proxai-gateway</Command>');
+});
+
 test('skips service unit when serviceUnitPath is null', async () => {
   const control = newControl();
   const d = { ...deps(control), serviceUnitPath: null as string | null };

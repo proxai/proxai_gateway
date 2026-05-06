@@ -22,6 +22,7 @@ import {
   consoleOutput,
   inquirerPrompts,
 } from 'cli/index.ts';
+import { defaultScheduledTaskXmlPath } from 'cli/scheduled-task-xml.ts';
 import { getServiceManager } from 'cli/service-manager.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
 import { openBufferDb } from 'services/buffer';
@@ -35,12 +36,23 @@ program.name('proxai-gateway').description(packageJson.description).version(pack
 function platformServiceUnitPath(platform: NodeJS.Platform): string | null {
   if (platform === 'darwin') return defaultLaunchdPlistPath();
   if (platform === 'linux') return defaultSystemdUnitPath();
+  if (platform === 'win32') return defaultScheduledTaskXmlPath();
   return null;
+}
+
+function resolveWindowsUserId(): string | undefined {
+  const domain = process.env['USERDOMAIN'];
+  const user = process.env['USERNAME'];
+  if (domain !== undefined && domain.length > 0 && user !== undefined && user.length > 0) {
+    return `${domain}\\${user}`;
+  }
+  if (user !== undefined && user.length > 0) return user;
+  return undefined;
 }
 
 function buildSetupDeps(): SetupCommandDeps {
   const platform = process.platform;
-  return {
+  const base: SetupCommandDeps = {
     output: consoleOutput(),
     prompts: inquirerPrompts(),
     configPath: configFilePath(),
@@ -61,6 +73,17 @@ function buildSetupDeps(): SetupCommandDeps {
       }),
     platform,
   };
+  if (platform === 'win32') {
+    const userId = resolveWindowsUserId();
+    if (userId !== undefined) {
+      base.windowsUserId = userId;
+    } else {
+      base.output.warn(
+        'could not detect Windows user id (USERDOMAIN/USERNAME unset); using INTERACTIVE placeholder',
+      );
+    }
+  }
+  return base;
 }
 
 function invokeSetupInteractive(): Promise<CommandResult> {

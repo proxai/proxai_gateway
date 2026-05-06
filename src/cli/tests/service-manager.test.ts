@@ -311,19 +311,168 @@ test('linux: surfaces stderr in error message when systemctl fails', async () =>
   await expect(sm.stop()).rejects.toThrow(/bad unit/);
 });
 
-// ---------- Windows ----------
+// ---------- Windows / schtasks ----------
 
-test('win32: throws "added in commit #3" placeholder error', async () => {
-  const { spawn } = mockSpawn(() => ({ exitCode: 0 }));
+test('win32: isRegistered true when schtasks /Query exits 0', async () => {
+  const { spawn, invocations } = mockSpawn(() => ({ exitCode: 0 }));
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
     programPath: 'C:/p.exe',
     spawn,
   });
-  await expect(sm.isRegistered()).rejects.toThrow(/commit #3/);
-  await expect(sm.start()).rejects.toThrow(/commit #3/);
-  await expect(sm.stop()).rejects.toThrow(/commit #3/);
+  expect(await sm.isRegistered()).toBe(true);
+  expect(invocations[0]?.argv).toEqual(['schtasks', '/Query', '/TN', 'ProxAI Gateway']);
+});
+
+test('win32: isRegistered false when schtasks /Query exits non-zero', async () => {
+  const { spawn } = mockSpawn(() => ({ exitCode: 1 }));
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  expect(await sm.isRegistered()).toBe(false);
+});
+
+test('win32: isRunning parses Status: Running from /FO LIST output', async () => {
+  const { spawn, invocations } = mockSpawn(() => ({
+    exitCode: 0,
+    stdout: 'TaskName: ProxAI Gateway\r\nNext Run Time: N/A\r\nStatus:    Running\r\n',
+  }));
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  expect(await sm.isRunning()).toBe(true);
+  const lastArgv = invocations[0]?.argv;
+  expect(lastArgv).toContain('/FO');
+  expect(lastArgv).toContain('LIST');
+});
+
+test('win32: isRunning false when status is Ready', async () => {
+  const { spawn } = mockSpawn(() => ({
+    exitCode: 0,
+    stdout: 'Status: Ready\r\n',
+  }));
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  expect(await sm.isRunning()).toBe(false);
+});
+
+test('win32: ensureRegistered creates task with /XML when missing', async () => {
+  const { spawn, invocations } = mockSpawn((argv) => {
+    if (argv[1] === '/Query') return { exitCode: 1 };
+    if (argv[1] === '/Create') return { exitCode: 0 };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/Users/test/scheduled-task.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await sm.ensureRegistered();
+  const create = invocations.find((i) => i.argv[1] === '/Create');
+  expect(create?.argv).toEqual([
+    'schtasks',
+    '/Create',
+    '/TN',
+    'ProxAI Gateway',
+    '/XML',
+    'C:/Users/test/scheduled-task.xml',
+    '/F',
+  ]);
+});
+
+test('win32: ensureRegistered no-op when already registered', async () => {
+  let creates = 0;
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === '/Query') return { exitCode: 0 };
+    if (argv[1] === '/Create') {
+      creates++;
+      return { exitCode: 0 };
+    }
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await sm.ensureRegistered();
+  expect(creates).toBe(0);
+});
+
+test('win32: start runs schtasks /Run after ensureRegistered', async () => {
+  const { spawn, invocations } = mockSpawn((argv) => {
+    if (argv[1] === '/Query') return { exitCode: 0 };
+    if (argv[1] === '/Run') return { exitCode: 0 };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await sm.start();
+  const run = invocations.find((i) => i.argv[1] === '/Run');
+  expect(run?.argv).toEqual(['schtasks', '/Run', '/TN', 'ProxAI Gateway']);
+});
+
+test('win32: stop tolerates schtasks /End non-zero exit (task not running)', async () => {
+  const { spawn, invocations } = mockSpawn(() => ({ exitCode: 1, stderr: 'task not running' }));
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await sm.stop();
+  expect(invocations[0]?.argv).toEqual(['schtasks', '/End', '/TN', 'ProxAI Gateway']);
+});
+
+test('win32: restart ends then runs', async () => {
+  const calls: string[] = [];
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === '/Query') return { exitCode: 0 };
+    calls.push(argv[1] ?? '');
+    if (argv[1] === '/End') return { exitCode: 0 };
+    if (argv[1] === '/Run') return { exitCode: 0 };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await sm.restart();
+  expect(calls).toEqual(['/End', '/Run']);
+});
+
+test('win32: start surfaces stderr when /Run fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === '/Query') return { exitCode: 0 };
+    if (argv[1] === '/Run') return { exitCode: 9, stderr: 'access denied' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await expect(sm.start()).rejects.toThrow(/access denied/);
 });
 
 test('unsupported platform throws clear error', () => {

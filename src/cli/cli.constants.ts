@@ -10,3 +10,4 @@ export const EXIT_CODE = {
 
 export const LAUNCHD_LABEL = 'co.proxai.gateway';
 export const SYSTEMD_UNIT_NAME = 'proxai-gateway.service';
+export const WINDOWS_TASK_NAME = 'ProxAI Gateway';

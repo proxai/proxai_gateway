@@ -1,4 +1,4 @@
-import { LAUNCHD_LABEL, SYSTEMD_UNIT_NAME } from 'cli/cli.constants.ts';
+import { LAUNCHD_LABEL, SYSTEMD_UNIT_NAME, WINDOWS_TASK_NAME } from 'cli/cli.constants.ts';
 
 export interface ServiceManager {
   ensureRegistered(): Promise<void>;
@@ -277,29 +277,111 @@ function createSystemctlManager(spawn: SpawnFn): ServiceManager {
   };
 }
 
-// ---------- Windows (placeholder until commit #3) ----------
+// ---------- Windows (schtasks) ----------
 
-const WIN32_NOT_IMPLEMENTED = 'windows service-manager support is added in commit #3';
-
-function createSchtasksManager(_spawn: SpawnFn, _unitPath: string): ServiceManager {
+function createSchtasksManager(spawn: SpawnFn, unitPath: string): ServiceManager {
+  const taskName = WINDOWS_TASK_NAME;
   return {
     isRegistered: async () => {
-      throw new Error(WIN32_NOT_IMPLEMENTED);
+      const result = await runCommand(spawn, ['schtasks', '/Query', '/TN', taskName]);
+      return result.exitCode === 0;
     },
     isRunning: async () => {
-      throw new Error(WIN32_NOT_IMPLEMENTED);
+      const result = await runCommand(spawn, [
+        'schtasks',
+        '/Query',
+        '/TN',
+        taskName,
+        '/FO',
+        'LIST',
+      ]);
+      if (result.exitCode !== 0) return false;
+      return /^Status:\s*Running\s*$/im.test(result.stdout);
     },
     ensureRegistered: async () => {
-      throw new Error(WIN32_NOT_IMPLEMENTED);
+      const query = await runCommand(spawn, ['schtasks', '/Query', '/TN', taskName]);
+      if (query.exitCode === 0) return;
+      const create = await runCommand(spawn, [
+        'schtasks',
+        '/Create',
+        '/TN',
+        taskName,
+        '/XML',
+        unitPath,
+        '/F',
+      ]);
+      if (create.exitCode !== 0) {
+        throw new Error(
+          `schtasks /Create failed (exit ${create.exitCode.toString()}): ${
+            create.stderr.trim() || create.stdout.trim()
+          }`,
+        );
+      }
     },
     start: async () => {
-      throw new Error(WIN32_NOT_IMPLEMENTED);
+      const query = await runCommand(spawn, ['schtasks', '/Query', '/TN', taskName]);
+      if (query.exitCode !== 0) {
+        const create = await runCommand(spawn, [
+          'schtasks',
+          '/Create',
+          '/TN',
+          taskName,
+          '/XML',
+          unitPath,
+          '/F',
+        ]);
+        if (create.exitCode !== 0) {
+          throw new Error(
+            `schtasks /Create failed (exit ${create.exitCode.toString()}): ${
+              create.stderr.trim() || create.stdout.trim()
+            }`,
+          );
+        }
+      }
+      const run = await runCommand(spawn, ['schtasks', '/Run', '/TN', taskName]);
+      if (run.exitCode !== 0) {
+        throw new Error(
+          `schtasks /Run failed (exit ${run.exitCode.toString()}): ${
+            run.stderr.trim() || run.stdout.trim()
+          }`,
+        );
+      }
     },
     stop: async () => {
-      throw new Error(WIN32_NOT_IMPLEMENTED);
+      // /End is non-zero when the task is not currently running; that is not
+      // an error condition for the caller — just no-op.
+      await runCommand(spawn, ['schtasks', '/End', '/TN', taskName]);
     },
     restart: async () => {
-      throw new Error(WIN32_NOT_IMPLEMENTED);
+      const query = await runCommand(spawn, ['schtasks', '/Query', '/TN', taskName]);
+      if (query.exitCode !== 0) {
+        const create = await runCommand(spawn, [
+          'schtasks',
+          '/Create',
+          '/TN',
+          taskName,
+          '/XML',
+          unitPath,
+          '/F',
+        ]);
+        if (create.exitCode !== 0) {
+          throw new Error(
+            `schtasks /Create failed (exit ${create.exitCode.toString()}): ${
+              create.stderr.trim() || create.stdout.trim()
+            }`,
+          );
+        }
+      }
+      // Best-effort end before starting again.
+      await runCommand(spawn, ['schtasks', '/End', '/TN', taskName]);
+      const run = await runCommand(spawn, ['schtasks', '/Run', '/TN', taskName]);
+      if (run.exitCode !== 0) {
+        throw new Error(
+          `schtasks /Run failed (exit ${run.exitCode.toString()}): ${
+            run.stderr.trim() || run.stdout.trim()
+          }`,
+        );
+      }
     },
   };
 }

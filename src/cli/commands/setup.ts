@@ -6,6 +6,7 @@ import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import { buildLaunchdPlist } from 'cli/launchd-plist.ts';
 import type { PromptSink } from 'cli/prompts.ts';
+import { buildScheduledTaskXml, encodeScheduledTaskXml } from 'cli/scheduled-task-xml.ts';
 import { buildSystemdUnit } from 'cli/systemd-unit.ts';
 import {
   DEFAULT_BUFFER_MAX_BYTES,
@@ -34,6 +35,7 @@ export interface SetupCommandDeps {
   generateHostId?: () => string;
   now?: () => string;
   platform: NodeJS.Platform;
+  windowsUserId?: string;
 }
 
 export interface SetupCommandOptions {
@@ -134,12 +136,22 @@ export async function runSetup(
 
   if (deps.serviceUnitPath !== null) {
     await ensureDir(dirname(deps.serviceUnitPath));
-    const unit =
-      deps.platform === 'darwin'
-        ? buildLaunchdPlist({ programPath: deps.programPath })
-        : buildSystemdUnit({ programPath: deps.programPath });
-    await writeAtomic(deps.serviceUnitPath, unit);
-    await setMode(deps.serviceUnitPath, 0o644);
+    if (deps.platform === 'win32') {
+      const userIdInput: { userId?: string } =
+        deps.windowsUserId !== undefined ? { userId: deps.windowsUserId } : {};
+      const xml = buildScheduledTaskXml({
+        programPath: deps.programPath,
+        ...userIdInput,
+      });
+      await writeAtomic(deps.serviceUnitPath, encodeScheduledTaskXml(xml));
+    } else {
+      const unit =
+        deps.platform === 'darwin'
+          ? buildLaunchdPlist({ programPath: deps.programPath })
+          : buildSystemdUnit({ programPath: deps.programPath });
+      await writeAtomic(deps.serviceUnitPath, unit);
+      await setMode(deps.serviceUnitPath, 0o644);
+    }
   }
 
   if (isReplace) {
