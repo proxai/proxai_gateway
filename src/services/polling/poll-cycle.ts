@@ -1,6 +1,7 @@
 import { nowIsoUtc } from 'core/utils';
 import { drainBuffer } from 'services/uploader';
 import { isPaused } from 'services/polling/pause-sentinel.ts';
+import { checkStaleBinary } from 'services/polling/stale-binary.ts';
 import type {
   PollCycleContext,
   PollCycleResult,
@@ -14,6 +15,15 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
   const log = ctx.logger;
 
   log?.info({ event: 'cycle.start', started_at: startedAt }, 'poll cycle started');
+
+  const staleDeps: Parameters<typeof checkStaleBinary>[0] = {
+    installedAt: ctx.installedAt,
+    warnAfterDays: ctx.staleBinary.warnAfterDays,
+    pauseAfterDays: ctx.staleBinary.pauseAfterDays,
+    pauseSentinelPath: ctx.pauseSentinelPath,
+  };
+  if (log !== undefined) staleDeps.logger = log;
+  await checkStaleBinary(staleDeps);
 
   if (await isPaused(ctx.pauseSentinelPath)) {
     const completedAt = nowIsoUtc();

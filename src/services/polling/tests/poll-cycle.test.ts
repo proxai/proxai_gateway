@@ -49,6 +49,8 @@ function makeContext(sources: RegisteredSource[]): PollCycleContext {
     gatewayVersion: 'gw-0.1',
     sources,
     pauseSentinelPath: join(dir, 'PAUSED'),
+    installedAt: new Date().toISOString(),
+    staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
   };
 }
 
@@ -153,4 +155,44 @@ test('aggregates errors from multiple sources into sourceResults', async () => {
   ]);
   const result = await runPollCycle(ctx);
   expect(result.sourceResults['s']?.errors).toEqual([{ sourcePath: '/x', reason: 'boom' }]);
+});
+
+test('stale binary past pause threshold writes sentinel and short-circuits via pause check', async () => {
+  let calls = 0;
+  const ctx = makeContext([
+    {
+      name: 's',
+      poll: async () => {
+        calls++;
+        return { filesProcessed: 0, capturedBatches: 0, capturedBytes: 0, errors: [] };
+      },
+    },
+  ]);
+  const DAY_MS = 86_400_000;
+  ctx.installedAt = new Date(Date.now() - 200 * DAY_MS).toISOString();
+  ctx.staleBinary = { warnAfterDays: 30, pauseAfterDays: 60 };
+  const result = await runPollCycle(ctx);
+  expect(result.paused).toBe(true);
+  expect(calls).toBe(0);
+  expect(await Bun.file(join(dir, 'PAUSED')).exists()).toBe(true);
+});
+
+test('stale binary in warning window does not pause; sources still run', async () => {
+  let calls = 0;
+  const ctx = makeContext([
+    {
+      name: 's',
+      poll: async () => {
+        calls++;
+        return { filesProcessed: 0, capturedBatches: 0, capturedBytes: 0, errors: [] };
+      },
+    },
+  ]);
+  const DAY_MS = 86_400_000;
+  ctx.installedAt = new Date(Date.now() - 40 * DAY_MS).toISOString();
+  ctx.staleBinary = { warnAfterDays: 30, pauseAfterDays: 60 };
+  const result = await runPollCycle(ctx);
+  expect(result.paused).toBe(false);
+  expect(calls).toBe(1);
+  expect(await Bun.file(join(dir, 'PAUSED')).exists()).toBe(false);
 });

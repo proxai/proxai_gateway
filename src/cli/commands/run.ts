@@ -115,6 +115,11 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
       gatewayVersion: deps.gatewayVersion,
       sources: deps.sources ?? buildDefaultSources({}),
       pauseSentinelPath: deps.pauseSentinelPath,
+      installedAt: deps.config.account.installedAt,
+      staleBinary: {
+        warnAfterDays: deps.config.staleBinary.warnAfterDays,
+        pauseAfterDays: deps.config.staleBinary.pauseAfterDays,
+      },
       logger,
     };
     await runPollLoop(cycleCtx, loopOptions);

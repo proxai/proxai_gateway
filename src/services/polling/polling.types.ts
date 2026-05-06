@@ -30,6 +30,11 @@ export interface RegisteredSource {
   poll: SourcePoller;
 }
 
+export interface StaleBinaryThresholds {
+  warnAfterDays: number;
+  pauseAfterDays: number;
+}
+
 export interface PollCycleContext {
   buffer: Database;
   http: HttpClient;
@@ -37,6 +42,8 @@ export interface PollCycleContext {
   gatewayVersion: string;
   sources: readonly RegisteredSource[];
   pauseSentinelPath: string;
+  installedAt: string;
+  staleBinary: StaleBinaryThresholds;
   logger?: Logger;
 }
 
