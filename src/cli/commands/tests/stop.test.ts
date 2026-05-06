@@ -81,3 +81,22 @@ test('returns error when stop throws', async () => {
   expect(calls.stop).toBe(1);
   expect(output.lines.some((l) => l.level === 'error' && l.msg.includes('stop failed'))).toBe(true);
 });
+
+test('formatError stringifies non-Error throws', async () => {
+  const sm: ServiceManager = {
+    isRegistered: async () => true,
+    isRunning: async () => false,
+    ensureRegistered: async () => undefined,
+    start: async () => undefined,
+    stop: async () => {
+      throw 'rope-throw';
+    },
+    restart: async () => undefined,
+  };
+  const output = captureOutput();
+  const result = await runStop({ output, serviceManager: sm });
+  expect(result.exitCode).toBe(1);
+  expect(
+    output.lines.some((l) => l.level === 'error' && l.msg.includes('stop failed: rope-throw')),
+  ).toBe(true);
+});

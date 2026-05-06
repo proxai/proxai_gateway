@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runStatus } from 'cli/commands/status.ts';
+import { runStatus, formatBytes } from 'cli/commands/status.ts';
 import { captureOutput } from 'cli/output.ts';
 import { generateUuidV7, zstdCompressSync } from 'core/utils';
 import {
@@ -112,4 +112,23 @@ test('reports buffer_full: yes when BUFFER_FULL sentinel exists', async () => {
   const out = captureOutput();
   await runStatus({ output: out, buffer, sentinelPath, bufferFullSentinelPath });
   expect(out.lines.some((l) => l.msg.includes('buffer_full: yes'))).toBe(true);
+});
+
+test('formatBytes handles each magnitude tier', () => {
+  expect(formatBytes(0)).toBe('0 B');
+  expect(formatBytes(512)).toBe('512 B');
+  expect(formatBytes(1024)).toBe('1.00 KB');
+  expect(formatBytes(50 * 1024)).toBe('50.0 KB');
+  expect(formatBytes(150 * 1024)).toBe('150 KB');
+  expect(formatBytes(2 * 1024 * 1024)).toBe('2.00 MB');
+  expect(formatBytes(2 * 1024 * 1024 * 1024)).toBe('2.00 GB');
+  expect(formatBytes(2 * 1024 * 1024 * 1024 * 1024)).toBe('2.00 TB');
+  // PB -- units array runs out, falls back to TB representation.
+  expect(formatBytes(2 * 1024 * 1024 * 1024 * 1024 * 1024)).toContain('TB');
+});
+
+test('formatBytes treats invalid input as zero', () => {
+  expect(formatBytes(NaN)).toBe('0 B');
+  expect(formatBytes(-1)).toBe('0 B');
+  expect(formatBytes(Infinity)).toBe('0 B');
 });

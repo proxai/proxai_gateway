@@ -111,3 +111,26 @@ test('returns error when invokeSetup is missing and config does not exist', asyn
   expect(result.exitCode).toBe(1);
   expect(output.lines.some((l) => l.level === 'error')).toBe(true);
 });
+
+test('formatError stringifies non-Error throws', async () => {
+  const sm: ServiceManager = {
+    isRegistered: async () => true,
+    isRunning: async () => true,
+    ensureRegistered: async () => undefined,
+    start: async () => undefined,
+    stop: async () => undefined,
+    restart: async () => {
+      throw 'rope-throw';
+    },
+  };
+  const output = captureOutput();
+  const result = await runRestart({
+    output,
+    configExists: async () => true,
+    serviceManager: sm,
+  });
+  expect(result.exitCode).toBe(1);
+  expect(
+    output.lines.some((l) => l.level === 'error' && l.msg.includes('restart failed: rope-throw')),
+  ).toBe(true);
+});

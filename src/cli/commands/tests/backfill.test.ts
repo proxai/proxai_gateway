@@ -229,6 +229,48 @@ test('captures zero batches when sources do nothing and reports the count', asyn
   );
 });
 
+test('logs a warning when syncServerWatermarks throws but continues the cycle', async () => {
+  const config = makeConfig();
+  const { source } = captureOverrideSource();
+  // Explicit fetch mock that throws on /v1/watermarks (fresh buffer triggers
+  // the pre-flight sync), but accepts ingest requests so the cycle can finish.
+  const httpClient = new HttpClient({
+    apiKey: config.account.apiKey,
+    hostId: config.account.hostId,
+    endpoints: {
+      ingest: config.backend.ingestUrl,
+      verifyKey: config.backend.verifyKeyUrl,
+      watermarks: config.backend.watermarksUrl,
+    },
+    fetch: (async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/v1/watermarks')) {
+        throw new Error('boom-watermark');
+      }
+      return new Response(JSON.stringify({ accepted: true, idempotent: false, capture_id: 'x' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof globalThis.fetch,
+  });
+
+  const out = captureOutput();
+  const result = await runBackfill(
+    {
+      output: out,
+      config,
+      pauseSentinelPath: join(dir, 'PAUSED'),
+      authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
+      bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
+      gatewayVersion: 'gw-test',
+      httpClient,
+      sources: [source],
+    },
+    { since: '7d' },
+  );
+  expect(result.exitCode).toBe(0);
+});
+
 test('closes the buffer database after the cycle completes', async () => {
   const config = makeConfig();
   const { source } = captureOverrideSource();

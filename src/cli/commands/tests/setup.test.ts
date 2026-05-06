@@ -437,6 +437,41 @@ test.skipIf(process.platform === 'win32')(
   },
 );
 
+test('returns error when readMachineUuid throws', async () => {
+  const control = newControl();
+  const d = {
+    ...deps(control),
+    readMachineUuid: async () => {
+      throw new Error('cannot read /etc/machine-id');
+    },
+  };
+  const out = captureOutput();
+  d.output = out;
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(1);
+  expect(
+    out.lines.some((l) => l.level === 'error' && l.msg.includes('failed to read machine UUID')),
+  ).toBe(true);
+});
+
+test('on replace, reports rederivation when host_id changes despite stable user_id', async () => {
+  // Pre-write config that has same userId but a stale hostId — simulates a
+  // machine UUID change captured in a fresh run.
+  await writeExistingConfig({ userId: TEST_USER_ID, hostId: 'stale-host-id-from-old-machine' });
+  const control = newControl({ userId: TEST_USER_ID });
+  const out = captureOutput();
+  const d = { ...deps(control), output: out };
+  const result = await runSetup(d, { apiKey: NEW_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(
+    out.lines.some(
+      (l) => l.level === 'info' && l.msg.includes('host_id rederived from machine UUID'),
+    ),
+  ).toBe(true);
+  const config = await loadConfigFromFile(configPath);
+  expect(config.account.hostId).toBe(EXPECTED_HOST_ID);
+});
+
 test('successful setup clears a pre-existing AUTH_FAILED sentinel', async () => {
   const control = newControl();
   const d = deps(control);

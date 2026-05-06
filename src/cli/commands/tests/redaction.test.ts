@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -85,6 +85,23 @@ test('test: returns fileUnreadable when file is missing', async () => {
   expect(result.exitCode).toBe(7);
   expect(out.lines.some((l) => l.msg.includes('file not found'))).toBe(true);
 });
+
+test.skipIf(process.platform === 'win32')(
+  'test: returns fileUnreadable when text() throws for an unreadable file',
+  async () => {
+    const filePath = await seed('locked.txt', 'secret content');
+    // chmod 0 — exists() still returns true on macOS/linux but text() throws EACCES.
+    await chmod(filePath, 0o000);
+    const out = captureOutput();
+    try {
+      const result = await runRedactionTest({ output: out, emit: () => undefined }, { filePath });
+      expect(result.exitCode).toBe(7);
+      expect(out.lines.some((l) => l.msg.includes('failed to read file'))).toBe(true);
+    } finally {
+      await chmod(filePath, 0o644);
+    }
+  },
+);
 
 test('test: rule summary lists rule IDs sorted by hit count', async () => {
   const k = 'sk-' + 'b'.repeat(48);

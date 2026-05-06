@@ -236,6 +236,65 @@ test('parses different --since unit suffixes (s, m, h, d)', async () => {
   expect(JSON.parse(lines[0]!).msg).toBe('recent');
 });
 
+test('formatLine renders trace, debug, info, warn, error, fatal levels', () => {
+  // Exercises every branch of the colorLevel switch. Chalk strips ANSI when
+  // stdout isn't a TTY so we assert on the level label only.
+  const trace = formatLine(JSON.stringify({ level: 10, time: Date.now(), msg: 't' }));
+  expect(trace).toContain('TRACE');
+  const debug = formatLine(JSON.stringify({ level: 20, time: Date.now(), msg: 'd' }));
+  expect(debug).toContain('DEBUG');
+  const info = formatLine(JSON.stringify({ level: 30, time: Date.now(), msg: 'i' }));
+  expect(info).toContain('INFO');
+  const warn = formatLine(JSON.stringify({ level: 40, time: Date.now(), msg: 'w' }));
+  expect(warn).toContain('WARN');
+  const error = formatLine(JSON.stringify({ level: 50, time: Date.now(), msg: 'e' }));
+  expect(error).toContain('ERROR');
+  const fatal = formatLine(JSON.stringify({ level: 60, time: Date.now(), msg: 'f' }));
+  expect(fatal).toContain('FATAL');
+});
+
+test('formatLine handles unknown level by falling through to numeric label', () => {
+  const out = formatLine(JSON.stringify({ level: 25, time: Date.now(), msg: 'x' }));
+  expect(out).toContain('25');
+});
+
+test('--follow resets read position when the log file rotates mid-loop', async () => {
+  // Two distinct file paths simulate UTC midnight rotation. The pathProvider
+  // returns path-A initially, then path-B after the first follow tick.
+  const pathA = join(dir, 'rotA.log');
+  const pathB = join(dir, 'rotB.log');
+  await Bun.write(pathA, `${makeLine(30, 'pre-rotate')}\n`);
+
+  let calls = 0;
+  const pathProvider = (): string => {
+    calls++;
+    return calls <= 2 ? pathA : pathB;
+  };
+
+  const ctrl = new AbortController();
+  const lines: string[] = [];
+  const followPromise = runTail(
+    {
+      output: captureOutput(),
+      logDir: dir,
+      emit: (l) => lines.push(l),
+      abortSignal: ctrl.signal,
+      pathProvider,
+    },
+    { follow: true, json: true },
+  );
+  await Bun.sleep(50);
+  // Now write to the new (rotated) path so the rotation branch reads from
+  // position=0 and emits this line.
+  await Bun.write(pathB, `${makeLine(30, 'post-rotate')}\n`);
+  await Bun.sleep(400);
+  ctrl.abort();
+  await followPromise;
+
+  expect(lines.some((l) => JSON.parse(l).msg === 'pre-rotate')).toBe(true);
+  expect(lines.some((l) => JSON.parse(l).msg === 'post-rotate')).toBe(true);
+});
+
 test('skips malformed JSON lines silently', async () => {
   await seedTodaysLog(['{not-json}', makeLine(30, 'good'), 'also-not-json'].join('\n') + '\n');
   const lines: string[] = [];

@@ -120,3 +120,37 @@ test('returns error when invokeSetup is missing and config does not exist', asyn
   expect(result.exitCode).toBe(1);
   expect(output.lines.some((l) => l.level === 'error')).toBe(true);
 });
+
+test('formatError stringifies non-Error throws', async () => {
+  const calls: FakeCalls = {
+    ensureRegistered: 0,
+    start: 0,
+    stop: 0,
+    restart: 0,
+    isRegistered: 0,
+    isRunning: 0,
+  };
+  const sm: ServiceManager = {
+    isRegistered: async () => false,
+    isRunning: async () => false,
+    ensureRegistered: async () => {
+      calls.ensureRegistered++;
+    },
+    // throw a non-Error so the `String(err)` branch in formatError fires.
+    start: async () => {
+      throw 'rope-throw';
+    },
+    stop: async () => undefined,
+    restart: async () => undefined,
+  };
+  const output = captureOutput();
+  const result = await runStart({
+    output,
+    configExists: async () => true,
+    serviceManager: sm,
+  });
+  expect(result.exitCode).toBe(1);
+  expect(
+    output.lines.some((l) => l.level === 'error' && l.msg.includes('start failed: rope-throw')),
+  ).toBe(true);
+});

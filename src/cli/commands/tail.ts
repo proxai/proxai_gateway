@@ -33,6 +33,12 @@ export interface TailCommandDeps {
   logDir: string;
   abortSignal?: AbortSignal;
   emit: (line: string) => void;
+  /**
+   * @internal Test seam. Defaults to `todaysLogPath(logDir)` and is
+   * re-evaluated each follow iteration to detect log rotation across UTC
+   * midnight. Production callers should not set this.
+   */
+  pathProvider?: () => string;
 }
 
 export interface TailCommandOptions {
@@ -68,7 +74,8 @@ export async function runTail(
   const json = options.json === true;
   const emit = deps.emit;
 
-  let path = todaysLogPath(deps.logDir);
+  const resolvePath = deps.pathProvider ?? ((): string => todaysLogPath(deps.logDir));
+  let path = resolvePath();
   let position = 0;
 
   const initial = await readMatchingTail(path, lineLimit, filters);
@@ -85,7 +92,7 @@ export async function runTail(
     await sleep(POLL_INTERVAL_MS, deps.abortSignal);
     if (deps.abortSignal !== undefined && deps.abortSignal.aborted) break;
 
-    const currentPath = todaysLogPath(deps.logDir);
+    const currentPath = resolvePath();
     if (currentPath !== path) {
       path = currentPath;
       position = 0;
