@@ -5,6 +5,12 @@ export interface RedactionRule {
   replacement: string;
 }
 
+export interface RuleCategory {
+  name: string;
+  description: string;
+  rules: readonly RedactionRule[];
+}
+
 export interface RedactionResult {
   redacted: string;
   matchCount: number;

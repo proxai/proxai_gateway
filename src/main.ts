@@ -7,7 +7,7 @@ import type { LogLevel } from 'core/log';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import { runInstall } from 'cli/commands/install.ts';
 import { runPause } from 'cli/commands/pause.ts';
-import { runRedactionTest } from 'cli/commands/redaction-test.ts';
+import { runRedactionList, runRedactionTest } from 'cli/commands/redaction.ts';
 import { runResume } from 'cli/commands/resume.ts';
 import { runDaemon } from 'cli/commands/run.ts';
 import { runStatus } from 'cli/commands/status.ts';
@@ -189,14 +189,36 @@ program
     },
   );
 
-program
-  .command('redaction-test <file>')
+const redaction = program
+  .command('redaction')
+  .description('Inspect and test the redaction pipeline');
+
+redaction
+  .command('test <file>')
   .description('Run the redaction pipeline against a file and print the redacted output')
   .option('--show-rules', 'print which rules matched and how many times', false)
   .action(async (filePath: string, opts: { showRules?: boolean }) => {
     const options: Parameters<typeof runRedactionTest>[1] = { filePath };
     if (opts.showRules === true) options.showRules = true;
     const result = await runRedactionTest(
+      { output: consoleOutput(), emit: (line) => console.log(line) },
+      options,
+    );
+    process.exit(result.exitCode);
+  });
+
+redaction
+  .command('list')
+  .description('List all redaction rules grouped by category')
+  .option('--categories', 'list only category names with rule counts', false)
+  .option('--category <name>', 'filter to one category (full detail)')
+  .option('--json', 'emit raw JSON output instead of pretty format', false)
+  .action((opts: { categories?: boolean; category?: string; json?: boolean }) => {
+    const options: Parameters<typeof runRedactionList>[1] = {};
+    if (opts.categories === true) options.categories = true;
+    if (opts.category !== undefined) options.category = opts.category;
+    if (opts.json === true) options.json = true;
+    const result = runRedactionList(
       { output: consoleOutput(), emit: (line) => console.log(line) },
       options,
     );
