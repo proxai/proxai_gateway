@@ -21,8 +21,8 @@ export const LLM_PROVIDERS_RULES: readonly RedactionRule[] = [
   },
   {
     id: 'openai-api-key',
-    description: 'OpenAI API key (sk-, sk-proj-, sk-svcacct-)',
-    pattern: /\bsk-(?!ant-)(?:proj-|svcacct-)?[A-Za-z0-9_-]{32,}\b/g,
+    description: 'OpenAI API key (sk-, sk-proj-, sk-svcacct-, sk-admin-)',
+    pattern: /\bsk-(?!ant-)(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{32,}\b/g,
     replacement: '[REDACTED:openai-api-key]',
   },
   {
@@ -39,9 +39,15 @@ export const LLM_PROVIDERS_RULES: readonly RedactionRule[] = [
   },
   {
     id: 'cohere-api-key',
-    description: 'Cohere API key (co_...)',
+    description: 'Cohere API key with co_ prefix',
     pattern: /\bco_[A-Za-z0-9]{40,}\b/g,
     replacement: '[REDACTED:cohere-api-key]',
+  },
+  {
+    id: 'cohere-api-key-keyword',
+    description: 'Cohere API key (40-char alnum after COHERE keyword; covers prefixless keys)',
+    pattern: /(COHERE[_A-Z]*KEY\s*[:=]\s*)["']?[A-Za-z0-9]{40}["']?/g,
+    replacement: '$1[REDACTED:cohere-api-key]',
   },
   {
     id: 'groq-api-key',
@@ -99,8 +105,8 @@ export const LLM_PROVIDERS_RULES: readonly RedactionRule[] = [
   },
   {
     id: 'mistral-api-key',
-    description: 'Mistral API key (32-char alphanumeric after MISTRAL keyword)',
-    pattern: /(MISTRAL[_A-Z]*KEY\s*[:=]\s*)["']?[A-Za-z0-9]{32}["']?/g,
+    description: 'Mistral API key (32+ alphanumeric chars after MISTRAL keyword)',
+    pattern: /(MISTRAL[_A-Z]*KEY\s*[:=]\s*)["']?[A-Za-z0-9]{32,}["']?/g,
     replacement: '$1[REDACTED:mistral-api-key]',
   },
   {

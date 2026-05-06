@@ -46,10 +46,22 @@ test('does not redact short prefix-only strings', () => {
   expect(result.matchCount).toBe(0);
 });
 
-test('redacts a Cohere API key', () => {
+test('redacts a Cohere API key with co_ prefix', () => {
   const input = 'COHERE_API_KEY=co_AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMn';
   const result = applyRedaction(input, LLM_PROVIDERS_RULES);
   expect(result.redacted).toContain('[REDACTED:cohere-api-key]');
+});
+
+test('redacts a prefixless Cohere API key via keyword anchor', () => {
+  const input = 'COHERE_API_KEY=AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMn';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:cohere-api-key]');
+});
+
+test('redacts an OpenAI admin API key (sk-admin-)', () => {
+  const input = 'OPENAI_ADMIN_KEY=sk-admin-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQrSt';
+  const result = applyRedaction(input, LLM_PROVIDERS_RULES);
+  expect(result.redacted).toContain('[REDACTED:openai-api-key]');
 });
 
 test('redacts an OpenRouter API key', () => {
