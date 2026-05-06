@@ -6,11 +6,15 @@ import { bufferDbPath, configFilePath, logDir, pausedSentinelPath } from 'core/i
 import type { LogLevel } from 'core/log';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import { runSetup } from 'cli/commands/setup.ts';
+import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup.ts';
 import { runPause } from 'cli/commands/pause.ts';
 import { runRedactionList, runRedactionTest } from 'cli/commands/redaction.ts';
+import { runRestart } from 'cli/commands/restart.ts';
 import { runResume } from 'cli/commands/resume.ts';
 import { runDaemon } from 'cli/commands/run.ts';
+import { runStart } from 'cli/commands/start.ts';
 import { runStatus } from 'cli/commands/status.ts';
+import { runStop } from 'cli/commands/stop.ts';
 import { runTail } from 'cli/commands/tail.ts';
 import {
   defaultLaunchdPlistPath,
@@ -18,6 +22,8 @@ import {
   consoleOutput,
   inquirerPrompts,
 } from 'cli/index.ts';
+import { getServiceManager } from 'cli/service-manager.ts';
+import type { CommandResult } from 'cli/cli.types.ts';
 import { openBufferDb } from 'services/buffer';
 import { loadConfigFromFile, NEST_INGEST_URL, NEST_VERIFY_KEY_URL } from 'services/config';
 import type { InstallSource } from 'services/config';
@@ -25,6 +31,41 @@ import { HttpClient } from 'services/http';
 
 const program = new Command();
 program.name('proxai-gateway').description(packageJson.description).version(packageJson.version);
+
+function platformServiceUnitPath(platform: NodeJS.Platform): string | null {
+  if (platform === 'darwin') return defaultLaunchdPlistPath();
+  if (platform === 'linux') return defaultSystemdUnitPath();
+  return null;
+}
+
+function buildSetupDeps(): SetupCommandDeps {
+  const platform = process.platform;
+  return {
+    output: consoleOutput(),
+    prompts: inquirerPrompts(),
+    configPath: configFilePath(),
+    bufferDbPath: bufferDbPath(),
+    logDir: logDir(),
+    serviceUnitPath: platformServiceUnitPath(platform),
+    programPath: process.argv[1] ?? 'proxai-gateway',
+    configExists: () => Bun.file(configFilePath()).exists(),
+    httpClientFactory: (apiKey, hostId) =>
+      new HttpClient({
+        apiKey,
+        hostId,
+        endpoints: {
+          ingest: NEST_INGEST_URL,
+          verifyKey: NEST_VERIFY_KEY_URL,
+        },
+        gatewayVersion: `@proxai/gateway ${packageJson.version}`,
+      }),
+    platform,
+  };
+}
+
+function invokeSetupInteractive(): Promise<CommandResult> {
+  return runSetup(buildSetupDeps(), {} as SetupCommandOptions);
+}
 
 program
   .command('setup')
@@ -38,37 +79,77 @@ program
     'github_release',
   )
   .action(async (opts: { apiKey?: string; installSource: string }) => {
+    const result = await runSetup(buildSetupDeps(), buildSetupOptions(opts));
+    process.exit(result.exitCode);
+  });
+
+program
+  .command('start')
+  .description('Start the proxai-gateway service (registering it on first run)')
+  .action(async () => {
     const platform = process.platform;
-    const serviceUnitPath =
-      platform === 'darwin'
-        ? defaultLaunchdPlistPath()
-        : platform === 'linux'
-          ? defaultSystemdUnitPath()
-          : null;
-    const result = await runSetup(
-      {
-        output: consoleOutput(),
-        prompts: inquirerPrompts(),
-        configPath: configFilePath(),
-        bufferDbPath: bufferDbPath(),
-        logDir: logDir(),
-        serviceUnitPath,
-        programPath: process.argv[1] ?? 'proxai-gateway',
-        configExists: () => Bun.file(configFilePath()).exists(),
-        httpClientFactory: (apiKey, hostId) =>
-          new HttpClient({
-            apiKey,
-            hostId,
-            endpoints: {
-              ingest: NEST_INGEST_URL,
-              verifyKey: NEST_VERIFY_KEY_URL,
-            },
-            gatewayVersion: `@proxai/gateway ${packageJson.version}`,
-          }),
-        platform,
-      },
-      buildSetupOptions(opts),
-    );
+    const unitPath = platformServiceUnitPath(platform);
+    if (unitPath === null) {
+      console.error(`unsupported platform for start: ${platform}`);
+      process.exit(EXIT_CODE.error);
+    }
+    const sm = getServiceManager({
+      platform,
+      unitPath,
+      programPath: process.argv[1] ?? 'proxai-gateway',
+    });
+    const result = await runStart({
+      output: consoleOutput(),
+      configExists: () => Bun.file(configFilePath()).exists(),
+      serviceManager: sm,
+      invokeSetup: invokeSetupInteractive,
+    });
+    process.exit(result.exitCode);
+  });
+
+program
+  .command('stop')
+  .description('Stop the proxai-gateway service')
+  .action(async () => {
+    const platform = process.platform;
+    const unitPath = platformServiceUnitPath(platform);
+    if (unitPath === null) {
+      console.error(`unsupported platform for stop: ${platform}`);
+      process.exit(EXIT_CODE.error);
+    }
+    const sm = getServiceManager({
+      platform,
+      unitPath,
+      programPath: process.argv[1] ?? 'proxai-gateway',
+    });
+    const result = await runStop({
+      output: consoleOutput(),
+      serviceManager: sm,
+    });
+    process.exit(result.exitCode);
+  });
+
+program
+  .command('restart')
+  .description('Restart the proxai-gateway service')
+  .action(async () => {
+    const platform = process.platform;
+    const unitPath = platformServiceUnitPath(platform);
+    if (unitPath === null) {
+      console.error(`unsupported platform for restart: ${platform}`);
+      process.exit(EXIT_CODE.error);
+    }
+    const sm = getServiceManager({
+      platform,
+      unitPath,
+      programPath: process.argv[1] ?? 'proxai-gateway',
+    });
+    const result = await runRestart({
+      output: consoleOutput(),
+      configExists: () => Bun.file(configFilePath()).exists(),
+      serviceManager: sm,
+      invokeSetup: invokeSetupInteractive,
+    });
     process.exit(result.exitCode);
   });
 

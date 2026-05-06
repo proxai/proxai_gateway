@@ -4,4 +4,5 @@ export * from 'cli/commands';
 export * from 'cli/launchd-plist.ts';
 export * from 'cli/output.ts';
 export * from 'cli/prompts.ts';
+export * from 'cli/service-manager.ts';
 export * from 'cli/systemd-unit.ts';
