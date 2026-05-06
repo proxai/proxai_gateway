@@ -6,10 +6,11 @@ This is the **contract** the backend enforces. The gateway-side algorithms (`03_
 
 If you're changing gateway behavior that touches the wire format, idempotency, redaction, or the watermark, **read this first.** Most of the constraints below exist because of a real bug we've already paid for somewhere.
 
-> **Implementation status (as of doc v2.1):** the **verify-key endpoint is live** in `proxai_nest`. The **raw-record upload endpoint is NOT yet live** — gateway code should be written against the contract below, but real uploads will only succeed once `POST /v1/raw_records` is wired up server-side. Gateway tests must mock the upload path.
+> **Implementation status (as of doc v2.2):** all three gateway-relevant endpoints are live in `proxai_nest`: `GET /ingestion/verify-key`, `POST /v1/raw_records`, and `GET /v1/watermarks`. The pipeline is pre-production (no real customer traffic), so contract drift can still be corrected cheaply — but the wire shapes below are the ground truth from the shipped server.
 
 ---
 
+<<<<<<< Updated upstream
 ## 1. The endpoints, in one paragraph
 
 The backend exposes three HTTP endpoints relevant to the gateway:
@@ -17,8 +18,17 @@ The backend exposes three HTTP endpoints relevant to the gateway:
 1. **`GET /ingestion/verify-key`** — authenticated. The gateway hits this during `setup` to validate that the user's ingestion key is real, active, and of type `INGESTION` before writing config. Returns `{ success: true, data: <ApiKey-without-id>, message }` on 200, or `403 Forbidden` if the key is missing/invalid/revoked/wrong-type. The response carries `data.userId`, which the gateway combines with the machine UUID to derive a stable `host_id` (see §5.4).
 2. **`POST /v1/raw_records`** — accepts a JSON envelope, decompresses the body, runs a defense-in-depth redaction pass, stores the bytes in S3, indexes the row in Postgres, enqueues a parse job, returns. Authenticated via the same **ingestion key** in the `X-API-Key` header. Treated as **at-least-once with capture-id idempotency** — same `capture_id` retried any number of times yields exactly one stored row. On watermark monotonicity rejection (§6.3) the 400 body is structured (`error: "watermark_regression"`) so the gateway can self-heal.
 3. **`GET /v1/watermarks?host_id=<host_id>`** — authenticated. Returns the server's known per-`(user_id, host_id)` watermark cursors so a fresh gateway instance can seed its local cursor table after a `~/.proxai` wipe. Read-only; one row per `(source_app, source_path_hash, watermark_table)`. Full spec lives in `~/Desktop/watermark_check.md`.
+=======
+## 1. The three endpoints, in one paragraph
 
-There is no host-pinning endpoint and no version-check endpoint. The system-level `GET /health` (DB+Redis probe) exists on `proxai_nest` but is **infrastructure-only** — it's hit by Docker HEALTHCHECK / Better Stack Uptime / internal dashboards, never by the gateway. The customer-facing "is my install going to work" probe is `verify-key`.
+The backend exposes three HTTP endpoints relevant to the gateway:
+
+1. **`GET /ingestion/verify-key`** — authenticated. The gateway hits this during `install` to validate that the user's ingestion key is real, active, and of type `INGESTION` before writing config. Returns `{ success: true, data: <ApiKey-without-id>, message }` on 200, or `403 Forbidden` if the key is missing/invalid/revoked/wrong-type.
+2. **`POST /v1/raw_records`** — accepts a JSON envelope, decompresses the body, runs a defense-in-depth redaction pass, stores the bytes in S3, indexes the row in Postgres, enqueues a parse job, returns. Authenticated via the same **ingestion key** in the `X-API-Key` header. Treated as **at-least-once with capture-id idempotency** — same `capture_id` retried any number of times yields exactly one stored row.
+3. **`GET /v1/watermarks?host_id=<sha256>`** — authenticated. Returns the backend's current per-`(source_path_hash, watermark_kind, watermark_table)` watermark cursors for the given `host_id`. Used by the gateway at startup and as a self-healing recovery path after a `400 watermark_regression` from `POST /v1/raw_records`. See §2.4.
+>>>>>>> Stashed changes
+
+The system-level `GET /health` (DB+Redis probe) exists on `proxai_nest` but is **infrastructure-only** — it's hit by Docker HEALTHCHECK / Better Stack Uptime / internal dashboards, never by the gateway. The customer-facing "is my install going to work" probe is `verify-key`.
 
 Everything beyond this paragraph is detail.
 
@@ -72,9 +82,17 @@ X-API-Key: <ingestion-key>
 
 Authenticated via the user's INGESTION-type API key in the `X-API-Key` header. The header value is the full key string, format `<random>-<datestr>-<random>` (three hyphen-separated parts). The backend looks up the key by signature hash, validates it's `state: ACTIVE` and `type: INGESTION`, and binds the request to the key's owner.
 
-**Important:** the ingestion key is per-user, not per-host. A user may run the gateway on multiple machines, all with the same key. The DTO includes `host_id` for telemetry and analytics partitioning, but the backend does NOT validate `host_id` against any allowlist — it stores whatever the gateway sends and uses it as a per-host correlation key.
+**Important:** the ingestion key is per-user, not per-host. A user may run the gateway on multiple machines, all with the same key, but the backend DOES enforce a per-key host-id allowlist when one is configured.
 
-**Once the endpoint is live (not yet today):** if the key is missing, malformed, or revoked, the backend returns `403`. If it's accepted but the request fails downstream validation, see §3.2.
+**Host-id binding (security boundary).** Each INGESTION key carries a `metadata.allowedHostIds` array provisioned at install time. The receive endpoint validates `dto.host_id ∈ apiKeyData.metadata.allowedHostIds` and returns `403 host_id not authorized` on miss. This protects against a stolen ingestion key being used to ingest fake data under another machine's identity.
+
+The `host_id` itself is the lowercase-hex sha256 of `machine_uuid + ':' + user_id` (gateway-side derivation in `core/system/host-id.ts`). The receive DTO requires this exact shape — the regex is `^[a-f0-9]{64}$`. Sending a non-hex `host_id` fails DTO validation with `400` before reaching the allowlist check.
+
+**Multi-machine workflow:** a user binding a second machine to the same INGESTION key must add the new `host_id` to `metadata.allowedHostIds`. The dashboard endpoint that mutates this list is out of scope for the gateway — the user opens it in the web UI and adds the new machine.
+
+**Legacy backfill window:** if `metadata.allowedHostIds` is null/empty AND the env override `AGENT_GATEWAY_ALLOW_LEGACY_HOST_IDS=true` is set, the backend accepts the request and emits the `agent_gateway_host_id_unverified_total` metric for operator visibility. Default is fail-closed.
+
+If the key is missing, malformed, or revoked, the backend returns `403`. If it's accepted but the request fails downstream validation, see §3.2.
 
 ### 2.3 Watermark sync (cold-start recovery)
 
@@ -116,6 +134,52 @@ The backend has an env-var kill switch. When the upload feature is disabled serv
 
 This switch exists for fast rollback during incidents. It is set by the operator, not by the gateway. The `/ingestion/verify-key` and `/v1/watermarks` endpoints are unaffected — the kill switch only gates uploads.
 
+### 2.4 Watermark fetch (pre-flight cursor sync)
+
+```
+GET /v1/watermarks?host_id=<64-char-lowercase-hex-sha256>
+X-API-Key: <ingestion-key>
+```
+
+Returns every per-file cursor the backend currently holds for this user × host:
+
+```json
+{
+  "host_id": "8a3aed6b9c1f...",
+  "user_id": "u_abc",
+  "watermarks": [
+    {
+      "source_app": "claude-code",
+      "source_path_hash": "<sha256>",
+      "watermark_kind": "byte_range",
+      "watermark_table": null,
+      "watermark_end": 12345,
+      "last_delivered_at": "2026-04-29T10:42:00.000Z"
+    },
+    {
+      "source_app": "codex",
+      "source_path_hash": "<sha256>",
+      "watermark_kind": "rowid_range",
+      "watermark_table": "thread_dynamic_tools",
+      "watermark_end": 5000,
+      "last_delivered_at": "2026-04-29T10:44:00.000Z"
+    }
+  ]
+}
+```
+
+**Use cases:**
+
+1. **Startup sync.** First call after install / reboot: hydrate the local cursor map so the gateway doesn't ship a batch the backend already has.
+2. **Recovery from `400 watermark_regression`.** The 400 body (§3.4) carries the offending file's `current_server_watermark_end` directly, but a full re-sync via this endpoint is the canonical "I'm out of sync, snap me back" recovery path.
+
+**Notes:**
+- `host_id` is required and must be 64-char lowercase hex (regex `^[a-f0-9]{64}$`). Other shapes return `400`.
+- The endpoint is scoped to the API key's owner; it does NOT enforce `metadata.allowedHostIds` because returning an empty list for "host_id not yours" is indistinguishable from "no captures yet" — and the security boundary that matters is on the write side (`POST /v1/raw_records`).
+- `watermark_end` is a JSON number. Per §6.5, gateway and backend agree to keep this `< 2^53`; values stored as `bigint` server-side are projected to `Number` at response time.
+- Empty `watermarks: []` for a host with no captures is the success case, not an error. Treat it as "server has no cursor; start from 0".
+- 200 response bodies are wrapped in the standard `{success, data, message}` envelope at the HTTP boundary; the shape above is `data`.
+
 ---
 
 ## 3. The wire DTO
@@ -144,18 +208,22 @@ This switch exists for fast rollback during incidents. It is set by the operator
 | Field | Type | Required | Validation | Notes |
 |---|---|---|---|---|
 | `capture_id` | string (UUIDv7) | yes | RFC 4122 v7 | Primary idempotency key. See §5. |
+<<<<<<< Updated upstream
 | `host_id` | string | yes | non-empty (64-char lowercase hex) | Derived deterministically by the gateway at setup time as `sha256(machine_uuid + ':' + user_id)` (see §5.4). Same physical machine + same user = same `host_id` across reinstalls and key rotations. **NOT pinned to the ingestion key** — the backend records it as-is and uses it as the per-host correlation key in `(user_id, host_id, source_path_hash)` watermark cursors. |
+=======
+| `host_id` | string | yes | 64-char lowercase hex (`^[a-f0-9]{64}$`) | Lowercase-hex sha256 of `machine_uuid + ':' + user_id`. **Pinned to the ingestion key** via `metadata.allowedHostIds` (§2.2). |
+>>>>>>> Stashed changes
 | `source_app` | enum | yes | `claude-code` \| `cursor` \| `codex` | Closed; new agents = new value, requires backend release. |
 | `source_kind` | enum | yes | `jsonl_append` \| `sqlite_kv_snapshot` \| `sqlite_table_snapshot` | Discriminator; see §4. |
-| `source_path` | string | yes | non-empty | Absolute path on host. |
-| `source_path_hash` | string | yes | sha256 hex of `source_path` | Indexable form. |
+| `source_path` | string | yes | non-empty, `MaxLength(4096)` | Absolute path on host. POSIX PATH_MAX is the cap. |
+| `source_path_hash` | string | yes | 64-char lowercase hex (`^[a-f0-9]{64}$`); must equal `sha256(source_path)` | Indexable form. |
 | `source_inode` | int (nullable) | yes (may be null) | non-negative | `null` for `sqlite_*_snapshot` (vacuum-into produces a fresh file each poll, inode is meaningless). |
 | `watermark.kind` | enum | yes | `byte_range` \| `rowid_range` | Must align with `source_kind`. See §4. |
 | `watermark.start` | int | yes | `>= 0` | INCLUSIVE. |
 | `watermark.end` | int | yes | `>= 0`, AND `> watermark.start` (DB CHECK) | EXCLUSIVE for `byte_range`; INCLUSIVE for `rowid_range`. **Read §6 carefully.** |
 | `watermark.table` | string (nullable) | yes (may be null) | when `source_kind = sqlite_table_snapshot`: required, non-empty | `null` otherwise. |
-| `agent_schema_version` | string | yes | non-empty | Free-form upstream marker. See §3.3. |
-| `gateway_version` | string | yes | non-empty | e.g. `@proxai/gateway 0.1.4`. Used for parser dispatch and drift triage. |
+| `agent_schema_version` | string | yes | `MaxLength(128)`, `^[\w.+:\-]+$` | Free-form upstream marker. See §3.3. |
+| `gateway_version` | string | yes | non-empty, `MaxLength(128)` | e.g. `@proxai/gateway 0.1.4`. Used for parser dispatch and drift triage. |
 | `captured_at_utc` | string (ISO-8601) | yes | RFC 3339, UTC | Gateway clock when bytes were read off disk. NOT the agent's record timestamp. |
 | `body_format` | enum | yes | `jsonl` \| `kv_pairs_json` \| `sqlite_rows_json` | Must align with `source_kind`. See §4. |
 | `body_compression` | enum | yes | `zstd` (only value today) | Reserved for future; must be `zstd`. |
@@ -188,6 +256,8 @@ The `error: "watermark_regression"` discriminator is reserved for this case. Ful
 - If the body's `error` is `"watermark_regression"`: read `current_server_watermark_end`, write it to the local cursor for that source, drop the rejected batch, continue from the corrected position on the next poll. Self-healing — no operator intervention.
 - Otherwise (generic 400): mark the batch as `failed`, surface in `proxai-gateway status`, **do not retry, do not advance watermark.** A generic 400 means a real bug or schema drift on the gateway side; retrying produces the same result.
 
+**Exception — watermark_regression 400 carries a structured body** so the gateway can self-heal without a follow-up `/v1/watermarks` round-trip. See §3.4.
+
 ### 3.3 `agent_schema_version` is per-agent and free-form
 
 | Agent | Source of value | Example |
@@ -196,7 +266,35 @@ The `error: "watermark_regression"` discriminator is reserved for this case. Ful
 | Cursor | `composerData._v + ':' + bubbleId._v` from the first row of each prefix | `13:3` |
 | Codex | `threads.cli_version`, sampled once per state-collection cycle and threaded into the rollout pass | `0.126.0-alpha.8` |
 
-The backend stores it verbatim and uses it for parser dispatch. It does NOT validate the format beyond "non-empty string." If a parser becomes incompatible with a particular `agent_schema_version`, the backend handles that on its side; you don't need to coordinate.
+The backend stores it verbatim and uses it for parser dispatch. The receive DTO bounds the value: `MaxLength(128)` and `^[\w.+:\-]+$` (alphanumeric plus `._+:-`). Anything outside that returns `400`.
+
+### 3.4 The structured 400 body — `watermark_regression`
+
+When the receive endpoint detects `watermark.start < highest known watermark_end` for the given `(user_id, host_id, source_path_hash, watermark_table)`, the response is a `400` with this body shape EXACTLY at the top level (no `{success, error}` wrapper):
+
+```json
+{
+  "error": "watermark_regression",
+  "host_id": "8a3aed6b9c1f...",
+  "source_path_hash": "<sha256>",
+  "current_server_watermark_end": 12345,
+  "submitted_watermark_start": 11000,
+  "submitted_watermark_end": 11500,
+  "watermark_kind": "byte_range",
+  "watermark_table": null,
+  "message": "Submitted watermark range [11000, 11500) is behind server's known end 12345 for source_path_hash=...; gateway should sync from current_server_watermark_end."
+}
+```
+
+**Discriminator:** the top-level `error: "watermark_regression"` field. Gateway parsers should match on this string before reading the recovery fields.
+
+**Recovery path:**
+1. Update local cursor for `(host_id, source_path_hash, watermark_kind, watermark_table)` to `current_server_watermark_end`.
+2. Re-derive the next batch starting at that cursor.
+3. Submit with a NEW `capture_id` (the old batch's capture_id is now stale — do not retry the failed batch).
+4. Optional safety: call `GET /v1/watermarks?host_id=...` to verify the full cursor map agrees with the local state.
+
+**Why structured-not-generic:** every other 400 path returns the standard `{success: false, error: {code, message}}` wrapper. The watermark-regression path bypasses that wrapper because it's the one error the gateway can recover from automatically — and the recovery requires reading `current_server_watermark_end`, not just a string match. Other 400 paths require human attention (a code change), so they don't need machine-readable bodies.
 
 ---
 
@@ -625,15 +723,28 @@ To save you a round-trip when reviewing a draft change, the most common 400 path
 
 - Missing or empty required field
 - `capture_id` not UUIDv7 format
+- `host_id` or `source_path_hash` not 64-char lowercase hex (`^[a-f0-9]{64}$`)
+- `source_path` longer than 4096 chars
+- `agent_schema_version` longer than 128 chars or contains characters outside `[\w.+:\-]`
+- `gateway_version` longer than 128 chars
 - `source_app`, `source_kind`, `body_format`, `body_compression`, `watermark.kind` outside the closed enums
 - `(source_kind, body_format, watermark.kind)` triple not in §4 matrix
 - `watermark.start >= watermark.end` (DB CHECK)
+<<<<<<< Updated upstream
 - `watermark.start` for this `(host_id, source_path_hash)` is less than the highest known `watermark.end` (monotonicity) — **structured body, recoverable** (see §3.2)
+=======
+- `watermark.start` for this `(host_id, source_path_hash, watermark.table)` is less than the highest known `watermark.end` — **structured body, see §3.4**
+>>>>>>> Stashed changes
 - For `sqlite_table_snapshot`: `watermark.table` missing or not in `[threads, thread_dynamic_tools, thread_spawn_edges]`
 - `body` not valid base64
 - `body` exceeds 2 MB compressed or 10 MB decompressed
 - `captured_at_utc` not valid ISO-8601 in UTC
 - `host_id` not 64-char lowercase hex (also applies to `GET /v1/watermarks?host_id=...`)
+
+### 15.1 What the backend rejects with 403
+
+- API key missing / malformed / revoked / wrong type (treat as retriable per §8.1)
+- `dto.host_id` not in `metadata.allowedHostIds` for this API key (operator must add the host_id; treat as retriable for the same reason)
 
 ---
 
@@ -649,6 +760,7 @@ When in doubt, send a small diff and ship to dev/preview first. The backend has 
 
 **Document version:** 2.2
 **Last updated:** 2026-05-06
+<<<<<<< Updated upstream
 **Backend implementation:** `proxai_nest`, ingestion module
 **Gateway implementation:** `@proxai/gateway`
 
@@ -658,6 +770,18 @@ When in doubt, send a small diff and ship to dev/preview first. The backend has 
 - `host_id` is now derived deterministically from `(machine_uuid, user_id)` per §5.4 (`sha256(machine_uuid + ':' + user_id)`, 64-char lowercase hex). Same machine + same user produces the same `host_id` across reinstalls and key rotations, which is what makes `/v1/watermarks` recovery work.
 - Buffer-full behavior (§8.3) updated: hysteresis-based `BUFFER_FULL` sentinel driven by `bufferSoftPauseBytes` / `bufferSoftResumeBytes` (defaults 700 MB / 600 MB). Distinct from `PAUSED` (user toggle) and `AUTH_FAILED` (403-set).
 - 403 handling updated: gateway drops `~/.proxai/AUTH_FAILED`, keeps batches pending, requires re-running `setup` with a fresh key.
+=======
+**Backend implementation:** `proxai_nest`, agent-gateway module
+**Gateway implementation:** `@proxai/gateway`
+
+**Changelog from v2.1 → v2.2:**
+- `POST /v1/raw_records` is now **live** server-side (pre-prod, no real customer traffic).
+- **Restored host-id pinning.** v2.0 removed the allowlist; v2.2 reinstates it as a security boundary. The receive endpoint enforces `dto.host_id ∈ apiKeyData.metadata.allowedHostIds` fail-closed when the list is configured. v2.0's "no allowlist" framing was wrong about the shipped server. See §2.2.
+- **New endpoint: `GET /v1/watermarks?host_id=<sha256>`.** Returns per-file cursor map for pre-flight sync + recovery. See §2.4.
+- **Structured 400 body for `watermark_regression`.** Discriminator at top level (`error: "watermark_regression"`) + recovery fields (`current_server_watermark_end`, etc.). See §3.4.
+- **DTO bounds tightened:** `host_id` and `source_path_hash` must be 64-char lowercase hex; `source_path` capped at 4096; `agent_schema_version` capped at 128 chars + `[\w.+:\-]` charset; `gateway_version` capped at 128 chars. See §3.1.
+- Monotonicity scope corrected: `(host_id, source_path_hash, watermark.table)`. Earlier docs implied the table dimension was not part of the cursor key — that was wrong for codex multi-table snapshots.
+>>>>>>> Stashed changes
 
 **Changelog from v2.0 → v2.1:**
 - Install flow now hits `GET /ingestion/verify-key` (customer-facing key check) instead of `GET /health` (operator-only DB/Redis probe). The gateway never calls `/health`. Customers shouldn't see infra health probes — they care about whether their key works.
@@ -666,7 +790,7 @@ When in doubt, send a small diff and ship to dev/preview first. The backend has 
 **Changelog from v1.0 → v2.0:**
 - Auth scheme: `Authorization: Bearer` → `X-API-Key`
 - Removed: dedicated `AGENT_GATEWAY` API-key type; replaced by reusing the user's existing **INGESTION-type** keys.
-- Removed: host pinning (`metadata.allowedHostIds`). `host_id` is still on the wire but not validated against an allowlist.
+- ~~Removed: host pinning (`metadata.allowedHostIds`).~~ **Reverted in v2.2.**
 - Removed: `POST /v1/auth/validate`, `PATCH /v1/api-keys/<key>/allowed-hosts`, `GET /v1/gateway/latest_version` endpoints.
 - 403 semantics: now retriable (key-fix recoverable) instead of terminal-failed for the upload path.
 - `POST /v1/raw_records` is documented but **not yet live** server-side — gateway tests must mock the upload path.
