@@ -9,6 +9,9 @@ interface Row {
 
 const HUGE = 1_000_000_000;
 
+const measureRowCountDiv100 = (s: readonly Row[]): number =>
+  Math.max(1, Math.floor(s.length / 100));
+
 function makeRows(count: number, payloadLen: number): Row[] {
   const rows: Row[] = [];
   for (let i = 1; i <= count; i++) {
@@ -116,11 +119,10 @@ test('preserves all rows across slices using a real zstd measurer', () => {
 
 test('splits early when raw row bytes exceed maxDecompressedBytes even if compressed budget is not yet hit', () => {
   const rows = makeRows(20, 30);
-  const measureCompressed = (s: readonly Row[]): number => Math.max(1, Math.floor(s.length / 100));
   const slices = splitRowsByCompressedSize(rows, {
     targetCompressedBytes: 100_000,
     maxDecompressedBytes: 200,
-    measureCompressed,
+    measureCompressed: measureRowCountDiv100,
     measureUncompressed: (s) => JSON.stringify(s).length,
   });
   expect(slices.length).toBeGreaterThan(1);

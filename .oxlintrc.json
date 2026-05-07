@@ -16,10 +16,32 @@
     ],
     "no-empty-pattern": "warn",
     "no-empty-file": "off",
-    "no-await-in-loop": "off",
     "no-unmodified-loop-condition": "off",
-    "no-underscore-dangle": "off",
-    "unicorn/consistent-function-scoping": "off"
+    "no-underscore-dangle": "off"
   },
+  "overrides": [
+    {
+      "files": [
+        "src/services/polling/poll-loop.ts",
+        "src/services/polling/poll-cycle.ts",
+        "src/services/polling/poll-claude-code.ts",
+        "src/services/polling/poll-codex.ts",
+        "src/services/polling/poll-cursor.ts",
+        "src/services/uploader/drain-buffer.ts",
+        "src/services/uploader/pacer.ts",
+        "src/cli/commands/tail.ts",
+        "src/core/log/prune.ts",
+        "src/core/system/machine-uuid.ts",
+        "scripts/build.ts",
+        "src/services/uploader/tests/drain-buffer.test.ts",
+        "src/services/uploader/tests/pacer.test.ts",
+        "src/services/polling/tests/default-sources.test.ts",
+        "src/cli/commands/tests/uninstall.test.ts"
+      ],
+      "rules": {
+        "no-await-in-loop": "off"
+      }
+    }
+  ],
   "ignorePatterns": ["dist", "node_modules", "*.md"]
 }

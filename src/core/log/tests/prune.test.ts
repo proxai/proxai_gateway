@@ -84,10 +84,12 @@ test('keeps at least one file even if it exceeds size cap on its own', async () 
 });
 
 test('day count and size cap work together', async () => {
+  const seeds: Promise<void>[] = [];
   for (let day = 1; day <= 10; day++) {
     const ds = day < 10 ? `0${day.toString()}` : day.toString();
-    await seed(`structured.2026-05-${ds}.1.log`, 500);
+    seeds.push(seed(`structured.2026-05-${ds}.1.log`, 500));
   }
+  await Promise.all(seeds);
   const result = await pruneLogDirectory(dir, { retentionDays: 7, totalSizeCapBytes: 2000 });
   expect(result.retainedCount).toBeLessThanOrEqual(7);
   expect(result.retainedBytes).toBeLessThanOrEqual(2000);

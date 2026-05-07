@@ -35,6 +35,26 @@ interface Bucket {
   lastRefill: number;
 }
 
+function refill(bucket: Bucket, t: number): void {
+  if (t <= bucket.lastRefill) return;
+  const elapsed = t - bucket.lastRefill;
+  const refilled = elapsed * bucket.refillPerMs;
+  bucket.tokens = Math.min(bucket.capacity, bucket.tokens + refilled);
+  bucket.lastRefill = t;
+}
+
+function timeUntil(bucket: Bucket, need: number, t: number): number {
+  refill(bucket, t);
+  if (bucket.tokens >= need) return 0;
+  const deficit = need - bucket.tokens;
+  return Math.ceil(deficit / bucket.refillPerMs);
+}
+
+function debit(bucket: Bucket, amount: number, t: number): void {
+  refill(bucket, t);
+  bucket.tokens = Math.max(0, bucket.tokens - amount);
+}
+
 export function createPacer(options: PacerOptions): Pacer {
   if (options.maxBatchesPerSec <= 0) {
     throw new Error('maxBatchesPerSec must be > 0');
@@ -68,26 +88,6 @@ export function createPacer(options: PacerOptions): Pacer {
   let serviceUnavailableSteps = 0;
   let pendingServiceUnavailable = false;
   let pendingServiceUnavailableFloorMs = 0;
-
-  function refill(bucket: Bucket, t: number): void {
-    if (t <= bucket.lastRefill) return;
-    const elapsed = t - bucket.lastRefill;
-    const refilled = elapsed * bucket.refillPerMs;
-    bucket.tokens = Math.min(bucket.capacity, bucket.tokens + refilled);
-    bucket.lastRefill = t;
-  }
-
-  function timeUntil(bucket: Bucket, need: number, t: number): number {
-    refill(bucket, t);
-    if (bucket.tokens >= need) return 0;
-    const deficit = need - bucket.tokens;
-    return Math.ceil(deficit / bucket.refillPerMs);
-  }
-
-  function debit(bucket: Bucket, amount: number, t: number): void {
-    refill(bucket, t);
-    bucket.tokens = Math.max(0, bucket.tokens - amount);
-  }
 
   async function acquire(payloadBytes: number): Promise<void> {
     if (payloadBytes < 0) throw new Error('payloadBytes must be >= 0');

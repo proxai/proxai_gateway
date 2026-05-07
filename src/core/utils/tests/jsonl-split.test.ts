@@ -7,6 +7,9 @@ const DECODER = new TextDecoder();
 
 const HUGE = 1_000_000_000;
 
+const measureByteLengthDiv100 = (b: Uint8Array): number =>
+  Math.max(1, Math.floor(b.byteLength / 100));
+
 function lines(slice: Uint8Array): string[] {
   return DECODER.decode(slice)
     .split('\n')
@@ -130,11 +133,10 @@ test('preserves all original lines across slices (real zstd compressor)', () => 
 test('splits early when raw bytes exceed maxDecompressedBytes even if compressed budget is not yet hit', () => {
   const line = `${'x'.repeat(40)}\n`;
   const bytes = ENCODER.encode(line.repeat(10));
-  const measureCompressed = (b: Uint8Array): number => Math.max(1, Math.floor(b.byteLength / 100));
   const slices = splitJsonlAtBoundary(bytes, {
     targetCompressedBytes: 1_000,
     maxDecompressedBytes: 80,
-    measureCompressed,
+    measureCompressed: measureByteLengthDiv100,
   });
   expect(slices.length).toBeGreaterThan(1);
   for (const slice of slices) {

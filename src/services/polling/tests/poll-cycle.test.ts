@@ -14,6 +14,8 @@ import type { PollCycleContext, RegisteredSource } from 'services/polling';
 let dir: string;
 let buffer: Database;
 
+const noopAsync = async (): Promise<void> => {};
+
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'proxai-poll-cycle-'));
   buffer = openInMemoryBufferDb();
@@ -373,7 +375,7 @@ test('cycle logs soft_resume info at cycle-start when sentinel exists and pendin
 test('cycle logs post-drain soft_resume when a source writes the sentinel mid-cycle', async () => {
   const entries: FakeLogEntry[] = [];
 
-  let sentinelWriter: () => Promise<void> = async () => {};
+  let sentinelWriter: () => Promise<void> = noopAsync;
   const writerSource: RegisteredSource = {
     name: 'writer',
     poll: async () => {
