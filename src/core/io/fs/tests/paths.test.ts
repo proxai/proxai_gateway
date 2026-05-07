@@ -13,6 +13,8 @@ import {
   expandHome,
   logDir,
   pausedSentinelPath,
+  sessionStoppedSentinelPath,
+  updateAvailableSentinelPath,
 } from 'core/io/fs';
 
 test('configDir returns ~/.proxai/proxai-gateway on macOS / Linux', () => {
@@ -36,6 +38,14 @@ test('derived paths live under configDir', () => {
   expect(bufferFullSentinelPath().startsWith(root)).toBe(true);
   expect(authFailedSentinelPath()).toContain('AUTH_FAILED');
   expect(bufferFullSentinelPath()).toContain('BUFFER_FULL');
+});
+
+test('sessionStoppedSentinelPath and updateAvailableSentinelPath live under configDir', () => {
+  const root = configDir();
+  expect(sessionStoppedSentinelPath().startsWith(root)).toBe(true);
+  expect(updateAvailableSentinelPath().startsWith(root)).toBe(true);
+  expect(sessionStoppedSentinelPath()).toContain('SESSION_STOPPED');
+  expect(updateAvailableSentinelPath()).toContain('UPDATE_AVAILABLE');
 });
 
 test('expandHome expands leading ~/', () => {
