@@ -6,6 +6,12 @@
 // Both must allow the upload before acquire() returns. The pacer also honors
 // explicit Retry-After delays from the server and applies a multiplicative
 // backoff while consecutive 429 responses keep arriving.
+//
+// In addition to 429 backoff, the pacer tracks a separate streak for 503
+// service-unavailable responses (nest backpressure). 503 backoff escalates
+// from 30s to a 5-minute cap so the gateway does not pile on requests while
+// nest's parse worker is recovering. The 503 and 429 streaks are independent
+// — distinct distress signals shouldn't compound.
 
 const DEFAULT_NOW = (): number => Date.now();
 const DEFAULT_SLEEP = (ms: number): Promise<void> =>
@@ -14,6 +20,12 @@ const DEFAULT_SLEEP = (ms: number): Promise<void> =>
 const RATE_WINDOW_MS = 1_000;
 const BYTES_WINDOW_MS = 60_000;
 const MAX_BACKOFF_MS = 30_000;
+
+// Service-unavailable (503) backoff envelope. Hard-coded because these are
+// protocol-level — nest's parse-queue high-water-mark recovery time is not
+// something a user should be tuning per-host.
+const SERVICE_UNAVAILABLE_INITIAL_DELAY_MS = 30_000;
+const SERVICE_UNAVAILABLE_MAX_DELAY_MS = 300_000;
 
 export interface PacerOptions {
   maxBatchesPerSec: number;
@@ -26,7 +38,7 @@ export interface PacerOptions {
 export interface Pacer {
   // Blocks until both the rate bucket and throughput bucket allow this batch
   // through, then debits them. Also honors any pending Retry-After delay and
-  // 429 backoff multiplier accumulated since the previous acquire.
+  // 429/503 backoff multipliers accumulated since the previous acquire.
   acquire(payloadBytes: number): Promise<void>;
   // Forces a one-shot wait before the next acquire returns. The longest
   // pending wait wins if multiple Retry-Afters arrive before acquire runs.
@@ -35,6 +47,12 @@ export interface Pacer {
   // non-429 acquire (signalled implicitly: an acquire that is not preceded by
   // another notify429() resets the streak after running).
   notify429(): void;
+  // Queues a 503 backoff step. The next acquire promotes it to an active
+  // backoff: delay = min(30s * 2^(steps-1), 5min). Optional retryAfterMs
+  // raises the floor to max(retryAfterMs, computed). Streak resets on the
+  // first acquire that runs without a pending notifyServiceUnavailable.
+  // Independent from the 429 streak (different fault class).
+  notifyServiceUnavailable(retryAfterMs?: number): void;
 }
 
 interface Bucket {
@@ -77,6 +95,14 @@ export function createPacer(options: PacerOptions): Pacer {
   // no further notify429() arrived, the streak resets to zero.
   let backoffSteps = 0;
   let pendingNotify429 = false;
+  // Consecutive-503 streak. Tracked independently of the 429 streak so a
+  // 503-then-429 sequence doesn't compound. Each notifyServiceUnavailable()
+  // bumps the pending flag (and may raise a per-step floor via retryAfter);
+  // the next acquire promotes it to an active backoff, then the streak resets
+  // unless another notifyServiceUnavailable() arrived in the interim.
+  let serviceUnavailableSteps = 0;
+  let pendingServiceUnavailable = false;
+  let pendingServiceUnavailableFloorMs = 0;
 
   function refill(bucket: Bucket, t: number): void {
     if (t <= bucket.lastRefill) return;
@@ -111,6 +137,19 @@ export function createPacer(options: PacerOptions): Pacer {
       backoffSteps = 0;
     }
 
+    // 1b) Same promotion logic for the independent 503 streak. The floor (if
+    //     any) is consumed alongside the streak step.
+    let serviceUnavailableFloorMs = 0;
+    if (pendingServiceUnavailable) {
+      serviceUnavailableSteps = Math.min(serviceUnavailableSteps + 1, 16);
+      serviceUnavailableFloorMs = pendingServiceUnavailableFloorMs;
+      pendingServiceUnavailable = false;
+      pendingServiceUnavailableFloorMs = 0;
+    } else {
+      serviceUnavailableSteps = 0;
+      pendingServiceUnavailableFloorMs = 0;
+    }
+
     // 2) Honor any pending explicit Retry-After.
     const t0 = now();
     if (retryAfterUntil > t0) {
@@ -128,6 +167,19 @@ export function createPacer(options: PacerOptions): Pacer {
       const backoffBase = slotMs * (backoffMultiplier ** backoffSteps - 1);
       const backoff = Math.min(MAX_BACKOFF_MS, Math.ceil(backoffBase));
       if (backoff > 0) await sleep(backoff);
+    }
+
+    // 3b) Apply the 503 backoff. Computed envelope is 30s -> 60s -> 120s ...
+    //     up to a 5-minute cap. If the server provided a Retry-After hint,
+    //     raise the floor (max wins). Note the explicit Retry-After header
+    //     was already consumed in step 2; the per-step floor here exists to
+    //     guarantee the *backoff* itself meets the server hint even if the
+    //     header was small or arrived before this streak was promoted.
+    if (serviceUnavailableSteps > 0) {
+      const computed = SERVICE_UNAVAILABLE_INITIAL_DELAY_MS * 2 ** (serviceUnavailableSteps - 1);
+      const capped = Math.min(SERVICE_UNAVAILABLE_MAX_DELAY_MS, computed);
+      const wait = Math.max(capped, serviceUnavailableFloorMs);
+      if (wait > 0) await sleep(wait);
     }
 
     // 4) Wait until both buckets allow this batch, then debit.
@@ -156,5 +208,16 @@ export function createPacer(options: PacerOptions): Pacer {
     pendingNotify429 = true;
   }
 
-  return { acquire, notifyRetryAfter, notify429 };
+  function notifyServiceUnavailable(retryAfterMs?: number): void {
+    pendingServiceUnavailable = true;
+    if (
+      retryAfterMs !== undefined &&
+      Number.isFinite(retryAfterMs) &&
+      retryAfterMs > pendingServiceUnavailableFloorMs
+    ) {
+      pendingServiceUnavailableFloorMs = retryAfterMs;
+    }
+  }
+
+  return { acquire, notifyRetryAfter, notify429, notifyServiceUnavailable };
 }

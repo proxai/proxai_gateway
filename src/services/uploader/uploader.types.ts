@@ -19,11 +19,20 @@ export interface AcceptedOutcome {
   idempotent: boolean;
 }
 
+// Why a retriable outcome was raised. Drives pacer notifications:
+//   * 'rate_limit'         -> notify429 (+ Retry-After if present)
+//   * 'service_unavailable' -> notifyServiceUnavailable (+ Retry-After if present)
+//   * 'auth_unconfirmed'    -> no pacer signal; verify-key was inconclusive,
+//                              the upload itself is being retried opportunistically
+//   * 'network'             -> no pacer signal; transport-level fault, not server distress
+export type RetriableReason = 'rate_limit' | 'service_unavailable' | 'auth_unconfirmed' | 'network';
+
 export interface RetriableOutcome {
   kind: 'retriable';
   captureId: string;
   error: string;
   retryAfterMs: number | null;
+  reason: RetriableReason;
 }
 
 export interface FatalOutcome {

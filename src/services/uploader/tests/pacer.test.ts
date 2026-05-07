@@ -254,3 +254,170 @@ test('zero-byte payload still consumes a rate token but no throughput', async ()
   await pacer.acquire(0); // must wait for rate refill (1000 ms)
   expect(clock.sleeps).toContain(1_000);
 });
+
+test('notifyServiceUnavailable() makes the next acquire wait the initial 30s', async () => {
+  const clock = makeClock();
+  const pacer = createPacer({
+    maxBatchesPerSec: 100,
+    maxBytesPerMinute: 100 * 1024 * 1024,
+    now: clock.now,
+    sleep: clock.sleep,
+  });
+  await pacer.acquire(100); // primes buckets
+  pacer.notifyServiceUnavailable();
+  await pacer.acquire(100);
+  // First step is the hard-coded initial delay: 30s.
+  expect(clock.sleeps).toContain(30_000);
+});
+
+test('consecutive notifyServiceUnavailable doubles up to the 5-minute cap', async () => {
+  const clock = makeClock();
+  const pacer = createPacer({
+    maxBatchesPerSec: 100,
+    maxBytesPerMinute: 100 * 1024 * 1024,
+    now: clock.now,
+    sleep: clock.sleep,
+  });
+  await pacer.acquire(100);
+  pacer.notifyServiceUnavailable();
+  await pacer.acquire(100); // step 1: 30s
+  pacer.notifyServiceUnavailable();
+  await pacer.acquire(100); // step 2: 60s
+  pacer.notifyServiceUnavailable();
+  await pacer.acquire(100); // step 3: 120s
+  pacer.notifyServiceUnavailable();
+  await pacer.acquire(100); // step 4: 240s
+  pacer.notifyServiceUnavailable();
+  await pacer.acquire(100); // step 5: would be 480s, capped at 300s
+  pacer.notifyServiceUnavailable();
+  await pacer.acquire(100); // step 6: still capped at 300s
+  expect(clock.sleeps).toContain(30_000);
+  expect(clock.sleeps).toContain(60_000);
+  expect(clock.sleeps).toContain(120_000);
+  expect(clock.sleeps).toContain(240_000);
+  expect(clock.sleeps).toContain(300_000);
+  for (const s of clock.sleeps) expect(s).toBeLessThanOrEqual(300_000);
+});
+
+test('a non-503 acquire clears the service-unavailable streak', async () => {
+  const clock = makeClock();
+  const pacer = createPacer({
+    maxBatchesPerSec: 100,
+    maxBytesPerMinute: 100 * 1024 * 1024,
+    now: clock.now,
+    sleep: clock.sleep,
+  });
+  await pacer.acquire(100);
+  pacer.notifyServiceUnavailable();
+  await pacer.acquire(100); // step 1: 30s
+  // No notify — caller observed a clean response. Streak should reset.
+  await pacer.acquire(100);
+  // Re-arm: should start back at step 1, not step 2.
+  pacer.notifyServiceUnavailable();
+  await pacer.acquire(100);
+  // We expect TWO 30s sleeps (one before each promotion) and zero 60s sleeps
+  // (which would only appear if the streak had escalated).
+  const thirties = clock.sleeps.filter((s) => s === 30_000);
+  expect(thirties.length).toBe(2);
+  expect(clock.sleeps).not.toContain(60_000);
+});
+
+test('503 and 429 streaks are independent (do not compound)', async () => {
+  const clock = makeClock();
+  const pacer = createPacer({
+    maxBatchesPerSec: 5,
+    backoffMultiplier: 2,
+    maxBytesPerMinute: 100 * 1024 * 1024,
+    now: clock.now,
+    sleep: clock.sleep,
+  });
+  await pacer.acquire(100);
+  // 503, then 429, then 503 — none should escalate the other.
+  pacer.notifyServiceUnavailable();
+  await pacer.acquire(100); // 503 step 1: 30s
+  pacer.notify429();
+  await pacer.acquire(100); // 429 step 1: slot=200, 200*(2^1-1)=200ms
+  pacer.notifyServiceUnavailable();
+  await pacer.acquire(100); // 503 step 1 again (streak reset by interleaving): 30s
+  // Both 503 backoffs should be 30s exactly (not 60s, which would imply the
+  // streak survived the 429-only acquire).
+  const thirties = clock.sleeps.filter((s) => s === 30_000);
+  expect(thirties.length).toBe(2);
+  // The 429 backoff slept 200ms.
+  expect(clock.sleeps).toContain(200);
+  // No 60s sleeps anywhere — that would only appear if either streak
+  // escalated due to cross-contamination.
+  expect(clock.sleeps).not.toContain(60_000);
+});
+
+test('explicit retryAfterMs raises the floor when larger than computed', async () => {
+  const clock = makeClock();
+  const pacer = createPacer({
+    maxBatchesPerSec: 100,
+    maxBytesPerMinute: 100 * 1024 * 1024,
+    now: clock.now,
+    sleep: clock.sleep,
+  });
+  await pacer.acquire(100);
+  // Step 1 computed = 30s. Hint = 90s — server says wait longer.
+  pacer.notifyServiceUnavailable(90_000);
+  await pacer.acquire(100);
+  // The 503 backoff specifically should be 90s (the floor). Step 1 computed
+  // 30s is dominated. Note the explicit Retry-After is also handled in step 2
+  // of acquire — but it'd surface as a separate sleep call there.
+  expect(clock.sleeps).toContain(90_000);
+});
+
+test('explicit retryAfterMs is ignored when smaller than computed', async () => {
+  const clock = makeClock();
+  const pacer = createPacer({
+    maxBatchesPerSec: 100,
+    maxBytesPerMinute: 100 * 1024 * 1024,
+    now: clock.now,
+    sleep: clock.sleep,
+  });
+  await pacer.acquire(100);
+  // Get to step 3 (120s computed). Hint = 1s — too small to matter.
+  pacer.notifyServiceUnavailable();
+  await pacer.acquire(100);
+  pacer.notifyServiceUnavailable();
+  await pacer.acquire(100);
+  pacer.notifyServiceUnavailable(1_000);
+  await pacer.acquire(100);
+  // Final 503 backoff sleep should be 120s, not 1s.
+  expect(clock.sleeps).toContain(120_000);
+});
+
+test('notifyServiceUnavailable with non-finite retryAfterMs is ignored', async () => {
+  const clock = makeClock();
+  const pacer = createPacer({
+    maxBatchesPerSec: 100,
+    maxBytesPerMinute: 100 * 1024 * 1024,
+    now: clock.now,
+    sleep: clock.sleep,
+  });
+  await pacer.acquire(100);
+  pacer.notifyServiceUnavailable(Number.POSITIVE_INFINITY);
+  await pacer.acquire(100);
+  // Falls back to the computed 30s — infinity is rejected.
+  expect(clock.sleeps).toContain(30_000);
+});
+
+test('multiple notifyServiceUnavailable calls before acquire keep the largest floor', async () => {
+  const clock = makeClock();
+  const pacer = createPacer({
+    maxBatchesPerSec: 100,
+    maxBytesPerMinute: 100 * 1024 * 1024,
+    now: clock.now,
+    sleep: clock.sleep,
+  });
+  await pacer.acquire(100);
+  pacer.notifyServiceUnavailable(40_000);
+  pacer.notifyServiceUnavailable(120_000);
+  pacer.notifyServiceUnavailable(50_000);
+  await pacer.acquire(100);
+  // Step 1 computed=30s; floor=120s wins.
+  expect(clock.sleeps).toContain(120_000);
+  expect(clock.sleeps).not.toContain(40_000);
+  expect(clock.sleeps).not.toContain(50_000);
+});

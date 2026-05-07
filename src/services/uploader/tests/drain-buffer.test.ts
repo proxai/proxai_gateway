@@ -168,12 +168,14 @@ interface PacerSpy {
   acquires: RecordedAcquire[];
   retryAfters: number[];
   notify429Count: { value: number };
+  serviceUnavailableCalls: Array<number | undefined>;
 }
 
 function makePacerSpy(): PacerSpy {
   const acquires: RecordedAcquire[] = [];
   const retryAfters: number[] = [];
   const notify429Count = { value: 0 };
+  const serviceUnavailableCalls: Array<number | undefined> = [];
   const pacer: Pacer = {
     acquire: async (bytes: number) => {
       acquires.push({ bytes });
@@ -184,8 +186,11 @@ function makePacerSpy(): PacerSpy {
     notify429: () => {
       notify429Count.value++;
     },
+    notifyServiceUnavailable: (ms?: number) => {
+      serviceUnavailableCalls.push(ms);
+    },
   };
-  return { pacer, acquires, retryAfters, notify429Count };
+  return { pacer, acquires, retryAfters, notify429Count, serviceUnavailableCalls };
 }
 
 test('pacer.acquire is called once per batch with the body byte length', async () => {
@@ -213,7 +218,7 @@ test('pacer.acquire is called once per batch with the body byte length', async (
   }
 });
 
-test('rate-limited response triggers notifyRetryAfter and notify429', async () => {
+test('rate-limited response triggers notifyRetryAfter and notify429 only', async () => {
   await insertN(2);
   const spy = makePacerSpy();
   const ctx: UploaderContext = {
@@ -226,9 +231,11 @@ test('rate-limited response triggers notifyRetryAfter and notify429', async () =
   expect(result.retriable).toBe(1);
   expect(spy.retryAfters).toEqual([15_000]);
   expect(spy.notify429Count.value).toBe(1);
+  // 429 must not bleed into the 503 channel — different distress class.
+  expect(spy.serviceUnavailableCalls).toEqual([]);
 });
 
-test('non-429 retriable failures do not trigger notify429', async () => {
+test('503 response triggers notifyServiceUnavailable, not notify429', async () => {
   await insertN(1);
   const spy = makePacerSpy();
   const ctx: UploaderContext = {
@@ -239,6 +246,67 @@ test('non-429 retriable failures do not trigger notify429', async () => {
   };
   const result = await drainBuffer(ctx);
   expect(result.retriable).toBe(1);
+  // No Retry-After header on the 503 — no explicit retry-after notified, and
+  // notifyServiceUnavailable is called with undefined.
   expect(spy.retryAfters).toEqual([]);
   expect(spy.notify429Count.value).toBe(0);
+  expect(spy.serviceUnavailableCalls).toEqual([undefined]);
+});
+
+test('503 with Retry-After threads the hint into notifyServiceUnavailable', async () => {
+  await insertN(1);
+  const spy = makePacerSpy();
+  const ctx: UploaderContext = {
+    db,
+    http: createTestHttpClient(mockFetch(() => emptyResponse(503, { 'Retry-After': '20' }))),
+    hostId: TEST_HOST_ID,
+    pacer: spy.pacer,
+  };
+  const result = await drainBuffer(ctx);
+  expect(result.retriable).toBe(1);
+  // Retry-After is threaded both to notifyRetryAfter (used for the immediate
+  // pre-acquire wait) and as the floor argument to notifyServiceUnavailable.
+  expect(spy.retryAfters).toEqual([20_000]);
+  expect(spy.notify429Count.value).toBe(0);
+  expect(spy.serviceUnavailableCalls).toEqual([20_000]);
+});
+
+test('auth-unconfirmed retriable does not trigger any pacer distress signal', async () => {
+  await insertN(1);
+  const spy = makePacerSpy();
+  // 403 from upload + 503 from verify-key → upload-batch returns retriable
+  // with reason 'auth_unconfirmed'. The pacer should not back off — auth
+  // faults are an identity issue, not server distress.
+  const ctx: UploaderContext = {
+    db,
+    http: createTestHttpClient(
+      mockFetch((call) => {
+        if (call.url.includes('/ingestion/verify-key')) return emptyResponse(503);
+        return emptyResponse(403);
+      }),
+    ),
+    hostId: TEST_HOST_ID,
+    pacer: spy.pacer,
+  };
+  const result = await drainBuffer(ctx);
+  expect(result.retriable).toBe(1);
+  expect(spy.retryAfters).toEqual([]);
+  expect(spy.notify429Count.value).toBe(0);
+  expect(spy.serviceUnavailableCalls).toEqual([]);
+});
+
+test('network failure retriable does not trigger any pacer distress signal', async () => {
+  await insertN(1);
+  const spy = makePacerSpy();
+  const ctx: UploaderContext = {
+    db,
+    http: createTestHttpClient(mockFetch(() => new Error('connection refused'))),
+    hostId: TEST_HOST_ID,
+    pacer: spy.pacer,
+  };
+  const result = await drainBuffer(ctx);
+  expect(result.retriable).toBe(1);
+  expect(spy.retryAfters).toEqual([]);
+  expect(spy.notify429Count.value).toBe(0);
+  expect(spy.serviceUnavailableCalls).toEqual([]);
 });

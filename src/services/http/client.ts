@@ -142,7 +142,11 @@ export class HttpClient {
     } catch (err: unknown) {
       const e = err as Error;
       if (e.name === 'TimeoutError' || e.name === 'AbortError') {
-        throw new RetriableError(`request timed out after ${this.timeoutMs.toString()}ms`, err);
+        throw new RetriableError(
+          `request timed out after ${this.timeoutMs.toString()}ms`,
+          null,
+          err,
+        );
       }
       throw new NetworkError(`network failure: ${e.message}`, err);
     }
@@ -193,7 +197,11 @@ export class HttpClient {
       throw new RateLimitError('server returned 429 (rate limit)', retryAfter);
     }
     if (status >= 500 && status < 600) {
-      throw new RetriableError(`server returned ${status.toString()}`);
+      // Honor Retry-After on 5xx (nest emits this when parse-queue
+      // backpressure trips the high-water mark on 503). Carries through to
+      // the pacer's notifyServiceUnavailable path.
+      const retryAfter = parseRetryAfter(response.headers.get(HEADER_RETRY_AFTER));
+      throw new RetriableError(`server returned ${status.toString()}`, retryAfter);
     }
     throw new FatalError(`unexpected status: ${status.toString()}`);
   }

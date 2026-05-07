@@ -46,7 +46,14 @@ export async function drainBuffer(
     if (ctx.pacer !== undefined) {
       if (outcome.retryAfterMs !== null && outcome.retryAfterMs > 0) {
         ctx.pacer.notifyRetryAfter(outcome.retryAfterMs);
+      }
+      // Route distress signals by reason. auth_unconfirmed and network are
+      // not server-distress signals — they're transport/identity faults that
+      // shouldn't make us slow down ordinary traffic.
+      if (outcome.reason === 'rate_limit') {
         ctx.pacer.notify429();
+      } else if (outcome.reason === 'service_unavailable') {
+        ctx.pacer.notifyServiceUnavailable(outcome.retryAfterMs ?? undefined);
       }
     }
     result.retriable++;

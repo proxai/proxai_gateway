@@ -76,18 +76,49 @@ async function classifyAndPersist(
       { event: 'upload.rate_limited', retry_after_ms: err.retryAfterMs, error: err.message },
       'upload rate-limited',
     );
-    return { kind: 'retriable', captureId, error: err.message, retryAfterMs: err.retryAfterMs };
+    return {
+      kind: 'retriable',
+      captureId,
+      error: err.message,
+      retryAfterMs: err.retryAfterMs,
+      reason: 'rate_limit',
+    };
   }
   if (err instanceof AuthError) {
     return handleAuthError(ctx, batch, err);
   }
-  if (err instanceof RetriableError || err instanceof NetworkError) {
+  if (err instanceof RetriableError) {
+    recordRetriableFailure(ctx.db, captureId, err.message);
+    log?.warn(
+      {
+        event: 'upload.retriable',
+        kind: err.constructor.name,
+        retry_after_ms: err.retryAfterMs,
+        error: err.message,
+      },
+      'upload failed (retriable)',
+    );
+    return {
+      kind: 'retriable',
+      captureId,
+      error: err.message,
+      retryAfterMs: err.retryAfterMs,
+      reason: 'service_unavailable',
+    };
+  }
+  if (err instanceof NetworkError) {
     recordRetriableFailure(ctx.db, captureId, err.message);
     log?.warn(
       { event: 'upload.retriable', kind: err.constructor.name, error: err.message },
       'upload failed (retriable)',
     );
-    return { kind: 'retriable', captureId, error: err.message, retryAfterMs: null };
+    return {
+      kind: 'retriable',
+      captureId,
+      error: err.message,
+      retryAfterMs: null,
+      reason: 'network',
+    };
   }
   if (err instanceof ValidationError || err instanceof GatewayError) {
     markBatchFailed(ctx.db, captureId, err.message);
@@ -131,7 +162,13 @@ async function handleAuthError(
       },
       'upload auth error; verify-key inconclusive, treating as retriable',
     );
-    return { kind: 'retriable', captureId, error: authErr.message, retryAfterMs: null };
+    return {
+      kind: 'retriable',
+      captureId,
+      error: authErr.message,
+      retryAfterMs: null,
+      reason: 'auth_unconfirmed',
+    };
   }
 
   if (!verification.success) {
@@ -145,7 +182,13 @@ async function handleAuthError(
     { event: 'upload.auth_transient', error: authErr.message },
     'upload auth error; verify-key still success, treating as retriable',
   );
-  return { kind: 'retriable', captureId, error: authErr.message, retryAfterMs: null };
+  return {
+    kind: 'retriable',
+    captureId,
+    error: authErr.message,
+    retryAfterMs: null,
+    reason: 'auth_unconfirmed',
+  };
 }
 
 async function finalizeAuthFailure(

@@ -174,7 +174,7 @@ test('403 AuthError + verify-key success keeps batch pending (transient)', async
   expect(row.attempts).toBe(1);
 });
 
-test('429 RateLimitError surfaces retryAfterMs and stays pending', async () => {
+test('429 RateLimitError surfaces retryAfterMs, reason=rate_limit, stays pending', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
   const stored = getBatch(db, batch.captureId)!;
@@ -183,11 +183,14 @@ test('429 RateLimitError surfaces retryAfterMs and stays pending', async () => {
   const outcome = await uploadBatch(ctx, stored);
 
   expect(outcome.kind).toBe('retriable');
-  if (outcome.kind === 'retriable') expect(outcome.retryAfterMs).toBe(45_000);
+  if (outcome.kind === 'retriable') {
+    expect(outcome.retryAfterMs).toBe(45_000);
+    expect(outcome.reason).toBe('rate_limit');
+  }
   expect(getBatch(db, batch.captureId)!.status).toBe('pending');
 });
 
-test('503 RetriableError keeps batch pending', async () => {
+test('503 RetriableError carries reason=service_unavailable, stays pending', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
   const stored = getBatch(db, batch.captureId)!;
@@ -196,6 +199,10 @@ test('503 RetriableError keeps batch pending', async () => {
   const outcome = await uploadBatch(ctx, stored);
 
   expect(outcome.kind).toBe('retriable');
+  if (outcome.kind === 'retriable') {
+    expect(outcome.reason).toBe('service_unavailable');
+    expect(outcome.retryAfterMs).toBeNull();
+  }
   expect(getBatch(db, batch.captureId)!.status).toBe('pending');
 });
 
@@ -235,7 +242,7 @@ test('unexpected status maps to FatalError -> fatal', async () => {
   expect(getBatch(db, batch.captureId)!.status).toBe('failed');
 });
 
-test('network failure -> retriable, pending, attempts++', async () => {
+test('network failure -> retriable, reason=network, pending, attempts++', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
   const stored = getBatch(db, batch.captureId)!;
@@ -244,9 +251,48 @@ test('network failure -> retriable, pending, attempts++', async () => {
   const outcome = await uploadBatch(ctx, stored);
 
   expect(outcome.kind).toBe('retriable');
+  if (outcome.kind === 'retriable') {
+    expect(outcome.reason).toBe('network');
+    expect(outcome.retryAfterMs).toBeNull();
+  }
   const row = getBatch(db, batch.captureId)!;
   expect(row.status).toBe('pending');
   expect(row.attempts).toBe(1);
+});
+
+test('AuthError + verify-key inconclusive -> retriable, reason=auth_unconfirmed', async () => {
+  const batch = newClaudeCodeBatch('payload');
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+
+  const ctx = ctxWith(
+    mockFetch((call) => {
+      // verify-key returns 503 -> RetriableError -> auth_unconfirmed branch.
+      if (call.url.includes('/ingestion/verify-key')) return emptyResponse(503);
+      return emptyResponse(401);
+    }),
+  );
+  const outcome = await uploadBatch(ctx, stored);
+  expect(outcome.kind).toBe('retriable');
+  if (outcome.kind === 'retriable') expect(outcome.reason).toBe('auth_unconfirmed');
+});
+
+test('AuthError + verify-key transient-success -> retriable, reason=auth_unconfirmed', async () => {
+  const batch = newClaudeCodeBatch('payload');
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+
+  const ctx = ctxWith(
+    mockFetch((call) => {
+      if (call.url.includes('/ingestion/verify-key')) {
+        return jsonResponse({ success: true, data: { userId: 'u_test' }, message: 'ok' });
+      }
+      return emptyResponse(403);
+    }),
+  );
+  const outcome = await uploadBatch(ctx, stored);
+  expect(outcome.kind).toBe('retriable');
+  if (outcome.kind === 'retriable') expect(outcome.reason).toBe('auth_unconfirmed');
 });
 
 test('uploaded body is base64-encoded recompressed payload', async () => {
