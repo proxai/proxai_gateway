@@ -291,6 +291,38 @@ test('auth-unconfirmed retriable does not trigger any pacer distress signal', as
   expect(spy.serviceUnavailableCalls).toEqual([]);
 });
 
+test('watermark regression returns recovered and drain counts it separately', async () => {
+  const ids = await insertN(2);
+  let calls = 0;
+  const ctx = ctxWith(
+    mockFetch((call) => {
+      calls++;
+      if (calls === 1) {
+        const parsed = JSON.parse(call.init.body as string) as { source_path_hash: string };
+        return jsonResponse(
+          {
+            error: 'watermark_regression',
+            current_server_watermark_end: 9999,
+            source_path_hash: parsed.source_path_hash,
+          },
+          400,
+        );
+      }
+      const parsed = JSON.parse(call.init.body as string) as { capture_id: string };
+      return jsonResponse({ capture_id: parsed.capture_id, accepted: true, idempotent: false });
+    }),
+  );
+  const result = await drainBuffer(ctx);
+  expect(result.recovered).toBe(1);
+  expect(result.accepted).toBe(1);
+  expect(result.attempted).toBe(2);
+
+  expect(getBatch(db, ids[0]!)).toBeNull();
+  expect(getReceipt(db, ids[0]!)).toBeNull();
+  expect(getBatch(db, ids[1]!)).toBeNull();
+  expect(getReceipt(db, ids[1]!)).not.toBeNull();
+});
+
 test('network failure retriable does not trigger any pacer distress signal', async () => {
   await insertN(1);
   const spy = makePacerSpy();
