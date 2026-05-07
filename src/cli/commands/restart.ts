@@ -1,11 +1,13 @@
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import type { ServiceManager } from 'cli/service-manager.ts';
+import { clearSessionStoppedSentinel } from 'services/polling';
 
 export interface RestartCommandDeps {
   output: OutputSink;
   configExists: () => Promise<boolean>;
   serviceManager: ServiceManager;
+  sessionStoppedSentinelPath: string;
   invokeSetup?: () => Promise<CommandResult>;
 }
 
@@ -20,6 +22,9 @@ export async function runRestart(deps: RestartCommandDeps): Promise<CommandResul
     return deps.invokeSetup();
   }
   try {
+    // Clear any prior SESSION_STOPPED sentinel: a restart resumes the
+    // session by definition. Idempotent on missing-file.
+    await clearSessionStoppedSentinel(deps.sessionStoppedSentinelPath);
     await deps.serviceManager.ensureRegistered();
     await deps.serviceManager.restart();
     deps.output.success('proxai-gateway restarted');

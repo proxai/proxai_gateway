@@ -6,7 +6,8 @@ test('emits a [Service] block with ExecStart', () => {
   const unit = buildSystemdUnit({ programPath: '/usr/local/bin/proxai-gateway' });
   expect(unit).toContain('[Service]');
   expect(unit).toContain('ExecStart=/usr/local/bin/proxai-gateway run');
-  expect(unit).toContain('Restart=always');
+  expect(unit).toContain('Restart=on-failure');
+  expect(unit).not.toContain('Restart=always');
   expect(unit).toContain('RestartSec=10s');
 });
 

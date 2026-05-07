@@ -40,7 +40,10 @@ ${argsXml}
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
 ${stdoutBlock}${stderrBlock}</dict>
 </plist>
 `;

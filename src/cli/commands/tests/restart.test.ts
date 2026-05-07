@@ -1,8 +1,15 @@
-import { expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { runRestart } from 'cli/commands/restart.ts';
 import { captureOutput } from 'cli/output.ts';
 import type { ServiceManager } from 'cli/service-manager.ts';
+import {
+  readSessionStoppedSentinel,
+  writeSessionStoppedSentinel,
+} from 'services/polling/session-stopped-sentinel.ts';
 
 interface FakeCalls {
   ensureRegistered: number;
@@ -54,6 +61,18 @@ function fakeManager(
   return { sm, calls };
 }
 
+let dir: string;
+let sentinelPath: string;
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'proxai-restart-'));
+  sentinelPath = join(dir, 'SESSION_STOPPED');
+});
+
+afterEach(async () => {
+  await rm(dir, { recursive: true, force: true });
+});
+
 test('redirects to setup when config missing', async () => {
   const { sm, calls } = fakeManager();
   const output = captureOutput();
@@ -62,6 +81,7 @@ test('redirects to setup when config missing', async () => {
     output,
     configExists: async () => false,
     serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
     invokeSetup: async () => {
       invokeSetupCalls++;
       return { exitCode: 0 };
@@ -79,11 +99,29 @@ test('ensureRegistered + restart when config exists', async () => {
     output,
     configExists: async () => true,
     serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
   });
   expect(result.exitCode).toBe(0);
   expect(calls.ensureRegistered).toBe(1);
   expect(calls.restart).toBe(1);
   expect(output.lines.some((l) => l.level === 'success' && l.msg.includes('restarted'))).toBe(true);
+});
+
+test('clears the SESSION_STOPPED sentinel as part of restart', async () => {
+  await writeSessionStoppedSentinel(sentinelPath, {
+    bootId: 'prior-boot',
+    setAt: '2026-05-06T00:00:00.000Z',
+  });
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runRestart({
+    output,
+    configExists: async () => true,
+    serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
+  });
+  expect(result.exitCode).toBe(0);
+  expect(await readSessionStoppedSentinel(sentinelPath)).toBeNull();
 });
 
 test('returns error when restart throws', async () => {
@@ -93,6 +131,7 @@ test('returns error when restart throws', async () => {
     output,
     configExists: async () => true,
     serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
   });
   expect(result.exitCode).toBe(1);
   expect(calls.restart).toBe(1);
@@ -108,6 +147,7 @@ test('returns error when invokeSetup is missing and config does not exist', asyn
     output,
     configExists: async () => false,
     serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
   });
   expect(result.exitCode).toBe(1);
   expect(output.lines.some((l) => l.level === 'error')).toBe(true);
@@ -130,6 +170,7 @@ test('formatError stringifies non-Error throws', async () => {
     output,
     configExists: async () => true,
     serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
   });
   expect(result.exitCode).toBe(1);
   expect(

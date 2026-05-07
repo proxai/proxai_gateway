@@ -23,7 +23,7 @@ After=network-online.target
 [Service]
 Type=simple
 ExecStart=${exec}
-Restart=always
+Restart=on-failure
 RestartSec=${restartSec.toString()}s
 
 [Install]

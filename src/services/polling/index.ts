@@ -8,6 +8,7 @@ export * from 'services/polling/poll-cursor.ts';
 export * from 'services/polling/poll-cycle.ts';
 export * from 'services/polling/poll-loop.ts';
 export * from 'services/polling/polling.constants.ts';
+export * from 'services/polling/session-stopped-sentinel.ts';
 export * from 'services/polling/polling.types.ts';
 export * from 'services/polling/stale-binary.ts';
 export * from 'services/polling/watermark-sync.ts';

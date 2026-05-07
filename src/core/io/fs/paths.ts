@@ -52,6 +52,10 @@ export function bufferFullSentinelPath(): string {
   return join(configDir(), 'BUFFER_FULL');
 }
 
+export function sessionStoppedSentinelPath(): string {
+  return join(configDir(), 'SESSION_STOPPED');
+}
+
 export function consentSentinelPath(): string {
   return join(configDir(), 'CONSENT_ACCEPTED');
 }

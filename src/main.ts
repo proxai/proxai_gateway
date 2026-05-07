@@ -10,6 +10,7 @@ import {
   configFilePath,
   logDir,
   pausedSentinelPath,
+  sessionStoppedSentinelPath,
 } from 'core/io/fs';
 import type { LogLevel } from 'core/log';
 import { readMachineUuid } from 'core/system';
@@ -146,6 +147,7 @@ program
       output: consoleOutput(),
       configExists: () => Bun.file(configFilePath()).exists(),
       serviceManager: sm,
+      sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
       invokeSetup: invokeSetupInteractive,
     });
     process.exit(result.exitCode);
@@ -169,6 +171,7 @@ program
     const result = await runStop({
       output: consoleOutput(),
       serviceManager: sm,
+      sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
     });
     process.exit(result.exitCode);
   });
@@ -192,6 +195,7 @@ program
       output: consoleOutput(),
       configExists: () => Bun.file(configFilePath()).exists(),
       serviceManager: sm,
+      sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
       invokeSetup: invokeSetupInteractive,
     });
     process.exit(result.exitCode);
@@ -212,6 +216,7 @@ program
       pauseSentinelPath: pausedSentinelPath(),
       authFailedSentinelPath: authFailedSentinelPath(),
       bufferFullSentinelPath: bufferFullSentinelPath(),
+      sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
       abortSignal: ctrl.signal,
       gatewayVersion: `@proxai/gateway ${packageJson.version}`,
     });

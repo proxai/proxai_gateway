@@ -8,6 +8,10 @@ import { captureOutput } from 'cli/output.ts';
 import { countCursors, openBufferDb, setCursor } from 'services/buffer';
 import type { GatewayConfig } from 'services/config';
 import { HttpClient } from 'services/http';
+import {
+  readSessionStoppedSentinel,
+  writeSessionStoppedSentinel,
+} from 'services/polling/session-stopped-sentinel.ts';
 
 let dir: string;
 
@@ -101,6 +105,8 @@ test('starts the loop, runs at least one cycle, and exits cleanly on abort', asy
     pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
+    sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
+    readBootId: async () => 'boot-test',
     abortSignal: ctrl.signal,
     gatewayVersion: 'gw-test',
     httpClient: mockHttp(config, emptyWatermarks),
@@ -138,6 +144,8 @@ test('exits immediately when abort signal is already aborted', async () => {
     pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
+    sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
+    readBootId: async () => 'boot-test',
     abortSignal: ctrl.signal,
     gatewayVersion: 'gw-test',
     httpClient: mockHttp(config, emptyWatermarks),
@@ -179,6 +187,8 @@ test('empty cursor table triggers a watermark sync; populated cursors are seeded
     pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
+    sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
+    readBootId: async () => 'boot-test',
     abortSignal: ctrl.signal,
     gatewayVersion: 'gw-test',
     httpClient,
@@ -221,6 +231,8 @@ test('non-empty cursor table skips the pre-flight sync', async () => {
     pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
+    sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
+    readBootId: async () => 'boot-test',
     abortSignal: ctrl.signal,
     gatewayVersion: 'gw-test',
     httpClient,
@@ -229,6 +241,128 @@ test('non-empty cursor table skips the pre-flight sync', async () => {
   });
   expect(result.exitCode).toBe(0);
   expect(log.watermarkCalls).toBe(0);
+});
+
+test('exits cleanly with EXIT_CODE.ok when SESSION_STOPPED matches current boot_id', async () => {
+  const config = makeConfig();
+  const sentinelPath = join(dir, 'SESSION_STOPPED');
+  await writeSessionStoppedSentinel(sentinelPath, {
+    bootId: 'boot-test',
+    setAt: '2026-05-06T00:00:00.000Z',
+  });
+  const ctrl = new AbortController();
+  const out = captureOutput();
+  let cycles = 0;
+  const result = await runDaemon({
+    output: out,
+    config,
+    pauseSentinelPath: join(dir, 'PAUSED'),
+    authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
+    bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
+    sessionStoppedSentinelPath: sentinelPath,
+    readBootId: async () => 'boot-test',
+    abortSignal: ctrl.signal,
+    gatewayVersion: 'gw-test',
+    httpClient: mockHttp(config, emptyWatermarks),
+    sources: [
+      {
+        name: 'noop',
+        poll: async () => {
+          cycles++;
+          return {
+            filesProcessed: 0,
+            capturedBatches: 0,
+            capturedBytes: 0,
+            errors: [],
+          };
+        },
+      },
+    ],
+  });
+  expect(result.exitCode).toBe(0);
+  expect(cycles).toBe(0);
+  // sentinel preserved on the matching path
+  expect(await readSessionStoppedSentinel(sentinelPath)).not.toBeNull();
+});
+
+test('deletes stale SESSION_STOPPED sentinel and proceeds when boot_id mismatches', async () => {
+  const config = makeConfig();
+  const sentinelPath = join(dir, 'SESSION_STOPPED');
+  await writeSessionStoppedSentinel(sentinelPath, {
+    bootId: 'old-boot',
+    setAt: '2026-05-06T00:00:00.000Z',
+  });
+  const ctrl = new AbortController();
+  const out = captureOutput();
+  let cycles = 0;
+  const result = await runDaemon({
+    output: out,
+    config,
+    pauseSentinelPath: join(dir, 'PAUSED'),
+    authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
+    bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
+    sessionStoppedSentinelPath: sentinelPath,
+    readBootId: async () => 'new-boot',
+    abortSignal: ctrl.signal,
+    gatewayVersion: 'gw-test',
+    httpClient: mockHttp(config, emptyWatermarks),
+    sources: [
+      {
+        name: 'noop',
+        poll: async () => ({
+          filesProcessed: 0,
+          capturedBatches: 0,
+          capturedBytes: 0,
+          errors: [],
+        }),
+      },
+    ],
+    onCycleComplete: () => {
+      cycles++;
+      ctrl.abort();
+    },
+  });
+  expect(result.exitCode).toBe(0);
+  expect(cycles).toBeGreaterThanOrEqual(1);
+  // stale sentinel removed
+  expect(await readSessionStoppedSentinel(sentinelPath)).toBeNull();
+});
+
+test('proceeds normally when the SESSION_STOPPED sentinel does not exist', async () => {
+  const config = makeConfig();
+  const sentinelPath = join(dir, 'SESSION_STOPPED');
+  const ctrl = new AbortController();
+  const out = captureOutput();
+  let cycles = 0;
+  const result = await runDaemon({
+    output: out,
+    config,
+    pauseSentinelPath: join(dir, 'PAUSED'),
+    authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
+    bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
+    sessionStoppedSentinelPath: sentinelPath,
+    readBootId: async () => 'boot-test',
+    abortSignal: ctrl.signal,
+    gatewayVersion: 'gw-test',
+    httpClient: mockHttp(config, emptyWatermarks),
+    sources: [
+      {
+        name: 'noop',
+        poll: async () => ({
+          filesProcessed: 0,
+          capturedBatches: 0,
+          capturedBytes: 0,
+          errors: [],
+        }),
+      },
+    ],
+    onCycleComplete: () => {
+      cycles++;
+      ctrl.abort();
+    },
+  });
+  expect(result.exitCode).toBe(0);
+  expect(cycles).toBeGreaterThanOrEqual(1);
 });
 
 test('watermark sync failure logs warn and does not abort the daemon', async () => {
@@ -242,6 +376,8 @@ test('watermark sync failure logs warn and does not abort the daemon', async () 
     pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
+    sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
+    readBootId: async () => 'boot-test',
     abortSignal: ctrl.signal,
     gatewayVersion: 'gw-test',
     httpClient,

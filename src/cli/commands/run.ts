@@ -3,12 +3,18 @@ import { dirname } from 'node:path';
 
 import { createLogger, pruneLogDirectory } from 'core/log';
 import type { Logger } from 'core/log';
+import { readBootId } from 'core/system';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import { countCursors, openBufferDb } from 'services/buffer';
 import type { GatewayConfig } from 'services/config';
 import { HttpClient } from 'services/http';
-import { buildDefaultSources, runPollLoop, syncServerWatermarks } from 'services/polling';
+import {
+  buildDefaultSources,
+  isCurrentSessionStopped,
+  runPollLoop,
+  syncServerWatermarks,
+} from 'services/polling';
 import type { PollCycleContext, PollCycleResult, RegisteredSource } from 'services/polling';
 import { createPacer } from 'services/uploader';
 
@@ -18,17 +24,18 @@ export interface RunCommandDeps {
   pauseSentinelPath: string;
   authFailedSentinelPath: string;
   bufferFullSentinelPath: string;
+  sessionStoppedSentinelPath: string;
   abortSignal: AbortSignal;
   gatewayVersion: string;
   sources?: readonly RegisteredSource[];
   onCycleComplete?: (result: PollCycleResult) => void;
   logger?: Logger;
   httpClient?: HttpClient;
+  readBootId?: () => Promise<string>;
 }
 
 export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
   await ensureDir(dirname(deps.config.capture.bufferPath));
-  const buffer = openBufferDb(deps.config.capture.bufferPath);
 
   const logger =
     deps.logger ??
@@ -45,6 +52,37 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
   try {
     await pruneLogDirectory(deps.config.logging.logDir);
   } catch {}
+
+  // Check the SESSION_STOPPED sentinel before doing any real work. If the
+  // sentinel is present and tagged with the current boot id, the user invoked
+  // `stop` during this boot session — exit cleanly so the service manager
+  // (with KeepAlive=SuccessfulExit:false / Restart=on-failure) does not relaunch.
+  // Stale sentinels (from a previous boot) are auto-cleared by the helper.
+  try {
+    const readBootIdFn = deps.readBootId ?? readBootId;
+    const currentBootId = await readBootIdFn();
+    const sessionStopped = await isCurrentSessionStopped(
+      deps.sessionStoppedSentinelPath,
+      currentBootId,
+    );
+    if (sessionStopped) {
+      logger.info(
+        { event: 'daemon.session_stopped' },
+        'session-stopped sentinel present; exiting cleanly',
+      );
+      return { exitCode: EXIT_CODE.ok };
+    }
+  } catch (err) {
+    logger.warn(
+      {
+        event: 'daemon.session_stopped_check_failed',
+        error: (err as Error).message ?? String(err),
+      },
+      'session-stopped check failed; proceeding with daemon start',
+    );
+  }
+
+  const buffer = openBufferDb(deps.config.capture.bufferPath);
 
   const http =
     deps.httpClient ??
