@@ -537,7 +537,7 @@ test('version check fires once per interval and skips on subsequent cycles withi
     gatewayVersion: '2026.5.7',
     updateAvailableSentinelPath: sentinelPath,
     versionCheckFetch: trackingFetch,
-    versionCheckIntervalMs: 24 * 60 * 60 * 1000,
+    versionCheckIntervalMs: 4 * 60 * 60 * 1000,
   };
 
   await runPollCycle(baseCtx);

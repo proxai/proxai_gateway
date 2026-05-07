@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    branches: [main]
-    tags: ['v*']
+    tags:
+      - 'v*'
 
 concurrency:
   group: release-${{ github.ref }}
@@ -25,25 +25,10 @@ jobs:
 
       - name: Compute version
         id: compute
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            tag="${GITHUB_REF#refs/tags/}"
-            version="${tag#v}"
-          else
-            today=$(date -u +%Y.%-m.%-d)
-            existing=$(gh release list --limit 200 --json tagName --jq ".[].tagName" | grep -E "^v${today}(-[0-9]+)?$" || true)
-            count=$(echo -n "${existing}" | grep -c '^' || true)
-            if [[ "${count}" -eq 0 ]]; then
-              version="${today}"
-            else
-              n=$((count + 1))
-              version="${today}-${n}"
-            fi
-            tag="v${version}"
-          fi
+          tag="${{ github.ref_name }}"
+          version="${tag#v}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "computed version=${version} tag=${tag}"

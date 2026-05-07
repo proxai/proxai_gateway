@@ -261,7 +261,7 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
   };
 }
 
-const DEFAULT_VERSION_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_VERSION_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
 async function maybeRunVersionCheck(ctx: PollCycleContext): Promise<void> {
   const sentinelPath = ctx.updateAvailableSentinelPath;
