@@ -49,7 +49,6 @@ test('sessionStoppedSentinelPath and updateAvailableSentinelPath live under conf
 });
 
 test('expandHome expands leading ~/', () => {
-  // expandHome uses path.join so its output uses the host separator.
   expect(expandHome('~/foo/bar')).toBe(join(homedir(), 'foo', 'bar'));
   expect(expandHome('~')).toBe(homedir());
   expect(expandHome('/abs/path')).toBe('/abs/path');
@@ -68,7 +67,6 @@ function withPlatform<T>(platform: NodeJS.Platform, fn: () => T): T {
 
 test('configDir on linux uses ~/.proxai/proxai-gateway', () => {
   withPlatform('linux', () => {
-    // path.join uses the host separator regardless of mocked process.platform.
     expect(configDir()).toBe(join(homedir(), '.proxai', 'proxai-gateway'));
   });
 });
@@ -103,7 +101,6 @@ test('configDir throws on unsupported platform', () => {
 
 test('logDir on linux uses ~/.local/state', () => {
   withPlatform('linux', () => {
-    // path.join uses the host separator regardless of mocked process.platform.
     expect(logDir()).toContain(join('.local', 'state', 'proxai', 'proxai-gateway'));
   });
 });

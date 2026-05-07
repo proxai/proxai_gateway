@@ -271,11 +271,6 @@ test('every batch satisfies BOTH compressed AND decompressed caps', async () => 
 });
 
 test('resets watermark when source_inode changes (file rotated/replaced)', async () => {
-  // Use synthetic inode values rather than OS-allocated ones. Windows surfaces
-  // inode-like ids inconsistently through node:fs (often 0 or non-stable),
-  // and Linux ext4 reuses inode numbers after unlink+create on the same path,
-  // so OS-derived inodes make this test platform-dependent. The cursor logic
-  // only cares that the (path_hash, inode) identity changes.
   const file = { ...(await makeFile('{"a":1}\n')), inode: 1001 };
   const first = await collectCodexRollout(file, ctx(buffer), '0.1.0');
   expect(first.capturedBatches).toBe(1);

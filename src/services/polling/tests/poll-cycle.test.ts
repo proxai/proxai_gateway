@@ -547,9 +547,6 @@ test('version check fires once per interval and skips on subsequent cycles withi
 });
 
 test('version check failure logs warn and continues the cycle', async () => {
-  // Make sentinelPath an existing directory so clearUpdateAvailableSentinel's
-  // unlink rejects with EISDIR, which surfaces as a thrown error inside
-  // maybeRunVersionCheck. The poll-cycle catch should then log version_check.failed.
   const sentinelPath = join(dir, 'UPDATE_AVAILABLE_DIR');
   const { mkdir } = await import('node:fs/promises');
   await mkdir(sentinelPath, { recursive: true });
@@ -570,7 +567,6 @@ test('version check failure logs warn and continues the cycle', async () => {
 test('version check returning null is logged as unavailable and clears no sentinel', async () => {
   const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
   const entries: FakeLogEntry[] = [];
-  // 503 from GitHub causes checkLatestVersion to return null.
   const fetchFn: typeof globalThis.fetch = (async () =>
     new Response('upstream error', { status: 503 })) as unknown as typeof globalThis.fetch;
   const ctx: PollCycleContext = {

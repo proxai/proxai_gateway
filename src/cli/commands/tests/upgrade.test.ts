@@ -352,7 +352,6 @@ test('empty downloaded body surfaces a verification error', async () => {
 test('write to binaryPath failure surfaces an install error', async () => {
   const out = captureOutput();
   const assetName = `proxai-gateway-linux-${process.arch}`;
-  // Point binaryPath at an existing directory so Bun.write fails with EISDIR.
   const binaryPath = join(dir, 'is-a-dir');
   await mkdir(binaryPath, { recursive: true });
   const newBinary = new TextEncoder().encode('new-binary');
@@ -389,7 +388,6 @@ test('windows write failure to .new path surfaces an error', async () => {
   const out = captureOutput();
   const assetName = `proxai-gateway-win32-${process.arch}.exe`;
   const newBinary = new TextEncoder().encode('payload');
-  // Make `${binaryPath}.new` resolve to an existing directory so Bun.write fails.
   const binaryPath = join(dir, 'win-binary');
   await mkdir(`${binaryPath}.new`, { recursive: true });
   const fetchFn = makeReleaseFetch(
@@ -422,8 +420,6 @@ test('windows write failure to .new path surfaces an error', async () => {
 });
 
 test('release fetch timeout aborts the request via setTimeout callback', async () => {
-  // Patch globalThis.setTimeout so we capture the abort callback and fire it
-  // immediately, exercising the `() => ctrl.abort()` arrow inside fetchLatestRelease.
   const origSetTimeout = globalThis.setTimeout;
   let capturedAbort: (() => void) | null = null;
   (globalThis as { setTimeout: typeof setTimeout }).setTimeout = ((
@@ -442,7 +438,6 @@ test('release fetch timeout aborts the request via setTimeout callback', async (
     _url: string | URL | Request,
     init?: RequestInit,
   ) => {
-    // Trigger the timeout abort callback synchronously, then honor the abort.
     if (capturedAbort !== null) {
       capturedAbort();
     }
@@ -477,8 +472,6 @@ test('download fetch timeout aborts the request via setTimeout callback', async 
   let capturedAbort: (() => void) | null = null;
   let releaseTimerInstalled = false;
 
-  // We need the FIRST setTimeout (release fetch) to clear normally, and the
-  // SECOND setTimeout (download fetch) to be captured & fired.
   (globalThis as { setTimeout: typeof setTimeout }).setTimeout = ((cb: () => void, ms?: number) => {
     if (!releaseTimerInstalled) {
       releaseTimerInstalled = true;
@@ -607,9 +600,6 @@ test('confirm declined via prompts (no yes flag, isTty true) returns ok', async 
 
 test('runUpgrade default isTty path is reachable when omitted (no prompts)', async () => {
   const out = captureOutput();
-  // Newer remote so we pass the "already at latest" branch and fall through
-  // to the default isTty check (no prompts means it bypasses the prompt path,
-  // and with yes=false default, isTty default arrow gets called).
   const assetName = `proxai-gateway-linux-${process.arch}`;
   const newBinary = new TextEncoder().encode('payload');
   const fetchFn = makeReleaseFetch(
@@ -630,7 +620,6 @@ test('runUpgrade default isTty path is reachable when omitted (no prompts)', asy
     binaryPath: join(dir, 'proxai-gateway-default-tty'),
     fetch: fetchFn,
     platform: 'linux',
-    // no isTty override - exercises the default arrow
   });
   expect(result.exitCode).toBe(0);
 });

@@ -550,9 +550,6 @@ test('AuthError + verify-key throws non-Error → retriable, log uses typeof and
 });
 
 test('AuthError + verify-key returns success: false → fatal even when sentinel write fails', async () => {
-  // Force the sentinel write to fail by giving it a path whose parent is a
-  // regular file (not a directory). This produces ENOTDIR / EEXIST on every
-  // OS, unlike "/dev/null/AUTH_FAILED" which only triggers ENOTDIR on Unix.
   const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-upload-auth-fail-'));
   const fileBlocker = join(dirAuth, 'blocker');
   await Bun.write(fileBlocker, 'not-a-directory');

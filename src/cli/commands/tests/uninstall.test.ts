@@ -413,7 +413,6 @@ test('unit-file removal swallows ENOENT silently', async () => {
 
 test('unit-file removal warns when unlink fails with non-ENOENT error', async () => {
   await writeConfig();
-  // Replace serviceUnitPath with a non-empty directory so unlink fails with EISDIR/EPERM
   await rm(serviceUnitPath, { force: true });
   await mkdir(serviceUnitPath, { recursive: true });
   await writeFile(join(serviceUnitPath, 'inner'), 'block-the-unlink');

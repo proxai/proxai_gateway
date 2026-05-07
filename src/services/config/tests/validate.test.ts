@@ -143,7 +143,6 @@ test('expands ~/ in path fields', () => {
     logging: { log_dir: '~/custom/logs' },
   });
   expect(result.capture.bufferPath.startsWith('~')).toBe(false);
-  // expandHome uses path.join, so the trailing segment uses the host separator.
   expect(result.capture.bufferPath.endsWith(join('custom', 'buffer.db'))).toBe(true);
   expect(result.logging.logDir.startsWith('~')).toBe(false);
   expect(result.logging.logDir.endsWith(join('custom', 'logs'))).toBe(true);

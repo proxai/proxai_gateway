@@ -76,7 +76,6 @@ test('escapes special XML characters in paths and label', () => {
 test('defaultLaunchdPlistPath ends with the label and .plist', () => {
   const path = defaultLaunchdPlistPath();
   expect(path.endsWith('co.proxai.gateway.plist')).toBe(true);
-  // `path.join` uses the host separator, so the segment is platform-specific.
   expect(path).toContain(`Library${pathSep}LaunchAgents`);
 });
 

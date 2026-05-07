@@ -105,11 +105,6 @@ test('session-trailing-partial.jsonl: holds back the unterminated last line', as
 });
 
 test('session-with-rotation: same path with new inode produces a fresh cursor', async () => {
-  // Use synthetic inode values rather than OS-allocated ones. Linux ext4
-  // reuses inode numbers immediately after unlink+create on the same path,
-  // so a real fs.stat-derived inode would collide and make the test
-  // platform-dependent. The cursor logic only cares that the (path_hash,
-  // inode) identity changes — it does not depend on the OS allocator.
   const fileA = {
     ...(await copyFixture('session-with-rotation.jsonl', 'session.jsonl')),
     inode: 1001,
