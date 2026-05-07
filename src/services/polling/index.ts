@@ -11,4 +11,6 @@ export * from 'services/polling/polling.constants.ts';
 export * from 'services/polling/session-stopped-sentinel.ts';
 export * from 'services/polling/polling.types.ts';
 export * from 'services/polling/stale-binary.ts';
+export * from 'services/polling/update-available-sentinel.ts';
+export * from 'services/polling/version-check.ts';
 export * from 'services/polling/watermark-sync.ts';

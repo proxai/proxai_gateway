@@ -19,6 +19,7 @@ export const METADATA_COLS = {
 
 export const METADATA_KEYS = {
   lastPruneAt: 'last_prune_at',
+  lastVersionCheckAt: 'last_version_check_at',
 } as const;
 
 export const BATCH_COLS = {

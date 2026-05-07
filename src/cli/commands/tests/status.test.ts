@@ -114,6 +114,45 @@ test('reports buffer_full: yes when BUFFER_FULL sentinel exists', async () => {
   expect(out.lines.some((l) => l.msg.includes('buffer_full: yes'))).toBe(true);
 });
 
+test('reports update_available when UPDATE_AVAILABLE sentinel exists', async () => {
+  const sentinelPath = join(dir, 'PAUSED');
+  const bufferFullSentinelPath = join(dir, 'BUFFER_FULL');
+  const updateAvailableSentinelPath = join(dir, 'UPDATE_AVAILABLE');
+  await Bun.write(
+    updateAvailableSentinelPath,
+    JSON.stringify({
+      latest_version: '2026.5.10',
+      current_version: '2026.5.7',
+      detected_at: '2026-05-06T00:00:00.000Z',
+    }),
+  );
+  const out = captureOutput();
+  await runStatus({
+    output: out,
+    buffer,
+    sentinelPath,
+    bufferFullSentinelPath,
+    updateAvailableSentinelPath,
+  });
+  expect(out.lines.some((l) => l.msg.includes('update_available: 2026.5.10'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('currently 2026.5.7'))).toBe(true);
+});
+
+test('does not print update_available when sentinel absent', async () => {
+  const sentinelPath = join(dir, 'PAUSED');
+  const bufferFullSentinelPath = join(dir, 'BUFFER_FULL');
+  const updateAvailableSentinelPath = join(dir, 'UPDATE_AVAILABLE');
+  const out = captureOutput();
+  await runStatus({
+    output: out,
+    buffer,
+    sentinelPath,
+    bufferFullSentinelPath,
+    updateAvailableSentinelPath,
+  });
+  expect(out.lines.some((l) => l.msg.includes('update_available'))).toBe(false);
+});
+
 test('formatBytes handles each magnitude tier', () => {
   expect(formatBytes(0)).toBe('0 B');
   expect(formatBytes(512)).toBe('512 B');

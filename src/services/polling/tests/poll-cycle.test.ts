@@ -470,6 +470,82 @@ test('cycle logs prune_failed warn when pruneBuffer throws', async () => {
   );
 });
 
+function makeVersionFetch(tagName: string): typeof globalThis.fetch {
+  return (async (url: string | URL | Request) => {
+    const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
+    if (u.includes('api.github.com')) {
+      return new Response(
+        JSON.stringify({
+          tag_name: tagName,
+          assets: [
+            { name: 'proxai-gateway-linux-x64', browser_download_url: 'https://example.com/asset' },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    return new Response('', { status: 404 });
+  }) as unknown as typeof globalThis.fetch;
+}
+
+test('version check writes UPDATE_AVAILABLE sentinel when newer release exists', async () => {
+  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    gatewayVersion: '2026.5.7',
+    updateAvailableSentinelPath: sentinelPath,
+    versionCheckFetch: makeVersionFetch('v2026.5.10'),
+  };
+  await runPollCycle(ctx);
+  expect(await Bun.file(sentinelPath).exists()).toBe(true);
+});
+
+test('version check does not write sentinel when up to date', async () => {
+  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    gatewayVersion: '2026.5.7',
+    updateAvailableSentinelPath: sentinelPath,
+    versionCheckFetch: makeVersionFetch('v2026.5.7'),
+  };
+  await runPollCycle(ctx);
+  expect(await Bun.file(sentinelPath).exists()).toBe(false);
+});
+
+test('version check fires once per interval and skips on subsequent cycles within window', async () => {
+  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
+  let calls = 0;
+  const trackingFetch = (async (url: string | URL | Request) => {
+    const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
+    if (u.includes('api.github.com')) {
+      calls++;
+      return new Response(
+        JSON.stringify({
+          tag_name: 'v2026.5.10',
+          assets: [
+            { name: 'proxai-gateway-linux-x64', browser_download_url: 'https://example.com/asset' },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    return new Response('', { status: 404 });
+  }) as unknown as typeof globalThis.fetch;
+
+  const baseCtx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    gatewayVersion: '2026.5.7',
+    updateAvailableSentinelPath: sentinelPath,
+    versionCheckFetch: trackingFetch,
+    versionCheckIntervalMs: 24 * 60 * 60 * 1000,
+  };
+
+  await runPollCycle(baseCtx);
+  await runPollCycle(baseCtx);
+  await runPollCycle(baseCtx);
+  expect(calls).toBe(1);
+});
+
 test('cycle logs pressure_failed warn when pressure check throws', async () => {
   const entries: FakeLogEntry[] = [];
   const wrapped = makeQueryThrowingBuffer(buffer, (sql) => sql.includes('SUM(LENGTH(body))'));

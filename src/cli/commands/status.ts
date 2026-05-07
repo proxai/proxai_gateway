@@ -8,13 +8,14 @@ import {
   totalFailedBytes,
   totalPendingBytes,
 } from 'services/buffer';
-import { isBufferFull, isPaused } from 'services/polling';
+import { isBufferFull, isPaused, readUpdateAvailableSentinel } from 'services/polling';
 
 export interface StatusCommandDeps {
   output: OutputSink;
   buffer: Database;
   sentinelPath: string;
   bufferFullSentinelPath: string;
+  updateAvailableSentinelPath?: string;
 }
 
 export async function runStatus(deps: StatusCommandDeps): Promise<CommandResult> {
@@ -36,6 +37,15 @@ export async function runStatus(deps: StatusCommandDeps): Promise<CommandResult>
   deps.output.info(`last_prune_at: ${lastPruneAt ?? 'never'}`);
   deps.output.info(`delivered: ${counts.delivered.toString()}`);
   deps.output.info(`failed: ${counts.failed.toString()}`);
+
+  if (deps.updateAvailableSentinelPath !== undefined) {
+    const update = await readUpdateAvailableSentinel(deps.updateAvailableSentinelPath);
+    if (update !== null) {
+      deps.output.info(
+        `update_available: ${update.latestVersion} (currently ${update.currentVersion}) — run \`proxai-gateway upgrade\``,
+      );
+    }
+  }
 
   return { exitCode: EXIT_CODE.ok };
 }

@@ -58,12 +58,16 @@ export interface PollCycleContext {
   pauseSentinelPath: string;
   authFailedSentinelPath: string;
   bufferFullSentinelPath: string;
+  updateAvailableSentinelPath?: string;
   installedAt: string;
   staleBinary: StaleBinaryThresholds;
   bufferPolicy: BufferRetentionPolicy;
   capturePolicy: CapturePolicy;
   pacer?: Pacer;
   logger?: Logger;
+
+  versionCheckFetch?: typeof globalThis.fetch;
+  versionCheckIntervalMs?: number;
 
   minimumMtimeOverride?: Date | null;
 }

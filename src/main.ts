@@ -11,6 +11,7 @@ import {
   logDir,
   pausedSentinelPath,
   sessionStoppedSentinelPath,
+  updateAvailableSentinelPath,
 } from 'core/io/fs';
 import type { LogLevel } from 'core/log';
 import { readMachineUuid } from 'core/system';
@@ -227,6 +228,7 @@ program
       authFailedSentinelPath: authFailedSentinelPath(),
       bufferFullSentinelPath: bufferFullSentinelPath(),
       sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
+      updateAvailableSentinelPath: updateAvailableSentinelPath(),
       abortSignal: ctrl.signal,
       gatewayVersion: `@proxai/gateway ${packageJson.version}`,
     });
@@ -289,6 +291,7 @@ program
         buffer,
         sentinelPath: pausedSentinelPath(),
         bufferFullSentinelPath: bufferFullSentinelPath(),
+        updateAvailableSentinelPath: updateAvailableSentinelPath(),
       });
       process.exit(result.exitCode);
     } finally {

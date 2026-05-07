@@ -65,6 +65,10 @@ export function consentSentinelPath(): string {
   return join(configDir(), 'CONSENT_ACCEPTED');
 }
 
+export function updateAvailableSentinelPath(): string {
+  return join(configDir(), 'UPDATE_AVAILABLE');
+}
+
 export function controlSocketPath(): string {
   switch (process.platform) {
     case 'darwin':

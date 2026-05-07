@@ -1,5 +1,6 @@
 import { nowIsoUtc } from 'core/utils';
-import { checkPendingPressure, pruneBuffer } from 'services/buffer';
+import { checkPendingPressure, getMetadata, pruneBuffer, setMetadata } from 'services/buffer';
+import { METADATA_KEYS } from 'services/buffer';
 import type { PendingPressureResult, PruneResult } from 'services/buffer';
 import { drainBuffer } from 'services/uploader';
 import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
@@ -10,6 +11,11 @@ import {
 } from 'services/polling/buffer-full-sentinel.ts';
 import { isPaused } from 'services/polling/pause-sentinel.ts';
 import { checkStaleBinary } from 'services/polling/stale-binary.ts';
+import {
+  clearUpdateAvailableSentinel,
+  writeUpdateAvailableSentinel,
+} from 'services/polling/update-available-sentinel.ts';
+import { checkLatestVersion } from 'services/polling/version-check.ts';
 import type {
   PollCycleContext,
   PollCycleResult,
@@ -106,6 +112,17 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
       pruneResult: null,
       pressureResult: null,
     };
+  }
+
+  if (ctx.updateAvailableSentinelPath !== undefined) {
+    try {
+      await maybeRunVersionCheck(ctx);
+    } catch (err) {
+      log?.warn(
+        { event: 'version_check.failed', error: (err as Error).message ?? String(err) },
+        'version check failed; continuing cycle',
+      );
+    }
   }
 
   const sourceResults: Record<string, SourcePollerResult> = {};
@@ -242,4 +259,53 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     pruneResult,
     pressureResult,
   };
+}
+
+const DEFAULT_VERSION_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+async function maybeRunVersionCheck(ctx: PollCycleContext): Promise<void> {
+  const sentinelPath = ctx.updateAvailableSentinelPath;
+  if (sentinelPath === undefined) return;
+
+  const interval = ctx.versionCheckIntervalMs ?? DEFAULT_VERSION_CHECK_INTERVAL_MS;
+  const log = ctx.logger;
+  const lastCheck = getMetadata(ctx.buffer, METADATA_KEYS.lastVersionCheckAt);
+  const lastMs = lastCheck === null ? 0 : Date.parse(lastCheck);
+  if (lastCheck !== null && Number.isFinite(lastMs) && Date.now() - lastMs < interval) {
+    return;
+  }
+
+  const fetchFn = ctx.versionCheckFetch ?? globalThis.fetch;
+  const result = await checkLatestVersion({
+    currentVersion: ctx.gatewayVersion,
+    fetch: fetchFn,
+  });
+  setMetadata(ctx.buffer, METADATA_KEYS.lastVersionCheckAt, nowIsoUtc());
+  if (result === null) {
+    log?.warn(
+      { event: 'version_check.unavailable' },
+      'version check returned no result; will retry next interval',
+    );
+    return;
+  }
+
+  if (result.hasUpdate) {
+    const sentinelInput: Parameters<typeof writeUpdateAvailableSentinel>[1] = {
+      latest_version: result.latestVersion,
+      current_version: ctx.gatewayVersion,
+      detected_at: nowIsoUtc(),
+    };
+    if (result.assetUrl !== undefined) sentinelInput.asset_url = result.assetUrl;
+    await writeUpdateAvailableSentinel(sentinelPath, sentinelInput);
+    log?.info(
+      {
+        event: 'update_available',
+        latest: result.latestVersion,
+        current: ctx.gatewayVersion,
+      },
+      'newer gateway version available',
+    );
+  } else {
+    await clearUpdateAvailableSentinel(sentinelPath);
+  }
 }

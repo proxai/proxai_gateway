@@ -25,6 +25,7 @@ export interface RunCommandDeps {
   authFailedSentinelPath: string;
   bufferFullSentinelPath: string;
   sessionStoppedSentinelPath: string;
+  updateAvailableSentinelPath?: string;
   abortSignal: AbortSignal;
   gatewayVersion: string;
   sources?: readonly RegisteredSource[];
@@ -158,6 +159,9 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
       pauseSentinelPath: deps.pauseSentinelPath,
       authFailedSentinelPath: deps.authFailedSentinelPath,
       bufferFullSentinelPath: deps.bufferFullSentinelPath,
+      ...(deps.updateAvailableSentinelPath !== undefined
+        ? { updateAvailableSentinelPath: deps.updateAvailableSentinelPath }
+        : {}),
       installedAt: deps.config.account.installedAt,
       staleBinary: {
         warnAfterDays: deps.config.staleBinary.warnAfterDays,
