@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { OversizedDecompressedSliceError } from 'core/utils';
 import {
   getBatch,
   getCursor,
@@ -11,6 +12,7 @@ import {
   insertBatch,
   openInMemoryBufferDb,
 } from 'services/buffer';
+import { HttpClient } from 'services/http';
 import { uploadBatch } from 'services/uploader';
 import type { UploaderContext } from 'services/uploader';
 import {
@@ -615,4 +617,59 @@ test('AuthError without authFailedSentinelPath: still classifies, no sentinel si
   const outcome = await uploadBatch(ctx, stored);
 
   expect(outcome.kind).toBe('fatal');
+});
+
+test('OversizedDecompressedSliceError thrown by http surfaces raw_bytes/cap/slice_index in fatal log', async () => {
+  const batch = newClaudeCodeBatch('payload');
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+
+  const oversize = new OversizedDecompressedSliceError({
+    sourcePath: '/x.jsonl',
+    sourcePathHash: 'h'.repeat(64),
+    rawBytes: 11 * 1024 * 1024,
+    compressedBytes: 1_800_000,
+    sliceIndex: 2,
+    cap: 10 * 1024 * 1024,
+  });
+
+  const fakeHttp = {
+    uploadRawRecord: async () => {
+      throw oversize;
+    },
+    verifyKey: async () => ({ success: true, message: '' }),
+    fetchWatermarks: async () => [],
+    registerHostId: async () => undefined,
+  } as unknown as HttpClient;
+
+  const loggedErrors: Array<{ obj: Record<string, unknown>; msg: string }> = [];
+  const fakeLogger = {
+    child: () => fakeLogger,
+    fatal: () => undefined,
+    error: (obj: Record<string, unknown>, msg: string) => {
+      loggedErrors.push({ obj, msg });
+    },
+    warn: () => undefined,
+    info: () => undefined,
+    debug: () => undefined,
+    trace: () => undefined,
+  };
+
+  const ctx: UploaderContext = {
+    db,
+    http: fakeHttp,
+    hostId: TEST_HOST_ID,
+    logger: fakeLogger as unknown as NonNullable<UploaderContext['logger']>,
+  };
+  const outcome = await uploadBatch(ctx, stored);
+
+  expect(outcome.kind).toBe('fatal');
+  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+  const fatalLog = loggedErrors.find((e) => e.msg === 'upload failed (fatal)');
+  expect(fatalLog).toBeDefined();
+  expect(fatalLog!.obj['raw_bytes']).toBe(11 * 1024 * 1024);
+  expect(fatalLog!.obj['cap']).toBe(10 * 1024 * 1024);
+  expect(fatalLog!.obj['slice_index']).toBe(2);
+  expect(fatalLog!.obj['source_path_hash']).toBe(stored.sourcePathHash);
+  expect(fatalLog!.obj['compressed_bytes']).toBe(stored.body.byteLength);
 });

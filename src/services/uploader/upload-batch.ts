@@ -2,6 +2,7 @@ import {
   AuthError,
   GatewayError,
   NetworkError,
+  OversizedDecompressedSliceError,
   RateLimitError,
   RetriableError,
   ValidationError,
@@ -118,10 +119,21 @@ async function classifyAndPersist(
   }
   if (err instanceof ValidationError || err instanceof GatewayError) {
     markBatchFailed(ctx.db, captureId, err.message);
-    log?.error(
-      { event: 'upload.fatal', kind: err.constructor.name, error: err.message },
-      'upload failed (fatal)',
-    );
+    const baseFields: Record<string, unknown> = {
+      event: 'upload.fatal',
+      kind: err.constructor.name,
+      error: err.message,
+      source_path_hash: batch.sourcePathHash,
+      compressed_bytes: batch.body.byteLength,
+      watermark_start: batch.watermarkStart,
+      watermark_end: batch.watermarkEnd,
+    };
+    if (err instanceof OversizedDecompressedSliceError) {
+      baseFields['raw_bytes'] = err.rawBytes;
+      baseFields['cap'] = err.cap;
+      baseFields['slice_index'] = err.sliceIndex;
+    }
+    log?.error(baseFields, 'upload failed (fatal)');
     return { kind: 'fatal', captureId, error: err.message };
   }
   const message = `unknown error: ${(err as Error).message ?? String(err)}`;
