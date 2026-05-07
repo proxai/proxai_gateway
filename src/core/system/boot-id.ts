@@ -55,7 +55,7 @@ async function readDarwin(spawn: BootIdSpawnFn): Promise<string> {
       `unable to read boot id for platform darwin (sysctl exit ${exitCode.toString()})`,
     );
   }
-  // Sample output: "{ sec = 1701234567, usec = 0 } Mon Jan ..."
+
   const match = /sec\s*=\s*(\d+)/.exec(stdout);
   if (match === null || match[1] === undefined) {
     throw new GatewayError('fatal', 'unable to read boot id for platform darwin');

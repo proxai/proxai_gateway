@@ -191,8 +191,6 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
 }, 30_000);
 
 test('watermark continuity holds under redaction-induced byte-count changes', async () => {
-  // Embed an Anthropic API key on every line so the redaction rule fires
-  // and the redacted body is strictly smaller than the source bytes.
   const lines: string[] = [];
   for (let i = 0; i < 50; i++) {
     const longSecret = `sk-ant-${'A'.repeat(64)}`;

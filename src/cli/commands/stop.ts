@@ -15,11 +15,6 @@ export interface StopCommandDeps {
 
 export async function runStop(deps: StopCommandDeps): Promise<CommandResult> {
   try {
-    // Always write the SESSION_STOPPED sentinel (tagged with the current
-    // boot id) BEFORE asking the service manager to stop. This guarantees
-    // the daemon respects the stop signal even if the service manager later
-    // relaunches it within this same boot session. The sentinel is cleared
-    // automatically on next reboot (boot id mismatch) or on `start`.
     const readBootIdFn = deps.readBootId ?? readBootId;
     const now = deps.now ?? nowIsoUtc;
     const currentBootId = await readBootIdFn();

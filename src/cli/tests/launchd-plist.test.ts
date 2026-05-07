@@ -18,8 +18,7 @@ test('KeepAlive is a dict with SuccessfulExit=false (restart only on failure)', 
   const xml = buildLaunchdPlist({ programPath: '/x' });
   expect(xml).toContain('<key>KeepAlive</key>');
   expect(xml).toContain('<key>SuccessfulExit</key>');
-  // Restart only when the daemon exits with a non-zero status
-  // (so a clean session-stop exit is respected by launchd).
+
   const ka = xml.slice(xml.indexOf('<key>KeepAlive</key>'));
   expect(ka).toMatch(
     /<key>KeepAlive<\/key>\s*<dict>\s*<key>SuccessfulExit<\/key>\s*<false\/>\s*<\/dict>/,

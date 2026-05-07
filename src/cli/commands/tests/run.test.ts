@@ -281,7 +281,7 @@ test('exits cleanly with EXIT_CODE.ok when SESSION_STOPPED matches current boot_
   });
   expect(result.exitCode).toBe(0);
   expect(cycles).toBe(0);
-  // sentinel preserved on the matching path
+
   expect(await readSessionStoppedSentinel(sentinelPath)).not.toBeNull();
 });
 
@@ -324,7 +324,7 @@ test('deletes stale SESSION_STOPPED sentinel and proceeds when boot_id mismatche
   });
   expect(result.exitCode).toBe(0);
   expect(cycles).toBeGreaterThanOrEqual(1);
-  // stale sentinel removed
+
   expect(await readSessionStoppedSentinel(sentinelPath)).toBeNull();
 });
 

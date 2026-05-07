@@ -22,8 +22,6 @@ export async function runStart(deps: StartCommandDeps): Promise<CommandResult> {
     return deps.invokeSetup();
   }
   try {
-    // Clear any prior SESSION_STOPPED sentinel so the daemon won't immediately
-    // exit when relaunched. Idempotent on missing-file.
     await clearSessionStoppedSentinel(deps.sessionStoppedSentinelPath);
     await deps.serviceManager.ensureRegistered();
     await deps.serviceManager.start();

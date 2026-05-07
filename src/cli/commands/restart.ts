@@ -22,8 +22,6 @@ export async function runRestart(deps: RestartCommandDeps): Promise<CommandResul
     return deps.invokeSetup();
   }
   try {
-    // Clear any prior SESSION_STOPPED sentinel: a restart resumes the
-    // session by definition. Idempotent on missing-file.
     await clearSessionStoppedSentinel(deps.sessionStoppedSentinelPath);
     await deps.serviceManager.ensureRegistered();
     await deps.serviceManager.restart();

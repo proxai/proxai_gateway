@@ -49,9 +49,6 @@ export async function collectCodexRollout(
       return result;
     }
 
-    // Split source bytes (not redacted bytes) so watermark math stays in
-    // source-byte space. measureCompressed factors redaction into the size
-    // budget so the splitter targets the actual on-wire body.
     const sourceSlices = splitJsonlAtBoundary(range.bytes, {
       targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
       measureCompressed: (slice) => {

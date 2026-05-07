@@ -45,8 +45,6 @@ export async function runUninstall(
     return { exitCode: EXIT_CODE.ok };
   }
 
-  // Capture install source BEFORE any state mutation so the post-uninstall
-  // hint can still be printed even after --reset wipes the config file.
   let installSource: InstallSource | null = null;
   if (cfgExists) {
     try {
@@ -58,7 +56,6 @@ export async function runUninstall(
     }
   }
 
-  // Stop the daemon (idempotent).
   try {
     await deps.serviceManager.stop();
     deps.output.info('daemon stopped');
@@ -66,7 +63,6 @@ export async function runUninstall(
     deps.output.info('daemon was not running');
   }
 
-  // Unregister the service unit (idempotent).
   try {
     await deps.serviceManager.unregister();
     deps.output.info('service unregistered');
@@ -74,7 +70,6 @@ export async function runUninstall(
     deps.output.info('service was not registered');
   }
 
-  // Remove the service unit file.
   if (deps.serviceUnitPath !== null) {
     try {
       await unlink(deps.serviceUnitPath);

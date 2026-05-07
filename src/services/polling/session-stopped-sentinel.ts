@@ -41,11 +41,6 @@ export async function clearSessionStoppedSentinel(sentinelPath: string): Promise
   await sentinelHandle(sentinelPath).remove();
 }
 
-/**
- * Returns true iff the sentinel exists AND its boot_id matches `currentBootId`.
- * If a sentinel exists but its boot_id does not match (i.e. it was set in a
- * previous boot session), it is removed as a side effect and false is returned.
- */
 export async function isCurrentSessionStopped(
   sentinelPath: string,
   currentBootId: string,

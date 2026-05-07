@@ -53,11 +53,6 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
     await pruneLogDirectory(deps.config.logging.logDir);
   } catch {}
 
-  // Check the SESSION_STOPPED sentinel before doing any real work. If the
-  // sentinel is present and tagged with the current boot id, the user invoked
-  // `stop` during this boot session — exit cleanly so the service manager
-  // (with KeepAlive=SuccessfulExit:false / Restart=on-failure) does not relaunch.
-  // Stale sentinels (from a previous boot) are auto-cleared by the helper.
   try {
     const readBootIdFn = deps.readBootId ?? readBootId;
     const currentBootId = await readBootIdFn();

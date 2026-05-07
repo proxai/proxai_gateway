@@ -82,7 +82,7 @@ test('isCurrentSessionStopped returns true when boot_id matches', async () => {
     setAt: '2026-05-06T00:00:00.000Z',
   });
   expect(await isCurrentSessionStopped(sentinelPath, 'boot-abc')).toBe(true);
-  // sentinel still present after a true reading
+
   expect(await readSessionStoppedSentinel(sentinelPath)).not.toBeNull();
 });
 

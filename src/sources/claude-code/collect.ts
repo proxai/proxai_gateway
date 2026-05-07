@@ -49,9 +49,6 @@ export async function collectClaudeCodeFile(
       return result;
     }
 
-    // Redact the whole range once for schema-version extraction. Watermark
-    // math runs in source-byte space below; per-slice redaction handles the
-    // actual on-wire body so cursor advances stay aligned with file bytes.
     const redactedFullText = applyRedaction(DECODER.decode(range.bytes)).redacted;
     const agentSchemaVersion = extractAgentSchemaVersion(redactedFullText);
 

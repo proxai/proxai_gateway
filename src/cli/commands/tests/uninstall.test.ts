@@ -182,7 +182,7 @@ test('stop + unregister + unit-file removal on a fresh install', async () => {
   expect(output.lines.some((l) => l.msg === 'daemon stopped')).toBe(true);
   expect(output.lines.some((l) => l.msg === 'service unregistered')).toBe(true);
   expect(output.lines.some((l) => l.level === 'success' && l.msg === 'uninstalled')).toBe(true);
-  // Local state preserved without --reset.
+
   expect(await Bun.file(configPath).exists()).toBe(true);
 });
 
@@ -242,7 +242,7 @@ test('--reset --yes skips the confirmation prompt and wipes state', async () => 
   await writeConfig();
   await writeFile(join(logDirPath, 'app.log'), 'log content');
   const { sm } = fakeManager();
-  // No `reset` answer scripted: scriptedPrompts.confirmReset would throw if called.
+
   const output = captureOutput();
   const result = await runUninstall({ ...depsFor(sm), output }, { reset: true, yes: true });
   expect(result.exitCode).toBe(0);
@@ -313,7 +313,6 @@ test('binary-removal hint with --reset: install_source captured before wipe', as
 });
 
 test('generic hint when config cannot be loaded', async () => {
-  // No config file written but service unit file exists, so we don't return early.
   await writeFile(serviceUnitPath, '<plist/>');
   const { sm } = fakeManager({ registered: false });
   const output = captureOutput();
@@ -370,9 +369,6 @@ test('serviceUnitPath null: skips unit-file removal', async () => {
 });
 
 test('per-platform smoke: stop + unregister called regardless of platform shim', async () => {
-  // The actual platform-specific commands live in service-manager. Here we just
-  // confirm the command invokes stop + unregister on whatever ServiceManager
-  // is wired in.
   for (const _platform of ['darwin', 'linux', 'win32'] as const) {
     await writeConfig();
     await writeFile(serviceUnitPath, '<plist/>');
@@ -387,8 +383,6 @@ test('per-platform smoke: stop + unregister called regardless of platform shim',
 });
 
 test('isRegistered throw treated as not-registered (idempotent path)', async () => {
-  // Service throws on isRegistered (e.g. command not found). With no config and
-  // no unit file, we should exit cleanly via the idempotent path.
   await rm(serviceUnitPath, { force: true });
   const sm: ServiceManager = {
     isRegistered: async () => {
@@ -409,7 +403,7 @@ test('isRegistered throw treated as not-registered (idempotent path)', async () 
 
 test('unit-file removal swallows ENOENT silently', async () => {
   await writeConfig();
-  // Unit file does not exist; should not warn.
+
   const { sm } = fakeManager();
   const output = captureOutput();
   const result = await runUninstall({ ...depsFor(sm), output });
