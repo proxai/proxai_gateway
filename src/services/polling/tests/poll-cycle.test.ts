@@ -546,6 +546,47 @@ test('version check fires once per interval and skips on subsequent cycles withi
   expect(calls).toBe(1);
 });
 
+test('version check failure logs warn and continues the cycle', async () => {
+  // Make sentinelPath an existing directory so clearUpdateAvailableSentinel's
+  // unlink rejects with EISDIR, which surfaces as a thrown error inside
+  // maybeRunVersionCheck. The poll-cycle catch should then log version_check.failed.
+  const sentinelPath = join(dir, 'UPDATE_AVAILABLE_DIR');
+  const { mkdir } = await import('node:fs/promises');
+  await mkdir(sentinelPath, { recursive: true });
+  const entries: FakeLogEntry[] = [];
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    gatewayVersion: '2026.5.7',
+    updateAvailableSentinelPath: sentinelPath,
+    versionCheckFetch: makeVersionFetch('v2026.5.7'),
+    logger: makeFakeLogger(entries),
+  };
+  await runPollCycle(ctx);
+  expect(entries.some((e) => e.level === 'warn' && e.msg.includes('version check failed'))).toBe(
+    true,
+  );
+});
+
+test('version check returning null is logged as unavailable and clears no sentinel', async () => {
+  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
+  const entries: FakeLogEntry[] = [];
+  // 503 from GitHub causes checkLatestVersion to return null.
+  const fetchFn: typeof globalThis.fetch = (async () =>
+    new Response('upstream error', { status: 503 })) as unknown as typeof globalThis.fetch;
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    gatewayVersion: '2026.5.7',
+    updateAvailableSentinelPath: sentinelPath,
+    versionCheckFetch: fetchFn,
+    logger: makeFakeLogger(entries),
+  };
+  await runPollCycle(ctx);
+  expect(
+    entries.some((e) => e.level === 'warn' && e.msg.includes('version check returned no result')),
+  ).toBe(true);
+  expect(await Bun.file(sentinelPath).exists()).toBe(false);
+});
+
 test('cycle logs pressure_failed warn when pressure check throws', async () => {
   const entries: FakeLogEntry[] = [];
   const wrapped = makeQueryThrowingBuffer(buffer, (sql) => sql.includes('SUM(LENGTH(body))'));

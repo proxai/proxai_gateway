@@ -87,6 +87,46 @@ test('populates assetUrl when matching asset exists for current platform', async
   expect(result?.assetUrl).toBe(url);
 });
 
+test('request timeout invokes ctrl.abort() and returns null', async () => {
+  const origSetTimeout = globalThis.setTimeout;
+  let capturedAbort: (() => void) | null = null;
+  (globalThis as { setTimeout: typeof setTimeout }).setTimeout = ((cb: () => void, ms?: number) => {
+    if (capturedAbort === null) {
+      capturedAbort = cb;
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }
+    return origSetTimeout(cb, ms);
+  }) as unknown as typeof setTimeout;
+
+  const fetchFn: typeof globalThis.fetch = (async (
+    _url: string | URL | Request,
+    init?: RequestInit,
+  ) => {
+    if (capturedAbort !== null) {
+      capturedAbort();
+    }
+    if (init?.signal?.aborted === true) {
+      const err = new Error('aborted');
+      (err as { name: string }).name = 'AbortError';
+      throw err;
+    }
+    return new Response('{}', { status: 200 });
+  }) as unknown as typeof globalThis.fetch;
+
+  try {
+    const result = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
+    expect(result).toBeNull();
+  } finally {
+    globalThis.setTimeout = origSetTimeout;
+  }
+});
+
+test('returns null when remote tag is empty after stripping v prefix', async () => {
+  const fetchFn = makeFetch({ tag_name: 'v', assets: [] });
+  const result = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
+  expect(result).toBeNull();
+});
+
 test('returns null on malformed payload', async () => {
   const fetchFn = (async () =>
     new Response(JSON.stringify({ foo: 'bar' }), {
