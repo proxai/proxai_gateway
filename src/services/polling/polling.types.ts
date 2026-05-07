@@ -9,7 +9,7 @@ export interface SourcePollerContext {
   buffer: Database;
   gatewayVersion: string;
   logger?: Logger;
-  
+
   minimumMtimeOverride?: Date | null;
 }
 
@@ -64,7 +64,7 @@ export interface PollCycleContext {
   capturePolicy: CapturePolicy;
   pacer?: Pacer;
   logger?: Logger;
-  
+
   minimumMtimeOverride?: Date | null;
 }
 

@@ -84,9 +84,6 @@ test('pageCount returns the PRAGMA page_count value for a real db', () => {
 test('maxRowid returns 0 for a non-existent table (catch fallback)', () => {
   const db = openReadOnly(dbPath);
   try {
-    
-    
-    
     expect(maxRowid(db, '')).toBe(0);
   } finally {
     db.close();
@@ -96,8 +93,6 @@ test('maxRowid returns 0 for a non-existent table (catch fallback)', () => {
 test('maxRowid returns 0 for a real but empty table', () => {
   const dbW = openReadOnly(dbPath);
   try {
-    
-    
     expect(maxRowid(dbW, 'thing')).toBeGreaterThan(0);
   } finally {
     dbW.close();

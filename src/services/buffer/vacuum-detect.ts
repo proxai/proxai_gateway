@@ -1,4 +1,3 @@
-
 export interface VacuumSignals {
   cursorSizeBytes: number | null;
   cursorPageCount: number | null;

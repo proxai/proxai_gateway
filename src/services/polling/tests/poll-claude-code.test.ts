@@ -106,7 +106,7 @@ test('initial-scan window: skips files older than cap when no cursors exist', as
 
   const poller = makeClaudeCodeSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
   const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
-  
+
   expect(result.filesProcessed).toBe(1);
   expect(result.capturedBatches).toBe(1);
 });
@@ -117,7 +117,6 @@ test('initial-scan window: cap skipped once cursors exist for the app', async ()
   const oldEpoch = new Date('2024-01-01T00:00:00Z');
   await utimes(oldPath, oldEpoch, oldEpoch);
 
-  
   setCursor(buffer, {
     sourceApp: 'claude-code',
     sourcePathHash: 'b'.repeat(64),
@@ -129,7 +128,7 @@ test('initial-scan window: cap skipped once cursors exist for the app', async ()
 
   const poller = makeClaudeCodeSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
   const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
-  
+
   expect(result.filesProcessed).toBe(2);
   expect(result.capturedBatches).toBe(2);
 });
@@ -140,7 +139,6 @@ test('initial-scan window: minimumMtimeOverride forces an explicit cap', async (
   const oldEpoch = new Date('2024-01-01T00:00:00Z');
   await utimes(oldPath, oldEpoch, oldEpoch);
 
-  
   setCursor(buffer, {
     sourceApp: 'claude-code',
     sourcePathHash: 'b'.repeat(64),

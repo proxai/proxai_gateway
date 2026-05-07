@@ -11,9 +11,7 @@ export function openReadWrite(path: string): Database {
   db.run('PRAGMA journal_mode = WAL;');
   db.run('PRAGMA synchronous = NORMAL;');
   db.run('PRAGMA foreign_keys = ON;');
-  
-  
-  
+
   if (process.platform !== 'win32') {
     setModeSilent(path, 0o600);
     setModeSilent(`${path}-wal`, 0o600);
@@ -25,7 +23,5 @@ export function openReadWrite(path: string): Database {
 function setModeSilent(path: string, mode: number): void {
   try {
     chmodSync(path, mode);
-  } catch {
-    
-  }
+  } catch {}
 }

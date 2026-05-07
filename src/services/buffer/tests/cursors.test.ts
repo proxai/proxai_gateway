@@ -155,7 +155,7 @@ test('hasAnyCursor returns true once a cursor exists for the app', () => {
     watermarkEnd: 100,
   });
   expect(hasAnyCursor(db, 'claude-code')).toBe(true);
-  
+
   expect(hasAnyCursor(db, 'cursor')).toBe(false);
   expect(hasAnyCursor(db, 'codex')).toBe(false);
 });

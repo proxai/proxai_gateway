@@ -191,13 +191,10 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
 }, 30_000);
 
 test('resets watermark when source_inode changes (file rotated/replaced)', async () => {
-  
   const file = await makeFile('{"a":1}\n');
   const first = await collectCodexRollout(file, ctx(buffer), '0.1.0');
   expect(first.capturedBatches).toBe(1);
 
-  
-  
   const newContent = '{"b":2}\n';
   await writeFile(file.sourcePath, newContent);
   const rotated = { ...file, inode: file.inode + 1, sizeBytes: newContent.length };

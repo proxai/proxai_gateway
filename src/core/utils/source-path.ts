@@ -1,5 +1,3 @@
-
-
 const GEN_SUFFIX_RE = /#gen=(\d+)$/;
 
 export function currentGenerationNumber(path: string): number {

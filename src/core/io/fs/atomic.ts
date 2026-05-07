@@ -9,9 +9,7 @@ export async function writeAtomic(path: string, data: string | Uint8Array): Prom
   } catch (err) {
     try {
       await unlink(tmp);
-    } catch {
-      
-    }
+    } catch {}
     throw err;
   }
 }

@@ -244,8 +244,6 @@ test('parses different --since unit suffixes (s, m, h, d)', async () => {
 });
 
 test('formatLine renders trace, debug, info, warn, error, fatal levels', () => {
-  
-  
   const trace = formatLine(JSON.stringify({ level: 10, time: Date.now(), msg: 't' }));
   expect(trace).toContain('TRACE');
   const debug = formatLine(JSON.stringify({ level: 20, time: Date.now(), msg: 'd' }));
@@ -266,8 +264,6 @@ test('formatLine handles unknown level by falling through to numeric label', () 
 });
 
 test('--follow resets read position when the log file rotates mid-loop', async () => {
-  
-  
   const pathA = join(dir, 'rotA.log');
   const pathB = join(dir, 'rotB.log');
   await Bun.write(pathA, `${makeLine(30, 'pre-rotate')}\n`);
@@ -291,8 +287,7 @@ test('--follow resets read position when the log file rotates mid-loop', async (
     { follow: true, json: true },
   );
   await Bun.sleep(50);
-  
-  
+
   await Bun.write(pathB, `${makeLine(30, 'post-rotate')}\n`);
   await Bun.sleep(400);
   ctrl.abort();

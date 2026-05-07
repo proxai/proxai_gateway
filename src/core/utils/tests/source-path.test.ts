@@ -47,10 +47,6 @@ test('nextGenerationSuffix increments past two-digit generations', () => {
 });
 
 test('nextGenerationSuffix on malformed suffix treats it as gen=0 and produces #gen=1', () => {
-  
-  
-  
-  
   expect(nextGenerationSuffix('/path/to/state.vscdb#gen=abc')).toBe(
     '/path/to/state.vscdb#gen=abc#gen=1',
   );

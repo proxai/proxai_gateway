@@ -54,10 +54,6 @@ async function classifyAndPersist(
   const captureId = batch.captureId;
   const log = ctx.logger?.child({ capture_id: captureId });
   if (err instanceof WatermarkRegressionError) {
-    
-    
-    
-    
     setCursorFromRegression(ctx.db, batch, err.currentServerWatermarkEnd);
     deleteBatch(ctx.db, captureId);
     log?.info(
@@ -142,9 +138,6 @@ async function handleAuthError(
   const captureId = batch.captureId;
   const log = ctx.logger?.child({ capture_id: captureId });
 
-  
-  
-  
   let verification;
   try {
     verification = await ctx.http.verifyKey();
@@ -152,7 +145,7 @@ async function handleAuthError(
     if (verifyErr instanceof AuthError) {
       return finalizeAuthFailure(ctx, batch, 'verify-key threw AuthError');
     }
-    
+
     recordRetriableFailure(ctx.db, captureId, authErr.message);
     log?.warn(
       {
@@ -176,7 +169,6 @@ async function handleAuthError(
     return finalizeAuthFailure(ctx, batch, reason);
   }
 
-  
   recordRetriableFailure(ctx.db, captureId, authErr.message);
   log?.warn(
     { event: 'upload.auth_transient', error: authErr.message },

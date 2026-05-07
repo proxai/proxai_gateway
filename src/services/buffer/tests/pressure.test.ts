@@ -29,8 +29,7 @@ test('empty buffer: pendingBytes 0, neither pause nor resume signal', () => {
   });
   expect(result.pendingBytes).toBe(0);
   expect(result.shouldPause).toBe(false);
-  
-  
+
   expect(result.shouldResume).toBe(true);
 });
 
@@ -67,7 +66,6 @@ test('pending exactly equal to pause threshold: shouldPause is false (strict gre
 });
 
 test('hysteresis: shouldResume only fires below resume threshold', () => {
-  
   insertBatch(db, newBatch({ body: new Uint8Array(500) }));
   const equal = checkPendingPressure({
     db,
@@ -76,7 +74,6 @@ test('hysteresis: shouldResume only fires below resume threshold', () => {
   });
   expect(equal.shouldResume).toBe(false);
 
-  
   insertBatch(db, newBatch({ body: new Uint8Array(200) }));
   const between = checkPendingPressure({
     db,
@@ -97,7 +94,7 @@ test('failed and delivered batches do not contribute to pending bytes', () => {
   insertBatch(db, c);
   markBatchFailed(db, a.captureId, 'oops');
   markBatchDelivered(db, getBatch(db, b.captureId)!, { idempotentOnServer: false });
-  
+
   const result = checkPendingPressure({
     db,
     softPauseBytes: 1000,

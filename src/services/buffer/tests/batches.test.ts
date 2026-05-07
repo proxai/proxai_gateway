@@ -120,11 +120,9 @@ test('markBatchDelivered transaction is atomic on duplicate receipt', () => {
   const batch = newBatch();
   insertBatch(db, batch);
   const stored = getBatch(db, batch.captureId)!;
-  
-  
-  
+
   markBatchDelivered(db, stored, { idempotentOnServer: false });
-  
+
   insertBatch(db, batch);
   expect(getBatch(db, batch.captureId)).not.toBeNull();
 
@@ -133,8 +131,6 @@ test('markBatchDelivered transaction is atomic on duplicate receipt', () => {
     markBatchDelivered(db, second, { idempotentOnServer: false });
   }).toThrow();
 
-  
-  
   expect(getBatch(db, batch.captureId)).not.toBeNull();
   expect(countReceipts(db)).toBe(1);
 });

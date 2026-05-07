@@ -88,7 +88,7 @@ test.skipIf(process.platform === 'win32')(
   'test: returns fileUnreadable when text() throws for an unreadable file',
   async () => {
     const filePath = await seed('locked.txt', 'secret content');
-    
+
     await chmod(filePath, 0o000);
     const out = captureOutput();
     try {
@@ -145,7 +145,7 @@ test('list: --categories shows only category summaries', () => {
     expect(joined).toContain(cat.name);
     expect(joined).toContain(cat.description);
   }
-  
+
   const firstPattern = ALL_RULES[0]!.pattern.toString();
   expect(joined.includes(firstPattern)).toBe(false);
 });
@@ -160,7 +160,7 @@ test('list: --category filters to one category', () => {
   expect(result.exitCode).toBe(0);
   const joined = stripAnsi(lines.join('\n'));
   expect(joined).toContain(target.name);
-  
+
   for (const other of RULE_CATEGORIES) {
     if (other.name === target.name) continue;
     expect(joined.includes(`${other.name}  (`)).toBe(false);

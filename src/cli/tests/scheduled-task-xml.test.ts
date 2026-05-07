@@ -25,7 +25,7 @@ test('embeds the provided userId in trigger and principal', () => {
     userId: 'MYDOMAIN\\testuser',
   });
   expect(xml).toContain('<UserId>MYDOMAIN\\testuser</UserId>');
-  
+
   const occurrences = xml.split('MYDOMAIN\\testuser').length - 1;
   expect(occurrences).toBe(2);
 });
@@ -64,12 +64,12 @@ test('defaultScheduledTaskXmlPath ends with scheduled-task.xml', () => {
 test('encodeScheduledTaskXml prepends UTF-16 BOM and uses 2 bytes per char', () => {
   const xml = '<a/>';
   const bytes = encodeScheduledTaskXml(xml);
-  
+
   expect(bytes.byteLength).toBe(10);
-  
+
   expect(bytes[0]).toBe(0xff);
   expect(bytes[1]).toBe(0xfe);
-  
+
   expect(bytes[2]).toBe(0x3c);
   expect(bytes[3]).toBe(0x00);
 });

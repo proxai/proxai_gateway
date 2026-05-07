@@ -480,9 +480,6 @@ test('unsupported platform throws clear error', () => {
 });
 
 test('default spawn factory is wired up when deps.spawn is omitted', async () => {
-  
-  
-  
   const sm = getServiceManager({
     platform: process.platform,
     unitPath: '/tmp/proxai-coverage-nonexistent.unit',

@@ -106,9 +106,6 @@ test('aggregates per-file collect errors into result.errors', async () => {
 });
 
 test('initialScanWindowDays applies a now-N-day floor on a fresh buffer', async () => {
-  
-  
-  
   const oldPath = await seedDb('workspaceStorage/old/state.vscdb', [
     { key: 'composerData:abc', value: JSON.stringify({ _v: 13 }) },
   ]);
@@ -120,6 +117,6 @@ test('initialScanWindowDays applies a now-N-day floor on a fresh buffer', async 
   await utimes(oldPath, oldDate, oldDate);
   const poller = makeCursorSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
   const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
-  
+
   expect(result.filesProcessed).toBe(1);
 });

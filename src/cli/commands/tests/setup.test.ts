@@ -57,7 +57,12 @@ interface MockHttpControl {
   verifyResponse: 'accepted' | 'rejected' | 'forbidden' | 'service-unavailable' | 'network-error';
   userId: string;
   verifyCalls: number;
-  registerResponse: 'registered' | 'idempotent' | 'forbidden' | 'service-unavailable' | 'network-error';
+  registerResponse:
+    | 'registered'
+    | 'idempotent'
+    | 'forbidden'
+    | 'service-unavailable'
+    | 'network-error';
   registerCalls: number;
   registerLastBody: { host_id?: string } | null;
 }
@@ -104,7 +109,9 @@ function mockFactory(control: MockHttpControl): (apiKey: string, hostId: string)
         if (url.includes('/v1/host-ids/register')) {
           control.registerCalls++;
           control.registerLastBody =
-            init?.body === undefined ? null : (JSON.parse(init.body as string) as { host_id?: string });
+            init?.body === undefined
+              ? null
+              : (JSON.parse(init.body as string) as { host_id?: string });
           if (control.registerResponse === 'registered') {
             return new Response(
               JSON.stringify({
@@ -183,7 +190,7 @@ async function writeExistingConfig(
     backend: {
       ingestUrl: NEST_INGEST_URL,
       verifyKeyUrl: NEST_VERIFY_KEY_URL,
-watermarksUrl: 'https://api.example.com/v1/watermarks',
+      watermarksUrl: 'https://api.example.com/v1/watermarks',
       registerHostIdUrl: 'https://api.example.com/v1/host-ids/register',
     },
     capture: {
@@ -250,9 +257,9 @@ test('writes a scheduled-task XML on win32 with the configured user id', async (
   d.windowsUserId = 'MYDOMAIN\\testuser';
   const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
-  
+
   const bytes = await Bun.file(d.serviceUnitPath as string).bytes();
-  
+
   expect(bytes[0]).toBe(0xff);
   expect(bytes[1]).toBe(0xfe);
   const unitContent = Buffer.from(
@@ -503,8 +510,6 @@ test('returns error when readMachineUuid throws', async () => {
 });
 
 test('on replace, reports rederivation when host_id changes despite stable user_id', async () => {
-  
-  
   await writeExistingConfig({ userId: TEST_USER_ID, hostId: 'stale-host-id-from-old-machine' });
   const control = newControl({ userId: TEST_USER_ID });
   const out = captureOutput();
@@ -523,7 +528,7 @@ test('on replace, reports rederivation when host_id changes despite stable user_
 test('successful setup clears a pre-existing AUTH_FAILED sentinel', async () => {
   const control = newControl();
   const d = deps(control);
-  
+
   await Bun.write(d.authFailedSentinelPath, '{"reason":"prior halt","detected_at":"x"}');
   expect(await Bun.file(d.authFailedSentinelPath).exists()).toBe(true);
   const result = await runSetup(d, { apiKey: VALID_KEY });
@@ -560,9 +565,9 @@ test('register-host-id idempotent path reports already bound', async () => {
   const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
   expect(control.registerCalls).toBe(1);
-  expect(
-    out.lines.some((l) => l.level === 'info' && /host_id already bound/.test(l.msg)),
-  ).toBe(true);
+  expect(out.lines.some((l) => l.level === 'info' && /host_id already bound/.test(l.msg))).toBe(
+    true,
+  );
 });
 
 test('register-host-id 403 returns authError exit and surfaces a clear message', async () => {
@@ -572,10 +577,7 @@ test('register-host-id 403 returns authError exit and surfaces a clear message',
   const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(3);
   expect(
-    out.lines.some(
-      (l) =>
-        l.level === 'error' && /already bound to another machine/.test(l.msg),
-    ),
+    out.lines.some((l) => l.level === 'error' && /already bound to another machine/.test(l.msg)),
   ).toBe(true);
 });
 
@@ -586,9 +588,7 @@ test('register-host-id 503 returns generic error', async () => {
   const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(1);
   expect(
-    out.lines.some(
-      (l) => l.level === 'error' && /host_id registration failed/.test(l.msg),
-    ),
+    out.lines.some((l) => l.level === 'error' && /host_id registration failed/.test(l.msg)),
   ).toBe(true);
 });
 
@@ -599,8 +599,6 @@ test('register-host-id network error returns generic error', async () => {
   const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(1);
   expect(
-    out.lines.some(
-      (l) => l.level === 'error' && /host_id registration failed/.test(l.msg),
-    ),
+    out.lines.some((l) => l.level === 'error' && /host_id registration failed/.test(l.msg)),
   ).toBe(true);
 });

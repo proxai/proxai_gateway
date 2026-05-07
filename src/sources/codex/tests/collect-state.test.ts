@@ -413,8 +413,6 @@ test('a fresh poll persists last_seen_size_bytes and last_seen_page_count on eac
 });
 
 test('rowid regression on a single codex table re-keys the whole file under #gen=1', async () => {
-  
-  
   const file = await makeStateDb({
     threads: [{ id: 't1', cli_version: '0.1.0' }],
     dynamicTools: [{ thread_id: 't1', position: 0, name: 'a' }],
@@ -437,8 +435,6 @@ test('rowid regression on a single codex table re-keys the whole file under #gen
   const expectedNewPath = nextGenerationSuffix(file.sourcePath);
   const expectedNewHash = sha256Hex(expectedNewPath);
 
-  
-  
   const seenTables = new Set<string>();
   for (let i = 0; i < 5; i++) {
     const batch = nextPendingBatch(buffer);
@@ -450,7 +446,6 @@ test('rowid regression on a single codex table re-keys the whole file under #gen
   }
   expect(seenTables.has('threads')).toBe(true);
 
-  
   for (const table of ['threads', 'thread_dynamic_tools', 'thread_spawn_edges']) {
     const c = getCursor(buffer, {
       sourceApp: 'codex',
@@ -462,7 +457,6 @@ test('rowid regression on a single codex table re-keys the whole file under #gen
     expect(c!.watermarkEnd).toBeGreaterThan(0);
   }
 
-  
   const oldThreads = getCursor(buffer, {
     sourceApp: 'codex',
     sourcePathHash: file.sourcePathHash,
@@ -507,22 +501,19 @@ test('null last_seen columns on existing codex cursor do not trigger size/page_c
     sourcePath: file.sourcePath,
     sourceInode: null,
     watermarkTable: 'threads',
-    watermarkEnd: 1, 
+    watermarkEnd: 1,
     lastSeenSizeBytes: null,
     lastSeenPageCount: null,
   });
 
   await collectCodexState(file, ctx(buffer));
   const batch = nextPendingBatch(buffer)!;
-  
+
   expect(batch.sourcePath).toBe(file.sourcePath);
   expect(batch.sourcePathHash).toBe(file.sourcePathHash);
 });
 
 test('splits an oversized table snapshot into multiple batches with contiguous rowid coverage', async () => {
-  
-  
-  
   const path = join(dir, 'big_state.sqlite');
   const db = new Database(path, { create: true });
   db.run(
@@ -559,10 +550,9 @@ test('splits an oversized table snapshot into multiple batches with contiguous r
 
   const { result } = await collectCodexState(file, ctx(buffer));
   expect(result.errors).toEqual([]);
-  
+
   expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
 
-  
   let prevEnd = 0;
   let scanned = 0;
   for (let i = 0; i < 50; i++) {
@@ -593,8 +583,6 @@ test('splits an oversized table snapshot into multiple batches with contiguous r
 }, 60_000);
 
 test('second poll with no new rows refreshes lastSeenSize/PageCount on the existing cursor', async () => {
-  
-  
   const file = await makeStateDb({
     threads: [{ id: 't1', cli_version: '0.1.0' }],
     dynamicTools: [{ thread_id: 't1', position: 0, name: 'a' }],
@@ -611,8 +599,6 @@ test('second poll with no new rows refreshes lastSeenSize/PageCount on the exist
   const beforeWatermark = before!.watermarkEnd;
   expect(beforeWatermark).toBeGreaterThan(0);
 
-  
-  
   const db = new Database(file.sourcePath);
   db.run('CREATE TABLE __padding (k TEXT)');
   for (let i = 0; i < 100; i++) {
@@ -635,7 +621,7 @@ test('second poll with no new rows refreshes lastSeenSize/PageCount on the exist
     watermarkTable: 'threads',
   });
   expect(after).not.toBeNull();
-  
+
   expect(after!.watermarkEnd).toBe(beforeWatermark);
   expect(after!.lastSeenSizeBytes).not.toBe(before!.lastSeenSizeBytes);
 });

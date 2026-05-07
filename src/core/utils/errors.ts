@@ -33,9 +33,6 @@ export class RateLimitError extends GatewayError {
 }
 
 export class RetriableError extends GatewayError {
-  
-  
-  
   readonly retryAfterMs: number | null;
   constructor(message: string, retryAfterMs: number | null = null, cause?: unknown) {
     super('retriable', message, cause);

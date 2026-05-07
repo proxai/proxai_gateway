@@ -49,9 +49,6 @@ export async function collectClaudeCodeFile(
       return result;
     }
 
-    
-    
-    
     const redactedText = applyRedaction(DECODER.decode(range.bytes)).redacted;
     const redactedBytes = ENCODER.encode(redactedText);
     const agentSchemaVersion = extractAgentSchemaVersion(redactedText);
@@ -74,17 +71,11 @@ export async function collectClaudeCodeFile(
       );
     }
 
-    
-    
-    
-    
-    
     let offset = 0;
     for (let i = 0; i < slices.length; i++) {
       const slice = slices[i]!;
       const sliceEndOffset = offset + slice.byteLength;
-      
-      
+
       const watermarkEnd = watermarkStart + sliceEndOffset;
       const compressed = zstdCompressSync(slice);
 

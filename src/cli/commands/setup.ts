@@ -105,8 +105,6 @@ export async function runSetup(
     installSource = options.installSource ?? 'github_release';
   }
 
-  
-  
   const http = deps.httpClientFactory(apiKey, '');
   let userId: string;
   try {
@@ -202,8 +200,6 @@ export async function runSetup(
   await writeConfigToFile(config, deps.configPath);
   await ensureDir(deps.logDir);
 
-  
-  
   await clearAuthFailedSentinel(deps.authFailedSentinelPath);
 
   if (deps.serviceUnitPath !== null) {

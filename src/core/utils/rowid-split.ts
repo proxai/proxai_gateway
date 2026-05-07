@@ -1,7 +1,6 @@
 export interface RowidSplitOptions<T> {
-  
   measureCompressed: (rows: readonly T[]) => number;
-  
+
   targetCompressedBytes: number;
 }
 
@@ -34,9 +33,7 @@ export function splitRowsByCompressedSize<T>(
       options.measureCompressed,
       options.targetCompressedBytes,
     );
-    
-    
-    
+
     const advance = takeCount === 0 ? 1 : takeCount;
     chunks.push(rows.slice(cursor, cursor + advance));
     cursor += advance;

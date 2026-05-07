@@ -34,8 +34,6 @@ test('returns an empty array for an empty input', () => {
 });
 
 test('splits across multiple slices each within budget', () => {
-  
-  
   const rows = makeRows(10, 60);
   const slices = splitRowsByCompressedSize(rows, {
     targetCompressedBytes: 300,
@@ -47,15 +45,11 @@ test('splits across multiple slices each within budget', () => {
     expect(JSON.stringify(slice).length).toBeLessThanOrEqual(300);
   }
 
-  
   const recovered = slices.flatMap((s) => s);
   expect(recovered).toEqual(rows);
 });
 
 test('emits single-row chunk when one row exceeds budget (caller surfaces failure)', () => {
-  
-  
-  
   const oversized: Row = { rowid: 1, payload: 'x'.repeat(10_000) };
   const small = makeRows(3, 10).map((r) => ({ ...r, rowid: r.rowid + 1 }));
   const rows = [oversized, ...small];
@@ -66,7 +60,7 @@ test('emits single-row chunk when one row exceeds budget (caller surfaces failur
   });
   expect(slices.length).toBeGreaterThanOrEqual(2);
   expect(slices[0]).toEqual([oversized]);
-  
+
   for (let i = 1; i < slices.length; i++) {
     expect(JSON.stringify(slices[i]).length).toBeLessThanOrEqual(200);
   }
@@ -82,7 +76,6 @@ test('throws when target budget is zero or negative', () => {
 });
 
 test('preserves all rows across slices using a real zstd measurer', () => {
-  
   const rowCount = 50;
   const rows: Row[] = [];
   for (let i = 1; i <= rowCount; i++) {

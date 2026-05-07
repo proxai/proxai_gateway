@@ -18,7 +18,6 @@ export function defaultCodexHome(): string {
 }
 
 export interface DiscoverCodexOptions {
-  
   minimumMtime?: Date | null;
 }
 

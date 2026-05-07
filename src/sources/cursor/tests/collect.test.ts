@@ -285,9 +285,6 @@ test('a fresh poll persists last_seen_size_bytes and last_seen_page_count on the
 });
 
 test('rowid regression triggers re-keying under #gen=1 with a fresh watermark', async () => {
-  
-  
-  
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },
     { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
@@ -307,15 +304,14 @@ test('rowid regression triggers re-keying under #gen=1 with a fresh watermark', 
   expect(result.capturedBatches).toBe(1);
 
   const batch = nextPendingBatch(buffer)!;
-  
+
   const expectedNewPath = nextGenerationSuffix(file.sourcePath);
   expect(batch.sourcePath).toBe(expectedNewPath);
   expect(batch.sourcePathHash).toBe(sha256Hex(expectedNewPath));
-  
+
   expect(batch.watermarkStart).toBe(1);
   expect(batch.watermarkEnd).toBe(3);
 
-  
   const newCursor = getCursor(buffer, {
     sourceApp: 'cursor',
     sourcePathHash: sha256Hex(expectedNewPath),
@@ -324,7 +320,6 @@ test('rowid regression triggers re-keying under #gen=1 with a fresh watermark', 
   });
   expect(newCursor?.watermarkEnd).toBe(3);
 
-  
   const oldCursor = getCursor(buffer, {
     sourceApp: 'cursor',
     sourcePathHash: file.sourcePathHash,
@@ -339,8 +334,7 @@ test('size_decreased signal also triggers re-keying via #gen suffix', async () =
     { key: 'composerData:c1', value: '{"_v":13}' },
     { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
   ]);
-  
-  
+
   setCursor(buffer, {
     sourceApp: 'cursor',
     sourcePathHash: file.sourcePathHash,
@@ -360,8 +354,6 @@ test('size_decreased signal also triggers re-keying via #gen suffix', async () =
 });
 
 test('splits an oversized snapshot into multiple batches with contiguous rowid coverage', async () => {
-  
-  
   const rows: { key: string; value: string }[] = [];
   const rowCount = 1500;
   for (let i = 0; i < rowCount; i++) {
@@ -385,7 +377,6 @@ test('splits an oversized snapshot into multiple batches with contiguous rowid c
     expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_MAX_COMPRESSED_BYTES);
     expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_TARGET_COMPRESSED_BYTES);
     if (scanned === 0) {
-      
       expect(batch.watermarkStart).toBe(1);
     } else {
       expect(batch.watermarkStart).toBe(prevEnd);
@@ -402,15 +393,12 @@ test('splits an oversized snapshot into multiple batches with contiguous rowid c
     sourceInode: null,
     watermarkTable: null,
   });
-  
+
   expect(cursor?.watermarkEnd).toBe(rowCount + 1);
   expect(prevEnd).toBe(rowCount + 1);
 }, 60_000);
 
 test('null last_seen columns on existing cursor never trigger size/page_count signals', async () => {
-  
-  
-  
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },
     { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
@@ -422,14 +410,14 @@ test('null last_seen columns on existing cursor never trigger size/page_count si
     sourcePath: file.sourcePath,
     sourceInode: null,
     watermarkTable: null,
-    watermarkEnd: 1, 
+    watermarkEnd: 1,
     lastSeenSizeBytes: null,
     lastSeenPageCount: null,
   });
 
   await collectCursorFile(file, ctx(buffer));
   const batch = nextPendingBatch(buffer)!;
-  
+
   expect(batch.sourcePath).toBe(file.sourcePath);
   expect(batch.sourcePathHash).toBe(file.sourcePathHash);
 });

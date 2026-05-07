@@ -150,15 +150,9 @@ test('throws on unsupported platform', async () => {
 });
 
 test('linux: falls through to defaultReadFile when readFile is omitted', async () => {
-  
-  
-  
-  
   try {
     await readMachineUuid({ platform: 'linux' });
-  } catch {
-    
-  }
+  } catch {}
 });
 
 test('defaultSpawn is wired up when spawn dep is omitted', async () => {

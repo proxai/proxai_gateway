@@ -50,17 +50,7 @@ export async function pruneLogDirectory(
     totalSize -= oldest.size;
   }
 
-  
-  
-  
-  await Promise.all(
-    files.map((f) =>
-       
-      setMode(f.path, 0o600).catch(() => {
-        
-      }),
-    ),
-  );
+  await Promise.all(files.map((f) => setMode(f.path, 0o600).catch(() => {})));
 
   return {
     deletedFiles: deleted,

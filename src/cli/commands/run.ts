@@ -44,9 +44,7 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
 
   try {
     await pruneLogDirectory(deps.config.logging.logDir);
-  } catch {
-    
-  }
+  } catch {}
 
   const http =
     deps.httpClient ??
@@ -71,10 +69,6 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
     'daemon starting',
   );
 
-  
-  
-  
-  
   if (countCursors(buffer) === 0) {
     logger.info(
       { event: 'watermark_sync.start', reason: 'fresh_buffer' },
@@ -112,9 +106,7 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
       abortSignal: deps.abortSignal,
     };
     if (deps.onCycleComplete !== undefined) loopOptions.onCycleComplete = deps.onCycleComplete;
-    
-    
-    
+
     const pacer = createPacer({
       maxBatchesPerSec: deps.config.capture.uploadMaxBatchesPerSec,
       maxBytesPerMinute: deps.config.capture.uploadMaxBytesPerMinute,

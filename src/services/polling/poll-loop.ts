@@ -29,9 +29,7 @@ function notifyCycleComplete(
   if (callback === undefined) return;
   try {
     callback(result);
-  } catch {
-    
-  }
+  } catch {}
 }
 
 function sleepUntilAbort(ms: number, signal: AbortSignal | undefined): Promise<void> {

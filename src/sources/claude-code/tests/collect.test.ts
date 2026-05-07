@@ -184,14 +184,10 @@ test('persists the wire-DTO fields needed by the uploader', async () => {
 });
 
 test('splits an oversized slice into multiple batches with contiguous watermark coverage', async () => {
-  
-  
-  
-  
   const targetTotalLines = Math.ceil((3 * 1024 * 1024) / 2048);
   const linesArr: string[] = [];
   for (let i = 0; i < targetTotalLines; i++) {
-    const noise = randomBytes(1500).toString('base64'); 
+    const noise = randomBytes(1500).toString('base64');
     linesArr.push(JSON.stringify({ i, noise }));
   }
   const content = `${linesArr.join('\n')}\n`;
@@ -201,8 +197,6 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
   expect(result.errors).toEqual([]);
   expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
 
-  
-  
   let prevEnd = 0;
   let scanned = 0;
   for (let i = 0; i < 50; i++) {
@@ -214,11 +208,11 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
     expect(batch.watermarkEnd).toBeGreaterThan(batch.watermarkStart);
     prevEnd = batch.watermarkEnd;
     scanned += 1;
-    
+
     deleteBatch(buffer, batch.captureId);
   }
   expect(scanned).toBe(result.capturedBatches);
-  
+
   const cursor = getCursor(buffer, {
     sourceApp: 'claude-code',
     sourcePathHash: file.sourcePathHash,
@@ -230,13 +224,10 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
 }, 30_000);
 
 test('resets watermark when source_inode changes (file rotated/replaced)', async () => {
-  
   const file = await makeFile('{"a":1}\n');
   const first = await collectClaudeCodeFile(file, ctx(buffer));
   expect(first.capturedBatches).toBe(1);
 
-  
-  
   const newContent = '{"b":2}\n';
   await writeFile(file.sourcePath, newContent);
   const rotated = { ...file, inode: file.inode + 1, sizeBytes: newContent.length };
@@ -245,8 +236,6 @@ test('resets watermark when source_inode changes (file rotated/replaced)', async
   expect(second.capturedBatches).toBe(1);
   expect(countByStatus(buffer).pending).toBe(2);
 
-  
-  
   const cursorOld = getCursor(buffer, {
     sourceApp: 'claude-code',
     sourcePathHash: file.sourcePathHash,

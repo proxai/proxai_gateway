@@ -14,7 +14,6 @@ export function defaultClaudeCodeProjectsRoot(): string {
 }
 
 export interface DiscoverClaudeCodeOptions {
-  
   minimumMtime?: Date | null;
 }
 

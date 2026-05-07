@@ -42,9 +42,6 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
   }
 
   if (await isBufferFull(ctx.bufferFullSentinelPath)) {
-    
-    
-    
     const recovery = checkPendingPressure({
       db: ctx.buffer,
       softPauseBytes: ctx.bufferPolicy.softPauseBytes,
@@ -203,10 +200,6 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
         'buffer pending pressure exceeded soft-pause threshold; sentinel written',
       );
     } else if (pressureResult.shouldResume) {
-      
-      
-      
-      
       const wasFull = await isBufferFull(ctx.bufferFullSentinelPath);
       if (wasFull) {
         await clearBufferFullSentinel(ctx.bufferFullSentinelPath);

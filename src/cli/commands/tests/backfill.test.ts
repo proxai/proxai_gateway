@@ -32,7 +32,7 @@ function makeConfig(): GatewayConfig {
     backend: {
       ingestUrl: 'https://api.example.com/v1/raw_records',
       verifyKeyUrl: 'https://api.example.com/ingestion/verify-key',
-watermarksUrl: 'https://api.example.com/v1/watermarks',
+      watermarksUrl: 'https://api.example.com/v1/watermarks',
       registerHostIdUrl: 'https://api.example.com/v1/host-ids/register',
     },
     capture: {
@@ -154,9 +154,9 @@ test('runs one cycle and propagates the --since cap to source pollers', async ()
   expect(result.exitCode).toBe(0);
   expect(observed.minimumMtimeOverride).toBeInstanceOf(Date);
   const cap = observed.minimumMtimeOverride as Date;
-  
+
   const expected = before - 90 * 24 * 60 * 60 * 1000;
-  
+
   expect(Math.abs(cap.getTime() - expected)).toBeLessThan(2000);
 });
 
@@ -234,8 +234,7 @@ test('captures zero batches when sources do nothing and reports the count', asyn
 test('logs a warning when syncServerWatermarks throws but continues the cycle', async () => {
   const config = makeConfig();
   const { source } = captureOverrideSource();
-  
-  
+
   const httpClient = new HttpClient({
     apiKey: config.account.apiKey,
     hostId: config.account.hostId,
@@ -290,8 +289,7 @@ test('closes the buffer database after the cycle completes', async () => {
     },
     { since: '7d' },
   );
-  
-  
+
   const reopened = openBufferDb(config.capture.bufferPath);
   reopened.close();
 });

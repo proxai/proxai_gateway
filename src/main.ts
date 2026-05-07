@@ -257,9 +257,7 @@ program
     try {
       const config = await loadConfigFromFile(opts.config);
       bufferPath = config.capture.bufferPath;
-    } catch {
-      
-    }
+    } catch {}
     const buffer = openBufferDb(bufferPath);
     try {
       const result = await runStatus({
@@ -321,9 +319,7 @@ program
       try {
         const config = await loadConfigFromFile(opts.config);
         dir = config.logging.logDir;
-      } catch {
-        
-      }
+      } catch {}
       const ctrl = new AbortController();
       process.on('SIGINT', () => ctrl.abort());
       process.on('SIGTERM', () => ctrl.abort());

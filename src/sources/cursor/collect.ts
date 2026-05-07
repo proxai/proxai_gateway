@@ -64,11 +64,6 @@ export async function collectCursorFile(
         return result;
       }
 
-      
-      
-      
-      
-      
       let effectiveSourcePath = file.sourcePath;
       let effectiveSourcePathHash = file.sourcePathHash;
       let priorCursor = getCursorWithFallback(context.buffer, {
@@ -106,8 +101,7 @@ export async function collectCursorFile(
             },
             'sqlite vacuum detected; re-keying source via #gen suffix',
           );
-          
-          
+
           priorCursor = null;
         }
       }
@@ -116,12 +110,6 @@ export async function collectCursorFile(
       const rows = db.query<KvRow, [number]>(SELECT_ROWS_SQL).all(lastMaxRowid);
 
       if (rows.length === 0) {
-        
-        
-        
-        
-        
-        
         if (priorCursor !== null) {
           setCursor(context.buffer, {
             sourceApp: CURSOR_SOURCE_APP,
@@ -145,9 +133,6 @@ export async function collectCursorFile(
 
       const agentSchemaVersion = extractAgentSchemaVersion(kvRows);
 
-      
-      
-      
       const measureCompressed = (slice: readonly CursorDiskKvRow[]): number =>
         zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted).byteLength;
 
@@ -172,10 +157,6 @@ export async function collectCursorFile(
       const lastRow = rows[rows.length - 1]!;
       const finalWatermarkEnd = lastRow.rowid + 1;
 
-      
-      
-      
-      
       for (let i = 0; i < slices.length; i++) {
         const slice = slices[i]!;
         if (slice.length === 0) continue;

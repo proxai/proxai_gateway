@@ -20,11 +20,11 @@ export interface BackfillCommandDeps {
   authFailedSentinelPath: string;
   bufferFullSentinelPath: string;
   gatewayVersion: string;
-  
+
   sources?: readonly RegisteredSource[];
   logger?: Logger;
   httpClient?: HttpClient;
-  
+
   isDaemonRunning?: () => Promise<boolean>;
 }
 
@@ -78,8 +78,6 @@ export async function runBackfill(
 
   let cycleResult: PollCycleResult;
   try {
-    
-    
     if (countCursors(buffer) === 0) {
       try {
         await syncServerWatermarks({ buffer, http, logger });

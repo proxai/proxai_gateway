@@ -14,8 +14,7 @@ export function sentinelHandle(path: string): SentinelHandle {
     },
     write: async (body: string) => {
       await writeAtomic(path, body);
-      
-      
+
       await setMode(path, 0o600);
     },
     remove: async () => {

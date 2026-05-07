@@ -342,8 +342,6 @@ function createSchtasksManager(spawn: SpawnFn, unitPath: string): ServiceManager
       }
     },
     stop: async () => {
-      
-      
       await runCommand(spawn, ['schtasks', '/End', '/TN', taskName]);
     },
     restart: async () => {
@@ -366,7 +364,7 @@ function createSchtasksManager(spawn: SpawnFn, unitPath: string): ServiceManager
           );
         }
       }
-      
+
       await runCommand(spawn, ['schtasks', '/End', '/TN', taskName]);
       const run = await runCommand(spawn, ['schtasks', '/Run', '/TN', taskName]);
       if (run.exitCode !== 0) {

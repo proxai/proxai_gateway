@@ -77,7 +77,6 @@ test('page_count_decreased takes priority over rowid signal when size is unchang
 });
 
 test('null cursor size means the size signal is suppressed (first-time poll)', () => {
-  
   const result = detectVacuum({
     ...HEALTHY_BASE,
     cursorSizeBytes: null,
@@ -96,8 +95,6 @@ test('null cursor page count means the page_count signal is suppressed', () => {
 });
 
 test('both cursor columns null and watermark unchanged -> vacuumed=false', () => {
-  
-  
   const result = detectVacuum({
     cursorSizeBytes: null,
     cursorPageCount: null,
@@ -110,8 +107,6 @@ test('both cursor columns null and watermark unchanged -> vacuumed=false', () =>
 });
 
 test('rowid signal still fires even when size and page_count cursors are null', () => {
-  
-  
   const result = detectVacuum({
     cursorSizeBytes: null,
     cursorPageCount: null,
@@ -125,9 +120,6 @@ test('rowid signal still fires even when size and page_count cursors are null', 
 });
 
 test('current_max_rowid equal to watermark_end is healthy (watermark_end is exclusive upper bound)', () => {
-  
-  
-  
   const result = detectVacuum({
     ...HEALTHY_BASE,
     cursorWatermarkEnd: 100,

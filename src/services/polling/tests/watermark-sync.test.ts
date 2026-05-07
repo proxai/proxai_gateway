@@ -10,7 +10,7 @@ const endpoints: HttpEndpoints = {
   ingest: 'https://api.example.com/v1/raw_records',
   verifyKey: 'https://api.example.com/ingestion/verify-key',
   watermarks: 'https://api.example.com/v1/watermarks',
-        registerHostId: 'https://api.example.com/v1/host-ids/register',
+  registerHostId: 'https://api.example.com/v1/host-ids/register',
 };
 
 let db: Database;
@@ -150,8 +150,6 @@ test('overwrites pre-existing local cursor (server is authoritative)', async () 
 });
 
 test('synced cursors are visible via inode-fallback lookup', async () => {
-  
-  
   const http = clientWith({
     host_id: 'h_test',
     user_id: 'u_1',
@@ -168,7 +166,6 @@ test('synced cursors are visible via inode-fallback lookup', async () => {
   });
   await syncServerWatermarks({ buffer: db, http });
 
-  
   const exact = getCursor(db, {
     sourceApp: 'claude-code',
     sourcePathHash: 'h1',
@@ -177,7 +174,6 @@ test('synced cursors are visible via inode-fallback lookup', async () => {
   });
   expect(exact).toBeNull();
 
-  
   const sentinel = getCursor(db, {
     sourceApp: 'claude-code',
     sourcePathHash: 'h1',

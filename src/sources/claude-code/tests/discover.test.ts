@@ -86,7 +86,6 @@ test('skips files older than minimumMtime, keeps newer ones', async () => {
   await utimes(oldPath, oldEpoch, oldEpoch);
   await utimes(newPath, newEpoch, newEpoch);
 
-  
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const found = await discoverClaudeCodeFiles(dir, { minimumMtime: cutoff });
   expect(found).toHaveLength(1);

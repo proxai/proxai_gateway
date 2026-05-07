@@ -243,7 +243,7 @@ test('BUFFER_FULL sentinel short-circuits the cycle when pending still above res
     softPauseBytes: 100,
     softResumeBytes: 50,
   };
-  
+
   insertBatch(
     buffer,
     batchWith('payload-large-enough-to-exceed-fifty-bytes-and-then-some-more-padding'),
@@ -269,7 +269,6 @@ test('cycle calls prune after drain and records prune result', async () => {
 });
 
 test('cycle writes BUFFER_FULL sentinel when pending exceeds pause threshold', async () => {
-  
   const ctx: PollCycleContext = {
     ...makeContext([noopSource('s')]),
     http: new HttpClient({
@@ -305,8 +304,7 @@ test('cycle clears BUFFER_FULL sentinel when pending drops below resume threshol
     softPauseBytes: 1_000_000,
     softResumeBytes: 500_000,
   };
-  
-  
+
   await Bun.write(
     ctx.bufferFullSentinelPath,
     '{"pending_bytes":1500000,"threshold":1000000,"set_at":"x"}',
@@ -361,7 +359,7 @@ test('cycle logs soft_resume info at cycle-start when sentinel exists and pendin
     '{"pending_bytes":1500000,"threshold":1000000,"set_at":"x"}',
   );
   await runPollCycle(ctx);
-  
+
   expect(
     entries.some(
       (e) =>
@@ -374,9 +372,7 @@ test('cycle logs soft_resume info at cycle-start when sentinel exists and pendin
 
 test('cycle logs post-drain soft_resume when a source writes the sentinel mid-cycle', async () => {
   const entries: FakeLogEntry[] = [];
-  
-  
-  
+
   let sentinelWriter: () => Promise<void> = async () => {};
   const writerSource: RegisteredSource = {
     name: 'writer',
@@ -395,8 +391,7 @@ test('cycle logs post-drain soft_resume when a source writes the sentinel mid-cy
     softPauseBytes: 1_000_000,
     softResumeBytes: 500_000,
   };
-  
-  
+
   sentinelWriter = async () => {
     await Bun.write(
       ctx.bufferFullSentinelPath,
@@ -418,9 +413,6 @@ function makeQueryThrowingBuffer(
   realBuffer: Database,
   shouldThrowOn: (sql: string) => boolean,
 ): Database {
-  
-  
-  
   const fake: Record<string, unknown> = {};
   for (const key of Object.keys(realBuffer)) {
     fake[key] = (realBuffer as unknown as Record<string, unknown>)[key];
@@ -449,7 +441,7 @@ function makeQueryThrowingBuffer(
 
 test('cycle logs prune_failed warn when pruneBuffer throws', async () => {
   const entries: FakeLogEntry[] = [];
-  
+
   const fake: Record<string, unknown> = {};
   for (const key of ['query', 'run', 'prepare', 'exec', 'close', 'serialize'] as const) {
     const original = (buffer as unknown as Record<string, unknown>)[key];

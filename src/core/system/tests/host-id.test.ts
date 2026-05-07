@@ -25,6 +25,5 @@ test('deriveHostId is whitespace-insensitive on inputs', () => {
 });
 
 test('deriveHostId binds machine and user (no trivial swap collision)', () => {
-  
   expect(deriveHostId('A', 'B')).not.toBe(deriveHostId('B', 'A'));
 });

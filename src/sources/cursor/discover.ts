@@ -15,7 +15,6 @@ export function defaultCursorUserRoot(): string {
 }
 
 export interface DiscoverCursorOptions {
-  
   minimumMtime?: Date | null;
 }
 

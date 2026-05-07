@@ -215,9 +215,6 @@ export class HttpClient {
       throw new RateLimitError('server returned 429 (rate limit)', retryAfter);
     }
     if (status >= 500 && status < 600) {
-      
-      
-      
       const retryAfter = parseRetryAfter(response.headers.get(HEADER_RETRY_AFTER));
       throw new RetriableError(`server returned ${status.toString()}`, retryAfter);
     }

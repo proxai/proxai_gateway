@@ -33,9 +33,9 @@ export interface TailCommandDeps {
   logDir: string;
   abortSignal?: AbortSignal;
   emit: (line: string) => void;
-  
+
   pathProvider?: () => string;
-  
+
   pollIntervalMs?: number;
 }
 

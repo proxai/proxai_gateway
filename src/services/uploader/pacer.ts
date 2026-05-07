@@ -1,5 +1,3 @@
-
-
 const DEFAULT_NOW = (): number => Date.now();
 const DEFAULT_SLEEP = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -20,29 +18,19 @@ export interface PacerOptions {
 }
 
 export interface Pacer {
-  
-  
-  
   acquire(payloadBytes: number): Promise<void>;
-  
-  
+
   notifyRetryAfter(retryAfterMs: number): void;
-  
-  
-  
+
   notify429(): void;
-  
-  
-  
-  
-  
+
   notifyServiceUnavailable(retryAfterMs?: number): void;
 }
 
 interface Bucket {
   capacity: number;
   tokens: number;
-  
+
   refillPerMs: number;
   lastRefill: number;
 }
@@ -72,18 +60,11 @@ export function createPacer(options: PacerOptions): Pacer {
     lastRefill: startedAt,
   };
 
-  
   let retryAfterUntil = 0;
-  
-  
-  
+
   let backoffSteps = 0;
   let pendingNotify429 = false;
-  
-  
-  
-  
-  
+
   let serviceUnavailableSteps = 0;
   let pendingServiceUnavailable = false;
   let pendingServiceUnavailableFloorMs = 0;
@@ -111,9 +92,6 @@ export function createPacer(options: PacerOptions): Pacer {
   async function acquire(payloadBytes: number): Promise<void> {
     if (payloadBytes < 0) throw new Error('payloadBytes must be >= 0');
 
-    
-    
-    
     if (pendingNotify429) {
       backoffSteps = Math.min(backoffSteps + 1, 16);
       pendingNotify429 = false;
@@ -121,8 +99,6 @@ export function createPacer(options: PacerOptions): Pacer {
       backoffSteps = 0;
     }
 
-    
-    
     let serviceUnavailableFloorMs = 0;
     if (pendingServiceUnavailable) {
       serviceUnavailableSteps = Math.min(serviceUnavailableSteps + 1, 16);
@@ -134,7 +110,6 @@ export function createPacer(options: PacerOptions): Pacer {
       pendingServiceUnavailableFloorMs = 0;
     }
 
-    
     const t0 = now();
     if (retryAfterUntil > t0) {
       const wait = retryAfterUntil - t0;
@@ -144,8 +119,6 @@ export function createPacer(options: PacerOptions): Pacer {
       retryAfterUntil = 0;
     }
 
-    
-    
     if (backoffSteps > 0) {
       const slotMs = RATE_WINDOW_MS / rateBucket.capacity;
       const backoffBase = slotMs * (backoffMultiplier ** backoffSteps - 1);
@@ -153,12 +126,6 @@ export function createPacer(options: PacerOptions): Pacer {
       if (backoff > 0) await sleep(backoff);
     }
 
-    
-    
-    
-    
-    
-    
     if (serviceUnavailableSteps > 0) {
       const computed = SERVICE_UNAVAILABLE_INITIAL_DELAY_MS * 2 ** (serviceUnavailableSteps - 1);
       const capped = Math.min(SERVICE_UNAVAILABLE_MAX_DELAY_MS, computed);
@@ -166,7 +133,6 @@ export function createPacer(options: PacerOptions): Pacer {
       if (wait > 0) await sleep(wait);
     }
 
-    
     while (true) {
       const t = now();
       const needBytes = Math.min(payloadBytes, bytesBucket.capacity);

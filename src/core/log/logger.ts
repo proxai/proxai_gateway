@@ -34,9 +34,7 @@ export async function createLogger(options: LoggerFactoryOptions = {}): Promise<
       sync: true,
       limit: { count: LOG_RETENTION_DAYS },
     });
-    
-    
-    
+
     secureLogStream(stream);
     return pino({ level, base }, stream);
   }
@@ -78,7 +76,5 @@ function applySecureMode(stream: FileLikeStream): void {
   if (filePath === null || filePath.length === 0) return;
   try {
     chmodSync(filePath, 0o600);
-  } catch {
-    
-  }
+  } catch {}
 }

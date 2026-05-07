@@ -55,10 +55,6 @@ export async function collectCodexState(
       const currentSizeBytes = sourceStat.exists ? sourceStat.size : 0;
       const currentPageCount = pageCount(db);
 
-      
-      
-      
-      
       const identity = resolveSourceIdentity(db, file, context, currentSizeBytes, currentPageCount);
 
       for (const table of CODEX_ALLOWED_STATE_TABLES) {
@@ -143,8 +139,6 @@ function resolveSourceIdentity(
         watermarkTable: table,
       });
     } catch {
-      
-      
       continue;
     }
     if (cursor === null) continue;
@@ -196,9 +190,6 @@ function collectOneTable(
 ): void {
   if (!tableExists(db, table)) return;
 
-  
-  
-  
   const priorCursor = identity.rotated
     ? null
     : getCursorWithFallback(context.buffer, {
@@ -217,11 +208,6 @@ function collectOneTable(
     >(`SELECT rowid, * FROM "${escaped}" WHERE rowid > ? ORDER BY rowid ASC`)
     .all(lastMaxRowid);
   if (rows.length === 0) {
-    
-    
-    
-    
-    
     if (priorCursor !== null) {
       setCursor(context.buffer, {
         sourceApp: CODEX_SOURCE_APP,
@@ -237,8 +223,6 @@ function collectOneTable(
     return;
   }
 
-  
-  
   const measureCompressed = (
     slice: readonly (Record<string, unknown> & { rowid: number })[],
   ): number => zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted).byteLength;

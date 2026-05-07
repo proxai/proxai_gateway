@@ -47,9 +47,7 @@ export async function drainBuffer(
       if (outcome.retryAfterMs !== null && outcome.retryAfterMs > 0) {
         ctx.pacer.notifyRetryAfter(outcome.retryAfterMs);
       }
-      
-      
-      
+
       if (outcome.reason === 'rate_limit') {
         ctx.pacer.notify429();
       } else if (outcome.reason === 'service_unavailable') {

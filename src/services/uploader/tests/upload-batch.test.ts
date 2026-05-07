@@ -119,11 +119,11 @@ test('400 watermark_regression updates cursor, drops batch, returns recovered', 
   if (outcome.kind === 'recovered') {
     expect(outcome.captureId).toBe(batch.captureId);
   }
-  
+
   expect(getBatch(db, batch.captureId)).toBeNull();
-  
+
   expect(getReceipt(db, batch.captureId)).toBeNull();
-  
+
   const cursor = getCursor(db, {
     sourceApp: stored.sourceApp,
     sourcePathHash: stored.sourcePathHash,
@@ -267,7 +267,6 @@ test('AuthError + verify-key inconclusive -> retriable, reason=auth_unconfirmed'
 
   const ctx = ctxWith(
     mockFetch((call) => {
-      
       if (call.url.includes('/ingestion/verify-key')) return emptyResponse(503);
       return emptyResponse(401);
     }),
@@ -455,7 +454,6 @@ test('AuthError + verify-key throws RetriableError → retriable, no sentinel', 
       http: createTestHttpClient(
         mockFetch((call) => {
           if (call.url.includes('/ingestion/verify-key')) {
-            
             return emptyResponse(503);
           }
           return emptyResponse(401);
@@ -508,12 +506,9 @@ test('AuthError + verify-key throws non-Error → retriable, log uses typeof and
     insertBatch(db, batch);
     const stored = getBatch(db, batch.captureId)!;
 
-    
-    
     const http = createTestHttpClient(mockFetch(() => emptyResponse(403)));
     Object.defineProperty(http, 'verifyKey', {
       value: async () => {
-        
         throw 'string-thrown-not-error';
       },
     });
@@ -557,9 +552,6 @@ test('AuthError + verify-key returns success: false → fatal even when sentinel
   insertBatch(db, batch);
   const stored = getBatch(db, batch.captureId)!;
 
-  
-  
-  
   const http = createTestHttpClient(
     mockFetch((call) => {
       if (call.url.includes('/ingestion/verify-key')) {
@@ -611,6 +603,5 @@ test('AuthError without authFailedSentinelPath: still classifies, no sentinel si
   };
   const outcome = await uploadBatch(ctx, stored);
 
-  
   expect(outcome.kind).toBe('fatal');
 });

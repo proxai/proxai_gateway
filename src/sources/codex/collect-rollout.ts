@@ -70,10 +70,6 @@ export async function collectCodexRollout(
       );
     }
 
-    
-    
-    
-    
     let offset = 0;
     for (let i = 0; i < slices.length; i++) {
       const slice = slices[i]!;
