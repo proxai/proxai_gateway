@@ -15,7 +15,12 @@ import {
   openInMemoryBufferDb,
   totalPendingBytes,
 } from 'services/buffer';
-import { BODY_MAX_COMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
+import {
+  BODY_MAX_COMPRESSED_BYTES,
+  BODY_MAX_DECOMPRESSED_BYTES,
+  BODY_TARGET_COMPRESSED_BYTES,
+  BODY_TARGET_DECOMPRESSED_BYTES,
+} from 'services/contract';
 import { collectClaudeCodeFile } from 'sources/claude-code';
 import type { ClaudeCodeCollectorContext, DiscoveredClaudeCodeFile } from 'sources/claude-code';
 
@@ -50,7 +55,11 @@ async function makeFile(
 }
 
 function ctx(b: Database): ClaudeCodeCollectorContext {
-  return { buffer: b, gatewayVersion: '@proxai/gateway 0.1.0' };
+  return {
+    buffer: b,
+    gatewayVersion: '@proxai/gateway 0.1.0',
+    maxDecompressedBytes: BODY_TARGET_DECOMPRESSED_BYTES,
+  };
 }
 
 const DECODER = new TextDecoder();
@@ -261,6 +270,37 @@ test('watermark continuity holds under redaction-induced byte-count changes', as
   expect(prevEnd).toBe(content.length);
   expect(totalCompressed).toBeLessThan(content.length);
   expect(anyBodySmallerThanRange).toBe(true);
+});
+
+test('surfaces OversizedDecompressedSliceError when single line exceeds BODY_MAX_DECOMPRESSED_BYTES', async () => {
+  const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
+  const oneLine = `${JSON.stringify({ giant: giantPayload, version: '2.1.122' })}\n`;
+  const file = await makeFile(oneLine, 'oversized.jsonl');
+
+  const result = await collectClaudeCodeFile(file, ctx(buffer));
+  expect(result.errors.length).toBeGreaterThanOrEqual(1);
+  expect(result.errors[0]!.reason).toMatch(/decompressed slice/);
+}, 30_000);
+
+test('every batch satisfies BOTH compressed AND decompressed caps', async () => {
+  const lines: string[] = [];
+  for (let i = 0; i < 100; i++) {
+    lines.push(JSON.stringify({ i, payload: 'x'.repeat(40), version: '2.1.122' }));
+  }
+  const content = `${lines.join('\n')}\n`;
+  const file = await makeFile(content, 'invariant.jsonl');
+
+  const result = await collectClaudeCodeFile(file, ctx(buffer));
+  expect(result.errors).toEqual([]);
+
+  for (let i = 0; i < 100; i++) {
+    const batch = nextPendingBatch(buffer);
+    if (batch === null) break;
+    expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_MAX_COMPRESSED_BYTES);
+    const decoded = zstdDecompressSync(batch.body);
+    expect(decoded.byteLength).toBeLessThanOrEqual(BODY_MAX_DECOMPRESSED_BYTES);
+    deleteBatch(buffer, batch.captureId);
+  }
 });
 
 test('resets watermark when source_inode changes (file rotated/replaced)', async () => {

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 import { zstdDecompressSync } from 'core/utils';
 import { countByStatus, getCursor, nextPendingBatch, openInMemoryBufferDb } from 'services/buffer';
+import { BODY_TARGET_DECOMPRESSED_BYTES } from 'services/contract';
 import { collectCursorFile } from 'sources/cursor';
 import type { CursorCollectorContext } from 'sources/cursor';
 import {
@@ -33,7 +34,11 @@ afterEach(async () => {
 });
 
 function ctx(b: SqliteDatabase): CursorCollectorContext {
-  return { buffer: b, gatewayVersion: '@proxai/gateway 0.1.0-fixture' };
+  return {
+    buffer: b,
+    gatewayVersion: '@proxai/gateway 0.1.0-fixture',
+    maxDecompressedBytes: BODY_TARGET_DECOMPRESSED_BYTES,
+  };
 }
 
 const DECODER = new TextDecoder();

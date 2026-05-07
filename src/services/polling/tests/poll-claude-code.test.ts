@@ -30,7 +30,11 @@ async function seedSession(project: string, name: string, content: string): Prom
 
 test('returns zero result when base dir is missing', async () => {
   const poller = makeClaudeCodeSourcePoller({ baseDir: join(dir, 'missing') });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBe(0);
   expect(result.capturedBatches).toBe(0);
   expect(result.errors).toEqual([]);
@@ -38,7 +42,11 @@ test('returns zero result when base dir is missing', async () => {
 
 test('returns zero result when no project dirs', async () => {
   const poller = makeClaudeCodeSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBe(0);
 });
 
@@ -49,7 +57,11 @@ test('processes a single session file and inserts a batch', async () => {
     '{"type":"user","message":{"version":"2.1.122"},"text":"hi"}\n',
   );
   const poller = makeClaudeCodeSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBe(1);
   expect(result.capturedBatches).toBe(1);
   expect(result.capturedBytes).toBeGreaterThan(0);
@@ -62,7 +74,11 @@ test('processes multiple sessions across multiple projects', async () => {
   await seedSession('project-a', 'session-2.jsonl', '{"type":"user","text":"b"}\n');
   await seedSession('project-b', 'session-1.jsonl', '{"type":"user","text":"c"}\n');
   const poller = makeClaudeCodeSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBe(3);
   expect(result.capturedBatches).toBe(3);
   expect(countByStatus(buffer).pending).toBe(3);
@@ -71,9 +87,13 @@ test('processes multiple sessions across multiple projects', async () => {
 test('subsequent poll on same files captures only new bytes', async () => {
   const path = await seedSession('project-a', 'session.jsonl', '{"type":"user","text":"first"}\n');
   const poller = makeClaudeCodeSourcePoller({ baseDir: dir });
-  await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  await poller({ buffer, gatewayVersion: 'gw-0.1', maxDecompressedBytes: 9 * 1024 * 1024 });
   await writeFile(path, '{"type":"user","text":"first"}\n{"type":"user","text":"second"}\n');
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.capturedBatches).toBe(1);
   expect(countByStatus(buffer).pending).toBe(2);
 });
@@ -82,7 +102,11 @@ test('captures discover error in result.errors when baseDir is unreadable', asyn
   const filePath = join(dir, 'is-a-file');
   await writeFile(filePath, 'not a directory');
   const poller = makeClaudeCodeSourcePoller({ baseDir: filePath });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBe(0);
   expect(result.errors.length).toBeGreaterThan(0);
   expect(result.errors[0]?.sourcePath).toBe(filePath);
@@ -93,7 +117,11 @@ test('aggregates per-file collect errors into result.errors', async () => {
   const closedBuffer = openInMemoryBufferDb();
   closedBuffer.close();
   const poller = makeClaudeCodeSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer: closedBuffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer: closedBuffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBe(1);
   expect(result.errors.length).toBeGreaterThan(0);
 });
@@ -105,7 +133,11 @@ test('initial-scan window: skips files older than cap when no cursors exist', as
   await utimes(oldPath, oldEpoch, oldEpoch);
 
   const poller = makeClaudeCodeSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
 
   expect(result.filesProcessed).toBe(1);
   expect(result.capturedBatches).toBe(1);
@@ -127,7 +159,11 @@ test('initial-scan window: cap skipped once cursors exist for the app', async ()
   });
 
   const poller = makeClaudeCodeSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
 
   expect(result.filesProcessed).toBe(2);
   expect(result.capturedBatches).toBe(2);
@@ -153,6 +189,7 @@ test('initial-scan window: minimumMtimeOverride forces an explicit cap', async (
   const result = await poller({
     buffer,
     gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
     minimumMtimeOverride: cutoff,
   });
   expect(result.filesProcessed).toBe(1);
@@ -169,6 +206,7 @@ test('initial-scan window: minimumMtimeOverride=null disables the cap on a fresh
   const result = await poller({
     buffer,
     gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
     minimumMtimeOverride: null,
   });
   expect(result.filesProcessed).toBe(2);

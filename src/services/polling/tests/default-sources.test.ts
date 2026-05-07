@@ -37,7 +37,11 @@ test('each source poll returns no-op result for empty base dirs', async () => {
     codexBaseDir: join(dir, 'cx'),
   });
   for (const s of sources) {
-    const result = await s.poll({ buffer, gatewayVersion: 'gw-test' });
+    const result = await s.poll({
+      buffer,
+      gatewayVersion: 'gw-test',
+      maxDecompressedBytes: 9 * 1024 * 1024,
+    });
     expect(result.filesProcessed).toBe(0);
     expect(result.capturedBatches).toBe(0);
     expect(result.errors).toEqual([]);

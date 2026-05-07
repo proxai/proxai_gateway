@@ -67,7 +67,11 @@ const DECODER = new TextDecoder();
 
 test('returns zero result when base dir missing', async () => {
   const poller = makeCodexSourcePoller({ baseDir: join(dir, 'missing') });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBe(0);
   expect(result.capturedBatches).toBe(0);
 });
@@ -80,7 +84,11 @@ test('processes state then rollouts and threads cli_version through', async () =
   );
   await seedRollout('sessions/2026/05/05/rollout-001.jsonl', '{"type":"user","text":"hello"}\n');
   const poller = makeCodexSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
 
   expect(result.filesProcessed).toBeGreaterThanOrEqual(2);
   expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
@@ -102,7 +110,11 @@ test('processes state then rollouts and threads cli_version through', async () =
 test('rollouts use default version when no state file exists', async () => {
   await seedRollout('sessions/2026/05/05/rollout-001.jsonl', '{"type":"user","text":"x"}\n');
   const poller = makeCodexSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.capturedBatches).toBe(1);
   const row = nextPendingBatch(buffer)!;
   expect(row.agentSchemaVersion).toBe('unknown');
@@ -112,7 +124,11 @@ test('captures discover errors when baseDir is a regular file', async () => {
   const filePath = join(dir, 'is-a-file');
   await writeFile(filePath, 'not a directory');
   const poller = makeCodexSourcePoller({ baseDir: filePath });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.errors.length).toBeGreaterThan(0);
 });
 
@@ -121,7 +137,11 @@ test('captures state-side discover error when baseDir is extreme', async () => {
   await writeFile(filePath, 'not a directory');
   const baseDir = join(filePath, 'subdir');
   const poller = makeCodexSourcePoller({ baseDir });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.errors.length).toBeGreaterThan(0);
 });
 
@@ -130,7 +150,11 @@ test('copies per-table state errors into pollCodex result.errors', async () => {
   const closedBuffer = openInMemoryBufferDb();
   closedBuffer.close();
   const poller = makeCodexSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer: closedBuffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer: closedBuffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.errors.length).toBeGreaterThan(0);
   expect(result.errors.some((e) => e.table !== undefined)).toBe(true);
 });
@@ -140,7 +164,11 @@ test('copies per-rollout collect errors into pollCodex result.errors', async () 
   const closedBuffer = openInMemoryBufferDb();
   closedBuffer.close();
   const poller = makeCodexSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer: closedBuffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer: closedBuffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.errors.length).toBeGreaterThan(0);
 });
 
@@ -150,14 +178,22 @@ test('captures per-rollout collect errors in result.errors', async () => {
   await rm(rolloutPath, { force: true });
   await mkdir(rolloutPath, { recursive: true });
   const poller = makeCodexSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBeGreaterThanOrEqual(0);
 });
 
 test('state-only run still inserts batches from threads table', async () => {
   await seedStateDb('state_1.sqlite', [{ id: 'tA', cli_version: 'codex-1.0.0' }]);
   const poller = makeCodexSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.capturedBatches).toBeGreaterThanOrEqual(1);
 });
 
@@ -169,7 +205,11 @@ test('initialScanWindowDays applies a now-N-day floor on a fresh buffer', async 
   await utimes(oldPath, oldDate, oldDate);
   await utimes(newPath, new Date(), new Date());
   const poller = makeCodexSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
 
   expect(result.capturedBatches).toBeGreaterThanOrEqual(1);
   const seenPaths = new Set<string>();

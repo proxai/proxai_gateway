@@ -38,7 +38,11 @@ async function seedDb(
 
 test('returns zero result when base dir missing', async () => {
   const poller = makeCursorSourcePoller({ baseDir: join(dir, 'missing') });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBe(0);
   expect(result.errors).toEqual([]);
 });
@@ -49,7 +53,11 @@ test('processes only globalStorage db when no workspace dbs exist', async () => 
     { key: 'bubbleId:def', value: JSON.stringify({ _v: 7 }) },
   ]);
   const poller = makeCursorSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBe(1);
   expect(result.capturedBatches).toBe(1);
   expect(countByStatus(buffer).pending).toBe(1);
@@ -67,7 +75,11 @@ test('processes globalStorage + workspaceStorage dbs', async () => {
     { key: 'bubbleId:lll', value: JSON.stringify({ _v: 7 }) },
   ]);
   const poller = makeCursorSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBe(3);
   expect(result.capturedBatches).toBe(3);
 });
@@ -78,7 +90,11 @@ test('skips db files with no allowlisted prefixes (no batch)', async () => {
     { key: 'somethingelse', value: 'random' },
   ]);
   const poller = makeCursorSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBe(1);
   expect(result.capturedBatches).toBe(0);
 });
@@ -88,7 +104,11 @@ test('captures discover error in result.errors when baseDir is unreadable', asyn
   const filePath = join(dir, 'is-a-file');
   await writeFile(filePath, 'not a directory');
   const poller = makeCursorSourcePoller({ baseDir: filePath });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBe(0);
   expect(result.errors.length).toBeGreaterThan(0);
 });
@@ -100,7 +120,11 @@ test('aggregates per-file collect errors into result.errors', async () => {
   const closedBuffer = openInMemoryBufferDb();
   closedBuffer.close();
   const poller = makeCursorSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer: closedBuffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer: closedBuffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.filesProcessed).toBe(1);
   expect(result.errors.length).toBeGreaterThan(0);
 });
@@ -116,7 +140,11 @@ test('initialScanWindowDays applies a now-N-day floor on a fresh buffer', async 
   const oldDate = new Date(Date.now() - 1000 * 60 * 60 * 24 * 365);
   await utimes(oldPath, oldDate, oldDate);
   const poller = makeCursorSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
 
   expect(result.filesProcessed).toBe(1);
 });

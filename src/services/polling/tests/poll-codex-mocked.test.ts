@@ -41,6 +41,10 @@ test('captures errors when state collection throws synchronously', async () => {
   }));
   const mod = await import('services/polling/poll-codex.ts');
   const poller = mod.makeCodexSourcePoller({ baseDir: dir });
-  const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
   expect(result.errors.some((e) => e.reason.includes('forced state failure'))).toBe(true);
 });

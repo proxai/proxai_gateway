@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { statFile } from 'core/io/fs';
 import { sha256Hex, zstdDecompressSync } from 'core/utils';
 import { getCursor, nextPendingBatch, openInMemoryBufferDb } from 'services/buffer';
+import { BODY_TARGET_DECOMPRESSED_BYTES } from 'services/contract';
 import { collectClaudeCodeFile } from 'sources/claude-code';
 import type { ClaudeCodeCollectorContext, DiscoveredClaudeCodeFile } from 'sources/claude-code';
 
@@ -43,7 +44,11 @@ async function copyFixture(name: string, destName = name): Promise<DiscoveredCla
 }
 
 function ctx(b: Database): ClaudeCodeCollectorContext {
-  return { buffer: b, gatewayVersion: '@proxai/gateway 0.1.0' };
+  return {
+    buffer: b,
+    gatewayVersion: '@proxai/gateway 0.1.0',
+    maxDecompressedBytes: BODY_TARGET_DECOMPRESSED_BYTES,
+  };
 }
 
 test('session-basic.jsonl: parses end-to-end and extracts message version from later lines', async () => {

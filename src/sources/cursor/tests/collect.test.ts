@@ -17,7 +17,12 @@ import {
   setCursor,
   totalPendingBytes,
 } from 'services/buffer';
-import { BODY_MAX_COMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
+import {
+  BODY_MAX_COMPRESSED_BYTES,
+  BODY_MAX_DECOMPRESSED_BYTES,
+  BODY_TARGET_COMPRESSED_BYTES,
+  BODY_TARGET_DECOMPRESSED_BYTES,
+} from 'services/contract';
 import { collectCursorFile } from 'sources/cursor';
 import type { CursorCollectorContext, DiscoveredCursorFile } from 'sources/cursor';
 
@@ -75,7 +80,11 @@ async function makeEmptyFile(name = 'empty.vscdb'): Promise<DiscoveredCursorFile
 }
 
 function ctx(b: SqliteDatabase): CursorCollectorContext {
-  return { buffer: b, gatewayVersion: '@proxai/gateway 0.1.0' };
+  return {
+    buffer: b,
+    gatewayVersion: '@proxai/gateway 0.1.0',
+    maxDecompressedBytes: BODY_TARGET_DECOMPRESSED_BYTES,
+  };
 }
 
 const DECODER = new TextDecoder();
@@ -420,4 +429,36 @@ test('null last_seen columns on existing cursor never trigger size/page_count si
 
   expect(batch.sourcePath).toBe(file.sourcePath);
   expect(batch.sourcePathHash).toBe(file.sourcePathHash);
+});
+
+test('surfaces OversizedDecompressedSliceError when single row exceeds BODY_MAX_DECOMPRESSED_BYTES', async () => {
+  const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
+  const file = await makeDb([{ key: 'composerData:huge', value: giantPayload }]);
+
+  const result = await collectCursorFile(file, ctx(buffer));
+  const oversized = result.errors.filter((e) => /decompressed slice/.test(e.reason));
+  expect(oversized.length).toBeGreaterThanOrEqual(1);
+}, 60_000);
+
+test('every cursor batch satisfies BOTH compressed AND decompressed caps', async () => {
+  const rows: SeedRow[] = [];
+  for (let i = 0; i < 80; i++) {
+    rows.push({ key: `composerData:c${i.toString()}`, value: JSON.stringify({ _v: 13, k: i }) });
+    rows.push({
+      key: `bubbleId:c${i.toString()}:b1`,
+      value: JSON.stringify({ _v: 3, txt: 'x'.repeat(60) }),
+    });
+  }
+  const file = await makeDb(rows, 'invariant.vscdb');
+  const result = await collectCursorFile(file, ctx(buffer));
+  expect(result.errors).toEqual([]);
+
+  for (let i = 0; i < 100; i++) {
+    const batch = nextPendingBatch(buffer);
+    if (batch === null) break;
+    expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_MAX_COMPRESSED_BYTES);
+    const decoded = zstdDecompressSync(batch.body);
+    expect(decoded.byteLength).toBeLessThanOrEqual(BODY_MAX_DECOMPRESSED_BYTES);
+    deleteBatch(buffer, batch.captureId);
+  }
 });
