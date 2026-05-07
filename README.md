@@ -13,30 +13,45 @@ ProxAI Gateway is a managed, on-device service that captures your coding-agent a
 
 ProxAI Gateway ships as a single self-contained native binary. You do not need Bun, Node, or any other runtime installed.
 
-### macOS / Linux
+### Recommended (all platforms)
+
+**macOS / Linux:**
 
 ```sh
 curl -fsSL https://github.com/proxai/proxai_gateway/raw/main/install.sh | bash
 ```
 
-On Linux, if you want the gateway to run when no user session is active, enable user lingering: `loginctl enable-linger $(whoami)`.
-
-### Windows (PowerShell)
+**Windows (PowerShell):**
 
 ```powershell
 irm https://github.com/proxai/proxai_gateway/raw/main/install.ps1 | iex
 ```
 
-### Alternative — npm (requires Node >=18)
+The script installs to a user-writable location (`~/.proxai/bin/` on macOS/Linux, `%USERPROFILE%\.proxai\bin\` on Windows). No sudo, no admin prompts.
+
+On Linux, if you want the gateway to run when no user session is active, enable user lingering: `loginctl enable-linger $(whoami)`.
+
+### Alternative — npm (all platforms)
 
 ```sh
 npm install -g @proxai/gateway
 ```
 
-### Alternative — Homebrew (macOS / Linux)
+The npm postinstall hook detects your platform and downloads the matching binary into the package's `bin/` directory. Same binary as the curl-bash install. Works on macOS, Linux, and Windows. Requires Node >=18 for the postinstall hook.
+
+### Platform-specific package managers
+
+**macOS — Homebrew:**
 
 ```sh
 brew install proxai/tap/proxai-gateway
+```
+
+**Windows — Scoop:**
+
+```powershell
+scoop bucket add proxai https://github.com/proxai/scoop-bucket
+scoop install proxai-gateway
 ```
 
 ## Quickstart
