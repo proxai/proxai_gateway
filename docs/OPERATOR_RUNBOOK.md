@@ -162,7 +162,7 @@ been redacted, or a security review flags a captured record.
 **Remediation.**
 
 - Server-side defense in depth: nest re-runs the rule corpus on receive
-  (see `planning/nest-contract.md` §10). Even if the gateway missed it, nest
+  (see `08_BACKEND_CONTRACT.md` §10). Even if the gateway missed it, nest
   catches it and emits a metric. Coordinate with the backend team to confirm.
 - Add the missing rule pattern to `services/redaction/rules/<category>.ts`
   and ship a release. The gateway's bundled rules are the contract.
@@ -219,7 +219,7 @@ relaxed.
    ```
 3. Pass the `capture_id` to the backend on-call team — nest emits structured
    logs tagged with `capture_id` at every async boundary
-   (see `planning/nest-contract.md` §13).
+   (see `08_BACKEND_CONTRACT.md` §13).
 
 ## Daemon won't start
 

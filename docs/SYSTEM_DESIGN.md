@@ -212,7 +212,7 @@ Layer 1 is the gateway's own contract with disk: once bytes are buffered, the
 cursor advances, and the next cycle reads strictly forward. Layer 2 is a
 gateway-server contract: the same `capture_id` may be submitted any number of
 times, but the server stores only the first. Layer 3 is a server-enforced
-invariant; see `planning/nest-contract.md` §6.3 for the full specification.
+invariant; see `08_BACKEND_CONTRACT.md` §6.3 for the full specification.
 
 The gateway deliberately does **not** wrap `insertBatch` and `setCursor` in a
 single SQLite transaction (see `planning/audit_crash_recovery.md`). A crash
@@ -387,7 +387,7 @@ cycle-time, not by any in-process watchdog.
 Several of the recovery paths are deliberately gateway-side, not
 contract-side: the server has no notion of vacuum or inode rotation, so the
 gateway picks `path#gen=N` as the rekeying convention (see
-`planning/nest-contract.md` §6.3).
+`08_BACKEND_CONTRACT.md` §6.3).
 
 ---
 
@@ -504,7 +504,7 @@ older than the default 30-day initial-scan window.
 
 ## 10. Where to read next
 
-- [`planning/nest-contract.md`](../planning/nest-contract.md) — the wire
+- [`08_BACKEND_CONTRACT.md`](../08_BACKEND_CONTRACT.md) — the wire
   contract with `proxai_nest`. Required reading before changing anything that
   touches the DTO, the watermark, or idempotency.
 - [`planning/audit_crash_recovery.md`](../planning/audit_crash_recovery.md) —

@@ -29,8 +29,8 @@ For end-user installation and CLI quick reference, see the project root
 These live in [`planning/`](../planning) and capture decisions and contracts
 that the system docs reference but do not replicate:
 
-- [`nest-contract.md`](../planning/nest-contract.md) — wire contract with
-  the `proxai_nest` backend.
+- [`08_BACKEND_CONTRACT.md`](../08_BACKEND_CONTRACT.md) (repo root) — wire
+  contract with the `proxai_nest` backend.
 - [`audit_crash_recovery.md`](../planning/audit_crash_recovery.md) — rationale
   for advancing the cursor on `insertBatch` rather than on server-accept.
 - [`audit_graceful_shutdown.md`](../planning/audit_graceful_shutdown.md) —
