@@ -65,6 +65,15 @@ export const SOURCE_VARIANTS: readonly SourceVariantSpec[] = [
 
 export const BODY_MAX_COMPRESSED_BYTES = 2 * 1024 * 1024;
 
+/**
+ * Capture-time chunking threshold. The server enforces
+ * `BODY_MAX_COMPRESSED_BYTES` as a hard cap; the gateway aims for 90% of that
+ * so realistic compression-ratio variation between capture and validation
+ * never trips the limit. Slices whose compressed body exceeds this threshold
+ * are split at safe boundaries before insertion.
+ */
+export const BODY_TARGET_COMPRESSED_BYTES = Math.floor(BODY_MAX_COMPRESSED_BYTES * 0.9);
+
 export const BODY_MAX_DECOMPRESSED_BYTES = 10 * 1024 * 1024;
 
 export const MAX_SAFE_WATERMARK = Number.MAX_SAFE_INTEGER;

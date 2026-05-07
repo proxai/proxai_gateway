@@ -3,6 +3,8 @@ export * from 'core/utils/compress.ts';
 export * from 'core/utils/duration.ts';
 export * from 'core/utils/errors.ts';
 export * from 'core/utils/hash.ts';
+export * from 'core/utils/jsonl-split.ts';
+export * from 'core/utils/rowid-split.ts';
 export * from 'core/utils/source-path.ts';
 export * from 'core/utils/time.ts';
 export * from 'core/utils/utils.constants.ts';

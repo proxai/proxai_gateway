@@ -5,10 +5,12 @@ import {
   nextGenerationSuffix,
   nowIsoUtc,
   sha256Hex,
+  splitRowsByCompressedSize,
   zstdCompressSync,
 } from 'core/utils';
 import { detectVacuum, getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
+import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
 import {
   CURSOR_BODY_COMPRESSION,
@@ -141,36 +143,84 @@ export async function collectCursorFile(
         value: r.value,
       }));
 
-      const jsonString = JSON.stringify(kvRows);
-      const redaction = applyRedaction(jsonString);
       const agentSchemaVersion = extractAgentSchemaVersion(kvRows);
-      const compressed = zstdCompressSync(redaction.redacted);
 
-      const firstRow = rows[0]!;
+      // Serialize-then-redact-then-compress for sizing. We measure the same
+      // payload the validator will see so per-chunk compressed size never
+      // crosses the threshold.
+      const measureCompressed = (slice: readonly CursorDiskKvRow[]): number =>
+        zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted).byteLength;
+
+      const slices = splitRowsByCompressedSize(kvRows, {
+        targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
+        measureCompressed,
+      });
+
+      if (slices.length > 1) {
+        context.logger?.info(
+          {
+            event: 'capture.split_for_size',
+            source_app: CURSOR_SOURCE_APP,
+            source_path_hash: effectiveSourcePathHash,
+            total_slices: slices.length,
+            row_count: kvRows.length,
+          },
+          'oversized capture slice split into multiple batches',
+        );
+      }
+
       const lastRow = rows[rows.length - 1]!;
-      const watermarkStart = firstRow.rowid;
-      const watermarkEnd = lastRow.rowid + 1;
+      const finalWatermarkEnd = lastRow.rowid + 1;
 
-      const batch: NewBatch = {
-        captureId: generateUuidV7(),
-        sourceApp: CURSOR_SOURCE_APP,
-        sourceKind: CURSOR_SOURCE_KIND,
-        sourcePath: effectiveSourcePath,
-        sourcePathHash: effectiveSourcePathHash,
-        sourceInode: null,
-        watermarkKind: 'rowid_range',
-        watermarkStart,
-        watermarkEnd,
-        watermarkTable: null,
-        agentSchemaVersion,
-        gatewayVersion: context.gatewayVersion,
-        capturedAtUtc: nowIsoUtc(),
-        bodyFormat: CURSOR_BODY_FORMAT,
-        bodyCompression: CURSOR_BODY_COMPRESSION,
-        body: compressed,
-      };
+      // Each slice owns a disjoint rowid range. The cursor advances ONLY
+      // after the last insert so a mid-loop crash leaves earlier slices
+      // buffered (with valid coverage) and the next poll re-derives the
+      // remaining tail from the un-advanced cursor.
+      for (let i = 0; i < slices.length; i++) {
+        const slice = slices[i]!;
+        if (slice.length === 0) continue;
+        const firstRowidInSlice = slice[0]!.rowid;
+        const lastRowidInSlice = slice[slice.length - 1]!.rowid;
+        const sliceWatermarkEnd = lastRowidInSlice + 1;
 
-      insertBatch(context.buffer, batch);
+        const compressed = zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted);
+
+        if (slices.length > 1) {
+          context.logger?.debug(
+            {
+              event: 'capture.chunked',
+              source_app: CURSOR_SOURCE_APP,
+              source_path_hash: effectiveSourcePathHash,
+              slice_index: i,
+              total_slices: slices.length,
+              compressed_bytes: compressed.byteLength,
+            },
+            'capture chunk insert',
+          );
+        }
+
+        const batch: NewBatch = {
+          captureId: generateUuidV7(),
+          sourceApp: CURSOR_SOURCE_APP,
+          sourceKind: CURSOR_SOURCE_KIND,
+          sourcePath: effectiveSourcePath,
+          sourcePathHash: effectiveSourcePathHash,
+          sourceInode: null,
+          watermarkKind: 'rowid_range',
+          watermarkStart: firstRowidInSlice,
+          watermarkEnd: sliceWatermarkEnd,
+          watermarkTable: null,
+          agentSchemaVersion,
+          gatewayVersion: context.gatewayVersion,
+          capturedAtUtc: nowIsoUtc(),
+          bodyFormat: CURSOR_BODY_FORMAT,
+          bodyCompression: CURSOR_BODY_COMPRESSION,
+          body: compressed,
+        };
+
+        insertBatch(context.buffer, batch);
+        result.capturedBytes += compressed.byteLength;
+      }
 
       setCursor(context.buffer, {
         sourceApp: CURSOR_SOURCE_APP,
@@ -178,13 +228,12 @@ export async function collectCursorFile(
         sourcePath: effectiveSourcePath,
         sourceInode: null,
         watermarkTable: null,
-        watermarkEnd,
+        watermarkEnd: finalWatermarkEnd,
         lastSeenSizeBytes: currentSizeBytes,
         lastSeenPageCount: currentPageCount,
       });
 
-      result.capturedBatches = 1;
-      result.capturedBytes = compressed.byteLength;
+      result.capturedBatches = slices.length;
     } finally {
       db.close();
     }

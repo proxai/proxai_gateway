@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
+import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,11 +9,13 @@ import { statFile } from 'core/io/fs';
 import { sha256Hex, zstdDecompressSync } from 'core/utils';
 import {
   countByStatus,
+  deleteBatch,
   getCursor,
   nextPendingBatch,
   openInMemoryBufferDb,
   totalPendingBytes,
 } from 'services/buffer';
+import { BODY_MAX_COMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { collectCodexRollout } from 'sources/codex';
 import type { CodexCollectorContext, DiscoveredCodexRolloutFile } from 'sources/codex';
 
@@ -148,6 +151,44 @@ test('persists the wire-DTO fields needed by the uploader', async () => {
   expect(batch.gatewayVersion).toBe('@proxai/gateway 0.1.0');
   expect(batch.capturedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 });
+
+test('splits an oversized slice into multiple batches with contiguous watermark coverage', async () => {
+  const targetTotalLines = Math.ceil((3 * 1024 * 1024) / 2048);
+  const linesArr: string[] = [];
+  for (let i = 0; i < targetTotalLines; i++) {
+    const noise = randomBytes(1500).toString('base64');
+    linesArr.push(JSON.stringify({ i, noise }));
+  }
+  const content = `${linesArr.join('\n')}\n`;
+  const file = await makeFile(content, 'big.jsonl');
+
+  const result = await collectCodexRollout(file, ctx(buffer), '0.126.0');
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
+
+  let prevEnd = 0;
+  let scanned = 0;
+  for (let i = 0; i < 50; i++) {
+    const batch = nextPendingBatch(buffer);
+    if (batch === null) break;
+    expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_MAX_COMPRESSED_BYTES);
+    expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_TARGET_COMPRESSED_BYTES);
+    expect(batch.watermarkStart).toBe(prevEnd);
+    expect(batch.watermarkEnd).toBeGreaterThan(batch.watermarkStart);
+    prevEnd = batch.watermarkEnd;
+    scanned += 1;
+    deleteBatch(buffer, batch.captureId);
+  }
+  expect(scanned).toBe(result.capturedBatches);
+  const cursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.watermarkEnd).toBe(content.length);
+  expect(prevEnd).toBe(content.length);
+}, 30_000);
 
 test('resets watermark when source_inode changes (file rotated/replaced)', async () => {
   // First poll: capture under inode A.

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
+import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,11 +9,13 @@ import { statFile } from 'core/io/fs';
 import { sha256Hex, zstdDecompressSync } from 'core/utils';
 import {
   countByStatus,
+  deleteBatch,
   getCursor,
   nextPendingBatch,
   openInMemoryBufferDb,
   totalPendingBytes,
 } from 'services/buffer';
+import { BODY_MAX_COMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { collectClaudeCodeFile } from 'sources/claude-code';
 import type { ClaudeCodeCollectorContext, DiscoveredClaudeCodeFile } from 'sources/claude-code';
 
@@ -179,6 +182,52 @@ test('persists the wire-DTO fields needed by the uploader', async () => {
   expect(batch.gatewayVersion).toBe('@proxai/gateway 0.1.0');
   expect(batch.capturedAtUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 });
+
+test('splits an oversized slice into multiple batches with contiguous watermark coverage', async () => {
+  // Build a JSONL stream whose ZSTD-compressed total exceeds the safety
+  // target. Random base64 is incompressible, so we control the size
+  // precisely. Each line is ~2 KB; we emit enough lines to reach ~3 MB
+  // compressed which forces at least two chunks.
+  const targetTotalLines = Math.ceil((3 * 1024 * 1024) / 2048);
+  const linesArr: string[] = [];
+  for (let i = 0; i < targetTotalLines; i++) {
+    const noise = randomBytes(1500).toString('base64'); // ~2 KB
+    linesArr.push(JSON.stringify({ i, noise }));
+  }
+  const content = `${linesArr.join('\n')}\n`;
+  const file = await makeFile(content, 'big.jsonl');
+
+  const result = await collectClaudeCodeFile(file, ctx(buffer));
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
+
+  // Every batch is below the hard server cap and below the target.
+  // Watermark ranges are contiguous and disjoint, covering [0, file.size).
+  let prevEnd = 0;
+  let scanned = 0;
+  for (let i = 0; i < 50; i++) {
+    const batch = nextPendingBatch(buffer);
+    if (batch === null) break;
+    expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_MAX_COMPRESSED_BYTES);
+    expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_TARGET_COMPRESSED_BYTES);
+    expect(batch.watermarkStart).toBe(prevEnd);
+    expect(batch.watermarkEnd).toBeGreaterThan(batch.watermarkStart);
+    prevEnd = batch.watermarkEnd;
+    scanned += 1;
+    // Drop the batch so nextPendingBatch returns the next one.
+    deleteBatch(buffer, batch.captureId);
+  }
+  expect(scanned).toBe(result.capturedBatches);
+  // Final cursor is at the file's size (the last newline).
+  const cursor = getCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.watermarkEnd).toBe(content.length);
+  expect(prevEnd).toBe(content.length);
+}, 30_000);
 
 test('resets watermark when source_inode changes (file rotated/replaced)', async () => {
   // First poll: capture a complete line under inode A and advance the cursor.

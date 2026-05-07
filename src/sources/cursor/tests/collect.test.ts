@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import type { Database as SqliteDatabase } from 'bun:sqlite';
+import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,12 +10,14 @@ import { statFile } from 'core/io/fs';
 import { nextGenerationSuffix, sha256Hex, zstdDecompressSync } from 'core/utils';
 import {
   countByStatus,
+  deleteBatch,
   getCursor,
   nextPendingBatch,
   openInMemoryBufferDb,
   setCursor,
   totalPendingBytes,
 } from 'services/buffer';
+import { BODY_MAX_COMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { collectCursorFile } from 'sources/cursor';
 import type { CursorCollectorContext, DiscoveredCursorFile } from 'sources/cursor';
 
@@ -355,6 +358,54 @@ test('size_decreased signal also triggers re-keying via #gen suffix', async () =
   expect(batch.sourcePath).toBe(nextGenerationSuffix(file.sourcePath));
   expect(batch.watermarkStart).toBe(1);
 });
+
+test('splits an oversized snapshot into multiple batches with contiguous rowid coverage', async () => {
+  // Each row carries ~3 KB of incompressible base64; ~1500 rows produce a
+  // body over the safety target and force multiple chunks.
+  const rows: { key: string; value: string }[] = [];
+  const rowCount = 1500;
+  for (let i = 0; i < rowCount; i++) {
+    const noise = randomBytes(2200).toString('base64');
+    rows.push({
+      key: i % 2 === 0 ? `composerData:c${i.toString()}` : `bubbleId:c${i.toString()}:b1`,
+      value: JSON.stringify({ _v: 1, noise }),
+    });
+  }
+  const file = await makeDb(rows, 'big.vscdb');
+
+  const result = await collectCursorFile(file, ctx(buffer));
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
+
+  let prevEnd = 0;
+  let scanned = 0;
+  for (let i = 0; i < 50; i++) {
+    const batch = nextPendingBatch(buffer);
+    if (batch === null) break;
+    expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_MAX_COMPRESSED_BYTES);
+    expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_TARGET_COMPRESSED_BYTES);
+    if (scanned === 0) {
+      // First slice starts at the smallest row's rowid (1).
+      expect(batch.watermarkStart).toBe(1);
+    } else {
+      expect(batch.watermarkStart).toBe(prevEnd);
+    }
+    expect(batch.watermarkEnd).toBeGreaterThan(batch.watermarkStart);
+    prevEnd = batch.watermarkEnd;
+    scanned += 1;
+    deleteBatch(buffer, batch.captureId);
+  }
+  expect(scanned).toBe(result.capturedBatches);
+  const cursor = getCursor(buffer, {
+    sourceApp: 'cursor',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: null,
+  });
+  // Rowids are 1..rowCount, watermark_end = lastRowid + 1 = rowCount + 1.
+  expect(cursor?.watermarkEnd).toBe(rowCount + 1);
+  expect(prevEnd).toBe(rowCount + 1);
+}, 60_000);
 
 test('null last_seen columns on existing cursor never trigger size/page_count signals', async () => {
   // A cursor created before the vacuum-detect migration has NULL columns;

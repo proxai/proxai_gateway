@@ -1,7 +1,8 @@
 import { readJsonlRange } from 'core/io/jsonl';
-import { generateUuidV7, nowIsoUtc, zstdCompressSync } from 'core/utils';
+import { generateUuidV7, nowIsoUtc, splitJsonlAtBoundary, zstdCompressSync } from 'core/utils';
 import { getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
+import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
 import {
   CLAUDE_CODE_BODY_COMPRESSION,
@@ -17,6 +18,7 @@ import type {
 } from 'sources/claude-code/claude-code.types.ts';
 
 const DECODER = new TextDecoder('utf-8', { fatal: false });
+const ENCODER = new TextEncoder();
 
 export async function collectClaudeCodeFile(
   file: DiscoveredClaudeCodeFile,
@@ -47,31 +49,81 @@ export async function collectClaudeCodeFile(
       return result;
     }
 
-    const text = DECODER.decode(range.bytes);
-    const redaction = applyRedaction(text);
-    const agentSchemaVersion = extractAgentSchemaVersion(redaction.redacted);
-    const compressed = zstdCompressSync(redaction.redacted);
+    // Redaction is applied to the safe (newline-terminated) portion of the
+    // range. Splitting happens on the redacted byte stream so each chunk
+    // measures against the same final body the validator will see.
+    const redactedText = applyRedaction(DECODER.decode(range.bytes)).redacted;
+    const redactedBytes = ENCODER.encode(redactedText);
+    const agentSchemaVersion = extractAgentSchemaVersion(redactedText);
 
-    const batch: NewBatch = {
-      captureId: generateUuidV7(),
-      sourceApp: CLAUDE_CODE_SOURCE_APP,
-      sourceKind: CLAUDE_CODE_SOURCE_KIND,
-      sourcePath: file.sourcePath,
-      sourcePathHash: file.sourcePathHash,
-      sourceInode: file.inode,
-      watermarkKind: 'byte_range',
-      watermarkStart,
-      watermarkEnd: range.endByte,
-      watermarkTable: null,
-      agentSchemaVersion,
-      gatewayVersion: context.gatewayVersion,
-      capturedAtUtc: nowIsoUtc(),
-      bodyFormat: CLAUDE_CODE_BODY_FORMAT,
-      bodyCompression: CLAUDE_CODE_BODY_COMPRESSION,
-      body: compressed,
-    };
+    const slices = splitJsonlAtBoundary(redactedBytes, {
+      targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
+      measureCompressed: (b) => zstdCompressSync(b).byteLength,
+    });
 
-    insertBatch(context.buffer, batch);
+    if (slices.length > 1) {
+      context.logger?.info(
+        {
+          event: 'capture.split_for_size',
+          source_app: CLAUDE_CODE_SOURCE_APP,
+          source_path_hash: file.sourcePathHash,
+          total_slices: slices.length,
+          uncompressed_bytes: redactedBytes.byteLength,
+        },
+        'oversized capture slice split into multiple batches',
+      );
+    }
+
+    // Each slice owns a contiguous byte range starting at watermarkStart and
+    // ending at watermarkStart + cumulativeOffset. The cursor advances ONLY
+    // after the last batch insert so a mid-loop crash leaves earlier batches
+    // already buffered with valid coverage and the cursor unmoved (a future
+    // poll will recompute and emit only the missing tail).
+    let offset = 0;
+    for (let i = 0; i < slices.length; i++) {
+      const slice = slices[i]!;
+      const sliceEndOffset = offset + slice.byteLength;
+      // The final slice MUST end at the same byte as the held-back-safe
+      // range; intermediate slices end at internal newlines.
+      const watermarkEnd = watermarkStart + sliceEndOffset;
+      const compressed = zstdCompressSync(slice);
+
+      if (slices.length > 1) {
+        context.logger?.debug(
+          {
+            event: 'capture.chunked',
+            source_app: CLAUDE_CODE_SOURCE_APP,
+            source_path_hash: file.sourcePathHash,
+            slice_index: i,
+            total_slices: slices.length,
+            compressed_bytes: compressed.byteLength,
+          },
+          'capture chunk insert',
+        );
+      }
+
+      const batch: NewBatch = {
+        captureId: generateUuidV7(),
+        sourceApp: CLAUDE_CODE_SOURCE_APP,
+        sourceKind: CLAUDE_CODE_SOURCE_KIND,
+        sourcePath: file.sourcePath,
+        sourcePathHash: file.sourcePathHash,
+        sourceInode: file.inode,
+        watermarkKind: 'byte_range',
+        watermarkStart: watermarkStart + offset,
+        watermarkEnd,
+        watermarkTable: null,
+        agentSchemaVersion,
+        gatewayVersion: context.gatewayVersion,
+        capturedAtUtc: nowIsoUtc(),
+        bodyFormat: CLAUDE_CODE_BODY_FORMAT,
+        bodyCompression: CLAUDE_CODE_BODY_COMPRESSION,
+        body: compressed,
+      };
+
+      insertBatch(context.buffer, batch);
+      offset = sliceEndOffset;
+    }
 
     setCursor(context.buffer, {
       sourceApp: CLAUDE_CODE_SOURCE_APP,
@@ -82,7 +134,7 @@ export async function collectClaudeCodeFile(
       watermarkEnd: range.endByte,
     });
 
-    result.capturedBatches = 1;
+    result.capturedBatches = slices.length;
     result.capturedBytes = range.bytes.byteLength;
   } catch (err) {
     result.errors.push({

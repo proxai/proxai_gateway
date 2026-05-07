@@ -7,11 +7,13 @@ import {
   nextGenerationSuffix,
   nowIsoUtc,
   sha256Hex,
+  splitRowsByCompressedSize,
   zstdCompressSync,
 } from 'core/utils';
 import { detectVacuum, getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import type { CodexTable } from 'services/contract';
+import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
 import {
   CODEX_ALLOWED_STATE_TABLES,
@@ -241,35 +243,80 @@ function collectOneTable(
     return;
   }
 
-  const jsonString = JSON.stringify(rows);
-  const redaction = applyRedaction(jsonString);
-  const compressed = zstdCompressSync(redaction.redacted);
+  // Serialize-then-redact-then-compress to size each chunk against the same
+  // payload the validator will see.
+  const measureCompressed = (
+    slice: readonly (Record<string, unknown> & { rowid: number })[],
+  ): number => zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted).byteLength;
 
-  const firstRow = rows[0]!;
+  const slices = splitRowsByCompressedSize(rows, {
+    targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
+    measureCompressed,
+  });
+
+  if (slices.length > 1) {
+    context.logger?.info(
+      {
+        event: 'capture.split_for_size',
+        source_app: CODEX_SOURCE_APP,
+        source_path_hash: identity.sourcePathHash,
+        watermark_table: table,
+        total_slices: slices.length,
+        row_count: rows.length,
+      },
+      'oversized capture slice split into multiple batches',
+    );
+  }
+
   const lastRow = rows[rows.length - 1]!;
-  const watermarkStart = firstRow.rowid;
-  const watermarkEnd = lastRow.rowid + 1;
+  const finalWatermarkEnd = lastRow.rowid + 1;
 
-  const batch: NewBatch = {
-    captureId: generateUuidV7(),
-    sourceApp: CODEX_SOURCE_APP,
-    sourceKind: CODEX_STATE_SOURCE_KIND,
-    sourcePath: identity.sourcePath,
-    sourcePathHash: identity.sourcePathHash,
-    sourceInode: null,
-    watermarkKind: 'rowid_range',
-    watermarkStart,
-    watermarkEnd,
-    watermarkTable: table,
-    agentSchemaVersion,
-    gatewayVersion: context.gatewayVersion,
-    capturedAtUtc: nowIsoUtc(),
-    bodyFormat: CODEX_STATE_BODY_FORMAT,
-    bodyCompression: CODEX_BODY_COMPRESSION,
-    body: compressed,
-  };
+  for (let i = 0; i < slices.length; i++) {
+    const slice = slices[i]!;
+    if (slice.length === 0) continue;
+    const firstRowidInSlice = slice[0]!.rowid;
+    const lastRowidInSlice = slice[slice.length - 1]!.rowid;
+    const sliceWatermarkEnd = lastRowidInSlice + 1;
 
-  insertBatch(context.buffer, batch);
+    const compressed = zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted);
+
+    if (slices.length > 1) {
+      context.logger?.debug(
+        {
+          event: 'capture.chunked',
+          source_app: CODEX_SOURCE_APP,
+          source_path_hash: identity.sourcePathHash,
+          watermark_table: table,
+          slice_index: i,
+          total_slices: slices.length,
+          compressed_bytes: compressed.byteLength,
+        },
+        'capture chunk insert',
+      );
+    }
+
+    const batch: NewBatch = {
+      captureId: generateUuidV7(),
+      sourceApp: CODEX_SOURCE_APP,
+      sourceKind: CODEX_STATE_SOURCE_KIND,
+      sourcePath: identity.sourcePath,
+      sourcePathHash: identity.sourcePathHash,
+      sourceInode: null,
+      watermarkKind: 'rowid_range',
+      watermarkStart: firstRowidInSlice,
+      watermarkEnd: sliceWatermarkEnd,
+      watermarkTable: table,
+      agentSchemaVersion,
+      gatewayVersion: context.gatewayVersion,
+      capturedAtUtc: nowIsoUtc(),
+      bodyFormat: CODEX_STATE_BODY_FORMAT,
+      bodyCompression: CODEX_BODY_COMPRESSION,
+      body: compressed,
+    };
+
+    insertBatch(context.buffer, batch);
+    result.capturedBytes += compressed.byteLength;
+  }
 
   setCursor(context.buffer, {
     sourceApp: CODEX_SOURCE_APP,
@@ -277,11 +324,10 @@ function collectOneTable(
     sourcePath: identity.sourcePath,
     sourceInode: null,
     watermarkTable: table,
-    watermarkEnd,
+    watermarkEnd: finalWatermarkEnd,
     lastSeenSizeBytes: currentSizeBytes,
     lastSeenPageCount: currentPageCount,
   });
 
-  result.capturedBatches += 1;
-  result.capturedBytes += compressed.byteLength;
+  result.capturedBatches += slices.length;
 }

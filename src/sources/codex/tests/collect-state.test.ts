@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import type { Database as SqliteDatabase } from 'bun:sqlite';
+import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,12 +10,14 @@ import { statFile } from 'core/io/fs';
 import { nextGenerationSuffix, sha256Hex, zstdDecompressSync } from 'core/utils';
 import {
   countByStatus,
+  deleteBatch,
   getBatch,
   getCursor,
   nextPendingBatch,
   openInMemoryBufferDb,
   setCursor,
 } from 'services/buffer';
+import { BODY_MAX_COMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { collectCodexState } from 'sources/codex';
 import type { CodexCollectorContext, DiscoveredCodexStateFile } from 'sources/codex';
 
@@ -515,6 +518,79 @@ test('null last_seen columns on existing codex cursor do not trigger size/page_c
   expect(batch.sourcePath).toBe(file.sourcePath);
   expect(batch.sourcePathHash).toBe(file.sourcePathHash);
 });
+
+test('splits an oversized table snapshot into multiple batches with contiguous rowid coverage', async () => {
+  // Inflate the threads table with rows whose `cwd` carries ~3 KB of
+  // incompressible noise. ~1500 rows push the body past the safety target
+  // and force multiple chunks for the threads table.
+  const path = join(dir, 'big_state.sqlite');
+  const db = new Database(path, { create: true });
+  db.run(
+    `CREATE TABLE threads (
+      id TEXT PRIMARY KEY,
+      cli_version TEXT,
+      cwd TEXT,
+      title TEXT,
+      model TEXT
+    )`,
+  );
+  const rowCount = 1500;
+  const insert = db.prepare(
+    'INSERT INTO threads (id, cli_version, cwd, title, model) VALUES (?, ?, ?, ?, ?)',
+  );
+  const tx = db.transaction(() => {
+    for (let i = 0; i < rowCount; i++) {
+      const noise = randomBytes(2200).toString('base64');
+      insert.run(`t${i.toString()}`, '0.126.0', noise, 't', 'gpt-5');
+    }
+  });
+  tx();
+  db.close();
+
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('seed missing');
+  const file: DiscoveredCodexStateFile = {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+
+  const { result } = await collectCodexState(file, ctx(buffer));
+  expect(result.errors).toEqual([]);
+  // Only the threads table has rows here; chunk count must be >= 2.
+  expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
+
+  // Drain the threads-table batches: assert size + contiguity.
+  let prevEnd = 0;
+  let scanned = 0;
+  for (let i = 0; i < 50; i++) {
+    const batch = nextPendingBatch(buffer);
+    if (batch === null) break;
+    expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_MAX_COMPRESSED_BYTES);
+    expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_TARGET_COMPRESSED_BYTES);
+    expect(batch.watermarkTable).toBe('threads');
+    if (scanned === 0) {
+      expect(batch.watermarkStart).toBe(1);
+    } else {
+      expect(batch.watermarkStart).toBe(prevEnd);
+    }
+    expect(batch.watermarkEnd).toBeGreaterThan(batch.watermarkStart);
+    prevEnd = batch.watermarkEnd;
+    scanned += 1;
+    deleteBatch(buffer, batch.captureId);
+  }
+  expect(scanned).toBe(result.capturedBatches);
+  const cursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: 'threads',
+  });
+  expect(cursor?.watermarkEnd).toBe(rowCount + 1);
+  expect(prevEnd).toBe(rowCount + 1);
+}, 60_000);
 
 test('second poll with no new rows refreshes lastSeenSize/PageCount on the existing cursor', async () => {
   // First poll inserts the rows and creates per-table cursors with their
