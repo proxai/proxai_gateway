@@ -548,47 +548,58 @@ test('AuthError + verify-key throws non-Error → retriable, log uses typeof and
 });
 
 test('AuthError + verify-key returns success: false → fatal even when sentinel write fails', async () => {
-  const batch = newClaudeCodeBatch('payload');
-  insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  // Force the sentinel write to fail by giving it a path whose parent is a
+  // regular file (not a directory). This produces ENOTDIR / EEXIST on every
+  // OS, unlike "/dev/null/AUTH_FAILED" which only triggers ENOTDIR on Unix.
+  const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-upload-auth-fail-'));
+  const fileBlocker = join(dirAuth, 'blocker');
+  await Bun.write(fileBlocker, 'not-a-directory');
+  const sentinelPath = join(fileBlocker, 'AUTH_FAILED');
+  try {
+    const batch = newClaudeCodeBatch('payload');
+    insertBatch(db, batch);
+    const stored = getBatch(db, batch.captureId)!;
 
-  const http = createTestHttpClient(
-    mockFetch((call) => {
-      if (call.url.includes('/ingestion/verify-key')) {
-        return jsonResponse({ success: false, message: 'revoked' });
-      }
-      return emptyResponse(401);
-    }),
-  );
+    const http = createTestHttpClient(
+      mockFetch((call) => {
+        if (call.url.includes('/ingestion/verify-key')) {
+          return jsonResponse({ success: false, message: 'revoked' });
+        }
+        return emptyResponse(401);
+      }),
+    );
 
-  const loggedErrors: Array<{ obj: unknown; msg: string }> = [];
-  const fakeLogger = {
-    child: () => fakeLogger,
-    fatal: () => undefined,
-    error: (obj: unknown, msg: string) => {
-      loggedErrors.push({ obj, msg });
-    },
-    warn: () => undefined,
-    info: () => undefined,
-    debug: () => undefined,
-    trace: () => undefined,
-  };
+    const loggedErrors: Array<{ obj: unknown; msg: string }> = [];
+    const fakeLogger = {
+      child: () => fakeLogger,
+      fatal: () => undefined,
+      error: (obj: unknown, msg: string) => {
+        loggedErrors.push({ obj, msg });
+      },
+      warn: () => undefined,
+      info: () => undefined,
+      debug: () => undefined,
+      trace: () => undefined,
+    };
 
-  const ctx: UploaderContext = {
-    db,
-    http,
-    hostId: TEST_HOST_ID,
-    authFailedSentinelPath: '/dev/null/AUTH_FAILED',
-    logger: fakeLogger as unknown as NonNullable<UploaderContext['logger']>,
-  };
-  const outcome = await uploadBatch(ctx, stored);
+    const ctx: UploaderContext = {
+      db,
+      http,
+      hostId: TEST_HOST_ID,
+      authFailedSentinelPath: sentinelPath,
+      logger: fakeLogger as unknown as NonNullable<UploaderContext['logger']>,
+    };
+    const outcome = await uploadBatch(ctx, stored);
 
-  expect(outcome.kind).toBe('fatal');
-  if (outcome.kind === 'fatal') expect(outcome.error).toContain('ingestion key invalid');
-  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
-  expect(loggedErrors.some((e) => e.msg.includes('failed to write AUTH_FAILED sentinel'))).toBe(
-    true,
-  );
+    expect(outcome.kind).toBe('fatal');
+    if (outcome.kind === 'fatal') expect(outcome.error).toContain('ingestion key invalid');
+    expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+    expect(loggedErrors.some((e) => e.msg.includes('failed to write AUTH_FAILED sentinel'))).toBe(
+      true,
+    );
+  } finally {
+    await rm(dirAuth, { recursive: true, force: true });
+  }
 });
 
 test('AuthError without authFailedSentinelPath: still classifies, no sentinel side-effect', async () => {

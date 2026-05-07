@@ -487,7 +487,8 @@ test('default spawn factory is wired up when deps.spawn is omitted', async () =>
   });
   const result = await sm.isRegistered();
   expect(typeof result).toBe('boolean');
-});
+}, // runners. Bump generously so cross-platform CI stays green. // Windows arm64 emulates x64 schtasks.exe and routinely needs >5s on cold
+30_000);
 
 test('darwin: ensureRegistered surfaces stderr when bootstrap fails', async () => {
   const { spawn } = mockSpawn((argv) => {
