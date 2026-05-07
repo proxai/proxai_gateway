@@ -49,6 +49,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun run lint && bun run format:check",
+    "validate": "bun run format && bun run lint:fix && bun run typecheck && bun test",
     "build": "bun scripts/build.ts",
     "build:darwin-arm64": "bun scripts/build.ts darwin-arm64",
     "build:darwin-x64": "bun scripts/build.ts darwin-x64",
