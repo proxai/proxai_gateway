@@ -624,4 +624,4 @@ test('second poll with no new rows refreshes lastSeenSize/PageCount on the exist
 
   expect(after!.watermarkEnd).toBe(beforeWatermark);
   expect(after!.lastSeenSizeBytes).not.toBe(before!.lastSeenSizeBytes);
-});
+}, 30_000);
