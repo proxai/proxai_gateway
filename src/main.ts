@@ -6,6 +6,7 @@ import {
   authFailedSentinelPath,
   bufferDbPath,
   bufferFullSentinelPath,
+  configDir,
   configFilePath,
   logDir,
   pausedSentinelPath,
@@ -25,6 +26,7 @@ import { runStart } from 'cli/commands/start.ts';
 import { runStatus } from 'cli/commands/status.ts';
 import { runStop } from 'cli/commands/stop.ts';
 import { runTail } from 'cli/commands/tail.ts';
+import { runUninstall } from 'cli/commands/uninstall.ts';
 import {
   defaultLaunchdPlistPath,
   defaultSystemdUnitPath,
@@ -292,6 +294,42 @@ program
       output: consoleOutput(),
       sentinelPath: pausedSentinelPath(),
     });
+    process.exit(result.exitCode);
+  });
+
+program
+  .command('uninstall')
+  .description('Stop and unregister the gateway service. Use --reset to wipe local data too.')
+  .option('--reset', 'also wipe ~/.proxai/, logs, and service unit file', false)
+  .option('-y, --yes', 'skip confirmation prompt for --reset', false)
+  .action(async (opts: { reset?: boolean; yes?: boolean }) => {
+    const platform = process.platform;
+    const unitPath = platformServiceUnitPath(platform);
+    if (unitPath === null) {
+      console.error(`unsupported platform for uninstall: ${platform}`);
+      process.exit(EXIT_CODE.error);
+    }
+    const sm = getServiceManager({
+      platform,
+      unitPath,
+      programPath: process.argv[1] ?? 'proxai-gateway',
+    });
+    const uninstallOptions: { reset?: boolean; yes?: boolean } = {};
+    if (opts.reset === true) uninstallOptions.reset = true;
+    if (opts.yes === true) uninstallOptions.yes = true;
+    const result = await runUninstall(
+      {
+        output: consoleOutput(),
+        prompts: inquirerPrompts(),
+        configPath: configFilePath(),
+        configDir: configDir(),
+        logDir: logDir(),
+        serviceUnitPath: unitPath,
+        serviceManager: sm,
+        configExists: () => Bun.file(configFilePath()).exists(),
+      },
+      uninstallOptions,
+    );
     process.exit(result.exitCode);
   });
 

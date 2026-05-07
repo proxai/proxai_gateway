@@ -1,7 +1,8 @@
-import { input } from '@inquirer/prompts';
+import { confirm, input } from '@inquirer/prompts';
 
 export interface PromptSink {
   askApiKey(message?: string): Promise<string>;
+  confirmReset(message: string): Promise<boolean>;
 }
 
 export function inquirerPrompts(): PromptSink {
@@ -11,10 +12,15 @@ export function inquirerPrompts(): PromptSink {
         message: message ?? 'Enter your ProxAI ingestion key:',
         validate: (v) => (v.trim().length > 0 ? true : 'ingestion key is required'),
       }),
+    confirmReset: (message) => confirm({ message, default: false }),
   };
 }
 
-export function scriptedPrompts(answers: { apiKey?: string; apiKeys?: string[] }): PromptSink {
+export function scriptedPrompts(answers: {
+  apiKey?: string;
+  apiKeys?: string[];
+  reset?: boolean;
+}): PromptSink {
   const queue: string[] = [
     ...(answers.apiKeys ?? []),
     ...(answers.apiKey !== undefined ? [answers.apiKey] : []),
@@ -24,6 +30,12 @@ export function scriptedPrompts(answers: { apiKey?: string; apiKeys?: string[] }
       const next = queue.shift();
       if (next === undefined) throw new Error('scripted prompt: no apiKey provided');
       return next;
+    },
+    confirmReset: async () => {
+      if (answers.reset === undefined) {
+        throw new Error('scripted prompt: no reset answer provided');
+      }
+      return answers.reset;
     },
   };
 }

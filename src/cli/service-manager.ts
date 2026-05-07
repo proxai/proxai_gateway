@@ -5,6 +5,7 @@ export interface ServiceManager {
   start(): Promise<void>;
   stop(): Promise<void>;
   restart(): Promise<void>;
+  unregister(): Promise<void>;
   isRegistered(): Promise<boolean>;
   isRunning(): Promise<boolean>;
 }
@@ -166,6 +167,18 @@ function createLaunchctlManager(spawn: SpawnFn, unitPath: string): ServiceManage
         );
       }
     },
+    unregister: async () => {
+      const printed = await runCommand(spawn, ['launchctl', 'print', darwinTarget()]);
+      if (printed.exitCode !== 0) return;
+      const out = await runCommand(spawn, ['launchctl', 'bootout', darwinTarget()]);
+      if (out.exitCode !== 0) {
+        throw new Error(
+          `launchctl bootout failed (exit ${out.exitCode.toString()}): ${
+            out.stderr.trim() || out.stdout.trim()
+          }`,
+        );
+      }
+    },
   };
 }
 
@@ -266,6 +279,27 @@ function createSystemctlManager(spawn: SpawnFn): ServiceManager {
         throw new Error(
           `systemctl restart failed (exit ${restartResult.exitCode.toString()}): ${
             restartResult.stderr.trim() || restartResult.stdout.trim()
+          }`,
+        );
+      }
+    },
+    unregister: async () => {
+      const enabled = await runCommand(spawn, ['systemctl', '--user', 'is-enabled', unit]);
+      if (enabled.exitCode === 0) {
+        const disable = await runCommand(spawn, ['systemctl', '--user', 'disable', unit]);
+        if (disable.exitCode !== 0) {
+          throw new Error(
+            `systemctl disable failed (exit ${disable.exitCode.toString()}): ${
+              disable.stderr.trim() || disable.stdout.trim()
+            }`,
+          );
+        }
+      }
+      const reload = await runCommand(spawn, ['systemctl', '--user', 'daemon-reload']);
+      if (reload.exitCode !== 0) {
+        throw new Error(
+          `systemctl daemon-reload failed (exit ${reload.exitCode.toString()}): ${
+            reload.stderr.trim() || reload.stdout.trim()
           }`,
         );
       }
@@ -374,6 +408,11 @@ function createSchtasksManager(spawn: SpawnFn, unitPath: string): ServiceManager
           }`,
         );
       }
+    },
+    unregister: async () => {
+      const query = await runCommand(spawn, ['schtasks', '/Query', '/TN', taskName]);
+      if (query.exitCode !== 0) return;
+      await runCommand(spawn, ['schtasks', '/Delete', '/TN', taskName, '/F']);
     },
   };
 }

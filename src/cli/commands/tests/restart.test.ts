@@ -49,6 +49,7 @@ function fakeManager(
       calls.restart++;
       if (overrides.failOn === 'restart') throw new Error('boom-restart');
     },
+    unregister: async () => undefined,
   };
   return { sm, calls };
 }
@@ -122,6 +123,7 @@ test('formatError stringifies non-Error throws', async () => {
     restart: async () => {
       throw 'rope-throw';
     },
+    unregister: async () => undefined,
   };
   const output = captureOutput();
   const result = await runRestart({

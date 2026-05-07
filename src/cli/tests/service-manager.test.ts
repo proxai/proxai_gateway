@@ -924,3 +924,142 @@ test('win32: errors fall back to stdout when stderr is empty', async () => {
   });
   await expect(sm.ensureRegistered()).rejects.toThrow(/win-stdout-fallback/);
 });
+
+test('darwin: unregister runs bootout when registered', async () => {
+  const { spawn, invocations } = mockSpawn((argv) => {
+    if (argv[1] === 'print') return { exitCode: 0 };
+    if (argv[1] === 'bootout') return { exitCode: 0 };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/x.plist',
+    programPath: '/p',
+    spawn,
+  });
+  await sm.unregister();
+  const bootout = invocations.find((i) => i.argv[1] === 'bootout');
+  expect(bootout?.argv[2]).toMatch(/^gui\/\d+\/co\.proxai\.gateway$/);
+});
+
+test('darwin: unregister is no-op when not registered (idempotent)', async () => {
+  const { spawn, invocations } = mockSpawn(() => ({ exitCode: 1 }));
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/x.plist',
+    programPath: '/p',
+    spawn,
+  });
+  await sm.unregister();
+  expect(invocations.some((i) => i.argv[1] === 'bootout')).toBe(false);
+});
+
+test('darwin: unregister surfaces stderr when bootout fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[1] === 'print') return { exitCode: 0 };
+    if (argv[1] === 'bootout') return { exitCode: 7, stderr: 'bootout-failed' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/x.plist',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.unregister()).rejects.toThrow(/bootout-failed/);
+});
+
+test('linux: unregister disables unit and reloads daemon', async () => {
+  const argvSeq: string[] = [];
+  const { spawn, invocations } = mockSpawn((argv) => {
+    argvSeq.push(argv[2] ?? '');
+    if (argv[2] === 'is-enabled') return { exitCode: 0 };
+    if (argv[2] === 'disable') return { exitCode: 0 };
+    if (argv[2] === 'daemon-reload') return { exitCode: 0 };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await sm.unregister();
+  expect(argvSeq).toEqual(['is-enabled', 'disable', 'daemon-reload']);
+  expect(invocations.some((i) => i.argv[2] === 'disable')).toBe(true);
+});
+
+test('linux: unregister skips disable when unit is already not enabled', async () => {
+  const { spawn, invocations } = mockSpawn((argv) => {
+    if (argv[2] === 'is-enabled') return { exitCode: 1 };
+    if (argv[2] === 'daemon-reload') return { exitCode: 0 };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await sm.unregister();
+  expect(invocations.some((i) => i.argv[2] === 'disable')).toBe(false);
+});
+
+test('linux: unregister surfaces stderr when disable fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[2] === 'is-enabled') return { exitCode: 0 };
+    if (argv[2] === 'disable') return { exitCode: 5, stderr: 'disable-broken' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.unregister()).rejects.toThrow(/disable-broken/);
+});
+
+test('linux: unregister surfaces stderr when daemon-reload fails', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[2] === 'is-enabled') return { exitCode: 1 };
+    if (argv[2] === 'daemon-reload') return { exitCode: 6, stderr: 'reload-broken' };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/x',
+    programPath: '/p',
+    spawn,
+  });
+  await expect(sm.unregister()).rejects.toThrow(/reload-broken/);
+});
+
+test('win32: unregister deletes task with /F when registered', async () => {
+  const { spawn, invocations } = mockSpawn((argv) => {
+    if (argv[1] === '/Query') return { exitCode: 0 };
+    if (argv[1] === '/Delete') return { exitCode: 0 };
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await sm.unregister();
+  const del = invocations.find((i) => i.argv[1] === '/Delete');
+  expect(del?.argv).toEqual(['schtasks', '/Delete', '/TN', 'ProxAI Gateway', '/F']);
+});
+
+test('win32: unregister is no-op when task not registered', async () => {
+  const { spawn, invocations } = mockSpawn(() => ({ exitCode: 1 }));
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  await sm.unregister();
+  expect(invocations.some((i) => i.argv[1] === '/Delete')).toBe(false);
+});

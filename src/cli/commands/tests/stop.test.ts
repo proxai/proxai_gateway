@@ -49,6 +49,7 @@ function fakeManager(
     restart: async () => {
       calls.restart++;
     },
+    unregister: async () => undefined,
   };
   return { sm, calls };
 }
@@ -92,6 +93,7 @@ test('formatError stringifies non-Error throws', async () => {
       throw 'rope-throw';
     },
     restart: async () => undefined,
+    unregister: async () => undefined,
   };
   const output = captureOutput();
   const result = await runStop({ output, serviceManager: sm });
