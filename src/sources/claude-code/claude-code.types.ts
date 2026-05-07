@@ -13,6 +13,7 @@ export interface DiscoveredClaudeCodeFile {
 export interface ClaudeCodeCollectorContext {
   buffer: Database;
   gatewayVersion: string;
+  maxDecompressedBytes: number;
   logger?: Logger;
 }
 

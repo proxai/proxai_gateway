@@ -132,6 +132,7 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     const sourceCtx: SourcePollerContext = {
       buffer: ctx.buffer,
       gatewayVersion: ctx.gatewayVersion,
+      maxDecompressedBytes: ctx.capturePolicy.maxDecompressedBytes,
     };
     if (sourceLog !== undefined) sourceCtx.logger = sourceLog;
     if (ctx.minimumMtimeOverride !== undefined) {

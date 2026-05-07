@@ -7,6 +7,7 @@ import { parseBackfillDuration } from 'core/utils';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import { countCursors, openBufferDb } from 'services/buffer';
+import { resolveMaxDecompressed } from 'services/config';
 import type { GatewayConfig } from 'services/config';
 import { HttpClient } from 'services/http';
 import { buildDefaultSources, runPollCycle, syncServerWatermarks } from 'services/polling';
@@ -123,6 +124,7 @@ export async function runBackfill(
       },
       capturePolicy: {
         initialScanWindowDays: deps.config.capture.initialScanWindowDays,
+        maxDecompressedBytes: resolveMaxDecompressed(deps.config.capture),
       },
       pacer,
       minimumMtimeOverride,

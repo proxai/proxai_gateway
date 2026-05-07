@@ -1,8 +1,14 @@
 import { readJsonlRange } from 'core/io/jsonl';
-import { generateUuidV7, nowIsoUtc, splitJsonlAtBoundary, zstdCompressSync } from 'core/utils';
+import {
+  OversizedDecompressedSliceError,
+  generateUuidV7,
+  nowIsoUtc,
+  splitJsonlAtBoundary,
+  zstdCompressSync,
+} from 'core/utils';
 import { getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
-import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
+import { BODY_MAX_DECOMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
 import {
   CODEX_BODY_COMPRESSION,
@@ -51,6 +57,7 @@ export async function collectCodexRollout(
 
     const sourceSlices = splitJsonlAtBoundary(range.bytes, {
       targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
+      maxDecompressedBytes: context.maxDecompressedBytes,
       measureCompressed: (slice) => {
         const redacted = ENCODER.encode(applyRedaction(DECODER.decode(slice)).redacted);
         return zstdCompressSync(redacted).byteLength;
@@ -76,6 +83,17 @@ export async function collectCodexRollout(
       const sliceEndOffset = offset + slice.byteLength;
       const redactedSlice = ENCODER.encode(applyRedaction(DECODER.decode(slice)).redacted);
       const compressed = zstdCompressSync(redactedSlice);
+
+      if (redactedSlice.byteLength > BODY_MAX_DECOMPRESSED_BYTES) {
+        throw new OversizedDecompressedSliceError({
+          sourcePath: file.sourcePath,
+          sourcePathHash: file.sourcePathHash,
+          rawBytes: redactedSlice.byteLength,
+          compressedBytes: compressed.byteLength,
+          sliceIndex: i,
+          cap: BODY_MAX_DECOMPRESSED_BYTES,
+        });
+      }
 
       if (sourceSlices.length > 1) {
         context.logger?.debug(

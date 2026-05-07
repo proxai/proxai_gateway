@@ -1,6 +1,7 @@
 import { statFile } from 'core/io/fs';
 import { maxRowid, openReadOnly, pageCount, snapshotSqlite, tableExists } from 'core/io/sqlite';
 import {
+  OversizedDecompressedSliceError,
   generateUuidV7,
   nextGenerationSuffix,
   nowIsoUtc,
@@ -10,7 +11,7 @@ import {
 } from 'core/utils';
 import { detectVacuum, getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
-import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
+import { BODY_MAX_DECOMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
 import {
   CURSOR_BODY_COMPRESSION,
@@ -136,9 +137,14 @@ export async function collectCursorFile(
       const measureCompressed = (slice: readonly CursorDiskKvRow[]): number =>
         zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted).byteLength;
 
+      const measureUncompressed = (slice: readonly CursorDiskKvRow[]): number =>
+        Buffer.byteLength(applyRedaction(JSON.stringify(slice)).redacted, 'utf8');
+
       const slices = splitRowsByCompressedSize(kvRows, {
         targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
+        maxDecompressedBytes: context.maxDecompressedBytes,
         measureCompressed,
+        measureUncompressed,
       });
 
       if (slices.length > 1) {
@@ -164,7 +170,20 @@ export async function collectCursorFile(
         const lastRowidInSlice = slice[slice.length - 1]!.rowid;
         const sliceWatermarkEnd = lastRowidInSlice + 1;
 
-        const compressed = zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted);
+        const redactedJson = applyRedaction(JSON.stringify(slice)).redacted;
+        const redactedBytes = Buffer.byteLength(redactedJson, 'utf8');
+        const compressed = zstdCompressSync(redactedJson);
+
+        if (redactedBytes > BODY_MAX_DECOMPRESSED_BYTES) {
+          throw new OversizedDecompressedSliceError({
+            sourcePath: effectiveSourcePath,
+            sourcePathHash: effectiveSourcePathHash,
+            rawBytes: redactedBytes,
+            compressedBytes: compressed.byteLength,
+            sliceIndex: i,
+            cap: BODY_MAX_DECOMPRESSED_BYTES,
+          });
+        }
 
         if (slices.length > 1) {
           context.logger?.debug(

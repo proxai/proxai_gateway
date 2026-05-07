@@ -8,6 +8,7 @@ import type { DrainResult, Pacer } from 'services/uploader';
 export interface SourcePollerContext {
   buffer: Database;
   gatewayVersion: string;
+  maxDecompressedBytes: number;
   logger?: Logger;
 
   minimumMtimeOverride?: Date | null;
@@ -47,6 +48,7 @@ export interface BufferRetentionPolicy {
 
 export interface CapturePolicy {
   initialScanWindowDays: number;
+  maxDecompressedBytes: number;
 }
 
 export interface PollCycleContext {

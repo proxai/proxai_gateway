@@ -13,6 +13,7 @@ export interface DiscoveredCursorFile {
 export interface CursorCollectorContext {
   buffer: Database;
   gatewayVersion: string;
+  maxDecompressedBytes: number;
   logger?: Logger;
 }
 

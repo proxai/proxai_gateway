@@ -3,6 +3,7 @@ import type { Database } from 'bun:sqlite';
 import { statFile } from 'core/io/fs';
 import { maxRowid, openReadOnly, pageCount, snapshotSqlite, tableExists } from 'core/io/sqlite';
 import {
+  OversizedDecompressedSliceError,
   generateUuidV7,
   nextGenerationSuffix,
   nowIsoUtc,
@@ -13,7 +14,7 @@ import {
 import { detectVacuum, getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import type { CodexTable } from 'services/contract';
-import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
+import { BODY_MAX_DECOMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
 import {
   CODEX_ALLOWED_STATE_TABLES,
@@ -227,9 +228,15 @@ function collectOneTable(
     slice: readonly (Record<string, unknown> & { rowid: number })[],
   ): number => zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted).byteLength;
 
+  const measureUncompressed = (
+    slice: readonly (Record<string, unknown> & { rowid: number })[],
+  ): number => Buffer.byteLength(applyRedaction(JSON.stringify(slice)).redacted, 'utf8');
+
   const slices = splitRowsByCompressedSize(rows, {
     targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
+    maxDecompressedBytes: context.maxDecompressedBytes,
     measureCompressed,
+    measureUncompressed,
   });
 
   if (slices.length > 1) {
@@ -256,7 +263,20 @@ function collectOneTable(
     const lastRowidInSlice = slice[slice.length - 1]!.rowid;
     const sliceWatermarkEnd = lastRowidInSlice + 1;
 
-    const compressed = zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted);
+    const redactedJson = applyRedaction(JSON.stringify(slice)).redacted;
+    const redactedBytes = Buffer.byteLength(redactedJson, 'utf8');
+    const compressed = zstdCompressSync(redactedJson);
+
+    if (redactedBytes > BODY_MAX_DECOMPRESSED_BYTES) {
+      throw new OversizedDecompressedSliceError({
+        sourcePath: identity.sourcePath,
+        sourcePathHash: identity.sourcePathHash,
+        rawBytes: redactedBytes,
+        compressedBytes: compressed.byteLength,
+        sliceIndex: i,
+        cap: BODY_MAX_DECOMPRESSED_BYTES,
+      });
+    }
 
     if (slices.length > 1) {
       context.logger?.debug(

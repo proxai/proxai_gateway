@@ -22,6 +22,7 @@ export interface DiscoveredCodexStateFile {
 export interface CodexCollectorContext {
   buffer: Database;
   gatewayVersion: string;
+  maxDecompressedBytes: number;
   logger?: Logger;
 }
 
