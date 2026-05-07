@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { rmRecursive } from 'core/io/fs';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -403,7 +404,7 @@ test('AuthError + verify-key returns success: false → fatal, sentinel written'
     expect(payload['reason']).toBe('key expired');
     expect(typeof payload['detected_at']).toBe('string');
   } finally {
-    await rm(dirAuth, { recursive: true, force: true });
+    await rmRecursive(dirAuth);
   }
 });
 
@@ -439,7 +440,7 @@ test('AuthError + verify-key returns success: true → retriable, no sentinel', 
     expect(row.status).toBe('pending');
     expect(await Bun.file(sentinelPath).exists()).toBe(false);
   } finally {
-    await rm(dirAuth, { recursive: true, force: true });
+    await rmRecursive(dirAuth);
   }
 });
 
@@ -471,7 +472,7 @@ test('AuthError + verify-key throws RetriableError → retriable, no sentinel', 
     expect(row.status).toBe('pending');
     expect(await Bun.file(sentinelPath).exists()).toBe(false);
   } finally {
-    await rm(dirAuth, { recursive: true, force: true });
+    await rmRecursive(dirAuth);
   }
 });
 
@@ -496,7 +497,7 @@ test('AuthError + verify-key throws AuthError → fatal, sentinel written', asyn
     expect(getBatch(db, batch.captureId)!.status).toBe('failed');
     expect(await Bun.file(sentinelPath).exists()).toBe(true);
   } finally {
-    await rm(dirAuth, { recursive: true, force: true });
+    await rmRecursive(dirAuth);
   }
 });
 
@@ -545,7 +546,7 @@ test('AuthError + verify-key throws non-Error → retriable, log uses typeof and
     expect(inconclusive?.obj['kind']).toBe('string');
     expect(inconclusive?.obj['error']).toBe('string-thrown-not-error');
   } finally {
-    await rm(dirAuth, { recursive: true, force: true });
+    await rmRecursive(dirAuth);
   }
 });
 
@@ -597,7 +598,7 @@ test('AuthError + verify-key returns success: false → fatal even when sentinel
       true,
     );
   } finally {
-    await rm(dirAuth, { recursive: true, force: true });
+    await rmRecursive(dirAuth);
   }
 });
 

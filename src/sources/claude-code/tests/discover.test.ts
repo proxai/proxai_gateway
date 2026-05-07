@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
+import { rmRecursive } from 'core/io/fs';
+import { mkdir, mkdtemp, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -12,7 +13,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rmRecursive(dir);
 });
 
 test('returns empty list when the projects directory does not exist', async () => {

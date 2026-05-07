@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { rmRecursive } from 'core/io/fs';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -74,7 +75,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rmRecursive(dir);
 });
 
 test('redirects to setup when config missing', async () => {

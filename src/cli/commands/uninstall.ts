@@ -1,9 +1,10 @@
-import { rm, unlink } from 'node:fs/promises';
+import { unlink } from 'node:fs/promises';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import type { PromptSink } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager.ts';
+import { rmRecursive } from 'core/io/fs';
 import { loadConfigFromFile } from 'services/config';
 import type { GatewayConfig, InstallSource } from 'services/config';
 
@@ -100,8 +101,8 @@ export async function runUninstall(
       }
     }
 
-    await rm(deps.configDir, { recursive: true, force: true });
-    await rm(deps.logDir, { recursive: true, force: true });
+    await rmRecursive(deps.configDir);
+    await rmRecursive(deps.logDir);
     deps.output.success('local state wiped');
   }
 

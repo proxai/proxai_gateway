@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { sentinelHandle } from 'core/io/fs';
+import { rmRecursive, sentinelHandle } from 'core/io/fs';
 
 let dir: string;
 
@@ -12,7 +12,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rmRecursive(dir);
 });
 
 test('write / read / exists / remove cycle', async () => {

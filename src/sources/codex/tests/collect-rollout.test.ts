@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 import { randomBytes } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { statFile } from 'core/io/fs';
+import { rmRecursive, statFile } from 'core/io/fs';
 import { sha256Hex, zstdDecompressSync } from 'core/utils';
 import {
   countByStatus,
@@ -34,7 +34,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   buffer.close();
-  await rm(dir, { recursive: true, force: true });
+  await rmRecursive(dir);
 });
 
 async function makeFile(

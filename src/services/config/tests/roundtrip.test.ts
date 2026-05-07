@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { rmRecursive } from 'core/io/fs';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -54,7 +55,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rmRecursive(dir);
 });
 
 test('serializeConfig -> loadConfigFromString round-trips a fully-populated config', () => {

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import type { Database as SqliteDatabase } from 'bun:sqlite';
+import { rmRecursive } from 'core/io/fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,7 +25,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   buffer.close();
-  await rm(dir, { recursive: true, force: true });
+  await rmRecursive(dir);
 });
 
 async function seedRollout(relativePath: string, content: string): Promise<string> {

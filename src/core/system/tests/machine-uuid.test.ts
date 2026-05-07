@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { rmRecursive } from 'core/io/fs';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -175,7 +176,7 @@ test('defaultReadFile resolves exists() and text() against a real file', async (
     const missing = defaultReadFile(join(dir, 'no-such-file'));
     expect(await missing.exists()).toBe(false);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await rmRecursive(dir);
   }
 });
 

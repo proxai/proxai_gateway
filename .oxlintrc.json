@@ -30,6 +30,7 @@
         "src/services/uploader/drain-buffer.ts",
         "src/services/uploader/pacer.ts",
         "src/cli/commands/tail.ts",
+        "src/core/io/fs/rm-recursive.ts",
         "src/core/log/prune.ts",
         "src/core/system/machine-uuid.ts",
         "scripts/build.ts",

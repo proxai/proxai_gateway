@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { statFile } from 'core/io/fs';
+import { rmRecursive, statFile } from 'core/io/fs';
 import { sha256Hex, zstdDecompressSync } from 'core/utils';
 import { getCursor, nextPendingBatch, openInMemoryBufferDb } from 'services/buffer';
 import { BODY_TARGET_DECOMPRESSED_BYTES } from 'services/contract';
@@ -25,7 +25,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   buffer.close();
-  await rm(dir, { recursive: true, force: true });
+  await rmRecursive(dir);
 });
 
 async function copyFixture(name: string, destName = name): Promise<DiscoveredClaudeCodeFile> {

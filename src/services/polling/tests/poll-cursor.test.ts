@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import type { Database as SqliteDatabase } from 'bun:sqlite';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { rmRecursive } from 'core/io/fs';
+import { mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -18,7 +19,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   buffer.close();
-  await rm(dir, { recursive: true, force: true });
+  await rmRecursive(dir);
 });
 
 async function seedDb(

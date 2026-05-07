@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import type { Database as SqliteDatabase } from 'bun:sqlite';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { rmRecursive } from 'core/io/fs';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -86,6 +87,6 @@ test('migrates pre-existing buffer DB by adding last_seen_size_bytes / last_seen
       opened.close();
     }
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await rmRecursive(dir);
   }
 });

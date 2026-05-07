@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { writeAtomic } from 'core/io/fs';
+import { rmRecursive, writeAtomic } from 'core/io/fs';
 
 let dir: string;
 
@@ -12,7 +12,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rmRecursive(dir);
 });
 
 test('writeAtomic writes the file', async () => {

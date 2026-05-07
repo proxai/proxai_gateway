@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { rmRecursive } from 'core/io/fs';
+import { mkdtemp, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -14,7 +15,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rmRecursive(dir);
 });
 
 function captureStream(): { lines: string[]; dest: DestinationStream } {

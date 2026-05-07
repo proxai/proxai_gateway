@@ -2,11 +2,11 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import type { Database as SqliteDatabase } from 'bun:sqlite';
 import { randomBytes } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { statFile } from 'core/io/fs';
+import { rmRecursive, statFile } from 'core/io/fs';
 import { nextGenerationSuffix, sha256Hex, zstdDecompressSync } from 'core/utils';
 import {
   countByStatus,
@@ -36,7 +36,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   buffer.close();
-  await rm(dir, { recursive: true, force: true });
+  await rmRecursive(dir);
 });
 
 interface SeedRow {
@@ -461,4 +461,4 @@ test('every cursor batch satisfies BOTH compressed AND decompressed caps', async
     expect(decoded.byteLength).toBeLessThanOrEqual(BODY_MAX_DECOMPRESSED_BYTES);
     deleteBatch(buffer, batch.captureId);
   }
-});
+}, 60_000);

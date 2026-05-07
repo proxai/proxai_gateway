@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { rmRecursive } from 'core/io/fs';
+import { mkdtemp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -48,7 +49,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rmRecursive(dir);
 });
 
 test('serializeConfig produces TOML with all five sections', () => {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { rmRecursive } from 'core/io/fs';
+import { mkdtemp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -19,7 +20,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rmRecursive(dir);
 });
 
 test('isBufferFull returns false when sentinel does not exist', async () => {

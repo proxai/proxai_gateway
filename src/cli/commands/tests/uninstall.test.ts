@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { rmRecursive } from 'core/io/fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -85,7 +86,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(tmpRoot, { recursive: true, force: true });
+  await rmRecursive(tmpRoot);
 });
 
 async function writeConfig(installSource: InstallSource = 'github_release'): Promise<void> {
