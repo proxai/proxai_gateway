@@ -14,9 +14,9 @@ import {
   pausedSentinelPath,
 } from 'core/io/fs';
 
-test('configDir returns ~/.proxai on macOS / Linux', () => {
+test('configDir returns ~/.proxai/proxai-gateway on macOS / Linux', () => {
   if (process.platform === 'darwin' || process.platform === 'linux') {
-    expect(configDir()).toBe(`${homedir()}/.proxai`);
+    expect(configDir()).toBe(`${homedir()}/.proxai/proxai-gateway`);
   }
 });
 
@@ -54,9 +54,9 @@ function withPlatform<T>(platform: NodeJS.Platform, fn: () => T): T {
   }
 }
 
-test('configDir on linux uses ~/.proxai', () => {
+test('configDir on linux uses ~/.proxai/proxai-gateway', () => {
   withPlatform('linux', () => {
-    expect(configDir()).toBe(`${homedir()}/.proxai`);
+    expect(configDir()).toBe(`${homedir()}/.proxai/proxai-gateway`);
   });
 });
 
@@ -64,7 +64,9 @@ test('configDir on win32 uses LOCALAPPDATA when set', () => {
   const original = process.env['LOCALAPPDATA'];
   process.env['LOCALAPPDATA'] = 'C:\\AppData\\Local';
   withPlatform('win32', () => {
-    expect(configDir()).toContain('proxai-gateway');
+    const dir = configDir();
+    expect(dir).toContain('proxai');
+    expect(dir).toContain('proxai-gateway');
   });
   if (original === undefined) delete process.env['LOCALAPPDATA'];
   else process.env['LOCALAPPDATA'] = original;
@@ -88,7 +90,7 @@ test('configDir throws on unsupported platform', () => {
 
 test('logDir on linux uses ~/.local/state', () => {
   withPlatform('linux', () => {
-    expect(logDir()).toContain('.local/state/proxai-gateway');
+    expect(logDir()).toContain('.local/state/proxai/proxai-gateway');
   });
 });
 
@@ -96,7 +98,10 @@ test('logDir on win32 uses LOCALAPPDATA Logs', () => {
   const original = process.env['LOCALAPPDATA'];
   process.env['LOCALAPPDATA'] = 'C:\\AppData\\Local';
   withPlatform('win32', () => {
-    expect(logDir()).toContain('Logs');
+    const dir = logDir();
+    expect(dir).toContain('Logs');
+    expect(dir).toContain('proxai');
+    expect(dir).toContain('proxai-gateway');
   });
   if (original === undefined) delete process.env['LOCALAPPDATA'];
   else process.env['LOCALAPPDATA'] = original;
@@ -106,7 +111,9 @@ test('logDir on win32 uses fallback when LOCALAPPDATA absent', () => {
   const original = process.env['LOCALAPPDATA'];
   delete process.env['LOCALAPPDATA'];
   withPlatform('win32', () => {
-    expect(logDir()).toContain('proxai-gateway');
+    const dir = logDir();
+    expect(dir).toContain('proxai');
+    expect(dir).toContain('proxai-gateway');
   });
   if (original === undefined) delete process.env['LOCALAPPDATA'];
   else process.env['LOCALAPPDATA'] = original;

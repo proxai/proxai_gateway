@@ -1,15 +1,19 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { APP_NAME } from 'core/io/fs/fs.constants.ts';
+import { APP_NAME, ORG_NAME } from 'core/io/fs/fs.constants.ts';
 
 export function configDir(): string {
   switch (process.platform) {
     case 'darwin':
     case 'linux':
-      return join(homedir(), '.proxai');
+      return join(homedir(), `.${ORG_NAME}`, APP_NAME);
     case 'win32':
-      return join(process.env['LOCALAPPDATA'] ?? join(homedir(), 'AppData', 'Local'), APP_NAME);
+      return join(
+        process.env['LOCALAPPDATA'] ?? join(homedir(), 'AppData', 'Local'),
+        ORG_NAME,
+        APP_NAME,
+      );
     default:
       throw new Error(`unsupported platform: ${process.platform}`);
   }
@@ -18,12 +22,13 @@ export function configDir(): string {
 export function logDir(): string {
   switch (process.platform) {
     case 'darwin':
-      return join(homedir(), 'Library', 'Logs', APP_NAME);
+      return join(homedir(), 'Library', 'Logs', ORG_NAME, APP_NAME);
     case 'linux':
-      return join(homedir(), '.local', 'state', APP_NAME, 'log');
+      return join(homedir(), '.local', 'state', ORG_NAME, APP_NAME, 'log');
     case 'win32':
       return join(
         process.env['LOCALAPPDATA'] ?? join(homedir(), 'AppData', 'Local'),
+        ORG_NAME,
         APP_NAME,
         'Logs',
       );

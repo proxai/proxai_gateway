@@ -115,7 +115,7 @@ function invokeSetupInteractive(): Promise<CommandResult> {
 program
   .command('setup')
   .description(
-    'Configure the gateway with your ingestion key. Verifies the key, writes ~/.proxai/config.toml, and installs the platform service unit. Re-run to replace an existing config.',
+    'Configure the gateway with your ingestion key. Verifies the key, writes ~/.proxai/proxai-gateway/config.toml, and installs the platform service unit. Re-run to replace an existing config.',
   )
   .option(
     '--api-key <key>',
@@ -213,7 +213,7 @@ program
   .description(
     'Run the gateway daemon in the foreground (used by the service unit; not for direct invocation).',
   )
-  .option('--config <path>', 'override the default ~/.proxai/config.toml path')
+  .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .action(async (opts: { config?: string }) => {
     const config = await loadConfigFromFile(opts.config);
     const ctrl = new AbortController();
@@ -241,7 +241,7 @@ program
     '--since <duration>',
     'lookback window. Format: Nd (days), Nmo (months), or Ny (years). Examples: 90d, 6mo, 1y.',
   )
-  .option('--config <path>', 'override the default ~/.proxai/config.toml path')
+  .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .action(async (opts: { since: string; config?: string }) => {
     const config = await loadConfigFromFile(opts.config);
     const platform = process.platform;
@@ -274,7 +274,7 @@ program
   .description(
     'Print gateway state: per-source cursors, capture buffer occupancy, sentinel flags (paused, auth-failed, buffer-full, session-stopped).',
   )
-  .option('--config <path>', 'override the default ~/.proxai/config.toml path')
+  .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .action(async (opts: { config?: string }) => {
     let bufferPath = bufferDbPath();
     try {
@@ -327,7 +327,7 @@ program
   )
   .option(
     '--reset',
-    'also delete ~/.proxai/ (config + buffer + sentinels), the gateway log directory, and the service unit file. Destructive: requires confirmation unless --yes is given.',
+    'also delete ~/.proxai/proxai-gateway/ (config + buffer + sentinels), the gateway log directory, and the service unit file. Destructive: requires confirmation unless --yes is given.',
     false,
   )
   .option('-y, --yes', 'skip the interactive confirmation prompt for `--reset`', false)
@@ -390,7 +390,7 @@ program
     'emit raw ndjson lines as written on disk, bypassing pretty formatting (useful for piping to jq)',
     false,
   )
-  .option('--config <path>', 'override the default ~/.proxai/config.toml path')
+  .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .action(
     async (opts: {
       lines?: string;

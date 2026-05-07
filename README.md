@@ -68,27 +68,27 @@ Run any command with `--help` for full option details.
 
 | Path | Purpose |
 | --- | --- |
-| `~/.proxai/config.toml` | Ingestion key and capture configuration. |
-| `~/.proxai/buffer.db` | Local capture buffer (SQLite). |
-| `~/Library/Logs/proxai-gateway/` | Daemon log files. |
+| `~/.proxai/proxai-gateway/config.toml` | Ingestion key and capture configuration. |
+| `~/.proxai/proxai-gateway/buffer.db` | Local capture buffer (SQLite). |
+| `~/Library/Logs/proxai/proxai-gateway/` | Daemon log files. |
 | `~/Library/LaunchAgents/co.proxai.gateway.plist` | launchd service unit. |
 
 ### Linux
 
 | Path | Purpose |
 | --- | --- |
-| `~/.proxai/config.toml` | Ingestion key and capture configuration. |
-| `~/.proxai/buffer.db` | Local capture buffer (SQLite). |
-| `~/.local/state/proxai-gateway/logs/` | Daemon log files. |
+| `~/.proxai/proxai-gateway/config.toml` | Ingestion key and capture configuration. |
+| `~/.proxai/proxai-gateway/buffer.db` | Local capture buffer (SQLite). |
+| `~/.local/state/proxai/proxai-gateway/log/` | Daemon log files. |
 | `~/.config/systemd/user/proxai-gateway.service` | systemd user unit. |
 
 ### Windows
 
 | Path | Purpose |
 | --- | --- |
-| `%USERPROFILE%\.proxai\config.toml` | Ingestion key and capture configuration. |
-| `%USERPROFILE%\.proxai\buffer.db` | Local capture buffer (SQLite). |
-| `%LOCALAPPDATA%\proxai-gateway\logs\` | Daemon log files. |
+| `%LOCALAPPDATA%\proxai\proxai-gateway\config.toml` | Ingestion key and capture configuration. |
+| `%LOCALAPPDATA%\proxai\proxai-gateway\buffer.db` | Local capture buffer (SQLite). |
+| `%LOCALAPPDATA%\proxai\proxai-gateway\Logs\` | Daemon log files. |
 | Scheduled Task `ProxAIGateway` | Per-user task that launches the daemon at logon. |
 
 ## Troubleshooting
@@ -97,7 +97,7 @@ Run any command with `--help` for full option details.
 
 **Ingestion key rejected.** The backend returned an auth error for the configured key. Re-run `proxai-gateway setup` with a fresh key from the ProxAI dashboard; the old key may have been revoked.
 
-**How do I uninstall?** Run `proxai-gateway uninstall` to stop and unregister the service while preserving local config and logs. Run `proxai-gateway uninstall --reset` to also wipe `~/.proxai/`, the gateway log directory, and the service unit file.
+**How do I uninstall?** Run `proxai-gateway uninstall` to stop and unregister the service while preserving local config and logs. Run `proxai-gateway uninstall --reset` to also wipe `~/.proxai/proxai-gateway/`, the gateway log directory, and the service unit file.
 
 ## License
 
