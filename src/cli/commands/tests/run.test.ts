@@ -365,6 +365,29 @@ test('proceeds normally when the SESSION_STOPPED sentinel does not exist', async
   expect(cycles).toBeGreaterThanOrEqual(1);
 });
 
+test('readBootId failure is logged as warn and does not abort the daemon', async () => {
+  const config = makeConfig();
+  const ctrl = new AbortController();
+  const out = captureOutput();
+  const result = await runDaemon({
+    output: out,
+    config,
+    pauseSentinelPath: join(dir, 'PAUSED'),
+    authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
+    bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
+    sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
+    readBootId: async () => {
+      throw new Error('boot id unavailable');
+    },
+    abortSignal: ctrl.signal,
+    gatewayVersion: 'gw-test',
+    httpClient: mockHttp(config, emptyWatermarks),
+    sources: [],
+    onCycleComplete: () => ctrl.abort(),
+  });
+  expect(result.exitCode).toBe(0);
+});
+
 test('watermark sync failure logs warn and does not abort the daemon', async () => {
   const config = makeConfig();
   const ctrl = new AbortController();

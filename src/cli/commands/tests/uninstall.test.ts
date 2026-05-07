@@ -410,3 +410,21 @@ test('unit-file removal swallows ENOENT silently', async () => {
   expect(result.exitCode).toBe(0);
   expect(output.lines.some((l) => l.level === 'warn')).toBe(false);
 });
+
+test('unit-file removal warns when unlink fails with non-ENOENT error', async () => {
+  await writeConfig();
+  // Replace serviceUnitPath with a non-empty directory so unlink fails with EISDIR/EPERM
+  await rm(serviceUnitPath, { force: true });
+  await mkdir(serviceUnitPath, { recursive: true });
+  await writeFile(join(serviceUnitPath, 'inner'), 'block-the-unlink');
+
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({ ...depsFor(sm), output });
+  expect(result.exitCode).toBe(0);
+  expect(
+    output.lines.some(
+      (l) => l.level === 'warn' && l.msg.includes('could not remove service unit file'),
+    ),
+  ).toBe(true);
+});
