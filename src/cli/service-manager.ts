@@ -60,8 +60,6 @@ export function getServiceManager(deps: ServiceManagerDeps): ServiceManager {
   }
 }
 
-// ---------- macOS (launchctl) ----------
-
 const LAUNCHCTL_TARGET = `gui/{uid}/${LAUNCHD_LABEL}`;
 
 function uidString(): string {
@@ -171,8 +169,6 @@ function createLaunchctlManager(spawn: SpawnFn, unitPath: string): ServiceManage
   };
 }
 
-// ---------- Linux (systemctl --user) ----------
-
 function createSystemctlManager(spawn: SpawnFn): ServiceManager {
   const unit = SYSTEMD_UNIT_NAME;
   return {
@@ -277,8 +273,6 @@ function createSystemctlManager(spawn: SpawnFn): ServiceManager {
   };
 }
 
-// ---------- Windows (schtasks) ----------
-
 function createSchtasksManager(spawn: SpawnFn, unitPath: string): ServiceManager {
   const taskName = WINDOWS_TASK_NAME;
   return {
@@ -348,8 +342,8 @@ function createSchtasksManager(spawn: SpawnFn, unitPath: string): ServiceManager
       }
     },
     stop: async () => {
-      // /End is non-zero when the task is not currently running; that is not
-      // an error condition for the caller — just no-op.
+      
+      
       await runCommand(spawn, ['schtasks', '/End', '/TN', taskName]);
     },
     restart: async () => {
@@ -372,7 +366,7 @@ function createSchtasksManager(spawn: SpawnFn, unitPath: string): ServiceManager
           );
         }
       }
-      // Best-effort end before starting again.
+      
       await runCommand(spawn, ['schtasks', '/End', '/TN', taskName]);
       const run = await runCommand(spawn, ['schtasks', '/Run', '/TN', taskName]);
       if (run.exitCode !== 0) {

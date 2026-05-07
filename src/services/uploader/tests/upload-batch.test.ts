@@ -119,11 +119,11 @@ test('400 watermark_regression updates cursor, drops batch, returns recovered', 
   if (outcome.kind === 'recovered') {
     expect(outcome.captureId).toBe(batch.captureId);
   }
-  // Failed batch is removed from the queue (no fatal row left behind).
+  
   expect(getBatch(db, batch.captureId)).toBeNull();
-  // No receipt is written either — recovery is not a delivery.
+  
   expect(getReceipt(db, batch.captureId)).toBeNull();
-  // Cursor is reset to the server's authoritative position.
+  
   const cursor = getCursor(db, {
     sourceApp: stored.sourceApp,
     sourcePathHash: stored.sourcePathHash,
@@ -267,7 +267,7 @@ test('AuthError + verify-key inconclusive -> retriable, reason=auth_unconfirmed'
 
   const ctx = ctxWith(
     mockFetch((call) => {
-      // verify-key returns 503 -> RetriableError -> auth_unconfirmed branch.
+      
       if (call.url.includes('/ingestion/verify-key')) return emptyResponse(503);
       return emptyResponse(401);
     }),
@@ -455,7 +455,7 @@ test('AuthError + verify-key throws RetriableError → retriable, no sentinel', 
       http: createTestHttpClient(
         mockFetch((call) => {
           if (call.url.includes('/ingestion/verify-key')) {
-            // 503 maps to RetriableError inside the HTTP client
+            
             return emptyResponse(503);
           }
           return emptyResponse(401);
@@ -508,12 +508,12 @@ test('AuthError + verify-key throws non-Error → retriable, log uses typeof and
     insertBatch(db, batch);
     const stored = getBatch(db, batch.captureId)!;
 
-    // Build an HttpClient where verifyKey throws a non-Error value to
-    // exercise the `String(verifyErr)` and `typeof verifyErr` fallbacks.
+    
+    
     const http = createTestHttpClient(mockFetch(() => emptyResponse(403)));
     Object.defineProperty(http, 'verifyKey', {
       value: async () => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        
         throw 'string-thrown-not-error';
       },
     });
@@ -557,9 +557,9 @@ test('AuthError + verify-key returns success: false → fatal even when sentinel
   insertBatch(db, batch);
   const stored = getBatch(db, batch.captureId)!;
 
-  // Pointing the sentinel path under a path that cannot be created (e.g.
-  // child of /dev/null) makes writeAuthFailedSentinel throw. With a logger
-  // attached, the classifier hits the inner log?.error branch.
+  
+  
+  
   const http = createTestHttpClient(
     mockFetch((call) => {
       if (call.url.includes('/ingestion/verify-key')) {
@@ -611,6 +611,6 @@ test('AuthError without authFailedSentinelPath: still classifies, no sentinel si
   };
   const outcome = await uploadBatch(ctx, stored);
 
-  // verifyKey also gets 403 → AuthError → fatal, but no sentinel path so nothing on disk.
+  
   expect(outcome.kind).toBe('fatal');
 });

@@ -29,8 +29,8 @@ test('empty buffer: pendingBytes 0, neither pause nor resume signal', () => {
   });
   expect(result.pendingBytes).toBe(0);
   expect(result.shouldPause).toBe(false);
-  // pending=0 < resume=500 → shouldResume=true; the cycle layer only acts on
-  // resume when the sentinel currently exists, which is the right behavior.
+  
+  
   expect(result.shouldResume).toBe(true);
 });
 
@@ -67,7 +67,7 @@ test('pending exactly equal to pause threshold: shouldPause is false (strict gre
 });
 
 test('hysteresis: shouldResume only fires below resume threshold', () => {
-  // Pending exactly at resume threshold should NOT signal resume.
+  
   insertBatch(db, newBatch({ body: new Uint8Array(500) }));
   const equal = checkPendingPressure({
     db,
@@ -76,7 +76,7 @@ test('hysteresis: shouldResume only fires below resume threshold', () => {
   });
   expect(equal.shouldResume).toBe(false);
 
-  // Add a 200-byte batch → 700 pending; still under pause but above resume.
+  
   insertBatch(db, newBatch({ body: new Uint8Array(200) }));
   const between = checkPendingPressure({
     db,
@@ -97,7 +97,7 @@ test('failed and delivered batches do not contribute to pending bytes', () => {
   insertBatch(db, c);
   markBatchFailed(db, a.captureId, 'oops');
   markBatchDelivered(db, getBatch(db, b.captureId)!, { idempotentOnServer: false });
-  // Only c (400) is pending.
+  
   const result = checkPendingPressure({
     db,
     softPauseBytes: 1000,

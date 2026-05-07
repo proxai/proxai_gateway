@@ -33,17 +33,9 @@ export interface TailCommandDeps {
   logDir: string;
   abortSignal?: AbortSignal;
   emit: (line: string) => void;
-  /**
-   * @internal Test seam. Defaults to `todaysLogPath(logDir)` and is
-   * re-evaluated each follow iteration to detect log rotation across UTC
-   * midnight. Production callers should not set this.
-   */
+  
   pathProvider?: () => string;
-  /**
-   * @internal Test seam. Defaults to `POLL_INTERVAL_MS` (200 ms). Tests
-   * inject a small value (e.g. 1 ms) so `--follow` assertions don't pay
-   * real wall-clock latency. Production callers should not set this.
-   */
+  
   pollIntervalMs?: number;
 }
 

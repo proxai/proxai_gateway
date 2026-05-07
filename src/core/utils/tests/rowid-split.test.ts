@@ -34,8 +34,8 @@ test('returns an empty array for an empty input', () => {
 });
 
 test('splits across multiple slices each within budget', () => {
-  // 10 rows × ~80 chars each → JSON ~800 bytes. With budget=300 bytes,
-  // each chunk should hold roughly 2-4 rows.
+  
+  
   const rows = makeRows(10, 60);
   const slices = splitRowsByCompressedSize(rows, {
     targetCompressedBytes: 300,
@@ -47,15 +47,15 @@ test('splits across multiple slices each within budget', () => {
     expect(JSON.stringify(slice).length).toBeLessThanOrEqual(300);
   }
 
-  // concatenation equals the original
+  
   const recovered = slices.flatMap((s) => s);
   expect(recovered).toEqual(rows);
 });
 
 test('emits single-row chunk when one row exceeds budget (caller surfaces failure)', () => {
-  // First row is huge; subsequent rows fit. Helper must always make forward
-  // progress, so the oversized row gets its own slice and the rest gets a
-  // valid partition.
+  
+  
+  
   const oversized: Row = { rowid: 1, payload: 'x'.repeat(10_000) };
   const small = makeRows(3, 10).map((r) => ({ ...r, rowid: r.rowid + 1 }));
   const rows = [oversized, ...small];
@@ -66,7 +66,7 @@ test('emits single-row chunk when one row exceeds budget (caller surfaces failur
   });
   expect(slices.length).toBeGreaterThanOrEqual(2);
   expect(slices[0]).toEqual([oversized]);
-  // Subsequent slices should each be within budget.
+  
   for (let i = 1; i < slices.length; i++) {
     expect(JSON.stringify(slices[i]).length).toBeLessThanOrEqual(200);
   }
@@ -82,7 +82,7 @@ test('throws when target budget is zero or negative', () => {
 });
 
 test('preserves all rows across slices using a real zstd measurer', () => {
-  // Each row is large enough that a tight budget forces multiple chunks.
+  
   const rowCount = 50;
   const rows: Row[] = [];
   for (let i = 1; i <= rowCount; i++) {

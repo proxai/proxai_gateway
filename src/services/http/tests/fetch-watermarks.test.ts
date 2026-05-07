@@ -8,6 +8,7 @@ const endpoints: HttpEndpoints = {
   ingest: 'https://api.example.com/v1/raw_records',
   verifyKey: 'https://api.example.com/ingestion/verify-key',
   watermarks: 'https://api.example.com/v1/watermarks',
+        registerHostId: 'https://api.example.com/v1/host-ids/register',
 };
 
 interface MockCall {
@@ -111,7 +112,7 @@ describe('fetchWatermarks', () => {
               watermark_table: null,
               last_delivered_at: '2026-04-29T10:42:00Z',
             },
-            { source_app: 'claude-code' }, // missing fields
+            { source_app: 'claude-code' }, 
             {
               source_app: 'claude-code',
               source_path_hash: 'xyz',

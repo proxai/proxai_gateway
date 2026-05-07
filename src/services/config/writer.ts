@@ -23,6 +23,7 @@ export function serializeConfig(config: GatewayConfig): string {
       ingest_url: config.backend.ingestUrl,
       verify_key_url: config.backend.verifyKeyUrl,
       watermarks_url: config.backend.watermarksUrl,
+      register_host_id_url: config.backend.registerHostIdUrl,
     },
     capture: {
       poll_interval_sec: config.capture.pollIntervalSec,

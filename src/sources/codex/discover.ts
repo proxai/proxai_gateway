@@ -18,12 +18,7 @@ export function defaultCodexHome(): string {
 }
 
 export interface DiscoverCodexOptions {
-  /**
-   * Skip files whose mtime is older than this Date. When `null` or omitted,
-   * no cap is applied. The poller passes a value only on a fresh install
-   * (no cursors yet); once cursors exist, those positions become the lower
-   * bound and the cap is skipped.
-   */
+  
   minimumMtime?: Date | null;
 }
 

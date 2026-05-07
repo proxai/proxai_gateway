@@ -70,10 +70,10 @@ export async function collectCodexRollout(
       );
     }
 
-    // Cursor advances after the LAST batch insert; intermediate failures
-    // leave earlier batches buffered (with their own contiguous watermark
-    // ranges) and the cursor unmoved — a future poll resumes from the
-    // last-persisted boundary.
+    
+    
+    
+    
     let offset = 0;
     for (let i = 0; i < slices.length; i++) {
       const slice = slices[i]!;

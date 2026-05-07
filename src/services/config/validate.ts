@@ -17,6 +17,7 @@ import {
   MAX_POLL_INTERVAL_SEC,
   MIN_POLL_INTERVAL_SEC,
   NEST_INGEST_URL,
+  NEST_REGISTER_HOST_ID_URL,
   NEST_VERIFY_KEY_URL,
   NEST_WATERMARKS_URL,
   VALID_INSTALL_SOURCES,
@@ -66,6 +67,11 @@ function validateBackend(raw: unknown): BackendConfig {
       r['watermarks_url'],
       NEST_WATERMARKS_URL,
       'backend.watermarks_url',
+    ),
+    registerHostIdUrl: optionalString(
+      r['register_host_id_url'],
+      NEST_REGISTER_HOST_ID_URL,
+      'backend.register_host_id_url',
     ),
   };
 }

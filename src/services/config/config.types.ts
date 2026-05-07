@@ -14,6 +14,7 @@ export interface BackendConfig {
   ingestUrl: string;
   verifyKeyUrl: string;
   watermarksUrl: string;
+  registerHostIdUrl: string;
 }
 
 export interface CaptureConfig {

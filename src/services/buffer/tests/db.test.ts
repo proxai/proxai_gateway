@@ -61,8 +61,8 @@ test('migrates pre-existing buffer DB by adding last_seen_size_bytes / last_seen
   const dir = await mkdtemp(join(tmpdir(), 'proxai-buffer-migrate-'));
   try {
     const path = join(dir, 'old-buffer.db');
-    // Hand-create a DB with the pre-vacuum-detection cursors schema (no
-    // last_seen_size_bytes, no last_seen_page_count).
+    
+    
     const seed = new Database(path, { create: true });
     seed.run(
       `CREATE TABLE source_cursors (
@@ -79,7 +79,7 @@ test('migrates pre-existing buffer DB by adding last_seen_size_bytes / last_seen
     );
     seed.close();
 
-    // Re-open via openBufferDb so the migration runs.
+    
     const opened = openBufferDb(path);
     try {
       expect(columnExists(opened, BUFFER_TABLES.cursors, 'last_seen_size_bytes')).toBe(true);

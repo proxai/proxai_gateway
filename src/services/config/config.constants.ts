@@ -16,6 +16,7 @@ export const NEST_BASE_URL = resolveNestBaseUrl();
 export const NEST_INGEST_URL = `${NEST_BASE_URL}/v1/raw_records`;
 export const NEST_VERIFY_KEY_URL = `${NEST_BASE_URL}/ingestion/verify-key`;
 export const NEST_WATERMARKS_URL = `${NEST_BASE_URL}/v1/watermarks`;
+export const NEST_REGISTER_HOST_ID_URL = `${NEST_BASE_URL}/v1/host-ids/register`;
 
 export const DEFAULT_POLL_INTERVAL_SEC = 300;
 export const MIN_POLL_INTERVAL_SEC = 60;

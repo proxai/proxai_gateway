@@ -20,16 +20,11 @@ export interface BackfillCommandDeps {
   authFailedSentinelPath: string;
   bufferFullSentinelPath: string;
   gatewayVersion: string;
-  /** Override the default poll-cycle sources (used by tests). */
+  
   sources?: readonly RegisteredSource[];
   logger?: Logger;
   httpClient?: HttpClient;
-  /**
-   * Returns true when the daemon is currently running. Affects only the
-   * post-cycle informational message ("daemon will drain..." vs.
-   * "run start to ship them"). When omitted, the message defaults to
-   * the latter.
-   */
+  
   isDaemonRunning?: () => Promise<boolean>;
 }
 
@@ -37,14 +32,6 @@ export interface BackfillCommandOptions {
   since: string;
 }
 
-/**
- * Run a single poll cycle with an explicit `--since` lower-bound override.
- *
- * Discovery is forced to use `now - duration` regardless of cursor state, so
- * the user can ingest history older than the default 30-day initial-scan
- * window. Captured batches enter the buffer normally and drain via the
- * existing pacing logic.
- */
 export async function runBackfill(
   deps: BackfillCommandDeps,
   options: BackfillCommandOptions,
@@ -84,14 +71,15 @@ export async function runBackfill(
         ingest: deps.config.backend.ingestUrl,
         verifyKey: deps.config.backend.verifyKeyUrl,
         watermarks: deps.config.backend.watermarksUrl,
+        registerHostId: deps.config.backend.registerHostIdUrl,
       },
       gatewayVersion: deps.gatewayVersion,
     });
 
   let cycleResult: PollCycleResult;
   try {
-    // Mirror runDaemon's pre-flight watermark sync for fresh buffers so we
-    // don't re-capture history the server already has. Failures don't abort.
+    
+    
     if (countCursors(buffer) === 0) {
       try {
         await syncServerWatermarks({ buffer, http, logger });

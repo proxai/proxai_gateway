@@ -41,12 +41,6 @@ function initializeSchema(db: Database): void {
   db.run(METADATA_TABLE_DDL);
 }
 
-/**
- * Adds last_seen_size_bytes / last_seen_page_count columns to source_cursors
- * if they're missing. Pre-publish migration: an existing buffer DB created
- * before vacuum detection landed will pick up the columns on next open.
- * Older rows have NULL until the next successful poll populates them.
- */
 function migrateCursorVacuumColumns(db: Database): void {
   if (!columnExists(db, BUFFER_TABLES.cursors, CURSOR_COLS.lastSeenSizeBytes)) {
     db.run(CURSOR_ALTER_ADD_LAST_SEEN_SIZE_DDL);

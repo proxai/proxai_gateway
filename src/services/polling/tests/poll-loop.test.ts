@@ -40,6 +40,7 @@ function makeContext(sources: RegisteredSource[]): PollCycleContext {
         ingest: 'https://api.example.com/v1/raw_records',
         verifyKey: 'https://api.example.com/ingestion/verify-key',
         watermarks: 'https://api.example.com/v1/watermarks',
+        registerHostId: 'https://api.example.com/v1/host-ids/register',
       },
       fetch: fakeFetch(),
     }),

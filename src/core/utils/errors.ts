@@ -33,9 +33,9 @@ export class RateLimitError extends GatewayError {
 }
 
 export class RetriableError extends GatewayError {
-  // Server-suggested wait before retrying. Parsed from Retry-After when the
-  // upstream advertises it on a 5xx (e.g. nest emits this when its parse
-  // queue is over the high-water mark). null when no hint is available.
+  
+  
+  
   readonly retryAfterMs: number | null;
   constructor(message: string, retryAfterMs: number | null = null, cause?: unknown) {
     super('retriable', message, cause);
@@ -55,12 +55,6 @@ export class FatalError extends GatewayError {
   }
 }
 
-/**
- * Server reported that the upload's watermark range falls below the position
- * it has already persisted (typically because the local cursor was wiped on
- * reinstall). Carries the server's authoritative watermark so the gateway
- * can reset its local cursor and drop the now-redundant batch.
- */
 export class WatermarkRegressionError extends ValidationError {
   readonly currentServerWatermarkEnd: number;
   readonly sourcePathHash: string;

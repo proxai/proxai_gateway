@@ -10,6 +10,7 @@ const endpoints: HttpEndpoints = {
   ingest: 'https://api.example.com/v1/raw_records',
   verifyKey: 'https://api.example.com/ingestion/verify-key',
   watermarks: 'https://api.example.com/v1/watermarks',
+        registerHostId: 'https://api.example.com/v1/host-ids/register',
 };
 
 let db: Database;
@@ -149,8 +150,8 @@ test('overwrites pre-existing local cursor (server is authoritative)', async () 
 });
 
 test('synced cursors are visible via inode-fallback lookup', async () => {
-  // Replicates the source-poller flow: server seeds cursor with inode=0,
-  // poller looks up by real inode, finds nothing, then falls back to inode=0.
+  
+  
   const http = clientWith({
     host_id: 'h_test',
     user_id: 'u_1',
@@ -167,7 +168,7 @@ test('synced cursors are visible via inode-fallback lookup', async () => {
   });
   await syncServerWatermarks({ buffer: db, http });
 
-  // Poller lookup with a real inode misses the exact key.
+  
   const exact = getCursor(db, {
     sourceApp: 'claude-code',
     sourcePathHash: 'h1',
@@ -176,7 +177,7 @@ test('synced cursors are visible via inode-fallback lookup', async () => {
   });
   expect(exact).toBeNull();
 
-  // But falling back to inode=0 finds the synced position.
+  
   const sentinel = getCursor(db, {
     sourceApp: 'claude-code',
     sourcePathHash: 'h1',

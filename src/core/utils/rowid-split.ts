@@ -1,21 +1,10 @@
 export interface RowidSplitOptions<T> {
-  /** Compresses a row slice and returns the compressed byteLength. */
+  
   measureCompressed: (rows: readonly T[]) => number;
-  /** Maximum compressed byte length any single slice may have. */
+  
   targetCompressedBytes: number;
 }
 
-/**
- * Splits an ordered row array into contiguous slices such that each slice,
- * when serialized + compressed via `measureCompressed`, is at most
- * `targetCompressedBytes` bytes.
- *
- * Returns one or more non-empty subarrays whose concatenation equals the
- * input. If a SINGLE row already exceeds the threshold, that row is emitted
- * as its own slice — the contract validator will reject it and the uploader
- * will mark the batch failed, but that is preferable to silently dropping
- * unbounded source rows.
- */
 export function splitRowsByCompressedSize<T>(
   rows: readonly T[],
   options: RowidSplitOptions<T>,
@@ -45,9 +34,9 @@ export function splitRowsByCompressedSize<T>(
       options.measureCompressed,
       options.targetCompressedBytes,
     );
-    // Always make forward progress: if no prefix fits (single-row overflow),
-    // emit one row anyway so the caller surfaces a hard failure rather than
-    // looping forever.
+    
+    
+    
     const advance = takeCount === 0 ? 1 : takeCount;
     chunks.push(rows.slice(cursor, cursor + advance));
     cursor += advance;
@@ -56,11 +45,6 @@ export function splitRowsByCompressedSize<T>(
   return chunks;
 }
 
-/**
- * Binary-searches `[start+1, end]` for the largest prefix length whose
- * compressed size is `<= targetCompressedBytes`. Returns 0 when even a
- * single-row prefix already exceeds the budget (caller handles).
- */
 function findLargestPrefixCount<T>(
   rows: readonly T[],
   start: number,

@@ -25,6 +25,6 @@ test('deriveHostId is whitespace-insensitive on inputs', () => {
 });
 
 test('deriveHostId binds machine and user (no trivial swap collision)', () => {
-  // sha256(A:B) != sha256(B:A) — avoids confusion if someone passes args reversed.
+  
   expect(deriveHostId('A', 'B')).not.toBe(deriveHostId('B', 'A'));
 });

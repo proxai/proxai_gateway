@@ -285,9 +285,9 @@ test('a fresh poll persists last_seen_size_bytes and last_seen_page_count on the
 });
 
 test('rowid regression triggers re-keying under #gen=1 with a fresh watermark', async () => {
-  // Pre-seed the cursor with a high watermark to simulate a state where the
-  // server believes we've shipped up to rowid 999. The new DB only has rowid
-  // 1 and 2, so currentMaxRowid + 1 < watermark_end → vacuum confirmed.
+  
+  
+  
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },
     { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
@@ -307,15 +307,15 @@ test('rowid regression triggers re-keying under #gen=1 with a fresh watermark', 
   expect(result.capturedBatches).toBe(1);
 
   const batch = nextPendingBatch(buffer)!;
-  // The new identity uses the rotated source_path / source_path_hash.
+  
   const expectedNewPath = nextGenerationSuffix(file.sourcePath);
   expect(batch.sourcePath).toBe(expectedNewPath);
   expect(batch.sourcePathHash).toBe(sha256Hex(expectedNewPath));
-  // Watermark restarts at 0 — first row in the rotated stream is rowid 1.
+  
   expect(batch.watermarkStart).toBe(1);
   expect(batch.watermarkEnd).toBe(3);
 
-  // The new cursor lives under the rotated hash with watermark_end=3.
+  
   const newCursor = getCursor(buffer, {
     sourceApp: 'cursor',
     sourcePathHash: sha256Hex(expectedNewPath),
@@ -324,7 +324,7 @@ test('rowid regression triggers re-keying under #gen=1 with a fresh watermark', 
   });
   expect(newCursor?.watermarkEnd).toBe(3);
 
-  // The old cursor row stays in place, frozen at its prior watermark.
+  
   const oldCursor = getCursor(buffer, {
     sourceApp: 'cursor',
     sourcePathHash: file.sourcePathHash,
@@ -339,8 +339,8 @@ test('size_decreased signal also triggers re-keying via #gen suffix', async () =
     { key: 'composerData:c1', value: '{"_v":13}' },
     { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
   ]);
-  // Watermark is consistent (we only seed up to rowid 1+1=2), but recorded
-  // size is 100x current. This must still rotate.
+  
+  
   setCursor(buffer, {
     sourceApp: 'cursor',
     sourcePathHash: file.sourcePathHash,
@@ -360,8 +360,8 @@ test('size_decreased signal also triggers re-keying via #gen suffix', async () =
 });
 
 test('splits an oversized snapshot into multiple batches with contiguous rowid coverage', async () => {
-  // Each row carries ~3 KB of incompressible base64; ~1500 rows produce a
-  // body over the safety target and force multiple chunks.
+  
+  
   const rows: { key: string; value: string }[] = [];
   const rowCount = 1500;
   for (let i = 0; i < rowCount; i++) {
@@ -385,7 +385,7 @@ test('splits an oversized snapshot into multiple batches with contiguous rowid c
     expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_MAX_COMPRESSED_BYTES);
     expect(batch.body.byteLength).toBeLessThanOrEqual(BODY_TARGET_COMPRESSED_BYTES);
     if (scanned === 0) {
-      // First slice starts at the smallest row's rowid (1).
+      
       expect(batch.watermarkStart).toBe(1);
     } else {
       expect(batch.watermarkStart).toBe(prevEnd);
@@ -402,15 +402,15 @@ test('splits an oversized snapshot into multiple batches with contiguous rowid c
     sourceInode: null,
     watermarkTable: null,
   });
-  // Rowids are 1..rowCount, watermark_end = lastRowid + 1 = rowCount + 1.
+  
   expect(cursor?.watermarkEnd).toBe(rowCount + 1);
   expect(prevEnd).toBe(rowCount + 1);
 }, 60_000);
 
 test('null last_seen columns on existing cursor never trigger size/page_count signals', async () => {
-  // A cursor created before the vacuum-detect migration has NULL columns;
-  // those fields can't fire. Without rowid regression, the source must NOT
-  // be re-keyed.
+  
+  
+  
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },
     { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
@@ -422,14 +422,14 @@ test('null last_seen columns on existing cursor never trigger size/page_count si
     sourcePath: file.sourcePath,
     sourceInode: null,
     watermarkTable: null,
-    watermarkEnd: 1, // captured up to rowid 0 (pretend), expect to capture 1..3
+    watermarkEnd: 1, 
     lastSeenSizeBytes: null,
     lastSeenPageCount: null,
   });
 
   await collectCursorFile(file, ctx(buffer));
   const batch = nextPendingBatch(buffer)!;
-  // No rotation: same path, same hash.
+  
   expect(batch.sourcePath).toBe(file.sourcePath);
   expect(batch.sourcePathHash).toBe(file.sourcePathHash);
 });

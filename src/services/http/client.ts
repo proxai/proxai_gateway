@@ -24,6 +24,7 @@ import type {
   FetchWatermarksResult,
   HttpClientOptions,
   HttpEndpoints,
+  RegisterHostIdResult,
   RequestOptions,
   ServerWatermark,
   UploadResult,
@@ -72,6 +73,23 @@ export class HttpClient {
       userId,
       keyName,
     };
+  }
+
+  async registerHostId(): Promise<RegisterHostIdResult> {
+    const raw = await this.request<{
+      host_id?: unknown;
+      user_id?: unknown;
+      registered?: unknown;
+    }>({
+      method: 'POST',
+      url: this.endpoints.registerHostId,
+      body: { host_id: this.hostId },
+      withApiKey: true,
+    });
+    const hostId = typeof raw.host_id === 'string' ? raw.host_id : '';
+    const userId = typeof raw.user_id === 'string' ? raw.user_id : '';
+    const registered = raw.registered === true;
+    return { hostId, userId, registered };
   }
 
   async fetchWatermarks(): Promise<FetchWatermarksResult> {
@@ -197,9 +215,9 @@ export class HttpClient {
       throw new RateLimitError('server returned 429 (rate limit)', retryAfter);
     }
     if (status >= 500 && status < 600) {
-      // Honor Retry-After on 5xx (nest emits this when parse-queue
-      // backpressure trips the high-water mark on 503). Carries through to
-      // the pacer's notifyServiceUnavailable path.
+      
+      
+      
       const retryAfter = parseRetryAfter(response.headers.get(HEADER_RETRY_AFTER));
       throw new RetriableError(`server returned ${status.toString()}`, retryAfter);
     }

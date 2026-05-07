@@ -218,6 +218,7 @@ describe('C — Reinstall / watermark sync', () => {
           ingest: `${nest.url}/v1/raw_records`,
           verifyKey: `${nest.url}/ingestion/verify-key`,
           watermarks: `${nest.url}/v1/watermarks`,
+          registerHostId: `${nest.url}/v1/host-ids/register`,
         },
       });
       expect(countCursors(buffer)).toBe(0);

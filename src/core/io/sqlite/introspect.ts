@@ -26,22 +26,11 @@ export function columnExists(db: Database, table: string, column: string): boole
   return rows.some((r) => r.name === column);
 }
 
-/**
- * Returns `PRAGMA page_count` for the open database.
- *
- * Used by the vacuum detector: a drop in page_count between polls is a strong
- * signal that the source DB was VACUUM'd or that auto_vacuum kicked in.
- */
 export function pageCount(db: Database): number {
   const row = db.query<{ page_count: number }, []>('PRAGMA page_count').get();
   return row?.page_count ?? 0;
 }
 
-/**
- * Returns the largest rowid in the given table, or 0 when the table is empty
- * or missing. The caller is responsible for verifying the table exists; this
- * helper swallows query errors and returns 0 to keep vacuum detection robust.
- */
 export function maxRowid(db: Database, table: string): number {
   const escaped = table.replace(/"/g, '""');
   try {

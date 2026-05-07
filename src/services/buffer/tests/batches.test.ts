@@ -120,11 +120,11 @@ test('markBatchDelivered transaction is atomic on duplicate receipt', () => {
   const batch = newBatch();
   insertBatch(db, batch);
   const stored = getBatch(db, batch.captureId)!;
-  // Pre-populate the receipts table with a row keyed on batch.captureId so the
-  // INSERT inside markBatchDelivered fails. The transaction should roll back the
-  // DELETE, leaving the original batch row untouched.
+  
+  
+  
   markBatchDelivered(db, stored, { idempotentOnServer: false });
-  // Reinstate the batch row to simulate a duplicate-receipt situation.
+  
   insertBatch(db, batch);
   expect(getBatch(db, batch.captureId)).not.toBeNull();
 
@@ -133,8 +133,8 @@ test('markBatchDelivered transaction is atomic on duplicate receipt', () => {
     markBatchDelivered(db, second, { idempotentOnServer: false });
   }).toThrow();
 
-  // Batch row stays intact because the DELETE was rolled back together with the
-  // failed INSERT.
+  
+  
   expect(getBatch(db, batch.captureId)).not.toBeNull();
   expect(countReceipts(db)).toBe(1);
 });

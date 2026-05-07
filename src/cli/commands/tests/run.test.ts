@@ -31,7 +31,8 @@ function makeConfig(): GatewayConfig {
     backend: {
       ingestUrl: 'https://api.example.com/v1/raw_records',
       verifyKeyUrl: 'https://api.example.com/ingestion/verify-key',
-      watermarksUrl: 'https://api.example.com/v1/watermarks',
+watermarksUrl: 'https://api.example.com/v1/watermarks',
+      registerHostIdUrl: 'https://api.example.com/v1/host-ids/register',
     },
     capture: {
       pollIntervalSec: 60,
@@ -66,6 +67,7 @@ function mockHttp(
       ingest: config.backend.ingestUrl,
       verifyKey: config.backend.verifyKeyUrl,
       watermarks: config.backend.watermarksUrl,
+      registerHostId: config.backend.registerHostIdUrl,
     },
     fetch: (async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input.toString();
@@ -187,7 +189,7 @@ test('empty cursor table triggers a watermark sync; populated cursors are seeded
   expect(result.exitCode).toBe(0);
   expect(log.watermarkCalls).toBe(1);
 
-  // Verify the cursor landed in the buffer.
+  
   const buffer = openBufferDb(config.capture.bufferPath);
   try {
     expect(countCursors(buffer)).toBe(1);
@@ -198,7 +200,7 @@ test('empty cursor table triggers a watermark sync; populated cursors are seeded
 
 test('non-empty cursor table skips the pre-flight sync', async () => {
   const config = makeConfig();
-  // Pre-populate a cursor before the daemon starts so countCursors > 0.
+  
   const seed = openBufferDb(config.capture.bufferPath);
   setCursor(seed, {
     sourceApp: 'claude-code',

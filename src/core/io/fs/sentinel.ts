@@ -14,8 +14,8 @@ export function sentinelHandle(path: string): SentinelHandle {
     },
     write: async (body: string) => {
       await writeAtomic(path, body);
-      // Sentinels (PAUSED, AUTH_FAILED, CONSENT_ACCEPTED, ...) may carry
-      // operator-supplied context. Treat as private to the gateway owner.
+      
+      
       await setMode(path, 0o600);
     },
     remove: async () => {

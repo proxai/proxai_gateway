@@ -34,9 +34,9 @@ export async function createLogger(options: LoggerFactoryOptions = {}): Promise<
       sync: true,
       limit: { count: LOG_RETENTION_DAYS },
     });
-    // Structured log files may contain redacted prompt context; tighten to
-    // owner-only on POSIX. SonicBoom emits 'ready' on initial open and after
-    // each rotation/reopen, so this stays correct as pino-roll cycles files.
+    
+    
+    
     secureLogStream(stream);
     return pino({ level, base }, stream);
   }
@@ -79,6 +79,6 @@ function applySecureMode(stream: FileLikeStream): void {
   try {
     chmodSync(filePath, 0o600);
   } catch {
-    // best-effort: stream may not have flushed an inode yet
+    
   }
 }

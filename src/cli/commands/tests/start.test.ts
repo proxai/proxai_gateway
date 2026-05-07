@@ -136,7 +136,7 @@ test('formatError stringifies non-Error throws', async () => {
     ensureRegistered: async () => {
       calls.ensureRegistered++;
     },
-    // throw a non-Error so the `String(err)` branch in formatError fires.
+    
     start: async () => {
       throw 'rope-throw';
     },

@@ -47,10 +47,10 @@ test('nextGenerationSuffix increments past two-digit generations', () => {
 });
 
 test('nextGenerationSuffix on malformed suffix treats it as gen=0 and produces #gen=1', () => {
-  // A non-numeric tail is treated as "no suffix"; the malformed text is left
-  // in place when stripped, then a new suffix is appended. This is by design:
-  // we never silently rewrite paths the gateway didn't write, but we keep
-  // moving forward.
+  
+  
+  
+  
   expect(nextGenerationSuffix('/path/to/state.vscdb#gen=abc')).toBe(
     '/path/to/state.vscdb#gen=abc#gen=1',
   );

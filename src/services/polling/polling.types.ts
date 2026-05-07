@@ -9,11 +9,7 @@ export interface SourcePollerContext {
   buffer: Database;
   gatewayVersion: string;
   logger?: Logger;
-  /**
-   * Optional explicit lower bound on file mtime. When set, overrides the
-   * poller's cursor-based decision to apply (or skip) the initial-scan
-   * window. Used by the `backfill` command to ingest extended history.
-   */
+  
   minimumMtimeOverride?: Date | null;
 }
 
@@ -68,11 +64,7 @@ export interface PollCycleContext {
   capturePolicy: CapturePolicy;
   pacer?: Pacer;
   logger?: Logger;
-  /**
-   * If set, overrides the per-source cursor-based decision and forces this
-   * exact `Date` (or `null` for no cap) on every source's discover phase.
-   * Used by the `backfill` command for opt-in extended history ingest.
-   */
+  
   minimumMtimeOverride?: Date | null;
 }
 

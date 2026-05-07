@@ -30,7 +30,7 @@ function notifyCycleComplete(
   try {
     callback(result);
   } catch {
-    // Callback errors must not break the loop.
+    
   }
 }
 

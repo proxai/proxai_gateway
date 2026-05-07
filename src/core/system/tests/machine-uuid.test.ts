@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { GatewayError } from 'core/utils';
-import { readMachineUuid } from 'core/system';
+import { defaultReadFile, defaultSpawn, readMachineUuid } from 'core/system';
 import type {
   MachineUuidFileReader,
   MachineUuidSpawnFn,
@@ -35,8 +38,6 @@ function fakeFiles(map: Record<string, string>): (path: string) => MachineUuidFi
     },
   });
 }
-
-// ---------- darwin ----------
 
 const SAMPLE_IOREG_OUTPUT = `+-o Root  <class IORegistryEntry, id 0x100000100, retain 35>
   +-o J274APAP  <class IOPlatformExpertDevice, id 0x100000110, registered, matched, active, busy 0 (3 ms), retain 38>
@@ -73,8 +74,6 @@ test('darwin: throws when ioreg exits non-zero', async () => {
   ).rejects.toThrow(/ioreg exit/);
 });
 
-// ---------- linux ----------
-
 test('linux: reads /etc/machine-id and trims whitespace', async () => {
   const uuid = await readMachineUuid({
     platform: 'linux',
@@ -109,8 +108,6 @@ test('linux: throws when machine-id file is empty', async () => {
   ).rejects.toThrow(/linux/);
 });
 
-// ---------- win32 ----------
-
 const SAMPLE_REG_OUTPUT = `
 
 HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography
@@ -144,8 +141,6 @@ test('win32: throws when reg exits non-zero', async () => {
   ).rejects.toThrow(/reg exit/);
 });
 
-// ---------- unsupported ----------
-
 test('throws on unsupported platform', async () => {
   await expect(
     readMachineUuid({
@@ -155,27 +150,45 @@ test('throws on unsupported platform', async () => {
 });
 
 test('linux: falls through to defaultReadFile when readFile is omitted', async () => {
-  // Explicitly omit deps.readFile so the linux path constructs the real
-  // defaultReadFile factory. The standard machine-id files may not exist on
-  // this dev machine, in which case readMachineUuid throws — that is fine
-  // for coverage. We just need the function body to execute.
+  
+  
+  
+  
   try {
     await readMachineUuid({ platform: 'linux' });
   } catch {
-    // Expected on macOS where /etc/machine-id is typically absent.
+    
   }
 });
 
 test('defaultSpawn is wired up when spawn dep is omitted', async () => {
-  // Smoke: with no spawn override and platform set to the host platform,
-  // the call exercises defaultSpawn(). We may or may not get a real UUID
-  // depending on the host, so we just assert it doesn't throw an
-  // unrelated TypeError.
   try {
     const result = await readMachineUuid({});
     expect(typeof result).toBe('string');
   } catch (err) {
-    // Allowed: GatewayError if the local machine doesn't expose a UUID.
     expect(err).toBeInstanceOf(Error);
   }
+});
+
+test('defaultReadFile resolves exists() and text() against a real file', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'proxai-mu-'));
+  const path = join(dir, 'machine-id');
+  await writeFile(path, '12345678-aaaa-bbbb-cccc-1234567890ab\n');
+  try {
+    const reader = defaultReadFile(path);
+    expect(await reader.exists()).toBe(true);
+    expect(await reader.text()).toContain('12345678-aaaa-bbbb-cccc-1234567890ab');
+    const missing = defaultReadFile(join(dir, 'no-such-file'));
+    expect(await missing.exists()).toBe(false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('defaultSpawn returns a callable that runs a real subprocess', async () => {
+  const spawn = defaultSpawn();
+  const result = spawn(['echo', 'hello'], { stdout: 'pipe', stderr: 'pipe' });
+  const text = await new Response(result.stdout).text();
+  await result.exited;
+  expect(text).toContain('hello');
 });

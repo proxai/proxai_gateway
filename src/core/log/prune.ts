@@ -1,7 +1,7 @@
 import { stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { setMode } from 'core/io/fs';
+import { setMode as defaultSetMode } from 'core/io/fs';
 import {
   LOG_RETENTION_DAYS,
   LOG_TOTAL_SIZE_CAP_BYTES,
@@ -27,6 +27,7 @@ export async function pruneLogDirectory(
 ): Promise<PruneResult> {
   const retentionDays = options.retentionDays ?? LOG_RETENTION_DAYS;
   const sizeCap = options.totalSizeCapBytes ?? LOG_TOTAL_SIZE_CAP_BYTES;
+  const setMode = options.setMode ?? defaultSetMode;
 
   const files = await scanLogFiles(dir);
   files.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -49,14 +50,14 @@ export async function pruneLogDirectory(
     totalSize -= oldest.size;
   }
 
-  // Tighten mode on every retained log file. Catches files created before the
-  // logger started chmod'ing on roll, and re-applies if anything externally
-  // relaxed permissions. setMode is a no-op on win32.
+  
+  
+  
   await Promise.all(
     files.map((f) =>
-      /* c8 ignore next 3 */ // best-effort hardening: catch fires only when chmod fails (e.g. file removed during scan); not exercisable deterministically in tests
+       
       setMode(f.path, 0o600).catch(() => {
-        // best-effort hardening; missing/unstattable files are skipped
+        
       }),
     ),
   );

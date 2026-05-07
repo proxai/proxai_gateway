@@ -55,10 +55,10 @@ export async function collectCodexState(
       const currentSizeBytes = sourceStat.exists ? sourceStat.size : 0;
       const currentPageCount = pageCount(db);
 
-      // Vacuum is a file-level event in SQLite — when detected against ANY of
-      // the codex tables, all tables in the file have rotated together. We
-      // resolve the new source identity once up front so per-table cursors
-      // all migrate atomically.
+      
+      
+      
+      
       const identity = resolveSourceIdentity(db, file, context, currentSizeBytes, currentPageCount);
 
       for (const table of CODEX_ALLOWED_STATE_TABLES) {
@@ -125,12 +125,6 @@ interface SourceIdentity {
   rotated: boolean;
 }
 
-/**
- * Decides whether to keep the discovered (path, hash) or re-key under a fresh
- * `#gen=N` suffix. Inspects every codex table's existing cursor for vacuum
- * signals (size, page_count, rowid regression); the FIRST positive signal
- * across any table forces the whole file to rotate.
- */
 function resolveSourceIdentity(
   db: Database,
   file: DiscoveredCodexStateFile,
@@ -149,8 +143,8 @@ function resolveSourceIdentity(
         watermarkTable: table,
       });
     } catch {
-      // Buffer DB unreachable. Skip vacuum detection here; the per-table loop
-      // will hit the same error and surface it as a table-scoped error.
+      
+      
       continue;
     }
     if (cursor === null) continue;
@@ -202,9 +196,9 @@ function collectOneTable(
 ): void {
   if (!tableExists(db, table)) return;
 
-  // After rotation, treat per-table cursor as absent — we want fresh
-  // watermark=0 under the new source identity. Before rotation, look up the
-  // existing cursor under the stable hash.
+  
+  
+  
   const priorCursor = identity.rotated
     ? null
     : getCursorWithFallback(context.buffer, {
@@ -223,11 +217,11 @@ function collectOneTable(
     >(`SELECT rowid, * FROM "${escaped}" WHERE rowid > ? ORDER BY rowid ASC`)
     .all(lastMaxRowid);
   if (rows.length === 0) {
-    // No new rows under this (effective) identity. Refresh size/page_count on
-    // the existing cursor row so vacuum stays detectable next poll. We skip
-    // this when no prior cursor existed and we haven't rotated — creating an
-    // empty watermark=0 row on first contact would muddle the "first poll"
-    // semantics other code relies on.
+    
+    
+    
+    
+    
     if (priorCursor !== null) {
       setCursor(context.buffer, {
         sourceApp: CODEX_SOURCE_APP,
@@ -243,8 +237,8 @@ function collectOneTable(
     return;
   }
 
-  // Serialize-then-redact-then-compress to size each chunk against the same
-  // payload the validator will see.
+  
+  
   const measureCompressed = (
     slice: readonly (Record<string, unknown> & { rowid: number })[],
   ): number => zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted).byteLength;

@@ -77,7 +77,7 @@ test('page_count_decreased takes priority over rowid signal when size is unchang
 });
 
 test('null cursor size means the size signal is suppressed (first-time poll)', () => {
-  // currentSizeBytes < cursorSizeBytes can't fire when cursor side is null.
+  
   const result = detectVacuum({
     ...HEALTHY_BASE,
     cursorSizeBytes: null,
@@ -96,8 +96,8 @@ test('null cursor page count means the page_count signal is suppressed', () => {
 });
 
 test('both cursor columns null and watermark unchanged -> vacuumed=false', () => {
-  // First poll after the migration adds the columns; cursor row exists but
-  // size/page_count are NULL, and the rowid space has only grown.
+  
+  
   const result = detectVacuum({
     cursorSizeBytes: null,
     cursorPageCount: null,
@@ -110,8 +110,8 @@ test('both cursor columns null and watermark unchanged -> vacuumed=false', () =>
 });
 
 test('rowid signal still fires even when size and page_count cursors are null', () => {
-  // Belt-and-suspenders: a cursor that pre-dates the size/page_count columns
-  // can still get rotated via rowid regression.
+  
+  
   const result = detectVacuum({
     cursorSizeBytes: null,
     cursorPageCount: null,
@@ -125,9 +125,9 @@ test('rowid signal still fires even when size and page_count cursors are null', 
 });
 
 test('current_max_rowid equal to watermark_end is healthy (watermark_end is exclusive upper bound)', () => {
-  // watermark_end = lastRowid + 1, so when no new rows have arrived since the
-  // last poll, currentMaxRowid will be exactly cursorWatermarkEnd - 1; equal
-  // is also fine (e.g. one new row arrived after the cursor was written).
+  
+  
+  
   const result = detectVacuum({
     ...HEALTHY_BASE,
     cursorWatermarkEnd: 100,

@@ -93,17 +93,6 @@ export function setCursor(db: Database, input: SetCursorInput): void {
   );
 }
 
-/**
- * Like `getCursor`, but if the exact (app, hash, inode, table) key misses,
- * fall back to the same key with `sourceInode = NO_INODE_SENTINEL`.
- *
- * Rationale: the watermark-sync pre-flight seeds cursors with inode=0
- * because the server doesn't track inode. When the source poller later
- * discovers the file with a real inode, it uses this helper to inherit
- * the synced position. The poller then writes a fresh cursor under its
- * real inode via `setCursor`; the inode=0 placeholder remains as a
- * harmless artifact.
- */
 export function getCursorWithFallback(db: Database, key: CursorKey): CursorState | null {
   const exact = getCursor(db, key);
   if (exact !== null) return exact;
@@ -124,24 +113,11 @@ const HAS_CURSOR_FOR_APP_SQL = `
   LIMIT 1
 `;
 
-/**
- * Returns true when at least one cursor row exists for the given source app.
- *
- * Used by the polling layer to decide whether the initial-scan window
- * should be enforced. If any cursors exist for the app, those cursors
- * already establish the lower bound and the scan-window cap is skipped.
- */
 export function hasAnyCursor(db: Database, sourceApp: SourceApp): boolean {
   const row = db.query<{ '1': number }, [string]>(HAS_CURSOR_FOR_APP_SQL).get(sourceApp);
   return row !== null;
 }
 
-/**
- * Reset the local cursor to the server's authoritative watermark after a
- * 400 watermark_regression response. The next capture cycle resumes from
- * `watermarkEnd` forward; the failed batch (which duplicated server state)
- * is discarded by the caller.
- */
 export function setCursorFromRegression(
   db: Database,
   batch: {

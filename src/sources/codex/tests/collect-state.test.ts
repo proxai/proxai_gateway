@@ -413,8 +413,8 @@ test('a fresh poll persists last_seen_size_bytes and last_seen_page_count on eac
 });
 
 test('rowid regression on a single codex table re-keys the whole file under #gen=1', async () => {
-  // Pre-seed the threads cursor with a high watermark; the actual DB only
-  // has rowid 1, so currentMaxRowid + 1 < watermark_end → rotate.
+  
+  
   const file = await makeStateDb({
     threads: [{ id: 't1', cli_version: '0.1.0' }],
     dynamicTools: [{ thread_id: 't1', position: 0, name: 'a' }],
@@ -437,8 +437,8 @@ test('rowid regression on a single codex table re-keys the whole file under #gen
   const expectedNewPath = nextGenerationSuffix(file.sourcePath);
   const expectedNewHash = sha256Hex(expectedNewPath);
 
-  // ALL three captured batches must use the rotated identity, not just the
-  // table that triggered the rotation.
+  
+  
   const seenTables = new Set<string>();
   for (let i = 0; i < 5; i++) {
     const batch = nextPendingBatch(buffer);
@@ -450,7 +450,7 @@ test('rowid regression on a single codex table re-keys the whole file under #gen
   }
   expect(seenTables.has('threads')).toBe(true);
 
-  // New per-table cursors all live under the rotated hash.
+  
   for (const table of ['threads', 'thread_dynamic_tools', 'thread_spawn_edges']) {
     const c = getCursor(buffer, {
       sourceApp: 'codex',
@@ -462,7 +462,7 @@ test('rowid regression on a single codex table re-keys the whole file under #gen
     expect(c!.watermarkEnd).toBeGreaterThan(0);
   }
 
-  // Old threads cursor remains frozen at the seeded watermark.
+  
   const oldThreads = getCursor(buffer, {
     sourceApp: 'codex',
     sourcePathHash: file.sourcePathHash,
@@ -507,22 +507,22 @@ test('null last_seen columns on existing codex cursor do not trigger size/page_c
     sourcePath: file.sourcePath,
     sourceInode: null,
     watermarkTable: 'threads',
-    watermarkEnd: 1, // captured up to rowid 0; rowid 1 and 2 are still ahead
+    watermarkEnd: 1, 
     lastSeenSizeBytes: null,
     lastSeenPageCount: null,
   });
 
   await collectCodexState(file, ctx(buffer));
   const batch = nextPendingBatch(buffer)!;
-  // No rotation expected: same hash carries through.
+  
   expect(batch.sourcePath).toBe(file.sourcePath);
   expect(batch.sourcePathHash).toBe(file.sourcePathHash);
 });
 
 test('splits an oversized table snapshot into multiple batches with contiguous rowid coverage', async () => {
-  // Inflate the threads table with rows whose `cwd` carries ~3 KB of
-  // incompressible noise. ~1500 rows push the body past the safety target
-  // and force multiple chunks for the threads table.
+  
+  
+  
   const path = join(dir, 'big_state.sqlite');
   const db = new Database(path, { create: true });
   db.run(
@@ -559,10 +559,10 @@ test('splits an oversized table snapshot into multiple batches with contiguous r
 
   const { result } = await collectCodexState(file, ctx(buffer));
   expect(result.errors).toEqual([]);
-  // Only the threads table has rows here; chunk count must be >= 2.
+  
   expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
 
-  // Drain the threads-table batches: assert size + contiguity.
+  
   let prevEnd = 0;
   let scanned = 0;
   for (let i = 0; i < 50; i++) {
@@ -593,8 +593,8 @@ test('splits an oversized table snapshot into multiple batches with contiguous r
 }, 60_000);
 
 test('second poll with no new rows refreshes lastSeenSize/PageCount on the existing cursor', async () => {
-  // First poll inserts the rows and creates per-table cursors with their
-  // current size/page_count.
+  
+  
   const file = await makeStateDb({
     threads: [{ id: 't1', cli_version: '0.1.0' }],
     dynamicTools: [{ thread_id: 't1', position: 0, name: 'a' }],
@@ -611,8 +611,8 @@ test('second poll with no new rows refreshes lastSeenSize/PageCount on the exist
   const beforeWatermark = before!.watermarkEnd;
   expect(beforeWatermark).toBeGreaterThan(0);
 
-  // Pad the same db with a no-op page change so size/page_count differs on
-  // second poll without affecting any tracked table's rowids.
+  
+  
   const db = new Database(file.sourcePath);
   db.run('CREATE TABLE __padding (k TEXT)');
   for (let i = 0; i < 100; i++) {
@@ -635,7 +635,7 @@ test('second poll with no new rows refreshes lastSeenSize/PageCount on the exist
     watermarkTable: 'threads',
   });
   expect(after).not.toBeNull();
-  // Watermark unchanged (no new rowids), but size/page-count refreshed.
+  
   expect(after!.watermarkEnd).toBe(beforeWatermark);
   expect(after!.lastSeenSizeBytes).not.toBe(before!.lastSeenSizeBytes);
 });

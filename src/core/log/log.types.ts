@@ -15,6 +15,7 @@ export interface LoggerFactoryOptions {
 export interface PruneLogDirectoryOptions {
   retentionDays?: number;
   totalSizeCapBytes?: number;
+  setMode?: (path: string, mode: number) => Promise<void>;
 }
 
 export interface PruneResult {

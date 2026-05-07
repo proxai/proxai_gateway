@@ -57,6 +57,9 @@ interface MockHttpControl {
   verifyResponse: 'accepted' | 'rejected' | 'forbidden' | 'service-unavailable' | 'network-error';
   userId: string;
   verifyCalls: number;
+  registerResponse: 'registered' | 'idempotent' | 'forbidden' | 'service-unavailable' | 'network-error';
+  registerCalls: number;
+  registerLastBody: { host_id?: string } | null;
 }
 
 function mockFactory(control: MockHttpControl): (apiKey: string, hostId: string) => HttpClient {
@@ -68,8 +71,9 @@ function mockFactory(control: MockHttpControl): (apiKey: string, hostId: string)
         ingest: 'https://api.example.com/v1/raw_records',
         verifyKey: 'https://api.example.com/ingestion/verify-key',
         watermarks: 'https://api.example.com/v1/watermarks',
+        registerHostId: 'https://api.example.com/v1/host-ids/register',
       },
-      fetch: (async (input: string | URL | Request) => {
+      fetch: (async (input: string | URL | Request, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input.toString();
         if (url.includes('/ingestion/verify-key')) {
           control.verifyCalls++;
@@ -97,13 +101,53 @@ function mockFactory(control: MockHttpControl): (apiKey: string, hostId: string)
           }
           throw new Error('boom');
         }
+        if (url.includes('/v1/host-ids/register')) {
+          control.registerCalls++;
+          control.registerLastBody =
+            init?.body === undefined ? null : (JSON.parse(init.body as string) as { host_id?: string });
+          if (control.registerResponse === 'registered') {
+            return new Response(
+              JSON.stringify({
+                host_id: control.registerLastBody?.host_id ?? '',
+                user_id: control.userId,
+                registered: true,
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          if (control.registerResponse === 'idempotent') {
+            return new Response(
+              JSON.stringify({
+                host_id: control.registerLastBody?.host_id ?? '',
+                user_id: control.userId,
+                registered: false,
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          if (control.registerResponse === 'forbidden') {
+            return new Response('', { status: 403 });
+          }
+          if (control.registerResponse === 'service-unavailable') {
+            return new Response('', { status: 503 });
+          }
+          throw new Error('boom-register');
+        }
         return new Response('', { status: 404 });
       }) as unknown as typeof globalThis.fetch,
     });
 }
 
 function newControl(overrides: Partial<MockHttpControl> = {}): MockHttpControl {
-  return { verifyResponse: 'accepted', userId: TEST_USER_ID, verifyCalls: 0, ...overrides };
+  return {
+    verifyResponse: 'accepted',
+    userId: TEST_USER_ID,
+    verifyCalls: 0,
+    registerResponse: 'registered',
+    registerCalls: 0,
+    registerLastBody: null,
+    ...overrides,
+  };
 }
 
 function deps(control: MockHttpControl): Parameters<typeof runSetup>[0] {
@@ -139,7 +183,8 @@ async function writeExistingConfig(
     backend: {
       ingestUrl: NEST_INGEST_URL,
       verifyKeyUrl: NEST_VERIFY_KEY_URL,
-      watermarksUrl: 'https://api.example.com/v1/watermarks',
+watermarksUrl: 'https://api.example.com/v1/watermarks',
+      registerHostIdUrl: 'https://api.example.com/v1/host-ids/register',
     },
     capture: {
       pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
@@ -205,9 +250,9 @@ test('writes a scheduled-task XML on win32 with the configured user id', async (
   d.windowsUserId = 'MYDOMAIN\\testuser';
   const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
-  // UTF-16 encoded — read as bytes and decode.
+  
   const bytes = await Bun.file(d.serviceUnitPath as string).bytes();
-  // Verify BOM + UTF-16LE.
+  
   expect(bytes[0]).toBe(0xff);
   expect(bytes[1]).toBe(0xfe);
   const unitContent = Buffer.from(
@@ -329,6 +374,9 @@ test('reports generic message when key is rejected without reason', async () => 
     verifyResponse: 'accepted',
     userId: TEST_USER_ID,
     verifyCalls: 0,
+    registerResponse: 'registered',
+    registerCalls: 0,
+    registerLastBody: null,
   };
   const baseDeps: Parameters<typeof runSetup>[0] = {
     ...deps(control),
@@ -455,8 +503,8 @@ test('returns error when readMachineUuid throws', async () => {
 });
 
 test('on replace, reports rederivation when host_id changes despite stable user_id', async () => {
-  // Pre-write config that has same userId but a stale hostId — simulates a
-  // machine UUID change captured in a fresh run.
+  
+  
   await writeExistingConfig({ userId: TEST_USER_ID, hostId: 'stale-host-id-from-old-machine' });
   const control = newControl({ userId: TEST_USER_ID });
   const out = captureOutput();
@@ -475,7 +523,7 @@ test('on replace, reports rederivation when host_id changes despite stable user_
 test('successful setup clears a pre-existing AUTH_FAILED sentinel', async () => {
   const control = newControl();
   const d = deps(control);
-  // Pre-write the sentinel as if a prior daemon halted on revoked key.
+  
   await Bun.write(d.authFailedSentinelPath, '{"reason":"prior halt","detected_at":"x"}');
   expect(await Bun.file(d.authFailedSentinelPath).exists()).toBe(true);
   const result = await runSetup(d, { apiKey: VALID_KEY });
@@ -490,4 +538,69 @@ test('failed setup (auth rejected) does not clear AUTH_FAILED sentinel', async (
   const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(3);
   expect(await Bun.file(d.authFailedSentinelPath).exists()).toBe(true);
+});
+
+test('register-host-id call is made with the derived host_id and reports newly bound', async () => {
+  const control = newControl();
+  const out = captureOutput();
+  const d = { ...deps(control), output: out };
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(control.registerCalls).toBe(1);
+  expect(control.registerLastBody?.host_id).toBe(EXPECTED_HOST_ID);
+  expect(out.lines.some((l) => l.level === 'info' && /host_id bound on backend/.test(l.msg))).toBe(
+    true,
+  );
+});
+
+test('register-host-id idempotent path reports already bound', async () => {
+  const control = newControl({ registerResponse: 'idempotent' });
+  const out = captureOutput();
+  const d = { ...deps(control), output: out };
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(control.registerCalls).toBe(1);
+  expect(
+    out.lines.some((l) => l.level === 'info' && /host_id already bound/.test(l.msg)),
+  ).toBe(true);
+});
+
+test('register-host-id 403 returns authError exit and surfaces a clear message', async () => {
+  const control = newControl({ registerResponse: 'forbidden' });
+  const out = captureOutput();
+  const d = { ...deps(control), output: out };
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(3);
+  expect(
+    out.lines.some(
+      (l) =>
+        l.level === 'error' && /already bound to another machine/.test(l.msg),
+    ),
+  ).toBe(true);
+});
+
+test('register-host-id 503 returns generic error', async () => {
+  const control = newControl({ registerResponse: 'service-unavailable' });
+  const out = captureOutput();
+  const d = { ...deps(control), output: out };
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(1);
+  expect(
+    out.lines.some(
+      (l) => l.level === 'error' && /host_id registration failed/.test(l.msg),
+    ),
+  ).toBe(true);
+});
+
+test('register-host-id network error returns generic error', async () => {
+  const control = newControl({ registerResponse: 'network-error' });
+  const out = captureOutput();
+  const d = { ...deps(control), output: out };
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(1);
+  expect(
+    out.lines.some(
+      (l) => l.level === 'error' && /host_id registration failed/.test(l.msg),
+    ),
+  ).toBe(true);
 });

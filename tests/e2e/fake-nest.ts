@@ -1,15 +1,16 @@
 /**
  * Fake nest server for e2e tests.
  *
- * Single-file, single-process Bun.serve instance that emulates the three
+ * Single-file, single-process Bun.serve instance that emulates the four
  * gateway-facing endpoints with enough fidelity to drive the capture-buffer-
  * upload pipeline:
  *
- *   GET  /ingestion/verify-key   — toggleable success/failure per api key
- *   GET  /v1/watermarks?host_id  — returns seeded server watermarks
- *   POST /v1/raw_records         — basic shape validation + per-(host_id,
- *                                   source_path_hash) monotonicity, dedupe
- *                                   by capture_id, 400 watermark_regression
+ *   GET  /ingestion/verify-key       — toggleable success/failure per api key
+ *   POST /v1/host-ids/register       — first-machine-wins host_id bind per key
+ *   GET  /v1/watermarks?host_id      — returns seeded server watermarks
+ *   POST /v1/raw_records             — basic shape validation + per-(host_id,
+ *                                       source_path_hash) monotonicity, dedupe
+ *                                       by capture_id, 400 watermark_regression
  *
  * Tests drive the server with the small control surface exposed below.
  */
@@ -45,6 +46,7 @@ export interface ReceivedSummary {
   records: ReceivedRawRecord[];
   verifyKeyCalls: { apiKey: string | null }[];
   watermarkFetches: { hostId: string; apiKey: string | null }[];
+  registerHostIdCalls: { apiKey: string | null; hostId: string }[];
 }
 
 export interface KeyEntry {
@@ -71,9 +73,13 @@ interface InternalState {
   capturesById: Map<string, ReceivedRawRecord>;
   // Latest watermark_end per (host_id, source_path_hash)
   latestWatermark: Map<string, number>;
+  // apiKey -> bound host_id (first-machine-wins). Mirrors the backend's
+  // `apiKey.metadata.allowedHostIds` allow-list at one entry per key.
+  registeredHostId: Map<string, string>;
   records: ReceivedRawRecord[];
   verifyKeyCalls: { apiKey: string | null }[];
   watermarkFetches: { hostId: string; apiKey: string | null }[];
+  registerHostIdCalls: { apiKey: string | null; hostId: string }[];
 }
 
 function newState(): InternalState {
@@ -82,9 +88,11 @@ function newState(): InternalState {
     hostWatermarks: new Map(),
     capturesById: new Map(),
     latestWatermark: new Map(),
+    registeredHostId: new Map(),
     records: [],
     verifyKeyCalls: [],
     watermarkFetches: [],
+    registerHostIdCalls: [],
   };
 }
 
@@ -290,6 +298,45 @@ function handleWatermarks(req: Request, state: InternalState): Response {
   });
 }
 
+async function handleRegisterHostId(req: Request, state: InternalState): Promise<Response> {
+  const apiKey = req.headers.get('x-api-key');
+  let parsedHostId = '';
+  try {
+    const body = (await req.json()) as { host_id?: unknown };
+    if (typeof body.host_id === 'string') parsedHostId = body.host_id;
+  } catch {
+    return new Response('invalid body', { status: 400 });
+  }
+  state.registerHostIdCalls.push({ apiKey, hostId: parsedHostId });
+  if (apiKey === null) {
+    return new Response('', { status: 401 });
+  }
+  const entry = state.keys.get(apiKey);
+  if (entry === undefined || !entry.valid) {
+    return new Response('', { status: 403 });
+  }
+  if (!/^[a-f0-9]{64}$/.test(parsedHostId)) {
+    return jsonResponse({ message: 'host_id must be 64-char lowercase hex (sha256)' }, 400);
+  }
+  const bound = state.registeredHostId.get(apiKey);
+  if (bound === undefined) {
+    state.registeredHostId.set(apiKey, parsedHostId);
+    return jsonResponse({
+      host_id: parsedHostId,
+      user_id: entry.userId,
+      registered: true,
+    });
+  }
+  if (bound === parsedHostId) {
+    return jsonResponse({
+      host_id: parsedHostId,
+      user_id: entry.userId,
+      registered: false,
+    });
+  }
+  return new Response('', { status: 403 });
+}
+
 export async function startFakeNest(): Promise<FakeNestHandle> {
   const state = newState();
   const server = Bun.serve({
@@ -298,6 +345,9 @@ export async function startFakeNest(): Promise<FakeNestHandle> {
       const url = new URL(req.url);
       if (url.pathname === '/ingestion/verify-key') {
         return handleVerifyKey(req, state);
+      }
+      if (url.pathname === '/v1/host-ids/register' && req.method === 'POST') {
+        return handleRegisterHostId(req, state);
       }
       if (url.pathname === '/v1/watermarks') {
         return handleWatermarks(req, state);
@@ -337,15 +387,18 @@ export async function startFakeNest(): Promise<FakeNestHandle> {
       records: [...state.records],
       verifyKeyCalls: [...state.verifyKeyCalls],
       watermarkFetches: [...state.watermarkFetches],
+      registerHostIdCalls: [...state.registerHostIdCalls],
     }),
     reset: () => {
       state.keys.clear();
       state.hostWatermarks.clear();
       state.capturesById.clear();
       state.latestWatermark.clear();
+      state.registeredHostId.clear();
       state.records.length = 0;
       state.verifyKeyCalls.length = 0;
       state.watermarkFetches.length = 0;
+      state.registerHostIdCalls.length = 0;
     },
     stop: async () => {
       await server.stop(true);

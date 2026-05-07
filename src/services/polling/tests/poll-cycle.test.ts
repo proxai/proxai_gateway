@@ -42,6 +42,7 @@ function makeContext(sources: RegisteredSource[]): PollCycleContext {
         ingest: 'https://api.example.com/v1/raw_records',
         verifyKey: 'https://api.example.com/ingestion/verify-key',
         watermarks: 'https://api.example.com/v1/watermarks',
+        registerHostId: 'https://api.example.com/v1/host-ids/register',
       },
       fetch: fakeFetch(),
     }),
@@ -242,7 +243,7 @@ test('BUFFER_FULL sentinel short-circuits the cycle when pending still above res
     softPauseBytes: 100,
     softResumeBytes: 50,
   };
-  // Insert a pending batch above resumeBytes so recovery is not triggered.
+  
   insertBatch(
     buffer,
     batchWith('payload-large-enough-to-exceed-fifty-bytes-and-then-some-more-padding'),
@@ -268,7 +269,7 @@ test('cycle calls prune after drain and records prune result', async () => {
 });
 
 test('cycle writes BUFFER_FULL sentinel when pending exceeds pause threshold', async () => {
-  // Use a fetch that returns 503 so batches stay pending after drain.
+  
   const ctx: PollCycleContext = {
     ...makeContext([noopSource('s')]),
     http: new HttpClient({
@@ -278,6 +279,7 @@ test('cycle writes BUFFER_FULL sentinel when pending exceeds pause threshold', a
         ingest: 'https://api.example.com/v1/raw_records',
         verifyKey: 'https://api.example.com/ingestion/verify-key',
         watermarks: 'https://api.example.com/v1/watermarks',
+        registerHostId: 'https://api.example.com/v1/host-ids/register',
       },
       fetch: (async () => new Response('', { status: 503 })) as unknown as typeof globalThis.fetch,
     }),
@@ -303,8 +305,8 @@ test('cycle clears BUFFER_FULL sentinel when pending drops below resume threshol
     softPauseBytes: 1_000_000,
     softResumeBytes: 500_000,
   };
-  // Sentinel pre-exists; pending is 0 (well below 500_000) → cycle should
-  // detect recovery, clear the sentinel, and run normally.
+  
+  
   await Bun.write(
     ctx.bufferFullSentinelPath,
     '{"pending_bytes":1500000,"threshold":1000000,"set_at":"x"}',
@@ -359,7 +361,7 @@ test('cycle logs soft_resume info at cycle-start when sentinel exists and pendin
     '{"pending_bytes":1500000,"threshold":1000000,"set_at":"x"}',
   );
   await runPollCycle(ctx);
-  // Cycle-start clear path emits the "...sentinel cleared at cycle start" line.
+  
   expect(
     entries.some(
       (e) =>
@@ -372,9 +374,9 @@ test('cycle logs soft_resume info at cycle-start when sentinel exists and pendin
 
 test('cycle logs post-drain soft_resume when a source writes the sentinel mid-cycle', async () => {
   const entries: FakeLogEntry[] = [];
-  // Source poller that writes the BUFFER_FULL sentinel during its poll. After
-  // the source returns and drain runs, the post-drain pressure check sees
-  // shouldResume=true and wasFull=true, exercising lines 208-216.
+  
+  
+  
   let sentinelWriter: () => Promise<void> = async () => {};
   const writerSource: RegisteredSource = {
     name: 'writer',
@@ -393,8 +395,8 @@ test('cycle logs post-drain soft_resume when a source writes the sentinel mid-cy
     softPauseBytes: 1_000_000,
     softResumeBytes: 500_000,
   };
-  // Buffer is empty so pendingBytes=0 → shouldResume=true at the late check.
-  // The source writes the sentinel during its poll, before the late check.
+  
+  
   sentinelWriter = async () => {
     await Bun.write(
       ctx.bufferFullSentinelPath,
@@ -416,9 +418,9 @@ function makeQueryThrowingBuffer(
   realBuffer: Database,
   shouldThrowOn: (sql: string) => boolean,
 ): Database {
-  // Build an object that delegates every method to realBuffer except `query`,
-  // which throws when shouldThrowOn(sql) is true. Wraps method bindings so
-  // bun:sqlite's internal `this` is preserved.
+  
+  
+  
   const fake: Record<string, unknown> = {};
   for (const key of Object.keys(realBuffer)) {
     fake[key] = (realBuffer as unknown as Record<string, unknown>)[key];
@@ -447,7 +449,7 @@ function makeQueryThrowingBuffer(
 
 test('cycle logs prune_failed warn when pruneBuffer throws', async () => {
   const entries: FakeLogEntry[] = [];
-  // Make the prune-stage transaction itself throw by intercepting db.transaction.
+  
   const fake: Record<string, unknown> = {};
   for (const key of ['query', 'run', 'prepare', 'exec', 'close', 'serialize'] as const) {
     const original = (buffer as unknown as Record<string, unknown>)[key];

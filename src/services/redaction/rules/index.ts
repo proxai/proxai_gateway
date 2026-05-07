@@ -27,9 +27,6 @@ export { PAYMENT_RULES } from 'services/redaction/rules/payment.ts';
 export { SAAS_TOOLS_RULES } from 'services/redaction/rules/saas-tools.ts';
 export { SOURCE_CONTROL_RULES } from 'services/redaction/rules/source-control.ts';
 
-// Order matters: most specific patterns run first so they replace before
-// the generic keyword-anchored catch-alls fire. The keyword-secret category
-// must stay LAST.
 export const RULE_CATEGORIES: readonly RuleCategory[] = [
   {
     name: 'crypto-keys',

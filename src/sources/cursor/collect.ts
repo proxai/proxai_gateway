@@ -64,11 +64,11 @@ export async function collectCursorFile(
         return result;
       }
 
-      // Resolve effective source identity. If the previous cursor for this
-      // path indicates the source DB rotated (size shrank, page_count fell,
-      // or rowids regressed beneath our saved watermark), bump the #gen=N
-      // suffix so the server treats this as a fresh stream and our local
-      // cursor restarts at watermark 0.
+      
+      
+      
+      
+      
       let effectiveSourcePath = file.sourcePath;
       let effectiveSourcePathHash = file.sourcePathHash;
       let priorCursor = getCursorWithFallback(context.buffer, {
@@ -106,8 +106,8 @@ export async function collectCursorFile(
             },
             'sqlite vacuum detected; re-keying source via #gen suffix',
           );
-          // Old cursor row is left frozen; capture under the new identity
-          // restarts at watermark 0.
+          
+          
           priorCursor = null;
         }
       }
@@ -116,12 +116,12 @@ export async function collectCursorFile(
       const rows = db.query<KvRow, [number]>(SELECT_ROWS_SQL).all(lastMaxRowid);
 
       if (rows.length === 0) {
-        // No new rows; still persist the latest size/page_count under the
-        // current cursor identity so we can detect vacuum next time. We only
-        // do this when a prior cursor already existed — otherwise we'd
-        // create an empty cursor row with watermark_end = 0, which would
-        // confuse downstream consumers that treat cursor existence as
-        // evidence of progress.
+        
+        
+        
+        
+        
+        
         if (priorCursor !== null) {
           setCursor(context.buffer, {
             sourceApp: CURSOR_SOURCE_APP,
@@ -145,9 +145,9 @@ export async function collectCursorFile(
 
       const agentSchemaVersion = extractAgentSchemaVersion(kvRows);
 
-      // Serialize-then-redact-then-compress for sizing. We measure the same
-      // payload the validator will see so per-chunk compressed size never
-      // crosses the threshold.
+      
+      
+      
       const measureCompressed = (slice: readonly CursorDiskKvRow[]): number =>
         zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted).byteLength;
 
@@ -172,10 +172,10 @@ export async function collectCursorFile(
       const lastRow = rows[rows.length - 1]!;
       const finalWatermarkEnd = lastRow.rowid + 1;
 
-      // Each slice owns a disjoint rowid range. The cursor advances ONLY
-      // after the last insert so a mid-loop crash leaves earlier slices
-      // buffered (with valid coverage) and the next poll re-derives the
-      // remaining tail from the un-advanced cursor.
+      
+      
+      
+      
       for (let i = 0; i < slices.length; i++) {
         const slice = slices[i]!;
         if (slice.length === 0) continue;

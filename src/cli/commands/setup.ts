@@ -22,6 +22,7 @@ import {
   DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
   DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
   NEST_INGEST_URL,
+  NEST_REGISTER_HOST_ID_URL,
   NEST_VERIFY_KEY_URL,
   NEST_WATERMARKS_URL,
 } from 'services/config';
@@ -30,11 +31,6 @@ import { loadConfigFromFile, writeConfigToFile } from 'services/config';
 import { HttpClient } from 'services/http';
 import { clearAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
 
-// Three hyphen-separated alphanumeric parts. Nest's key generator
-// (api-key-repository.service.ts) produces `<rand36>-<Date.now().toString(36)>-<rand36>`,
-// so the middle segment is base-36 (alphanumeric), NOT digits-only.
-// The minimum-length floors are sized to the smallest plausible
-// generator output and reject obvious typos early.
 const INGESTION_KEY_PATTERN = /^[A-Za-z0-9]{4,}-[A-Za-z0-9]{4,}-[A-Za-z0-9]{4,}$/;
 
 export interface SetupCommandDeps {
@@ -109,8 +105,8 @@ export async function runSetup(
     installSource = options.installSource ?? 'github_release';
   }
 
-  // verify-key does not consult host_id; pass an empty placeholder while we
-  // derive the real, stable id from the verified user id and the machine UUID.
+  
+  
   const http = deps.httpClientFactory(apiKey, '');
   let userId: string;
   try {
@@ -156,12 +152,32 @@ export async function runSetup(
     }
   }
 
+  const httpForRegister = deps.httpClientFactory(apiKey, hostId);
+  try {
+    const registration = await httpForRegister.registerHostId();
+    if (registration.registered) {
+      deps.output.info(`host_id bound on backend (host_id: ${hostId})`);
+    } else {
+      deps.output.info('host_id already bound on backend');
+    }
+  } catch (err) {
+    if (err instanceof AuthError) {
+      deps.output.error(
+        'this ingestion key is already bound to another machine; create a new ingestion key on https://proxai.co for this machine',
+      );
+      return { exitCode: EXIT_CODE.authError };
+    }
+    deps.output.error(formatError('host_id registration failed', err));
+    return { exitCode: EXIT_CODE.error };
+  }
+
   const config: GatewayConfig = {
     account: { apiKey, userId, hostId, installedAt, installSource },
     backend: {
       ingestUrl: NEST_INGEST_URL,
       verifyKeyUrl: NEST_VERIFY_KEY_URL,
       watermarksUrl: NEST_WATERMARKS_URL,
+      registerHostIdUrl: NEST_REGISTER_HOST_ID_URL,
     },
     capture: {
       pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
@@ -186,8 +202,8 @@ export async function runSetup(
   await writeConfigToFile(config, deps.configPath);
   await ensureDir(deps.logDir);
 
-  // Successful verify-key implies the new key is valid. Clear any previous
-  // halt sentinel so a halted daemon resumes on its next cycle.
+  
+  
   await clearAuthFailedSentinel(deps.authFailedSentinelPath);
 
   if (deps.serviceUnitPath !== null) {

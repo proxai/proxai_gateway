@@ -38,6 +38,7 @@ import { openBufferDb } from 'services/buffer';
 import {
   loadConfigFromFile,
   NEST_INGEST_URL,
+  NEST_REGISTER_HOST_ID_URL,
   NEST_VERIFY_KEY_URL,
   NEST_WATERMARKS_URL,
 } from 'services/config';
@@ -84,6 +85,7 @@ function buildSetupDeps(): SetupCommandDeps {
           ingest: NEST_INGEST_URL,
           verifyKey: NEST_VERIFY_KEY_URL,
           watermarks: NEST_WATERMARKS_URL,
+          registerHostId: NEST_REGISTER_HOST_ID_URL,
         },
         gatewayVersion: `@proxai/gateway ${packageJson.version}`,
       }),
@@ -256,7 +258,7 @@ program
       const config = await loadConfigFromFile(opts.config);
       bufferPath = config.capture.bufferPath;
     } catch {
-      // Fall back to default path if config missing.
+      
     }
     const buffer = openBufferDb(bufferPath);
     try {
@@ -320,7 +322,7 @@ program
         const config = await loadConfigFromFile(opts.config);
         dir = config.logging.logDir;
       } catch {
-        // fall back to default if config missing
+        
       }
       const ctrl = new AbortController();
       process.on('SIGINT', () => ctrl.abort());

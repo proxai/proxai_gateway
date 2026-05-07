@@ -11,9 +11,6 @@ import { setLastPruneAt } from 'services/buffer/metadata.ts';
 
 const MS_PER_DAY = 86_400_000;
 
-// Receipt rows are tiny — capture_id, source_app, hashes, watermarks,
-// timestamps. We approximate ~200 bytes per row to surface a non-zero
-// "bytes freed" number without a separate length pass.
 const RECEIPT_BYTES_PER_ROW = 200;
 
 const COUNT_OLD_RECEIPTS_SQL = `

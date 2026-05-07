@@ -1,16 +1,5 @@
 import { GatewayError } from 'core/utils';
 
-/**
- * Read the platform-provided machine identifier.
- *
- * - darwin: `ioreg -rd1 -c IOPlatformExpertDevice` → `IOPlatformUUID` field
- * - linux: `/etc/machine-id`, falling back to `/var/lib/dbus/machine-id`
- * - win32: `HKLM\SOFTWARE\Microsoft\Cryptography` → `MachineGuid` registry value
- *
- * The returned string is the raw vendor identifier (UUID or GUID); callers
- * should not assume any particular format. A stable host_id is derived by
- * combining this value with the verified user id (see `deriveHostId`).
- */
 export interface MachineUuidSpawnResult {
   exited: Promise<number>;
   stdout: ReadableStream<Uint8Array>;
@@ -115,11 +104,11 @@ function stripQuotes(value: string): string {
   return v.trim();
 }
 
-function defaultSpawn(): MachineUuidSpawnFn {
+export function defaultSpawn(): MachineUuidSpawnFn {
   return (argv, options) => Bun.spawn(argv, options) as unknown as MachineUuidSpawnResult;
 }
 
-function defaultReadFile(path: string): MachineUuidFileReader {
+export function defaultReadFile(path: string): MachineUuidFileReader {
   const file = Bun.file(path);
   return {
     exists: () => file.exists(),

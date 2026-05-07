@@ -1,21 +1,4 @@
 #!/usr/bin/env bun
-/**
- * Per-platform `bun build --compile` driver.
- *
- * Produces standalone executables under `dist/<platform>-<arch>/proxai-gateway`
- * (with `.exe` suffix on win32). Each target is built sequentially; on any
- * non-zero exit code the script aborts with the same code.
- *
- * Bun supports the following compile targets as of Bun 1.3.x:
- *   - bun-darwin-arm64
- *   - bun-darwin-x64
- *   - bun-linux-arm64
- *   - bun-linux-x64
- *   - bun-windows-x64
- *   - bun-windows-arm64   (experimental; downloads aarch64 runtime)
- *
- * If a future Bun release adds or drops a target, update `TARGETS` below.
- */
 
 import { mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';

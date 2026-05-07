@@ -20,6 +20,7 @@ const endpoints: HttpEndpoints = {
   ingest: 'https://api.example.com/v1/raw_records',
   verifyKey: 'https://api.example.com/ingestion/verify-key',
   watermarks: 'https://api.example.com/v1/watermarks',
+        registerHostId: 'https://api.example.com/v1/host-ids/register',
 };
 
 interface MockCall {
@@ -138,7 +139,7 @@ describe('uploadRawRecord', () => {
       expect(err).toBeInstanceOf(WatermarkRegressionError);
       expect((err as WatermarkRegressionError).currentServerWatermarkEnd).toBe(7777);
       expect((err as WatermarkRegressionError).sourcePathHash).toBe('h_abc');
-      // Subclass of ValidationError so existing classifiers still recognize it.
+      
       expect(err).toBeInstanceOf(ValidationError);
     }
   });

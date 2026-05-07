@@ -54,10 +54,10 @@ async function classifyAndPersist(
   const captureId = batch.captureId;
   const log = ctx.logger?.child({ capture_id: captureId });
   if (err instanceof WatermarkRegressionError) {
-    // Server already has data up to err.currentServerWatermarkEnd for this
-    // source_path_hash. Update our local cursor to match, drop the failed
-    // batch (it duplicates server state), and let the next cycle resume from
-    // the new cursor position forward.
+    
+    
+    
+    
     setCursorFromRegression(ctx.db, batch, err.currentServerWatermarkEnd);
     deleteBatch(ctx.db, captureId);
     log?.info(
@@ -142,9 +142,9 @@ async function handleAuthError(
   const captureId = batch.captureId;
   const log = ctx.logger?.child({ capture_id: captureId });
 
-  // Reactive verify-key disambiguates "transient 401/403" from "key actually
-  // revoked". One extra request per failed upload — never recurses on the
-  // verify-key call itself.
+  
+  
+  
   let verification;
   try {
     verification = await ctx.http.verifyKey();
@@ -152,7 +152,7 @@ async function handleAuthError(
     if (verifyErr instanceof AuthError) {
       return finalizeAuthFailure(ctx, batch, 'verify-key threw AuthError');
     }
-    // 5xx, network failure, etc. — cannot confirm the key is bad, so retry.
+    
     recordRetriableFailure(ctx.db, captureId, authErr.message);
     log?.warn(
       {
@@ -176,7 +176,7 @@ async function handleAuthError(
     return finalizeAuthFailure(ctx, batch, reason);
   }
 
-  // verify-key reports success — the upload's 401/403 was transient.
+  
   recordRetriableFailure(ctx.db, captureId, authErr.message);
   log?.warn(
     { event: 'upload.auth_transient', error: authErr.message },

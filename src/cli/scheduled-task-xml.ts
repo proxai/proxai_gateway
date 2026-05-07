@@ -76,10 +76,6 @@ export function defaultScheduledTaskName(): string {
   return WINDOWS_TASK_NAME;
 }
 
-/**
- * Encodes XML text as UTF-16 LE with a BOM. Windows `schtasks /Create /XML`
- * requires UTF-16 input — UTF-8 bytes are silently misinterpreted.
- */
 export function encodeScheduledTaskXml(xml: string): Uint8Array {
   const bom = '﻿';
   const text = bom + xml;

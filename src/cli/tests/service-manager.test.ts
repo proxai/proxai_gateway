@@ -53,8 +53,6 @@ test('runCommand returns stdout, stderr, exit code', async () => {
   expect(result.stderr).toBe('oops');
 });
 
-// ---------- macOS / launchctl ----------
-
 test('darwin: isRegistered true when launchctl print exits 0', async () => {
   const { spawn, invocations } = mockSpawn(() => ({ exitCode: 0 }));
   const sm = getServiceManager({
@@ -186,8 +184,6 @@ test('darwin: restart uses kickstart -k', async () => {
   expect(kick?.argv[2]).toBe('-k');
 });
 
-// ---------- Linux / systemctl ----------
-
 test('linux: isRegistered true when list-unit-files exits 0 with unit name', async () => {
   const { spawn, invocations } = mockSpawn(() => ({
     exitCode: 0,
@@ -310,8 +306,6 @@ test('linux: surfaces stderr in error message when systemctl fails', async () =>
   });
   await expect(sm.stop()).rejects.toThrow(/bad unit/);
 });
-
-// ---------- Windows / schtasks ----------
 
 test('win32: isRegistered true when schtasks /Query exits 0', async () => {
   const { spawn, invocations } = mockSpawn(() => ({ exitCode: 0 }));
@@ -486,9 +480,9 @@ test('unsupported platform throws clear error', () => {
 });
 
 test('default spawn factory is wired up when deps.spawn is omitted', async () => {
-  // Exercises the defaultSpawn() function — spawns a real command. Use the
-  // current platform; isRegistered makes a single cheap query that returns a
-  // boolean regardless of whether the service is registered.
+  
+  
+  
   const sm = getServiceManager({
     platform: process.platform,
     unitPath: '/tmp/proxai-coverage-nonexistent.unit',
@@ -497,8 +491,6 @@ test('default spawn factory is wired up when deps.spawn is omitted', async () =>
   const result = await sm.isRegistered();
   expect(typeof result).toBe('boolean');
 });
-
-// ---------- darwin error branches ----------
 
 test('darwin: ensureRegistered surfaces stderr when bootstrap fails', async () => {
   const { spawn } = mockSpawn((argv) => {
@@ -643,8 +635,6 @@ test('darwin: restart surfaces error when kickstart -k fails', async () => {
   });
   await expect(sm.restart()).rejects.toThrow(/kick-failed/);
 });
-
-// ---------- linux error branches ----------
 
 test('linux: ensureRegistered surfaces stderr when daemon-reload fails', async () => {
   const { spawn } = mockSpawn((argv) => {
@@ -822,8 +812,6 @@ test('linux: errors fall back to stdout when stderr is empty', async () => {
   });
   await expect(sm.stop()).rejects.toThrow(/stdout-fallback-message/);
 });
-
-// ---------- win32 error branches ----------
 
 test('win32: ensureRegistered surfaces stderr when /Create fails', async () => {
   const { spawn } = mockSpawn((argv) => {

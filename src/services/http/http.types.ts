@@ -2,6 +2,7 @@ export interface HttpEndpoints {
   ingest: string;
   verifyKey: string;
   watermarks: string;
+  registerHostId: string;
 }
 
 export interface HttpClientOptions {
@@ -31,6 +32,12 @@ export interface VerifyKeyResult {
   message: string;
   userId: string | null;
   keyName: string | null;
+}
+
+export interface RegisterHostIdResult {
+  hostId: string;
+  userId: string;
+  registered: boolean;
 }
 
 export interface ServerWatermark {

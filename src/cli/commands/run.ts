@@ -45,7 +45,7 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
   try {
     await pruneLogDirectory(deps.config.logging.logDir);
   } catch {
-    // best-effort startup pruning; do not block daemon on retention errors
+    
   }
 
   const http =
@@ -57,6 +57,7 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
         ingest: deps.config.backend.ingestUrl,
         verifyKey: deps.config.backend.verifyKeyUrl,
         watermarks: deps.config.backend.watermarksUrl,
+        registerHostId: deps.config.backend.registerHostIdUrl,
       },
       gatewayVersion: deps.gatewayVersion,
     });
@@ -70,10 +71,10 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
     'daemon starting',
   );
 
-  // Pre-flight watermark sync. When the cursor table is empty (typical after
-  // a fresh install or buffer wipe), pull server-known positions to suppress
-  // duplicate captures from byte 0. Failures are logged but do not abort the
-  // daemon — the runtime regression-recovery path acts as a safety net.
+  
+  
+  
+  
   if (countCursors(buffer) === 0) {
     logger.info(
       { event: 'watermark_sync.start', reason: 'fresh_buffer' },
@@ -111,9 +112,9 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
       abortSignal: deps.abortSignal,
     };
     if (deps.onCycleComplete !== undefined) loopOptions.onCycleComplete = deps.onCycleComplete;
-    // Per-daemon pacer: rate-limit state must accumulate across drain calls so
-    // a sustained 429 streak applies the right backoff regardless of where in
-    // the poll cycle the throttling started.
+    
+    
+    
     const pacer = createPacer({
       maxBatchesPerSec: deps.config.capture.uploadMaxBatchesPerSec,
       maxBytesPerMinute: deps.config.capture.uploadMaxBytesPerMinute,

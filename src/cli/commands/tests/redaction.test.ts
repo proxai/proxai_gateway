@@ -27,8 +27,6 @@ function stripAnsi(s: string): string {
   return s.replace(/\[[0-9;]*m/g, '');
 }
 
-// runRedactionTest
-
 test('test: redacts an inline-pattern key in input file', async () => {
   const fakeKey = 'sk-' + 'a'.repeat(48);
   const filePath = await seed('input.txt', `key=${fakeKey} other=value`);
@@ -90,7 +88,7 @@ test.skipIf(process.platform === 'win32')(
   'test: returns fileUnreadable when text() throws for an unreadable file',
   async () => {
     const filePath = await seed('locked.txt', 'secret content');
-    // chmod 0 — exists() still returns true on macOS/linux but text() throws EACCES.
+    
     await chmod(filePath, 0o000);
     const out = captureOutput();
     try {
@@ -115,8 +113,6 @@ test('test: rule summary lists rule IDs sorted by hit count', async () => {
   expect(joined).toMatch(/openai-api-key: 3/);
   expect(joined).toMatch(/travis-ci-token: 1/);
 });
-
-// runRedactionList
 
 test('list: default emits every category and rule', () => {
   const lines: string[] = [];
@@ -149,7 +145,7 @@ test('list: --categories shows only category summaries', () => {
     expect(joined).toContain(cat.name);
     expect(joined).toContain(cat.description);
   }
-  // Patterns should not appear in summary mode
+  
   const firstPattern = ALL_RULES[0]!.pattern.toString();
   expect(joined.includes(firstPattern)).toBe(false);
 });
@@ -164,7 +160,7 @@ test('list: --category filters to one category', () => {
   expect(result.exitCode).toBe(0);
   const joined = stripAnsi(lines.join('\n'));
   expect(joined).toContain(target.name);
-  // Other categories should not appear
+  
   for (const other of RULE_CATEGORIES) {
     if (other.name === target.name) continue;
     expect(joined.includes(`${other.name}  (`)).toBe(false);

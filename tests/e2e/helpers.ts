@@ -152,6 +152,7 @@ export async function setupGateway(env: TempEnv, opts: SetupOptions): Promise<Se
           ingest: `${opts.nestUrl}/v1/raw_records`,
           verifyKey: `${opts.nestUrl}/ingestion/verify-key`,
           watermarks: `${opts.nestUrl}/v1/watermarks`,
+          registerHostId: `${opts.nestUrl}/v1/host-ids/register`,
         },
         gatewayVersion: TEST_GATEWAY_VERSION,
       }),
@@ -171,6 +172,7 @@ export async function setupGateway(env: TempEnv, opts: SetupOptions): Promise<Se
     cfg.backend.ingestUrl = `${opts.nestUrl}/v1/raw_records`;
     cfg.backend.verifyKeyUrl = `${opts.nestUrl}/ingestion/verify-key`;
     cfg.backend.watermarksUrl = `${opts.nestUrl}/v1/watermarks`;
+    cfg.backend.registerHostIdUrl = `${opts.nestUrl}/v1/host-ids/register`;
     const { writeConfigToFile } = await import('services/config');
     await writeConfigToFile(cfg, env.configPath);
     return { exitCode: result.exitCode, config: cfg };
@@ -210,6 +212,7 @@ export async function runOneCycle(opts: RunCycleOptions): Promise<PollCycleResul
       ingest: `${opts.nestUrl}/v1/raw_records`,
       verifyKey: `${opts.nestUrl}/ingestion/verify-key`,
       watermarks: `${opts.nestUrl}/v1/watermarks`,
+      registerHostId: `${opts.nestUrl}/v1/host-ids/register`,
     },
     gatewayVersion: TEST_GATEWAY_VERSION,
   });
@@ -278,6 +281,7 @@ export function makeSyntheticConfig(
       ingestUrl: `${account.nestUrl}/v1/raw_records`,
       verifyKeyUrl: `${account.nestUrl}/ingestion/verify-key`,
       watermarksUrl: `${account.nestUrl}/v1/watermarks`,
+      registerHostIdUrl: `${account.nestUrl}/v1/host-ids/register`,
     },
     capture: {
       pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,

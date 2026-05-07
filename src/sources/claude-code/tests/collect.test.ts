@@ -184,14 +184,14 @@ test('persists the wire-DTO fields needed by the uploader', async () => {
 });
 
 test('splits an oversized slice into multiple batches with contiguous watermark coverage', async () => {
-  // Build a JSONL stream whose ZSTD-compressed total exceeds the safety
-  // target. Random base64 is incompressible, so we control the size
-  // precisely. Each line is ~2 KB; we emit enough lines to reach ~3 MB
-  // compressed which forces at least two chunks.
+  
+  
+  
+  
   const targetTotalLines = Math.ceil((3 * 1024 * 1024) / 2048);
   const linesArr: string[] = [];
   for (let i = 0; i < targetTotalLines; i++) {
-    const noise = randomBytes(1500).toString('base64'); // ~2 KB
+    const noise = randomBytes(1500).toString('base64'); 
     linesArr.push(JSON.stringify({ i, noise }));
   }
   const content = `${linesArr.join('\n')}\n`;
@@ -201,8 +201,8 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
   expect(result.errors).toEqual([]);
   expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
 
-  // Every batch is below the hard server cap and below the target.
-  // Watermark ranges are contiguous and disjoint, covering [0, file.size).
+  
+  
   let prevEnd = 0;
   let scanned = 0;
   for (let i = 0; i < 50; i++) {
@@ -214,11 +214,11 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
     expect(batch.watermarkEnd).toBeGreaterThan(batch.watermarkStart);
     prevEnd = batch.watermarkEnd;
     scanned += 1;
-    // Drop the batch so nextPendingBatch returns the next one.
+    
     deleteBatch(buffer, batch.captureId);
   }
   expect(scanned).toBe(result.capturedBatches);
-  // Final cursor is at the file's size (the last newline).
+  
   const cursor = getCursor(buffer, {
     sourceApp: 'claude-code',
     sourcePathHash: file.sourcePathHash,
@@ -230,13 +230,13 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
 }, 30_000);
 
 test('resets watermark when source_inode changes (file rotated/replaced)', async () => {
-  // First poll: capture a complete line under inode A and advance the cursor.
+  
   const file = await makeFile('{"a":1}\n');
   const first = await collectClaudeCodeFile(file, ctx(buffer));
   expect(first.capturedBatches).toBe(1);
 
-  // Same path, same hash, but a NEW inode (file replaced or rotated). The
-  // file's bytes now reflect fresh, never-seen-before content.
+  
+  
   const newContent = '{"b":2}\n';
   await writeFile(file.sourcePath, newContent);
   const rotated = { ...file, inode: file.inode + 1, sizeBytes: newContent.length };
@@ -245,8 +245,8 @@ test('resets watermark when source_inode changes (file rotated/replaced)', async
   expect(second.capturedBatches).toBe(1);
   expect(countByStatus(buffer).pending).toBe(2);
 
-  // The watermark from inode A must not carry over: the new inode's cursor
-  // starts the range at 0 and ends at the full size of the new bytes.
+  
+  
   const cursorOld = getCursor(buffer, {
     sourceApp: 'claude-code',
     sourcePathHash: file.sourcePathHash,

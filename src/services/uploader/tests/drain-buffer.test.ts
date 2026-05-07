@@ -231,7 +231,7 @@ test('rate-limited response triggers notifyRetryAfter and notify429 only', async
   expect(result.retriable).toBe(1);
   expect(spy.retryAfters).toEqual([15_000]);
   expect(spy.notify429Count.value).toBe(1);
-  // 429 must not bleed into the 503 channel — different distress class.
+  
   expect(spy.serviceUnavailableCalls).toEqual([]);
 });
 
@@ -246,8 +246,8 @@ test('503 response triggers notifyServiceUnavailable, not notify429', async () =
   };
   const result = await drainBuffer(ctx);
   expect(result.retriable).toBe(1);
-  // No Retry-After header on the 503 — no explicit retry-after notified, and
-  // notifyServiceUnavailable is called with undefined.
+  
+  
   expect(spy.retryAfters).toEqual([]);
   expect(spy.notify429Count.value).toBe(0);
   expect(spy.serviceUnavailableCalls).toEqual([undefined]);
@@ -264,8 +264,8 @@ test('503 with Retry-After threads the hint into notifyServiceUnavailable', asyn
   };
   const result = await drainBuffer(ctx);
   expect(result.retriable).toBe(1);
-  // Retry-After is threaded both to notifyRetryAfter (used for the immediate
-  // pre-acquire wait) and as the floor argument to notifyServiceUnavailable.
+  
+  
   expect(spy.retryAfters).toEqual([20_000]);
   expect(spy.notify429Count.value).toBe(0);
   expect(spy.serviceUnavailableCalls).toEqual([20_000]);
@@ -274,9 +274,9 @@ test('503 with Retry-After threads the hint into notifyServiceUnavailable', asyn
 test('auth-unconfirmed retriable does not trigger any pacer distress signal', async () => {
   await insertN(1);
   const spy = makePacerSpy();
-  // 403 from upload + 503 from verify-key → upload-batch returns retriable
-  // with reason 'auth_unconfirmed'. The pacer should not back off — auth
-  // faults are an identity issue, not server distress.
+  
+  
+  
   const ctx: UploaderContext = {
     db,
     http: createTestHttpClient(

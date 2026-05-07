@@ -33,7 +33,7 @@ function isoDaysAgo(days: number): string {
 }
 
 test('deletes receipts older than retention; keeps recent receipts', () => {
-  // Insert a fresh receipt (<1 day) and an old receipt (>30 days).
+  
   insertReceipt(db, {
     captureId: generateUuidV7(),
     sourceApp: 'claude-code',
@@ -65,8 +65,8 @@ test('deletes receipts older than retention; keeps recent receipts', () => {
 });
 
 test('deletes failed batches older than retention; keeps recent failed and pending', () => {
-  // We mark batches failed; created_at is set on insert. To make a batch "old"
-  // we have to update created_at directly, which the prune SQL filters on.
+  
+  
   const oldFailed = newBatch({ body: new Uint8Array(100) });
   const recentFailed = newBatch({ body: new Uint8Array(200) });
   const pending = newBatch({ body: new Uint8Array(300) });
@@ -75,7 +75,7 @@ test('deletes failed batches older than retention; keeps recent failed and pendi
   insertBatch(db, pending);
   markBatchFailed(db, oldFailed.captureId, 'old');
   markBatchFailed(db, recentFailed.captureId, 'recent');
-  // Backdate oldFailed
+  
   db.run('UPDATE upload_batches SET created_at = ? WHERE capture_id = ?', [
     isoDaysAgo(45),
     oldFailed.captureId,
@@ -129,7 +129,7 @@ test('uses custom retention windows', () => {
     deliveredAt: isoDaysAgo(5),
     idempotentOnServer: false,
   });
-  // 1-day retention should drop the 5-day-old receipt.
+  
   const result = pruneBuffer({ db, receiptRetentionDays: 1, failedRetentionDays: 30 });
   expect(result.receiptsDeleted).toBe(1);
 });
@@ -142,8 +142,8 @@ test('records last_prune_at metadata', () => {
 });
 
 test('respects an injected now() value when computing cutoffs', () => {
-  // markBatchDelivered uses real-now for deliveredAt, so use insertReceipt
-  // with a controlled deliveredAt instead.
+  
+  
   const stableId = generateUuidV7();
   insertReceipt(db, {
     captureId: stableId,
@@ -156,8 +156,8 @@ test('respects an injected now() value when computing cutoffs', () => {
     deliveredAt: '2026-01-01T00:00:00.000Z',
     idempotentOnServer: false,
   });
-  // Cutoff is now - 30d. With now=2026-01-15, the receipt at 2026-01-01 is 14
-  // days old → not deleted.
+  
+  
   const result1 = pruneBuffer({
     db,
     receiptRetentionDays: 30,
@@ -165,7 +165,7 @@ test('respects an injected now() value when computing cutoffs', () => {
     now: new Date('2026-01-15T00:00:00.000Z'),
   });
   expect(result1.receiptsDeleted).toBe(0);
-  // With now=2026-03-15, the receipt is 73 days old → deleted.
+  
   const result2 = pruneBuffer({
     db,
     receiptRetentionDays: 30,
@@ -176,16 +176,16 @@ test('respects an injected now() value when computing cutoffs', () => {
 });
 
 test('runs in a single transaction (delivered batches with markBatchDelivered + then prune)', () => {
-  // Use markBatchDelivered to verify receipt path, then prune by age.
+  
   const a = newBatch();
   insertBatch(db, a);
   markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
-  // After delivery there's a receipt; prune with 0-day retention should sweep.
+  
   const result = pruneBuffer({
     db,
     receiptRetentionDays: 0,
     failedRetentionDays: 30,
-    // Force cutoff into the future so the just-now-delivered receipt qualifies.
+    
     now: new Date(Date.now() + 1000),
   });
   expect(result.receiptsDeleted).toBe(1);

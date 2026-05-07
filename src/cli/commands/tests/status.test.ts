@@ -123,7 +123,7 @@ test('formatBytes handles each magnitude tier', () => {
   expect(formatBytes(2 * 1024 * 1024)).toBe('2.00 MB');
   expect(formatBytes(2 * 1024 * 1024 * 1024)).toBe('2.00 GB');
   expect(formatBytes(2 * 1024 * 1024 * 1024 * 1024)).toBe('2.00 TB');
-  // PB -- units array runs out, falls back to TB representation.
+  
   expect(formatBytes(2 * 1024 * 1024 * 1024 * 1024 * 1024)).toContain('TB');
 });
 

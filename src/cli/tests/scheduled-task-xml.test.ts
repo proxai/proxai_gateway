@@ -25,7 +25,7 @@ test('embeds the provided userId in trigger and principal', () => {
     userId: 'MYDOMAIN\\testuser',
   });
   expect(xml).toContain('<UserId>MYDOMAIN\\testuser</UserId>');
-  // appears twice (LogonTrigger + Principal)
+  
   const occurrences = xml.split('MYDOMAIN\\testuser').length - 1;
   expect(occurrences).toBe(2);
 });
@@ -64,12 +64,12 @@ test('defaultScheduledTaskXmlPath ends with scheduled-task.xml', () => {
 test('encodeScheduledTaskXml prepends UTF-16 BOM and uses 2 bytes per char', () => {
   const xml = '<a/>';
   const bytes = encodeScheduledTaskXml(xml);
-  // 1 BOM + 4 chars = 5 code units * 2 bytes = 10 bytes
+  
   expect(bytes.byteLength).toBe(10);
-  // BOM 0xFFFE? Actually U+FEFF in little-endian is bytes [0xFF, 0xFE]
+  
   expect(bytes[0]).toBe(0xff);
   expect(bytes[1]).toBe(0xfe);
-  // first XML char '<' is 0x3C
+  
   expect(bytes[2]).toBe(0x3c);
   expect(bytes[3]).toBe(0x00);
 });
