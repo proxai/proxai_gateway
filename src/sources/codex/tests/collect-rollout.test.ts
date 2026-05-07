@@ -231,13 +231,18 @@ test('watermark continuity holds under redaction-induced byte-count changes', as
 });
 
 test('resets watermark when source_inode changes (file rotated/replaced)', async () => {
-  const file = await makeFile('{"a":1}\n');
+  // Use synthetic inode values rather than OS-allocated ones. Windows surfaces
+  // inode-like ids inconsistently through node:fs (often 0 or non-stable),
+  // and Linux ext4 reuses inode numbers after unlink+create on the same path,
+  // so OS-derived inodes make this test platform-dependent. The cursor logic
+  // only cares that the (path_hash, inode) identity changes.
+  const file = { ...(await makeFile('{"a":1}\n')), inode: 1001 };
   const first = await collectCodexRollout(file, ctx(buffer), '0.1.0');
   expect(first.capturedBatches).toBe(1);
 
   const newContent = '{"b":2}\n';
   await writeFile(file.sourcePath, newContent);
-  const rotated = { ...file, inode: file.inode + 1, sizeBytes: newContent.length };
+  const rotated = { ...file, inode: 1002, sizeBytes: newContent.length };
 
   const second = await collectCodexRollout(rotated, ctx(buffer), '0.1.0');
   expect(second.capturedBatches).toBe(1);

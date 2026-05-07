@@ -117,8 +117,10 @@ test('captures discover errors when baseDir is a regular file', async () => {
 });
 
 test('captures state-side discover error when baseDir is extreme', async () => {
-  const tooLong = `/${'x'.repeat(10_000)}`;
-  const poller = makeCodexSourcePoller({ baseDir: tooLong });
+  const filePath = join(dir, 'is-a-file');
+  await writeFile(filePath, 'not a directory');
+  const baseDir = join(filePath, 'subdir');
+  const poller = makeCodexSourcePoller({ baseDir });
   const result = await poller({ buffer, gatewayVersion: 'gw-0.1' });
   expect(result.errors.length).toBeGreaterThan(0);
 });
