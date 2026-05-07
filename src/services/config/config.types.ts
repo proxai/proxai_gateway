@@ -28,6 +28,7 @@ export interface CaptureConfig {
   uploadMaxBatchesPerSec: number;
   uploadMaxBytesPerMinute: number;
   uploadBackoffOn429Multiplier: number;
+  maxDecompressedBytes?: number;
 }
 
 export interface LoggingConfig {

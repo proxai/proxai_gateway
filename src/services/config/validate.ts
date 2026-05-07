@@ -100,7 +100,7 @@ function validateCapture(raw: unknown): CaptureConfig {
       'capture.buffer_soft_resume_bytes must be less than capture.buffer_soft_pause_bytes',
     );
   }
-  return {
+  const capture: CaptureConfig = {
     pollIntervalSec: optionalNumber(
       r['poll_interval_sec'],
       DEFAULT_POLL_INTERVAL_SEC,
@@ -148,6 +148,14 @@ function validateCapture(raw: unknown): CaptureConfig {
       1,
     ),
   };
+  const maxDecompressed = optionalPositiveNumberOrInfinity(
+    r['max_decompressed_bytes'],
+    'capture.max_decompressed_bytes',
+  );
+  if (maxDecompressed !== undefined) {
+    capture.maxDecompressedBytes = maxDecompressed;
+  }
+  return capture;
 }
 
 function validateLogging(raw: unknown): LoggingConfig {
@@ -222,6 +230,20 @@ function optionalNumber(
   }
   if (max !== undefined && value > max) {
     throw new ValidationError(`${fieldPath} must be <= ${max}`);
+  }
+  return value;
+}
+
+function optionalPositiveNumberOrInfinity(value: unknown, fieldPath: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number') {
+    throw new ValidationError(`${fieldPath} must be a number`);
+  }
+  if (!Number.isFinite(value) && value !== Number.POSITIVE_INFINITY) {
+    throw new ValidationError(`${fieldPath} must be finite or +Infinity`);
+  }
+  if (value <= 0) {
+    throw new ValidationError(`${fieldPath} must be > 0`);
   }
   return value;
 }

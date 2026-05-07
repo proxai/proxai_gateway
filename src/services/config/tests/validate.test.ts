@@ -149,6 +149,60 @@ test('expands ~/ in path fields', () => {
   expect(result.logging.logDir.endsWith(join('custom', 'logs'))).toBe(true);
 });
 
+test('accepts max_decompressed_bytes as a positive finite number', () => {
+  const result = validateAndCoerce({
+    account: minimalAccount,
+    capture: { max_decompressed_bytes: 9 * 1024 * 1024 },
+  });
+  expect(result.capture.maxDecompressedBytes).toBe(9 * 1024 * 1024);
+});
+
+test('accepts max_decompressed_bytes set to +Infinity (kill switch)', () => {
+  const result = validateAndCoerce({
+    account: minimalAccount,
+    capture: { max_decompressed_bytes: Number.POSITIVE_INFINITY },
+  });
+  expect(result.capture.maxDecompressedBytes).toBe(Number.POSITIVE_INFINITY);
+});
+
+test('omits max_decompressed_bytes when not provided', () => {
+  const result = validateAndCoerce({ account: minimalAccount });
+  expect(result.capture.maxDecompressedBytes).toBeUndefined();
+});
+
+test('rejects non-numeric max_decompressed_bytes', () => {
+  expect(() =>
+    validateAndCoerce({
+      account: minimalAccount,
+      capture: { max_decompressed_bytes: 'lots' },
+    }),
+  ).toThrow(/max_decompressed_bytes/);
+});
+
+test('rejects NaN max_decompressed_bytes', () => {
+  expect(() =>
+    validateAndCoerce({
+      account: minimalAccount,
+      capture: { max_decompressed_bytes: Number.NaN },
+    }),
+  ).toThrow(/finite or \+Infinity/);
+});
+
+test('rejects max_decompressed_bytes <= 0', () => {
+  expect(() =>
+    validateAndCoerce({
+      account: minimalAccount,
+      capture: { max_decompressed_bytes: 0 },
+    }),
+  ).toThrow(/> 0/);
+  expect(() =>
+    validateAndCoerce({
+      account: minimalAccount,
+      capture: { max_decompressed_bytes: -1 },
+    }),
+  ).toThrow(/> 0/);
+});
+
 test('camelCase output mirrors snake_case input', () => {
   const result = validateAndCoerce({ account: minimalAccount });
   expect(result.account.apiKey).toBe('pxg_live_test');

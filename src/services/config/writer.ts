@@ -36,6 +36,10 @@ export function serializeConfig(config: GatewayConfig): string {
       upload_max_batches_per_sec: config.capture.uploadMaxBatchesPerSec,
       upload_max_bytes_per_minute: config.capture.uploadMaxBytesPerMinute,
       upload_backoff_on_429_multiplier: config.capture.uploadBackoffOn429Multiplier,
+      ...(config.capture.maxDecompressedBytes !== undefined &&
+      Number.isFinite(config.capture.maxDecompressedBytes)
+        ? { max_decompressed_bytes: config.capture.maxDecompressedBytes }
+        : {}),
     },
     logging: {
       level: config.logging.level,
