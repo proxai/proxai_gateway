@@ -1,7 +1,8 @@
 export interface RowidSplitOptions<T> {
   measureCompressed: (rows: readonly T[]) => number;
-
+  measureUncompressed: (rows: readonly T[]) => number;
   targetCompressedBytes: number;
+  maxDecompressedBytes: number;
 }
 
 export function splitRowsByCompressedSize<T>(
@@ -12,6 +13,9 @@ export function splitRowsByCompressedSize<T>(
   if (options.targetCompressedBytes <= 0) {
     throw new Error('targetCompressedBytes must be positive');
   }
+  if (options.maxDecompressedBytes <= 0) {
+    throw new Error('maxDecompressedBytes must be positive');
+  }
 
   const chunks: T[][] = [];
   let cursor = 0;
@@ -19,8 +23,12 @@ export function splitRowsByCompressedSize<T>(
 
   while (cursor < total) {
     const remaining = rows.slice(cursor, total);
-    const remainingSize = options.measureCompressed(remaining);
-    if (remainingSize <= options.targetCompressedBytes) {
+    const remainingCompressed = options.measureCompressed(remaining);
+    const remainingRaw = options.measureUncompressed(remaining);
+    if (
+      remainingCompressed <= options.targetCompressedBytes &&
+      remainingRaw <= options.maxDecompressedBytes
+    ) {
       chunks.push(remaining);
       cursor = total;
       break;
@@ -31,7 +39,9 @@ export function splitRowsByCompressedSize<T>(
       cursor,
       total,
       options.measureCompressed,
+      options.measureUncompressed,
       options.targetCompressedBytes,
+      options.maxDecompressedBytes,
     );
 
     const advance = takeCount === 0 ? 1 : takeCount;
@@ -47,7 +57,9 @@ function findLargestPrefixCount<T>(
   start: number,
   end: number,
   measureCompressed: (rows: readonly T[]) => number,
+  measureUncompressed: (rows: readonly T[]) => number,
   targetCompressedBytes: number,
+  maxDecompressedBytes: number,
 ): number {
   let lo = 1;
   let hi = end - start;
@@ -56,8 +68,9 @@ function findLargestPrefixCount<T>(
   while (lo <= hi) {
     const mid = (lo + hi) >>> 1;
     const candidate = rows.slice(start, start + mid);
-    const size = measureCompressed(candidate);
-    if (size <= targetCompressedBytes) {
+    const compressedSize = measureCompressed(candidate);
+    const rawSize = measureUncompressed(candidate);
+    if (compressedSize <= targetCompressedBytes && rawSize <= maxDecompressedBytes) {
       best = mid;
       lo = mid + 1;
     } else {

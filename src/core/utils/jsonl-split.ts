@@ -3,6 +3,7 @@ import { NEWLINE_BYTE } from 'core/io/jsonl/jsonl.constants.ts';
 export interface JsonlSplitOptions {
   measureCompressed: (bytes: Uint8Array) => number;
   targetCompressedBytes: number;
+  maxDecompressedBytes: number;
 }
 
 export function splitJsonlAtBoundary(bytes: Uint8Array, options: JsonlSplitOptions): Uint8Array[] {
@@ -13,6 +14,9 @@ export function splitJsonlAtBoundary(bytes: Uint8Array, options: JsonlSplitOptio
   if (options.targetCompressedBytes <= 0) {
     throw new Error('targetCompressedBytes must be positive');
   }
+  if (options.maxDecompressedBytes <= 0) {
+    throw new Error('maxDecompressedBytes must be positive');
+  }
 
   const chunks: Uint8Array[] = [];
   let cursor = 0;
@@ -21,7 +25,10 @@ export function splitJsonlAtBoundary(bytes: Uint8Array, options: JsonlSplitOptio
   while (cursor < total) {
     const remaining = bytes.subarray(cursor, total);
     const wholeRemainingSize = options.measureCompressed(remaining);
-    if (wholeRemainingSize <= options.targetCompressedBytes) {
+    if (
+      wholeRemainingSize <= options.targetCompressedBytes &&
+      remaining.byteLength <= options.maxDecompressedBytes
+    ) {
       chunks.push(remaining);
       cursor = total;
       break;
@@ -33,6 +40,7 @@ export function splitJsonlAtBoundary(bytes: Uint8Array, options: JsonlSplitOptio
       total,
       options.measureCompressed,
       options.targetCompressedBytes,
+      options.maxDecompressedBytes,
     );
 
     chunks.push(bytes.subarray(cursor, splitAt));
@@ -48,6 +56,7 @@ function findLargestPrefixEndingAtNewline(
   end: number,
   measureCompressed: (bytes: Uint8Array) => number,
   targetCompressedBytes: number,
+  maxDecompressedBytes: number,
 ): number {
   const splits: number[] = [];
   for (let i = start; i < end; i++) {
@@ -61,7 +70,10 @@ function findLargestPrefixEndingAtNewline(
     const mid = (lo + hi) >>> 1;
     const splitAt = splits[mid]!;
     const candidate = bytes.subarray(start, splitAt);
-    if (measureCompressed(candidate) <= targetCompressedBytes) {
+    if (
+      measureCompressed(candidate) <= targetCompressedBytes &&
+      candidate.byteLength <= maxDecompressedBytes
+    ) {
       best = splitAt;
       lo = mid + 1;
     } else {
