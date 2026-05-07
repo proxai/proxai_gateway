@@ -3,6 +3,11 @@ planning/
 
 scripts/
 
+npm-build/
+
+install.sh
+install.ps1
+
 **/tests/
 **/*.test.ts
 
