@@ -9,3 +9,4 @@ export * from 'cli/commands/status.ts';
 export * from 'cli/commands/stop.ts';
 export * from 'cli/commands/tail.ts';
 export * from 'cli/commands/uninstall.ts';
+export * from 'cli/commands/upgrade.ts';

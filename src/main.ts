@@ -28,6 +28,7 @@ import { runStatus } from 'cli/commands/status.ts';
 import { runStop } from 'cli/commands/stop.ts';
 import { runTail } from 'cli/commands/tail.ts';
 import { runUninstall } from 'cli/commands/uninstall.ts';
+import { runUpgrade } from 'cli/commands/upgrade.ts';
 import {
   defaultLaunchdPlistPath,
   defaultSystemdUnitPath,
@@ -358,6 +359,29 @@ program
         configExists: () => Bun.file(configFilePath()).exists(),
       },
       uninstallOptions,
+    );
+    process.exit(result.exitCode);
+  });
+
+program
+  .command('upgrade')
+  .description(
+    'Manually fetch the latest gateway release from GitHub and replace the running binary. On Windows, writes the new binary alongside the existing one (restart required to apply).',
+  )
+  .option('-y, --yes', 'skip the interactive confirmation prompt', false)
+  .option('--force', 'redownload and reinstall even if already on the latest version', false)
+  .action(async (opts: { yes?: boolean; force?: boolean }) => {
+    const upgradeOptions: { yes?: boolean; force?: boolean } = {};
+    if (opts.yes === true) upgradeOptions.yes = true;
+    if (opts.force === true) upgradeOptions.force = true;
+    const result = await runUpgrade(
+      {
+        output: consoleOutput(),
+        prompts: inquirerPrompts(),
+        currentVersion: packageJson.version,
+        binaryPath: process.execPath,
+      },
+      upgradeOptions,
     );
     process.exit(result.exitCode);
   });
