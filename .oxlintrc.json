@@ -15,7 +15,11 @@
       { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
     ],
     "no-empty-pattern": "warn",
-    "no-empty-file": "off"
+    "no-empty-file": "off",
+    "no-await-in-loop": "off",
+    "no-unmodified-loop-condition": "off",
+    "no-underscore-dangle": "off",
+    "unicorn/consistent-function-scoping": "off"
   },
   "ignorePatterns": ["dist", "node_modules", "*.md"]
 }
