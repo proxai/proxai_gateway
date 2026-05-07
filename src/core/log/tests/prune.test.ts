@@ -60,7 +60,10 @@ test('deletes oldest files beyond retention day count', async () => {
   expect(result.retainedCount).toBe(2);
   expect(result.deletedFiles).toHaveLength(2);
   const remaining = await readdir(dir);
-  expect(remaining.sort()).toEqual(['structured.2026-05-03.1.log', 'structured.2026-05-04.1.log']);
+  expect(remaining.toSorted()).toEqual([
+    'structured.2026-05-03.1.log',
+    'structured.2026-05-04.1.log',
+  ]);
 });
 
 test('deletes oldest files when total size exceeds cap', async () => {

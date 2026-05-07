@@ -7,8 +7,8 @@ test('RULE_CATEGORIES covers every rule in ALL_RULES exactly once', () => {
   expect(fromCategories.length).toBe(ALL_RULES.length);
   const ids = new Set(fromCategories.map((r) => r.id));
   expect(ids.size).toBe(fromCategories.length);
-  const allIds = ALL_RULES.map((r) => r.id).sort();
-  const categoryIds = [...ids].sort();
+  const allIds = ALL_RULES.map((r) => r.id).toSorted();
+  const categoryIds = [...ids].toSorted();
   expect(categoryIds).toEqual(allIds);
 });
 

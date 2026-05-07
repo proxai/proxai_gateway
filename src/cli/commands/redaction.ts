@@ -38,7 +38,7 @@ export async function runRedactionTest(
 
   if (options.showRules === true) {
     emit(`Rules matched: ${result.matchCount.toString()} redaction(s)`);
-    const entries = Object.entries(result.ruleHits).sort((a, b) => b[1] - a[1]);
+    const entries = Object.entries(result.ruleHits).toSorted((a, b) => b[1] - a[1]);
     if (entries.length === 0) {
       emit('  (no rules matched)');
     } else {
