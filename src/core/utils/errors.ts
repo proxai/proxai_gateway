@@ -66,3 +66,34 @@ export class WatermarkRegressionError extends ValidationError {
     this.sourcePathHash = sourcePathHash;
   }
 }
+
+export interface OversizedDecompressedSliceErrorDetails {
+  sourcePath: string;
+  sourcePathHash: string;
+  rawBytes: number;
+  compressedBytes: number;
+  sliceIndex: number;
+  cap: number;
+}
+
+export class OversizedDecompressedSliceError extends ValidationError {
+  readonly sourcePath: string;
+  readonly sourcePathHash: string;
+  readonly rawBytes: number;
+  readonly compressedBytes: number;
+  readonly sliceIndex: number;
+  readonly cap: number;
+
+  constructor(details: OversizedDecompressedSliceErrorDetails, cause?: unknown) {
+    super(
+      `decompressed slice ${details.rawBytes.toString()} bytes exceeds cap ${details.cap.toString()} bytes (compressed=${details.compressedBytes.toString()}, slice_index=${details.sliceIndex.toString()}, source_path_hash=${details.sourcePathHash})`,
+      cause,
+    );
+    this.sourcePath = details.sourcePath;
+    this.sourcePathHash = details.sourcePathHash;
+    this.rawBytes = details.rawBytes;
+    this.compressedBytes = details.compressedBytes;
+    this.sliceIndex = details.sliceIndex;
+    this.cap = details.cap;
+  }
+}
