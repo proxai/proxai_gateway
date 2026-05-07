@@ -1,19 +1,14 @@
 #!/usr/bin/env node
 const { spawnSync } = require('child_process');
+const { resolve } = require('node:path');
 
-const platform = process.platform;
-const arch = process.arch;
-const ext = platform === 'win32' ? '.exe' : '';
-const pkgName = `@proxai/gateway-${platform}-${arch}`;
+const ext = process.platform === 'win32' ? '.exe' : '';
+const binPath = resolve(__dirname, 'bin', `proxai-gateway${ext}`);
 
-let binPath;
-try {
-  binPath = require.resolve(`${pkgName}/proxai-gateway${ext}`);
-} catch {
-  console.error(`@proxai/gateway: no binary for ${platform}-${arch}`);
-  console.error(`Install the matching platform package: npm install -g ${pkgName}`);
+const { status, error } = spawnSync(binPath, process.argv.slice(2), { stdio: 'inherit' });
+if (error) {
+  console.error(`@proxai/gateway: failed to run binary at ${binPath}`);
+  console.error('Try reinstalling: npm install -g @proxai/gateway');
   process.exit(1);
 }
-
-const { status } = spawnSync(binPath, process.argv.slice(2), { stdio: 'inherit' });
 process.exit(status ?? 1);
