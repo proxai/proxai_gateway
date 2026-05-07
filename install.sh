@@ -93,6 +93,18 @@ main() {
   os="$(detect_os)"
   arch="$(detect_arch)"
 
+  if [ "${os}" = "darwin" ] && [ "${arch}" = "x64" ]; then
+    cat >&2 <<'EOF'
+error: Intel Mac (darwin-x64) is not supported by the prebuilt binary distribution.
+       Apple Silicon (arm64) Macs only.
+
+To build a darwin-x64 binary manually:
+  git clone https://github.com/proxai/proxai_gateway
+  cd proxai_gateway && bun install && bun run build:darwin-x64
+EOF
+    exit 1
+  fi
+
   if [ "${VERSION}" = "latest" ]; then
     path_segment="latest/download"
   else

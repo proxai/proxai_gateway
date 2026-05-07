@@ -43,8 +43,6 @@ jobs:
         include:
           - target: darwin-arm64
             ext: ''
-          - target: darwin-x64
-            ext: ''
           - target: linux-arm64
             ext: ''
           - target: linux-x64
@@ -116,7 +114,6 @@ jobs:
           mkdir -p release
           declare -A REMAP=(
             [darwin-arm64]=darwin-arm64
-            [darwin-x64]=darwin-x64
             [linux-arm64]=linux-arm64
             [linux-x64]=linux-x64
             [windows-x64]=win32-x64
@@ -124,7 +121,6 @@ jobs:
           )
           declare -A EXT=(
             [darwin-arm64]=''
-            [darwin-x64]=''
             [linux-arm64]=''
             [linux-x64]=''
             [windows-x64]='.exe'
