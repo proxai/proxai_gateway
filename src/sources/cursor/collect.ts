@@ -134,11 +134,27 @@ export async function collectCursorFile(
 
       const agentSchemaVersion = extractAgentSchemaVersion(kvRows);
 
+      const sliceMeasureCache = new WeakMap<
+        readonly CursorDiskKvRow[],
+        { redactedJson: string; rawBytes: number; compressedBytes: number }
+      >();
+      const measureSlice = (
+        slice: readonly CursorDiskKvRow[],
+      ): { redactedJson: string; rawBytes: number; compressedBytes: number } => {
+        let entry = sliceMeasureCache.get(slice);
+        if (entry === undefined) {
+          const redactedJson = applyRedaction(JSON.stringify(slice)).redacted;
+          const rawBytes = Buffer.byteLength(redactedJson, 'utf8');
+          const compressedBytes = zstdCompressSync(redactedJson).byteLength;
+          entry = { redactedJson, rawBytes, compressedBytes };
+          sliceMeasureCache.set(slice, entry);
+        }
+        return entry;
+      };
       const measureCompressed = (slice: readonly CursorDiskKvRow[]): number =>
-        zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted).byteLength;
-
+        measureSlice(slice).compressedBytes;
       const measureUncompressed = (slice: readonly CursorDiskKvRow[]): number =>
-        Buffer.byteLength(applyRedaction(JSON.stringify(slice)).redacted, 'utf8');
+        measureSlice(slice).rawBytes;
 
       const slices = splitRowsByCompressedSize(kvRows, {
         targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,

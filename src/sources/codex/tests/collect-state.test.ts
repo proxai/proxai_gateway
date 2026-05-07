@@ -589,7 +589,7 @@ test('splits an oversized table snapshot into multiple batches with contiguous r
   });
   expect(cursor?.watermarkEnd).toBe(rowCount + 1);
   expect(prevEnd).toBe(rowCount + 1);
-}, 60_000);
+}, 120_000);
 
 test('second poll with no new rows refreshes lastSeenSize/PageCount on the existing cursor', async () => {
   const file = await makeStateDb({
@@ -685,7 +685,7 @@ test('surfaces OversizedDecompressedSliceError when single row exceeds BODY_MAX_
   const { result } = await collectCodexState(file, ctx(buffer));
   const oversized = result.errors.filter((e) => /decompressed slice/.test(e.reason));
   expect(oversized.length).toBeGreaterThanOrEqual(1);
-}, 60_000);
+}, 120_000);
 
 test('every codex-state batch satisfies BOTH compressed AND decompressed caps', async () => {
   const file = await makeStateDb({

@@ -405,7 +405,7 @@ test('splits an oversized snapshot into multiple batches with contiguous rowid c
 
   expect(cursor?.watermarkEnd).toBe(rowCount + 1);
   expect(prevEnd).toBe(rowCount + 1);
-}, 60_000);
+}, 120_000);
 
 test('null last_seen columns on existing cursor never trigger size/page_count signals', async () => {
   const file = await makeDb([

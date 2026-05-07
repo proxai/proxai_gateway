@@ -224,13 +224,29 @@ function collectOneTable(
     return;
   }
 
+  const sliceMeasureCache = new WeakMap<
+    readonly (Record<string, unknown> & { rowid: number })[],
+    { redactedJson: string; rawBytes: number; compressedBytes: number }
+  >();
+  const measureSlice = (
+    slice: readonly (Record<string, unknown> & { rowid: number })[],
+  ): { redactedJson: string; rawBytes: number; compressedBytes: number } => {
+    let entry = sliceMeasureCache.get(slice);
+    if (entry === undefined) {
+      const redactedJson = applyRedaction(JSON.stringify(slice)).redacted;
+      const rawBytes = Buffer.byteLength(redactedJson, 'utf8');
+      const compressedBytes = zstdCompressSync(redactedJson).byteLength;
+      entry = { redactedJson, rawBytes, compressedBytes };
+      sliceMeasureCache.set(slice, entry);
+    }
+    return entry;
+  };
   const measureCompressed = (
     slice: readonly (Record<string, unknown> & { rowid: number })[],
-  ): number => zstdCompressSync(applyRedaction(JSON.stringify(slice)).redacted).byteLength;
-
+  ): number => measureSlice(slice).compressedBytes;
   const measureUncompressed = (
     slice: readonly (Record<string, unknown> & { rowid: number })[],
-  ): number => Buffer.byteLength(applyRedaction(JSON.stringify(slice)).redacted, 'utf8');
+  ): number => measureSlice(slice).rawBytes;
 
   const slices = splitRowsByCompressedSize(rows, {
     targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,

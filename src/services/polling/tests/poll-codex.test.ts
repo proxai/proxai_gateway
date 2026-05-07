@@ -132,10 +132,8 @@ test('captures discover errors when baseDir is a regular file', async () => {
   expect(result.errors.length).toBeGreaterThan(0);
 });
 
-test('captures state-side discover error when baseDir is extreme', async () => {
-  const filePath = join(dir, 'is-a-file');
-  await writeFile(filePath, 'not a directory');
-  const baseDir = join(filePath, 'subdir');
+test('captures state-side discover error when baseDir is invalid', async () => {
+  const baseDir = `${join(dir, 'invalid')}${String.fromCharCode(0)}subdir`;
   const poller = makeCodexSourcePoller({ baseDir });
   const result = await poller({
     buffer,

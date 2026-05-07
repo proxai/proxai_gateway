@@ -304,13 +304,13 @@ test('every batch satisfies BOTH compressed AND decompressed caps', async () => 
 });
 
 test('resets watermark when source_inode changes (file rotated/replaced)', async () => {
-  const file = await makeFile('{"a":1}\n');
+  const file = { ...(await makeFile('{"a":1}\n')), inode: 1001 };
   const first = await collectClaudeCodeFile(file, ctx(buffer));
   expect(first.capturedBatches).toBe(1);
 
   const newContent = '{"b":2}\n';
   await writeFile(file.sourcePath, newContent);
-  const rotated = { ...file, inode: file.inode + 1, sizeBytes: newContent.length };
+  const rotated = { ...file, inode: 1002, sizeBytes: newContent.length };
 
   const second = await collectClaudeCodeFile(rotated, ctx(buffer));
   expect(second.capturedBatches).toBe(1);
