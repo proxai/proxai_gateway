@@ -13,26 +13,30 @@ ProxAI Gateway is a managed, on-device service that captures your coding-agent a
 
 ProxAI Gateway ships as a single self-contained native binary. You do not need Bun, Node, or any other runtime installed.
 
-### macOS
+### macOS / Linux
+
+```sh
+curl -fsSL https://github.com/proxai/proxai_gateway/raw/main/install.sh | bash
+```
+
+On Linux, if you want the gateway to run when no user session is active, enable user lingering: `loginctl enable-linger $(whoami)`.
+
+### Windows (PowerShell)
+
+```powershell
+irm https://github.com/proxai/proxai_gateway/raw/main/install.ps1 | iex
+```
+
+### Alternative — npm (requires Node >=18)
 
 ```sh
 npm install -g @proxai/gateway
 ```
 
-Homebrew tap is coming soon.
-
-### Linux
+### Alternative — Homebrew (macOS / Linux)
 
 ```sh
-npm install -g @proxai/gateway
-```
-
-If you want the gateway to run when no user session is active, enable user lingering: `loginctl enable-linger $(whoami)`.
-
-### Windows
-
-```sh
-npm install -g @proxai/gateway
+brew install proxai/tap/proxai-gateway
 ```
 
 ## Quickstart
