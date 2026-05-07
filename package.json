@@ -1,6 +1,6 @@
 {
   "name": "@proxai/gateway",
-  "version": "0.1.0",
+  "version": "2026.5.7",
   "description": "ProxAI Gateway — captures coding-agent activity (Claude Code, Cursor, Codex) and ships it to ProxAI's backend with on-device secret redaction.",
   "license": "MIT",
   "type": "module",
