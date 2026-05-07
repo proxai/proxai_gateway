@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { join } from 'node:path';
 
 import { ValidationError } from 'core/utils';
 import {
@@ -142,9 +143,10 @@ test('expands ~/ in path fields', () => {
     logging: { log_dir: '~/custom/logs' },
   });
   expect(result.capture.bufferPath.startsWith('~')).toBe(false);
-  expect(result.capture.bufferPath.endsWith('/custom/buffer.db')).toBe(true);
+  // expandHome uses path.join, so the trailing segment uses the host separator.
+  expect(result.capture.bufferPath.endsWith(join('custom', 'buffer.db'))).toBe(true);
   expect(result.logging.logDir.startsWith('~')).toBe(false);
-  expect(result.logging.logDir.endsWith('/custom/logs')).toBe(true);
+  expect(result.logging.logDir.endsWith(join('custom', 'logs'))).toBe(true);
 });
 
 test('camelCase output mirrors snake_case input', () => {

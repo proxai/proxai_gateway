@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { sep as pathSep } from 'node:path';
 
 import { buildLaunchdPlist, defaultLaunchdPlistPath } from 'cli/launchd-plist.ts';
 
@@ -75,7 +76,8 @@ test('escapes special XML characters in paths and label', () => {
 test('defaultLaunchdPlistPath ends with the label and .plist', () => {
   const path = defaultLaunchdPlistPath();
   expect(path.endsWith('co.proxai.gateway.plist')).toBe(true);
-  expect(path).toContain('Library/LaunchAgents');
+  // `path.join` uses the host separator, so the segment is platform-specific.
+  expect(path).toContain(`Library${pathSep}LaunchAgents`);
 });
 
 test('defaultLaunchdPlistPath honors explicit label override', () => {
