@@ -80,7 +80,7 @@ function buildSetupDeps(): SetupCommandDeps {
     logDir: logDir(),
     authFailedSentinelPath: authFailedSentinelPath(),
     serviceUnitPath: platformServiceUnitPath(platform),
-    programPath: process.argv[1] ?? 'proxai-gateway',
+    programPath: process.execPath,
     configExists: () => Bun.file(configFilePath()).exists(),
     httpClientFactory: (apiKey, hostId) =>
       new HttpClient({
@@ -148,7 +148,7 @@ program
     const sm = getServiceManager({
       platform,
       unitPath,
-      programPath: process.argv[1] ?? 'proxai-gateway',
+      programPath: process.execPath,
     });
     const result = await runStart({
       output: consoleOutput(),
@@ -175,7 +175,7 @@ program
     const sm = getServiceManager({
       platform,
       unitPath,
-      programPath: process.argv[1] ?? 'proxai-gateway',
+      programPath: process.execPath,
     });
     const result = await runStop({
       output: consoleOutput(),
@@ -198,7 +198,7 @@ program
     const sm = getServiceManager({
       platform,
       unitPath,
-      programPath: process.argv[1] ?? 'proxai-gateway',
+      programPath: process.execPath,
     });
     const result = await runRestart({
       output: consoleOutput(),
@@ -254,7 +254,7 @@ program
         ? getServiceManager({
             platform,
             unitPath,
-            programPath: process.argv[1] ?? 'proxai-gateway',
+            programPath: process.execPath,
           })
         : null;
     const result = await runBackfill(
@@ -345,7 +345,7 @@ program
     const sm = getServiceManager({
       platform,
       unitPath,
-      programPath: process.argv[1] ?? 'proxai-gateway',
+      programPath: process.execPath,
     });
     const uninstallOptions: { reset?: boolean; yes?: boolean } = {};
     if (opts.reset === true) uninstallOptions.reset = true;
