@@ -190,6 +190,48 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
   expect(prevEnd).toBe(content.length);
 }, 30_000);
 
+test('watermark continuity holds under redaction-induced byte-count changes', async () => {
+  // Embed an Anthropic API key on every line so the redaction rule fires
+  // and the redacted body is strictly smaller than the source bytes.
+  const lines: string[] = [];
+  for (let i = 0; i < 50; i++) {
+    const longSecret = `sk-ant-${'A'.repeat(64)}`;
+    lines.push(JSON.stringify({ i, key: longSecret }));
+  }
+  const content = `${lines.join('\n')}\n`;
+  const file = await makeFile(content, 'redaction.jsonl');
+
+  const result = await collectCodexRollout(file, ctx(buffer), '0.126.0');
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBeGreaterThanOrEqual(1);
+
+  let prevEnd = 0;
+  let totalCompressed = 0;
+  let anyBodySmallerThanRange = false;
+  for (let i = 0; i < 100; i++) {
+    const batch = nextPendingBatch(buffer);
+    if (batch === null) break;
+    expect(batch.watermarkStart).toBe(prevEnd);
+    expect(batch.watermarkEnd).toBeGreaterThan(batch.watermarkStart);
+    const span = batch.watermarkEnd - batch.watermarkStart;
+    if (batch.body.byteLength < span) anyBodySmallerThanRange = true;
+    totalCompressed += batch.body.byteLength;
+    prevEnd = batch.watermarkEnd;
+    deleteBatch(buffer, batch.captureId);
+  }
+
+  const cursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.watermarkEnd).toBe(content.length);
+  expect(prevEnd).toBe(content.length);
+  expect(totalCompressed).toBeLessThan(content.length);
+  expect(anyBodySmallerThanRange).toBe(true);
+});
+
 test('resets watermark when source_inode changes (file rotated/replaced)', async () => {
   const file = await makeFile('{"a":1}\n');
   const first = await collectCodexRollout(file, ctx(buffer), '0.1.0');

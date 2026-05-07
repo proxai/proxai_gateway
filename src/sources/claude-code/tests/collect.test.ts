@@ -223,6 +223,52 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
   expect(prevEnd).toBe(content.length);
 }, 30_000);
 
+test('watermark continuity holds under redaction-induced byte-count changes', async () => {
+  // Embed an Anthropic API key on every line. The redaction rule
+  // (sk-ant- prefix + >= 20 chars) replaces a long literal with the
+  // shorter '[REDACTED:anthropic-api-key]' marker on most realistic keys
+  // (here 64 chars => 64 -> 27 byte shrink per match), so redacted bytes
+  // are strictly smaller than source bytes. The cursor must still advance
+  // by source-byte counts.
+  const lines: string[] = [];
+  for (let i = 0; i < 50; i++) {
+    const longSecret = `sk-ant-${'A'.repeat(64)}`;
+    lines.push(JSON.stringify({ i, key: longSecret, version: '2.1.122' }));
+  }
+  const content = `${lines.join('\n')}\n`;
+  const file = await makeFile(content, 'redaction.jsonl');
+
+  const result = await collectClaudeCodeFile(file, ctx(buffer));
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBeGreaterThanOrEqual(1);
+
+  let prevEnd = 0;
+  let totalCompressed = 0;
+  let anyBodySmallerThanRange = false;
+  for (let i = 0; i < 100; i++) {
+    const batch = nextPendingBatch(buffer);
+    if (batch === null) break;
+    expect(batch.watermarkStart).toBe(prevEnd);
+    expect(batch.watermarkEnd).toBeGreaterThan(batch.watermarkStart);
+    const span = batch.watermarkEnd - batch.watermarkStart;
+    if (batch.body.byteLength < span) anyBodySmallerThanRange = true;
+    totalCompressed += batch.body.byteLength;
+    prevEnd = batch.watermarkEnd;
+    deleteBatch(buffer, batch.captureId);
+  }
+
+  const cursor = getCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.watermarkEnd).toBe(content.length);
+  expect(prevEnd).toBe(content.length);
+  expect(totalCompressed).toBeLessThan(content.length);
+  expect(anyBodySmallerThanRange).toBe(true);
+});
+
 test('resets watermark when source_inode changes (file rotated/replaced)', async () => {
   const file = await makeFile('{"a":1}\n');
   const first = await collectClaudeCodeFile(file, ctx(buffer));

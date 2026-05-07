@@ -49,44 +49,49 @@ export async function collectClaudeCodeFile(
       return result;
     }
 
-    const redactedText = applyRedaction(DECODER.decode(range.bytes)).redacted;
-    const redactedBytes = ENCODER.encode(redactedText);
-    const agentSchemaVersion = extractAgentSchemaVersion(redactedText);
+    // Redact the whole range once for schema-version extraction. Watermark
+    // math runs in source-byte space below; per-slice redaction handles the
+    // actual on-wire body so cursor advances stay aligned with file bytes.
+    const redactedFullText = applyRedaction(DECODER.decode(range.bytes)).redacted;
+    const agentSchemaVersion = extractAgentSchemaVersion(redactedFullText);
 
-    const slices = splitJsonlAtBoundary(redactedBytes, {
+    const sourceSlices = splitJsonlAtBoundary(range.bytes, {
       targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
-      measureCompressed: (b) => zstdCompressSync(b).byteLength,
+      measureCompressed: (slice) => {
+        const redacted = ENCODER.encode(applyRedaction(DECODER.decode(slice)).redacted);
+        return zstdCompressSync(redacted).byteLength;
+      },
     });
 
-    if (slices.length > 1) {
+    if (sourceSlices.length > 1) {
       context.logger?.info(
         {
           event: 'capture.split_for_size',
           source_app: CLAUDE_CODE_SOURCE_APP,
           source_path_hash: file.sourcePathHash,
-          total_slices: slices.length,
-          uncompressed_bytes: redactedBytes.byteLength,
+          total_slices: sourceSlices.length,
+          uncompressed_bytes: range.bytes.byteLength,
         },
         'oversized capture slice split into multiple batches',
       );
     }
 
     let offset = 0;
-    for (let i = 0; i < slices.length; i++) {
-      const slice = slices[i]!;
+    for (let i = 0; i < sourceSlices.length; i++) {
+      const slice = sourceSlices[i]!;
       const sliceEndOffset = offset + slice.byteLength;
 
-      const watermarkEnd = watermarkStart + sliceEndOffset;
-      const compressed = zstdCompressSync(slice);
+      const redactedSlice = ENCODER.encode(applyRedaction(DECODER.decode(slice)).redacted);
+      const compressed = zstdCompressSync(redactedSlice);
 
-      if (slices.length > 1) {
+      if (sourceSlices.length > 1) {
         context.logger?.debug(
           {
             event: 'capture.chunked',
             source_app: CLAUDE_CODE_SOURCE_APP,
             source_path_hash: file.sourcePathHash,
             slice_index: i,
-            total_slices: slices.length,
+            total_slices: sourceSlices.length,
             compressed_bytes: compressed.byteLength,
           },
           'capture chunk insert',
@@ -102,7 +107,7 @@ export async function collectClaudeCodeFile(
         sourceInode: file.inode,
         watermarkKind: 'byte_range',
         watermarkStart: watermarkStart + offset,
-        watermarkEnd,
+        watermarkEnd: watermarkStart + sliceEndOffset,
         watermarkTable: null,
         agentSchemaVersion,
         gatewayVersion: context.gatewayVersion,
@@ -125,7 +130,7 @@ export async function collectClaudeCodeFile(
       watermarkEnd: range.endByte,
     });
 
-    result.capturedBatches = slices.length;
+    result.capturedBatches = sourceSlices.length;
     result.capturedBytes = range.bytes.byteLength;
   } catch (err) {
     result.errors.push({
