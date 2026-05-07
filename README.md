@@ -1,13 +1,13 @@
 # ProxAI Gateway
 
-ProxAI Gateway is a managed, on-device service that captures your coding-agent activity (Claude Code, Cursor, Codex), redacts secrets locally, and ships the redacted records to ProxAI.
+ProxAI Gateway is a managed, on-device service that captures your coding-agent activity, redacts secrets locally, and ships the redacted records to ProxAI.
 
 ## What it does
 
-- Captures prompts, responses, tool calls, and per-turn token counts from Claude Code, Cursor, and Codex by reading their on-disk transcript files. No proxy, no root CA, no traffic interception.
-- Redacts API keys, tokens, and known secret formats on-device, in a single pass at capture time, before any byte is buffered or uploaded.
-- Runs as a managed background service: launchd on macOS, systemd on Linux, Windows Task Scheduler on Windows. Starts at login; survives reboots.
-- Observable from the command line: `status` for liveness, `tail` for recent activity, `redaction list` and `redaction test` for what the redactor will and will not strip.
+- Captures Claude Code, Cursor, and Codex agent activity directly from their on-disk session files. No proxy, no root CA, no traffic interception.
+- Redacts API keys, tokens, and other secrets on-device, in a single pass, before any byte is buffered or uploaded.
+- Runs as a managed background service that auto-starts on login and survives reboots.
+- Observable from the command line via `status` and `tail`.
 
 ## Installation
 
@@ -16,14 +16,10 @@ ProxAI Gateway ships as a single self-contained native binary. You do not need B
 ### macOS
 
 ```sh
-# Homebrew (coming soon)
-brew install proxai/tap/proxai-gateway
-
-# npm (works today)
 npm install -g @proxai/gateway
 ```
 
-The binary registers itself as a launchd user agent at `~/Library/LaunchAgents/co.proxai.gateway.plist` during `proxai-gateway setup`. The agent is loaded at every login.
+Homebrew tap is coming soon.
 
 ### Linux
 
@@ -31,7 +27,7 @@ The binary registers itself as a launchd user agent at `~/Library/LaunchAgents/c
 npm install -g @proxai/gateway
 ```
 
-The binary registers itself as a systemd user unit at `~/.config/systemd/user/proxai-gateway.service` during `proxai-gateway setup`. Lingering must be enabled (`loginctl enable-linger`) for the service to run when no user session is active; the setup command will print instructions if needed.
+If you want the gateway to run when no user session is active, enable user lingering: `loginctl enable-linger $(whoami)`.
 
 ### Windows
 
@@ -39,63 +35,69 @@ The binary registers itself as a systemd user unit at `~/.config/systemd/user/pr
 npm install -g @proxai/gateway
 ```
 
-The binary registers itself as a per-user scheduled task named `ProxAIGateway` during `proxai-gateway setup`. The task triggers at logon.
-
-## First-time setup
-
-Run once after install:
+## Quickstart
 
 ```sh
-proxai-gateway setup
+proxai-gateway setup       # configure with your ingestion key
+proxai-gateway start       # register service and run
+proxai-gateway status      # check it's working
 ```
 
-This prompts for your ProxAI ingestion key, writes `~/.proxai/config.toml` (mode `0600` on POSIX), and registers the platform service unit. The daemon is started immediately on completion.
+## Commands
 
-If you re-run `setup` and a config already exists, you must enter the new ingestion key twice (double-entry confirmation) before the existing config is overwritten. To bypass the prompt non-interactively, pass `--api-key <key>`.
+| Command | What it does |
+| --- | --- |
+| `setup` | Configure the gateway with your ingestion key. Re-run to replace. |
+| `start` | Register the gateway as a managed service and start the daemon. |
+| `stop` | Halt the daemon for this session. Auto-restarts on next reboot. |
+| `restart` | Stop and start. |
+| `status` | Print buffer state, cursors, and sentinel status. |
+| `pause` | Pause polling indefinitely. Persists across reboots until `resume`. |
+| `resume` | Clear an active pause. |
+| `tail` | Stream structured logs from the active log file. |
+| `redaction list` | List secret-redaction rules by category. |
+| `redaction test <file>` | Run the redaction pipeline on a file and show what would be redacted. |
+| `backfill` | Capture extended history beyond the default 30-day window. |
+| `uninstall` | Decommission the service. Use `--reset` to also wipe local data. |
 
-## Lifecycle
+Run any command with `--help` for full option details.
 
-```sh
-proxai-gateway start      # start the service if stopped
-proxai-gateway stop       # stop the service (capture pauses, no data loss)
-proxai-gateway restart    # stop then start
-```
+## Where things live
 
-`start`/`stop`/`restart` are thin wrappers over the platform service manager (launchctl / systemctl --user / schtasks).
+### macOS
 
-## Inspecting activity
+| Path | Purpose |
+| --- | --- |
+| `~/.proxai/config.toml` | Ingestion key and capture configuration. |
+| `~/.proxai/buffer.db` | Local capture buffer (SQLite). |
+| `~/Library/Logs/proxai-gateway/` | Daemon log files. |
+| `~/Library/LaunchAgents/co.proxai.gateway.plist` | launchd service unit. |
 
-```sh
-proxai-gateway status                  # daemon liveness + last upload time
-proxai-gateway tail                    # follow the structured log
-proxai-gateway tail --since 1h         # show entries from the last hour, then follow
-proxai-gateway tail --level warn       # filter to warn and above
-```
+### Linux
 
-`--since` accepts `Nm`, `Nh`, `Nd`. `--level` accepts `debug`, `info`, `warn`, `error`. The two flags compose.
+| Path | Purpose |
+| --- | --- |
+| `~/.proxai/config.toml` | Ingestion key and capture configuration. |
+| `~/.proxai/buffer.db` | Local capture buffer (SQLite). |
+| `~/.local/state/proxai-gateway/logs/` | Daemon log files. |
+| `~/.config/systemd/user/proxai-gateway.service` | systemd user unit. |
 
-## Redaction
+### Windows
 
-```sh
-proxai-gateway redaction list                 # all enabled redaction rules
-proxai-gateway redaction list --categories    # rules grouped by category
-proxai-gateway redaction test <file>          # run rules against a file, show what would be replaced
-```
-
-Redaction is single-pass and runs at the moment of capture, before the record is written to the local buffer. Rules cover the common provider-key formats (Anthropic, OpenAI, Google, AWS, GitHub PATs, Stripe, JWTs, GCP service accounts) plus the `gitleaks` and `detect-secrets` corpora. Matches are replaced with `[REDACTED:type]`. The backend re-runs redaction on receive as defense in depth.
+| Path | Purpose |
+| --- | --- |
+| `%USERPROFILE%\.proxai\config.toml` | Ingestion key and capture configuration. |
+| `%USERPROFILE%\.proxai\buffer.db` | Local capture buffer (SQLite). |
+| `%LOCALAPPDATA%\proxai-gateway\logs\` | Daemon log files. |
+| Scheduled Task `ProxAIGateway` | Per-user task that launches the daemon at logon. |
 
 ## Troubleshooting
 
-**Daemon will not start.** Run `proxai-gateway status` for the unit state and last-known error. If the daemon is failing on startup, `proxai-gateway tail --level error --since 1h` will show recent stack traces. On macOS, ensure the launchd plist is loaded: `launchctl print gui/$(id -u)/co.proxai.gateway`.
+**Daemon isn't running.** Run `proxai-gateway status` to see service state and sentinel flags. Use `proxai-gateway tail --level error --since 1h` to surface recent errors. If you have not yet run `setup`, do that first.
 
-**Ingestion key rejected.** The backend returned 401/403 for the configured key. Re-run `proxai-gateway setup` with a fresh key from the ProxAI dashboard. The setup command will detect the existing config and require double-entry of the new key.
+**Ingestion key rejected.** The backend returned an auth error for the configured key. Re-run `proxai-gateway setup` with a fresh key from the ProxAI dashboard; the old key may have been revoked.
 
-**How do I uninstall?** There is no `uninstall` command — by policy, captured records remain in the local buffer and on the backend per ProxAI's data-retention terms. To stop and remove the gateway manually:
-
-1. `proxai-gateway stop`
-2. Remove the platform service unit (`~/Library/LaunchAgents/co.proxai.gateway.plist` on macOS, `~/.config/systemd/user/proxai-gateway.service` on Linux, the `ProxAIGateway` scheduled task on Windows).
-3. Delete `~/.proxai/` to remove the local buffer, config, and sentinels.
-4. Uninstall the package (`npm uninstall -g @proxai/gateway` or `brew uninstall proxai/tap/proxai-gateway`).
+**How do I uninstall?** Run `proxai-gateway uninstall` to stop and unregister the service while preserving local config and logs. Run `proxai-gateway uninstall --reset` to also wipe `~/.proxai/`, the gateway log directory, and the service unit file.
 
 ## License
 
