@@ -4,7 +4,6 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import * as codexReal from 'sources/codex';
 import { openInMemoryBufferDb } from 'services/buffer';
 
 let dir: string;
@@ -18,13 +17,6 @@ beforeEach(async () => {
 afterEach(async () => {
   buffer.close();
   await rm(dir, { recursive: true, force: true });
-  // Restore the real `sources/codex` module. `mock.module` in Bun mutates the
-  // module registry process-wide and `mock.restore()` does not unwind module
-  // mocks — the only reliable cleanup is to re-mock the path back to the real
-  // exports. Without this, tests that load AFTER this file see the stub
-  // exports and fail across platforms whose test ordering happens to load
-  // this file before `src/sources/codex/tests/*` or `src/services/polling/tests/poll-codex.test.ts`.
-  await mock.module('sources/codex', () => codexReal);
 });
 
 test('captures errors when state collection throws synchronously', async () => {

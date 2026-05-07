@@ -35,4 +35,4 @@ jobs:
           restore-keys: |
             bun-${{ runner.os }}-${{ runner.arch }}-
       - run: bun install --frozen-lockfile
-      - run: bun test --coverage
+      - run: bun test --parallel --coverage
