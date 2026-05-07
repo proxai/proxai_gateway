@@ -115,12 +115,15 @@ function invokeSetupInteractive(): Promise<CommandResult> {
 program
   .command('setup')
   .description(
-    'Configure the gateway: verify the ingestion key, write config and service unit. Re-running replaces the existing key.',
+    'Configure the gateway with your ingestion key. Verifies the key, writes ~/.proxai/config.toml, and installs the platform service unit. Re-run to replace an existing config.',
   )
-  .option('--api-key <key>', 'ingestion key (skip prompt)')
+  .option(
+    '--api-key <key>',
+    'ingestion key to verify and store; skips the interactive prompt. Get one at https://proxai.co.',
+  )
   .option(
     '--install-source <source>',
-    'install source (bun|pnpm|yarn|npm|brew|github_release)',
+    'how this binary was installed; reported to the backend for diagnostics. One of: bun, pnpm, yarn, npm, brew, github_release.',
     'github_release',
   )
   .action(async (opts: { apiKey?: string; installSource: string }) => {
@@ -130,7 +133,9 @@ program
 
 program
   .command('start')
-  .description('Start the proxai-gateway service (registering it on first run)')
+  .description(
+    'Register the gateway as a managed service (launchd / systemd / Scheduled Task) and start the daemon. Auto-restarts on reboot. Requires a prior `setup`.',
+  )
   .action(async () => {
     const platform = process.platform;
     const unitPath = platformServiceUnitPath(platform);
@@ -155,7 +160,9 @@ program
 
 program
   .command('stop')
-  .description('Stop the proxai-gateway service')
+  .description(
+    'Halt the running gateway daemon for this session. The service remains registered and will start again automatically on next reboot. Use `uninstall` to fully decommission.',
+  )
   .action(async () => {
     const platform = process.platform;
     const unitPath = platformServiceUnitPath(platform);
@@ -178,7 +185,7 @@ program
 
 program
   .command('restart')
-  .description('Restart the proxai-gateway service')
+  .description('Stop and start the gateway daemon. Equivalent to `stop` followed by `start`.')
   .action(async () => {
     const platform = process.platform;
     const unitPath = platformServiceUnitPath(platform);
@@ -203,8 +210,10 @@ program
 
 program
   .command('run', { hidden: true })
-  .description('Run the gateway daemon (poll + ship loop)')
-  .option('--config <path>', 'path to config.toml')
+  .description(
+    'Run the gateway daemon in the foreground (used by the service unit; not for direct invocation).',
+  )
+  .option('--config <path>', 'override the default ~/.proxai/config.toml path')
   .action(async (opts: { config?: string }) => {
     const config = await loadConfigFromFile(opts.config);
     const ctrl = new AbortController();
@@ -225,9 +234,14 @@ program
 
 program
   .command('backfill')
-  .description('Run a single capture cycle ingesting history older than the default 30-day window')
-  .requiredOption('--since <duration>', 'lookback window: Nd (days), Nmo (months), or Ny (years)')
-  .option('--config <path>', 'path to config.toml')
+  .description(
+    'Capture extended history beyond the default 30-day window. Runs a one-shot capture cycle and exits; the daemon must be stopped while this runs.',
+  )
+  .requiredOption(
+    '--since <duration>',
+    'lookback window. Format: Nd (days), Nmo (months), or Ny (years). Examples: 90d, 6mo, 1y.',
+  )
+  .option('--config <path>', 'override the default ~/.proxai/config.toml path')
   .action(async (opts: { since: string; config?: string }) => {
     const config = await loadConfigFromFile(opts.config);
     const platform = process.platform;
@@ -257,8 +271,10 @@ program
 
 program
   .command('status')
-  .description('Show buffer status')
-  .option('--config <path>', 'path to config.toml')
+  .description(
+    'Print gateway state: per-source cursors, capture buffer occupancy, sentinel flags (paused, auth-failed, buffer-full, session-stopped).',
+  )
+  .option('--config <path>', 'override the default ~/.proxai/config.toml path')
   .action(async (opts: { config?: string }) => {
     let bufferPath = bufferDbPath();
     try {
@@ -281,8 +297,10 @@ program
 
 program
   .command('pause')
-  .description('Pause polling')
-  .option('--reason <reason>', 'reason for pause')
+  .description(
+    'Pause polling indefinitely by writing a PAUSED sentinel. The daemon keeps running but skips capture cycles. Persists across reboots until cleared with `resume`.',
+  )
+  .option('--reason <reason>', 'free-form reason recorded in the sentinel file (shown by `status`)')
   .action(async (opts: { reason?: string }) => {
     const result = await runPause(
       { output: consoleOutput(), sentinelPath: pausedSentinelPath() },
@@ -293,7 +311,7 @@ program
 
 program
   .command('resume')
-  .description('Resume polling')
+  .description('Clear the PAUSED sentinel and resume capture cycles on the next polling tick.')
   .action(async () => {
     const result = await runResume({
       output: consoleOutput(),
@@ -304,9 +322,15 @@ program
 
 program
   .command('uninstall')
-  .description('Stop and unregister the gateway service. Use --reset to wipe local data too.')
-  .option('--reset', 'also wipe ~/.proxai/, logs, and service unit file', false)
-  .option('-y, --yes', 'skip confirmation prompt for --reset', false)
+  .description(
+    'Stop the daemon and unregister the platform service unit. Local config and logs are preserved unless `--reset` is passed.',
+  )
+  .option(
+    '--reset',
+    'also delete ~/.proxai/ (config + buffer + sentinels), the gateway log directory, and the service unit file. Destructive: requires confirmation unless --yes is given.',
+    false,
+  )
+  .option('-y, --yes', 'skip the interactive confirmation prompt for `--reset`', false)
   .action(async (opts: { reset?: boolean; yes?: boolean }) => {
     const platform = process.platform;
     const unitPath = platformServiceUnitPath(platform);
@@ -340,14 +364,33 @@ program
 
 program
   .command('tail')
-  .description('Show structured-log entries from the active log file')
-  .option('--lines <n>', 'number of lines to show', '50')
-  .option('-f, --follow', 'stream new entries until interrupted', false)
-  .option('--source <name>', 'filter to one collector (claude-code | cursor | codex)')
-  .option('--level <level>', 'minimum level (trace|debug|info|warn|error|fatal)')
-  .option('--since <duration>', 'limit to entries after now-duration (e.g. 1h, 24h, 30m, 7d)')
-  .option('--json', 'emit raw ndjson lines instead of pretty format', false)
-  .option('--config <path>', 'path to config.toml')
+  .description(
+    'Stream structured (ndjson) log entries from the active gateway log file. Pretty-prints by default; combine filters as needed.',
+  )
+  .option('--lines <n>', 'number of trailing entries to print before applying filters', '50')
+  .option(
+    '-f, --follow',
+    'keep the stream open and print new entries as they are written; exit with Ctrl-C',
+    false,
+  )
+  .option(
+    '--source <name>',
+    'show only entries from one collector. One of: claude-code, cursor, codex.',
+  )
+  .option(
+    '--level <level>',
+    'minimum log level to include (everything at or above this level passes). One of: trace, debug, info, warn, error, fatal.',
+  )
+  .option(
+    '--since <duration>',
+    'limit to entries newer than now minus this duration. Format: Nm (minutes), Nh (hours), Nd (days). Examples: 30m, 2h, 7d.',
+  )
+  .option(
+    '--json',
+    'emit raw ndjson lines as written on disk, bypassing pretty formatting (useful for piping to jq)',
+    false,
+  )
+  .option('--config <path>', 'override the default ~/.proxai/config.toml path')
   .action(
     async (opts: {
       lines?: string;
@@ -388,12 +431,18 @@ program
 
 const redaction = program
   .command('redaction')
-  .description('Inspect and test the redaction pipeline');
+  .description('Inspect the on-device secret-redaction rules and try them against a sample file.');
 
 redaction
   .command('test <file>')
-  .description('Run the redaction pipeline against a file and print the redacted output')
-  .option('--show-rules', 'print which rules matched and how many times', false)
+  .description(
+    'Run the full redaction pipeline against a local file and print what would be uploaded. The file is never sent anywhere; this is a local-only dry run.',
+  )
+  .option(
+    '--show-rules',
+    'after the redacted output, print a summary of which rules matched and how many times',
+    false,
+  )
   .action(async (filePath: string, opts: { showRules?: boolean }) => {
     const options: Parameters<typeof runRedactionTest>[1] = { filePath };
     if (opts.showRules === true) options.showRules = true;
@@ -406,10 +455,16 @@ redaction
 
 redaction
   .command('list')
-  .description('List all redaction rules grouped by category')
-  .option('--categories', 'list only category names with rule counts', false)
-  .option('--category <name>', 'filter to one category (full detail)')
-  .option('--json', 'emit raw JSON output instead of pretty format', false)
+  .description(
+    'List the active redaction rules grouped by category (e.g. llm-providers, cloud-providers, communication).',
+  )
+  .option('--categories', 'show only the category names and a rule count per category', false)
+  .option('--category <name>', 'restrict the listing to one category (full per-rule detail)')
+  .option(
+    '--json',
+    'emit raw JSON instead of the pretty table format (useful for piping to jq)',
+    false,
+  )
   .action((opts: { categories?: boolean; category?: string; json?: boolean }) => {
     const options: Parameters<typeof runRedactionList>[1] = {};
     if (opts.categories === true) options.categories = true;
