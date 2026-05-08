@@ -406,13 +406,14 @@ test('--follow resets read position when the log file rotates mid-loop', async (
       emit: (l) => lines.push(l),
       abortSignal: ctrl.signal,
       pathProvider,
+      pollIntervalMs: 1,
     },
     { follow: true, raw: true },
   );
-  await Bun.sleep(50);
+  await Bun.sleep(20);
 
   await Bun.write(pathB, `${makeLine(30, 'post-rotate')}\n`);
-  await Bun.sleep(400);
+  await Bun.sleep(100);
   ctrl.abort();
   await followPromise;
 
