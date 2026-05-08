@@ -308,10 +308,23 @@ test('formatLine renders unknown level as numeric label', () => {
   expect(out).toContain('99');
 });
 
-test('todaysLogPath uses the current UTC date', () => {
+test('todaysLogPath uses the current local date', () => {
   const path = todaysLogPath('/some/dir');
-  const today = new Date().toISOString().slice(0, 10);
-  expect(path).toContain(`structured.${today}.1.log`);
+  const now = new Date();
+  const local = `${now.getFullYear().toString()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
+  expect(path).toContain(`structured.${local}.1.log`);
+});
+
+test('todaysLogPath formats provided date in local time', () => {
+  const fixed = new Date(2026, 4, 7, 23, 59, 59);
+  const path = todaysLogPath('/some/dir', fixed);
+  expect(path).toContain('structured.2026-05-07.1.log');
+});
+
+test('todaysLogPath zero-pads single-digit month and day', () => {
+  const fixed = new Date(2026, 0, 1, 12, 0, 0);
+  const path = todaysLogPath('/some/dir', fixed);
+  expect(path).toContain('structured.2026-01-01.1.log');
 });
 
 test('parses different --since unit suffixes (s, m, h, d)', async () => {
