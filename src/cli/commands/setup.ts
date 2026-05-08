@@ -1,16 +1,14 @@
 import chalk from 'chalk';
-import { ensureDir, setMode, writeAtomic } from 'core/io/fs';
+import { ensureDir } from 'core/io/fs';
 import { dirname } from 'node:path';
 
 import { deriveHostId, readMachineUuid } from 'core/system';
 import { AuthError, GatewayError, nowIsoUtc } from 'core/utils';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
-import { buildLaunchdPlist } from 'cli/launchd-plist.ts';
 import type { PromptSink } from 'cli/prompts.ts';
-import { buildScheduledTaskXml, encodeScheduledTaskXml } from 'cli/scheduled-task-xml.ts';
 import type { ServiceManager } from 'cli/service-manager.ts';
-import { buildSystemdUnit } from 'cli/systemd-unit.ts';
+import { writeServiceUnit } from 'cli/service-unit-writer.ts';
 import { clearSessionStoppedSentinel } from 'services/polling/session-stopped-sentinel.ts';
 import {
   DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
@@ -228,23 +226,13 @@ export async function runSetup(
   await clearAuthFailedSentinel(deps.authFailedSentinelPath);
 
   if (deps.serviceUnitPath !== null) {
-    await ensureDir(dirname(deps.serviceUnitPath));
-    if (deps.platform === 'win32') {
-      const userIdInput: { userId?: string } =
-        deps.windowsUserId !== undefined ? { userId: deps.windowsUserId } : {};
-      const xml = buildScheduledTaskXml({
-        programPath: deps.programPath,
-        ...userIdInput,
-      });
-      await writeAtomic(deps.serviceUnitPath, encodeScheduledTaskXml(xml));
-    } else {
-      const unit =
-        deps.platform === 'darwin'
-          ? buildLaunchdPlist({ programPath: deps.programPath })
-          : buildSystemdUnit({ programPath: deps.programPath });
-      await writeAtomic(deps.serviceUnitPath, unit);
-      await setMode(deps.serviceUnitPath, 0o644);
-    }
+    const writeInput: Parameters<typeof writeServiceUnit>[0] = {
+      serviceUnitPath: deps.serviceUnitPath,
+      programPath: deps.programPath,
+      platform: deps.platform,
+    };
+    if (deps.windowsUserId !== undefined) writeInput.windowsUserId = deps.windowsUserId;
+    await writeServiceUnit(writeInput);
   }
 
   if (isReplace) {

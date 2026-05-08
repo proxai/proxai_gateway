@@ -154,6 +154,56 @@ test('returns error when invokeSetup is missing and config does not exist', asyn
   expect(output.lines.some((l) => l.level === 'error')).toBe(true);
 });
 
+test('self-heals service unit when missing then proceeds with restart', async () => {
+  const { sm, calls } = fakeManager();
+  const output = captureOutput();
+  let writes = 0;
+  const result = await runRestart({
+    output,
+    configExists: async () => true,
+    serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
+    serviceUnitRecreate: {
+      serviceUnitPath: join(dir, 'co.proxai.gateway.plist'),
+      programPath: '/tmp/proxai-gateway',
+      platform: 'darwin',
+    },
+    serviceUnitFileExists: async () => false,
+    writeServiceUnitFn: async () => {
+      writes++;
+    },
+  });
+  expect(result.exitCode).toBe(0);
+  expect(writes).toBe(1);
+  expect(calls.ensureRegistered).toBe(1);
+  expect(calls.restart).toBe(1);
+  expect(output.lines.some((l) => l.msg.includes('service unit missing'))).toBe(true);
+});
+
+test('skips service unit write when file exists', async () => {
+  const { sm, calls } = fakeManager();
+  const output = captureOutput();
+  let writes = 0;
+  const result = await runRestart({
+    output,
+    configExists: async () => true,
+    serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
+    serviceUnitRecreate: {
+      serviceUnitPath: join(dir, 'co.proxai.gateway.plist'),
+      programPath: '/tmp/proxai-gateway',
+      platform: 'darwin',
+    },
+    serviceUnitFileExists: async () => true,
+    writeServiceUnitFn: async () => {
+      writes++;
+    },
+  });
+  expect(result.exitCode).toBe(0);
+  expect(writes).toBe(0);
+  expect(calls.restart).toBe(1);
+});
+
 test('formatError stringifies non-Error throws', async () => {
   const sm: ServiceManager = {
     isRegistered: async () => true,

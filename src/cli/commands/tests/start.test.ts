@@ -188,6 +188,61 @@ test('returns error when invokeSetup is missing and config does not exist', asyn
   expect(output.lines.some((l) => l.level === 'error')).toBe(true);
 });
 
+test('self-heals service unit when serviceUnitPath is missing then proceeds', async () => {
+  const { sm, calls } = fakeManager();
+  const output = captureOutput();
+  let writes = 0;
+  const writtenPaths: string[] = [];
+  const result = await runStart({
+    output,
+    configExists: async () => true,
+    serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
+    serviceUnitRecreate: {
+      serviceUnitPath: join(dir, 'co.proxai.gateway.plist'),
+      programPath: '/tmp/proxai-gateway',
+      platform: 'darwin',
+    },
+    serviceUnitFileExists: async () => false,
+    writeServiceUnitFn: async (input) => {
+      writes++;
+      writtenPaths.push(input.serviceUnitPath);
+    },
+  });
+  expect(result.exitCode).toBe(0);
+  expect(writes).toBe(1);
+  expect(writtenPaths).toEqual([join(dir, 'co.proxai.gateway.plist')]);
+  expect(calls.ensureRegistered).toBe(1);
+  expect(calls.start).toBe(1);
+  expect(output.lines.some((l) => l.msg.includes('service unit missing'))).toBe(true);
+});
+
+test('does not rewrite service unit when it already exists', async () => {
+  const { sm, calls } = fakeManager();
+  const output = captureOutput();
+  let writes = 0;
+  const result = await runStart({
+    output,
+    configExists: async () => true,
+    serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
+    serviceUnitRecreate: {
+      serviceUnitPath: join(dir, 'co.proxai.gateway.plist'),
+      programPath: '/tmp/proxai-gateway',
+      platform: 'darwin',
+    },
+    serviceUnitFileExists: async () => true,
+    writeServiceUnitFn: async () => {
+      writes++;
+    },
+  });
+  expect(result.exitCode).toBe(0);
+  expect(writes).toBe(0);
+  expect(calls.ensureRegistered).toBe(1);
+  expect(calls.start).toBe(1);
+  expect(output.lines.every((l) => !l.msg.includes('service unit missing'))).toBe(true);
+});
+
 test('formatError stringifies non-Error throws', async () => {
   const calls: FakeCalls = {
     ensureRegistered: 0,

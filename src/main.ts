@@ -27,6 +27,7 @@ import { runRestart } from 'cli/commands/restart.ts';
 import { runResume } from 'cli/commands/resume.ts';
 import { runDaemon } from 'cli/commands/run.ts';
 import { runStart } from 'cli/commands/start.ts';
+import type { ServiceUnitRecreateConfig } from 'cli/service-unit-writer.ts';
 import { runStatus } from 'cli/commands/status.ts';
 import { runStop } from 'cli/commands/stop.ts';
 import { runTail } from 'cli/commands/tail.ts';
@@ -172,12 +173,22 @@ program
       unitPath,
       programPath: process.execPath,
     });
+    const recreate: ServiceUnitRecreateConfig = {
+      serviceUnitPath: unitPath,
+      programPath: process.execPath,
+      platform,
+    };
+    if (platform === 'win32') {
+      const windowsUserId = resolveWindowsUserId();
+      if (windowsUserId !== undefined) recreate.windowsUserId = windowsUserId;
+    }
     const result = await runStart({
       output: consoleOutput(),
       configExists: () => Bun.file(configFilePath()).exists(),
       serviceManager: sm,
       sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
       invokeSetup: invokeSetupInteractive,
+      serviceUnitRecreate: recreate,
     });
     process.exit(result.exitCode);
   });
@@ -222,12 +233,22 @@ program
       unitPath,
       programPath: process.execPath,
     });
+    const recreate: ServiceUnitRecreateConfig = {
+      serviceUnitPath: unitPath,
+      programPath: process.execPath,
+      platform,
+    };
+    if (platform === 'win32') {
+      const windowsUserId = resolveWindowsUserId();
+      if (windowsUserId !== undefined) recreate.windowsUserId = windowsUserId;
+    }
     const result = await runRestart({
       output: consoleOutput(),
       configExists: () => Bun.file(configFilePath()).exists(),
       serviceManager: sm,
       sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
       invokeSetup: invokeSetupInteractive,
+      serviceUnitRecreate: recreate,
     });
     process.exit(result.exitCode);
   });

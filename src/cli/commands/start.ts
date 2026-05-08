@@ -1,6 +1,11 @@
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import type { ServiceManager } from 'cli/service-manager.ts';
+import {
+  ensureServiceUnitExists,
+  type EnsureServiceUnitDeps,
+  type ServiceUnitRecreateConfig,
+} from 'cli/service-unit-writer.ts';
 import { clearSessionStoppedSentinel } from 'services/polling';
 
 export interface StartCommandDeps {
@@ -9,6 +14,9 @@ export interface StartCommandDeps {
   serviceManager: ServiceManager;
   sessionStoppedSentinelPath: string;
   invokeSetup?: () => Promise<CommandResult>;
+  serviceUnitRecreate?: ServiceUnitRecreateConfig;
+  serviceUnitFileExists?: EnsureServiceUnitDeps['fileExists'];
+  writeServiceUnitFn?: EnsureServiceUnitDeps['writer'];
 }
 
 export async function runStart(deps: StartCommandDeps): Promise<CommandResult> {
@@ -23,6 +31,21 @@ export async function runStart(deps: StartCommandDeps): Promise<CommandResult> {
   }
   try {
     await clearSessionStoppedSentinel(deps.sessionStoppedSentinelPath);
+    if (deps.serviceUnitRecreate !== undefined) {
+      const ensureDeps: EnsureServiceUnitDeps = {
+        config: deps.serviceUnitRecreate,
+        onRecreate: () => {
+          deps.output.info('service unit missing — recreating from current binary');
+        },
+      };
+      if (deps.serviceUnitFileExists !== undefined) {
+        ensureDeps.fileExists = deps.serviceUnitFileExists;
+      }
+      if (deps.writeServiceUnitFn !== undefined) {
+        ensureDeps.writer = deps.writeServiceUnitFn;
+      }
+      await ensureServiceUnitExists(ensureDeps);
+    }
     await deps.serviceManager.ensureRegistered();
     await deps.serviceManager.start();
     deps.output.success('proxai-gateway started');
