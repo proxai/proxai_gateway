@@ -62,19 +62,14 @@ export function parseBunPmLs(text: string): boolean {
 
 export const realCommandRunner: CommandRunner = {
   exec: async (file, args) => {
-    try {
-      const proc = Bun.spawn([file, ...args], { stdout: 'pipe', stderr: 'pipe' });
-      const stdout = await new Response(proc.stdout).text();
-      await proc.exited;
-      return { stdout, ok: proc.exitCode === 0 };
-    } catch {
-      return { stdout: '', ok: false };
-    }
+    const resolved = Bun.which(file);
+    if (resolved === null) return { stdout: '', ok: false };
+    const proc = Bun.spawn([resolved, ...args], { stdout: 'pipe', stderr: 'pipe' });
+    const stdout = await new Response(proc.stdout).text();
+    await proc.exited;
+    return { stdout, ok: proc.exitCode === 0 };
   },
-  has: async (cmd) => {
-    const lookup = process.platform === 'win32' ? 'where' : 'which';
-    return (await realCommandRunner.exec(lookup, [cmd])).ok;
-  },
+  has: async (cmd) => Bun.which(cmd) !== null,
 };
 
 export function createSweep(runner: CommandRunner): PackageManagerSweep {
