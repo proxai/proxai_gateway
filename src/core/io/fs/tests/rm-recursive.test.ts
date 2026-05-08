@@ -153,3 +153,36 @@ test('uses default attempts and baseDelayMs when omitted but eventually throws',
   ).rejects.toThrow('locked');
   expect(calls).toBe(10);
 });
+
+test('forces GC between retries on windows EBUSY to release orphaned handles', async () => {
+  const gcCalls: number[] = [];
+  let calls = 0;
+  await rmRecursive(join(dir, 'gc-test'), {
+    isWindows: true,
+    baseDelayMs: 1,
+    delay: async () => {},
+    rm: async () => {
+      calls++;
+      if (calls < 4) throw ebusyError();
+    },
+    forceGc: () => {
+      gcCalls.push(calls);
+    },
+  });
+  expect(calls).toBe(4);
+  expect(gcCalls).toEqual([1, 2, 3]);
+});
+
+test('default forceGc is benign when invoked (no throw, no behavior change)', async () => {
+  let calls = 0;
+  await rmRecursive(join(dir, 'default-gc'), {
+    isWindows: true,
+    baseDelayMs: 1,
+    delay: async () => {},
+    rm: async () => {
+      calls++;
+      if (calls < 2) throw ebusyError();
+    },
+  });
+  expect(calls).toBe(2);
+});

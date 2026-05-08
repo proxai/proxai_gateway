@@ -37,7 +37,7 @@ beforeEach(async () => {
 afterEach(async () => {
   buffer.close();
   await rmRecursive(dir);
-});
+}, 30_000);
 
 interface SeedRow {
   key: string;
