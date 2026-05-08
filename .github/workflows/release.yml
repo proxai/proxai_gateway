@@ -198,13 +198,11 @@ jobs:
       - name: Prepare npm-build
         run: bun scripts/publish-npm.ts
 
-      - name: Configure npm auth
-        if: ${{ env.NPM_TOKEN != '' }}
-        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
-
       - name: Publish to npm
         if: ${{ env.NPM_TOKEN != '' }}
         working-directory: npm-build
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public
 
       - name: Skip npm publish (NPM_TOKEN not configured)
