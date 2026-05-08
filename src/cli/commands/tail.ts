@@ -1,4 +1,3 @@
-import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import chalk from 'chalk';
@@ -186,14 +185,9 @@ async function readMatchingFrom(
   fromPosition: number,
   filters: ResolvedFilters,
 ): Promise<ReadResult> {
-  let size: number;
-  try {
-    size = (await stat(path)).size;
-  } catch {
-    return { lines: [], endPosition: fromPosition };
-  }
-  if (size <= fromPosition) return { lines: [], endPosition: fromPosition };
   const file = Bun.file(path);
+  const size = file.size;
+  if (size <= fromPosition) return { lines: [], endPosition: fromPosition };
   if (!(await file.exists())) return { lines: [], endPosition: fromPosition };
   const slice = await file.slice(fromPosition, size).text();
   const newLines = slice.split('\n').filter((l) => l.length > 0);

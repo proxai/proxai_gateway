@@ -1,13 +1,12 @@
 import { expect, test } from 'bun:test';
-import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import packageJson from '../../package.json' with { type: 'json' };
 
 const REPO_ROOT = resolve(import.meta.dir, '../..');
 
-test('scripts/build.ts exists', () => {
-  expect(existsSync(resolve(REPO_ROOT, 'scripts/build.ts'))).toBe(true);
+test('scripts/build.ts exists', async () => {
+  expect(await Bun.file(resolve(REPO_ROOT, 'scripts/build.ts')).exists()).toBe(true);
 });
 
 test('package.json wires the top-level build script', () => {
