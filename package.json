@@ -1,6 +1,6 @@
 {
   "name": "@proxai/gateway",
-  "version": "2026.5.7",
+  "version": "2026.5.8",
   "description": "ProxAI Gateway — captures coding-agent activity (Claude Code, Cursor, Codex) and ships it to ProxAI's backend with on-device secret redaction.",
   "license": "MIT",
   "type": "module",
@@ -9,10 +9,10 @@
   "homepage": "https://proxai.co",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/proxai/proxai-gateway.git"
+    "url": "git+https://github.com/proxai/proxai_gateway.git"
   },
   "bugs": {
-    "url": "https://github.com/proxai/proxai-gateway/issues"
+    "url": "https://github.com/proxai/proxai_gateway/issues"
   },
   "keywords": [
     "ai",

@@ -204,7 +204,6 @@ jobs:
 
       - name: Publish to npm
         if: ${{ env.NPM_TOKEN != '' }}
-        continue-on-error: true
         working-directory: npm-build
         run: npm publish --access public
 
