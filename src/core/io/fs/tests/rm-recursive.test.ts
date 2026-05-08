@@ -151,5 +151,5 @@ test('uses default attempts and baseDelayMs when omitted but eventually throws',
       },
     }),
   ).rejects.toThrow('locked');
-  expect(calls).toBe(5);
+  expect(calls).toBe(10);
 });

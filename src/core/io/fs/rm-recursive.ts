@@ -1,7 +1,8 @@
 import { rm as nodeRm } from 'node:fs/promises';
 
 const RETRYABLE_WINDOWS_CODES = new Set(['EBUSY', 'ENOTEMPTY', 'EPERM']);
-const MAX_ATTEMPTS = 5;
+const MAX_ATTEMPTS = 10;
+const DEFAULT_BASE_DELAY_MS = 250;
 
 export interface RmRecursiveOptions {
   attempts?: number;
@@ -22,7 +23,7 @@ interface ResolvedConfig {
 export async function rmRecursive(path: string, options: RmRecursiveOptions = {}): Promise<void> {
   const cfg: ResolvedConfig = {
     attempts: options.attempts ?? MAX_ATTEMPTS,
-    baseDelayMs: options.baseDelayMs ?? 100,
+    baseDelayMs: options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS,
     isWindows: options.isWindows ?? process.platform === 'win32',
     delay: options.delay ?? defaultDelay,
     rm: options.rm ?? defaultRm,
