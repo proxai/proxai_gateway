@@ -603,3 +603,103 @@ test('register-host-id network error returns generic error', async () => {
     out.lines.some((l) => l.level === 'error' && /host_id registration failed/.test(l.msg)),
   ).toBe(true);
 });
+
+import type { ServiceManager } from 'cli/service-manager.ts';
+
+interface FakeServiceManager extends ServiceManager {
+  calls: { ensureRegistered: number; start: number };
+}
+
+function fakeServiceManager(opts: { failStart?: boolean } = {}): FakeServiceManager {
+  const calls = { ensureRegistered: 0, start: 0 };
+  return {
+    calls,
+    ensureRegistered: async () => {
+      calls.ensureRegistered++;
+    },
+    start: async () => {
+      calls.start++;
+      if (opts.failStart === true) throw new Error('launchd offline');
+    },
+    stop: async () => {},
+    restart: async () => {},
+    unregister: async () => {},
+    isRegistered: async () => true,
+    isRunning: async () => true,
+  };
+}
+
+test('auto-starts the daemon by default after successful setup', async () => {
+  const control = newControl();
+  const sm = fakeServiceManager();
+  const out = captureOutput();
+  const d = {
+    ...deps(control),
+    output: out,
+    serviceManager: sm,
+    sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
+  };
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(sm.calls.ensureRegistered).toBe(1);
+  expect(sm.calls.start).toBe(1);
+  expect(out.lines.some((l) => l.msg.includes('daemon started'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('proxai-gateway tail'))).toBe(true);
+});
+
+test('skips auto-start when --no-start is passed', async () => {
+  const control = newControl();
+  const sm = fakeServiceManager();
+  const out = captureOutput();
+  const d = {
+    ...deps(control),
+    output: out,
+    serviceManager: sm,
+  };
+  const result = await runSetup(d, { apiKey: VALID_KEY, noStart: true });
+  expect(result.exitCode).toBe(0);
+  expect(sm.calls.start).toBe(0);
+  expect(out.lines.some((l) => l.msg.includes('when you are ready'))).toBe(true);
+});
+
+test('warns but exits 0 when service manager start throws', async () => {
+  const control = newControl();
+  const sm = fakeServiceManager({ failStart: true });
+  const out = captureOutput();
+  const d = {
+    ...deps(control),
+    output: out,
+    serviceManager: sm,
+  };
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(
+    out.lines.some((l) => l.level === 'warn' && l.msg.includes('daemon auto-start failed')),
+  ).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('manually'))).toBe(true);
+});
+
+test('falls through with manual-start hint when no service manager is supplied', async () => {
+  const control = newControl();
+  const out = captureOutput();
+  const d = { ...deps(control), output: out };
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(out.lines.some((l) => l.msg.includes('Service manager unavailable'))).toBe(true);
+});
+
+test('clears session-stopped sentinel before starting (when sentinel path supplied)', async () => {
+  const control = newControl();
+  const sm = fakeServiceManager();
+  const out = captureOutput();
+  const sentinelPath = join(dir, 'SESSION_STOPPED');
+  await Bun.write(sentinelPath, JSON.stringify({ boot_id: 'b', set_at: '2026-05-08T00:00:00Z' }));
+  const d = {
+    ...deps(control),
+    output: out,
+    serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
+  };
+  await runSetup(d, { apiKey: VALID_KEY });
+  expect(await Bun.file(sentinelPath).exists()).toBe(false);
+});

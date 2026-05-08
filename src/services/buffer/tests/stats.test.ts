@@ -95,7 +95,7 @@ test('countsBySource aggregates pending failed and delivered per source', () => 
 test('countsBySource ignores unknown source_app values defensively', () => {
   const a = newBatch({ sourceApp: 'claude-code' });
   insertBatch(db, a);
-  db.run("UPDATE upload_batches SET source_app = 'unknown' WHERE capture_id = ?", a.captureId);
+  db.run("UPDATE upload_batches SET source_app = 'unknown' WHERE capture_id = ?", [a.captureId]);
   const counts = countsBySource(db);
   expect(counts['claude-code'].pending).toBe(0);
 });
@@ -104,7 +104,7 @@ test('countsBySource ignores unknown source_app values in receipts defensively',
   const a = newBatch({ sourceApp: 'claude-code' });
   insertBatch(db, a);
   markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
-  db.run("UPDATE upload_receipts SET source_app = 'unknown' WHERE capture_id = ?", a.captureId);
+  db.run("UPDATE upload_receipts SET source_app = 'unknown' WHERE capture_id = ?", [a.captureId]);
   const counts = countsBySource(db);
   expect(counts['claude-code'].delivered).toBe(0);
 });

@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { ensureDir, setMode, writeAtomic } from 'core/io/fs';
 import { dirname } from 'node:path';
 
@@ -8,7 +9,9 @@ import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import { buildLaunchdPlist } from 'cli/launchd-plist.ts';
 import type { PromptSink } from 'cli/prompts.ts';
 import { buildScheduledTaskXml, encodeScheduledTaskXml } from 'cli/scheduled-task-xml.ts';
+import type { ServiceManager } from 'cli/service-manager.ts';
 import { buildSystemdUnit } from 'cli/systemd-unit.ts';
+import { clearSessionStoppedSentinel } from 'services/polling/session-stopped-sentinel.ts';
 import {
   DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
   DEFAULT_BUFFER_SOFT_RESUME_BYTES,
@@ -41,6 +44,7 @@ export interface SetupCommandDeps {
   logDir: string;
   authFailedSentinelPath: string;
   serviceUnitPath: string | null;
+  sessionStoppedSentinelPath?: string;
   programPath: string;
   configExists: () => Promise<boolean>;
   httpClientFactory: (apiKey: string, hostId: string) => HttpClient;
@@ -48,12 +52,14 @@ export interface SetupCommandDeps {
   now?: () => string;
   platform: NodeJS.Platform;
   windowsUserId?: string;
+  serviceManager?: ServiceManager;
 }
 
 export interface SetupCommandOptions {
   apiKey?: string;
   installSource?: InstallSource;
   skipKeyFormatCheck?: boolean;
+  noStart?: boolean;
 }
 
 export async function runSetup(
@@ -227,6 +233,41 @@ export async function runSetup(
   } else {
     deps.output.success(`installed (host_id: ${hostId})`);
   }
+
+  if (options.noStart === true) {
+    deps.output.info('');
+    deps.output.info(
+      `Run ${chalk.cyan('proxai-gateway start')} when you are ready to begin capturing.`,
+    );
+    return { exitCode: EXIT_CODE.ok };
+  }
+
+  if (deps.serviceManager === undefined) {
+    deps.output.info('');
+    deps.output.info(
+      `Service manager unavailable in this environment; run ${chalk.cyan('proxai-gateway start')} manually to begin capturing.`,
+    );
+    return { exitCode: EXIT_CODE.ok };
+  }
+
+  try {
+    if (deps.sessionStoppedSentinelPath !== undefined) {
+      await clearSessionStoppedSentinel(deps.sessionStoppedSentinelPath);
+    }
+    await deps.serviceManager.ensureRegistered();
+    await deps.serviceManager.start();
+    deps.output.success('daemon started');
+    deps.output.info('');
+    deps.output.info(`  Logs:    ${chalk.cyan('proxai-gateway tail --follow')}`);
+    deps.output.info(`  Status:  ${chalk.cyan('proxai-gateway status')}`);
+    deps.output.info(`  Stop:    ${chalk.cyan('proxai-gateway stop')}`);
+  } catch (err) {
+    deps.output.warn(formatError('daemon auto-start failed', err));
+    deps.output.info(
+      `Setup completed; run ${chalk.cyan('proxai-gateway start')} manually to begin capturing.`,
+    );
+  }
+
   return { exitCode: EXIT_CODE.ok };
 }
 

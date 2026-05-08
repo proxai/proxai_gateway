@@ -72,6 +72,7 @@ function resolveWindowsUserId(): string | undefined {
 
 function buildSetupDeps(): SetupCommandDeps {
   const platform = process.platform;
+  const unitPath = platformServiceUnitPath(platform);
   const base: SetupCommandDeps = {
     output: consoleOutput(),
     prompts: inquirerPrompts(),
@@ -79,7 +80,8 @@ function buildSetupDeps(): SetupCommandDeps {
     bufferDbPath: bufferDbPath(),
     logDir: logDir(),
     authFailedSentinelPath: authFailedSentinelPath(),
-    serviceUnitPath: platformServiceUnitPath(platform),
+    sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
+    serviceUnitPath: unitPath,
     programPath: process.execPath,
     configExists: () => Bun.file(configFilePath()).exists(),
     httpClientFactory: (apiKey, hostId) =>
@@ -97,6 +99,13 @@ function buildSetupDeps(): SetupCommandDeps {
     readMachineUuid: () => readMachineUuid(),
     platform,
   };
+  if (unitPath !== null) {
+    base.serviceManager = getServiceManager({
+      platform,
+      unitPath,
+      programPath: process.execPath,
+    });
+  }
   if (platform === 'win32') {
     const userId = resolveWindowsUserId();
     if (userId !== undefined) {
@@ -117,7 +126,7 @@ function invokeSetupInteractive(): Promise<CommandResult> {
 program
   .command('setup')
   .description(
-    'Configure the gateway with your ingestion key. Verifies the key, writes ~/.proxai/proxai-gateway/config.toml, and installs the platform service unit. Re-run to replace an existing config.',
+    'Configure the gateway with your ingestion key. Verifies the key, writes ~/.proxai/proxai-gateway/config.toml, installs the platform service unit, and starts the daemon.',
   )
   .option(
     '--api-key <key>',
@@ -128,7 +137,12 @@ program
     'how this binary was installed; reported to the backend for diagnostics. One of: bun, pnpm, yarn, npm, brew, github_release.',
     'github_release',
   )
-  .action(async (opts: { apiKey?: string; installSource: string }) => {
+  .option(
+    '--no-start',
+    'finish setup without registering or starting the platform service. Run `proxai-gateway start` manually when ready.',
+    false,
+  )
+  .action(async (opts: { apiKey?: string; installSource: string; start?: boolean }) => {
     const result = await runSetup(buildSetupDeps(), buildSetupOptions(opts));
     process.exit(result.exitCode);
   });
@@ -535,18 +549,20 @@ program.parseAsync().catch((err: unknown) => {
   process.exit(EXIT_CODE.error);
 });
 
-function buildSetupOptions(opts: { apiKey?: string; installSource: string }): {
+function buildSetupOptions(opts: { apiKey?: string; installSource: string; start?: boolean }): {
   apiKey?: string;
   installSource?: InstallSource;
+  noStart?: boolean;
 } {
   const VALID = ['bun', 'pnpm', 'yarn', 'npm', 'brew', 'github_release'] as const;
   type Source = (typeof VALID)[number];
   const installSource = (VALID as readonly string[]).includes(opts.installSource)
     ? (opts.installSource as Source)
     : ('github_release' as Source);
-  const out: { apiKey?: string; installSource?: InstallSource } = {
+  const out: { apiKey?: string; installSource?: InstallSource; noStart?: boolean } = {
     installSource,
   };
   if (opts.apiKey !== undefined) out.apiKey = opts.apiKey;
+  if (opts.start === false) out.noStart = true;
   return out;
 }
