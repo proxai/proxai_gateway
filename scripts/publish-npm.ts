@@ -51,7 +51,7 @@ async function buildNpmPackage(root: RootPkg): Promise<string> {
     keywords: root.keywords,
     author: root.author,
     license: root.license,
-    bin: { 'proxai-gateway': './shim.js' },
+    bin: { 'proxai-gateway': 'shim.js' },
     scripts: { postinstall: 'node postinstall.js' },
     engines: { node: '>=18' },
     files: ['shim.js', 'postinstall.js', 'README.md', 'LICENSE'],
