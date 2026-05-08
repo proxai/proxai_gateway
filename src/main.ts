@@ -13,6 +13,7 @@ import {
   sessionStoppedSentinelPath,
   updateAvailableSentinelPath,
 } from 'core/io/fs';
+import { createLogger } from 'core/log';
 import type { LogLevel } from 'core/log';
 import { readMachineUuid } from 'core/system';
 import { GatewayError, UserAbortedError } from 'core/utils';
@@ -26,6 +27,7 @@ import { runRedactionList, runRedactionTest } from 'cli/commands/redaction.ts';
 import { runRestart } from 'cli/commands/restart.ts';
 import { runResume } from 'cli/commands/resume.ts';
 import { runDaemon } from 'cli/commands/run.ts';
+import { runDev } from 'cli/commands/dev.ts';
 import { runStart } from 'cli/commands/start.ts';
 import type { ServiceUnitRecreateConfig } from 'cli/service-unit-writer.ts';
 import { runStatus } from 'cli/commands/status.ts';
@@ -284,6 +286,28 @@ program
     });
     process.exit(result.exitCode);
   });
+
+program.command('dev', { hidden: true }).action(async () => {
+  const ctrl = new AbortController();
+  process.on('SIGINT', () => ctrl.abort());
+  process.on('SIGTERM', () => ctrl.abort());
+  const result = await runDev({
+    output: consoleOutput(),
+    abortSignal: ctrl.signal,
+    gatewayVersion: `@proxai/gateway ${packageJson.version}`,
+    currentVersion: packageJson.version,
+    binaryPath: process.execPath,
+    pauseSentinelPath: pausedSentinelPath(),
+    authFailedSentinelPath: authFailedSentinelPath(),
+    bufferFullSentinelPath: bufferFullSentinelPath(),
+    sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
+    updateAvailableSentinelPath: updateAvailableSentinelPath(),
+    loadConfig: () => loadConfigFromFile(),
+    runDaemon,
+    createLogger,
+  });
+  process.exit(result.exitCode);
+});
 
 program
   .command('backfill')
