@@ -539,7 +539,7 @@ program
   )
   .option(
     '--source <name>',
-    'show only entries from one collector. One of: claude-code, cursor, codex.',
+    'show only entries from one collector. One of: claude-code, cursor, codex, gemini-cli.',
   )
   .option(
     '--level <level>',

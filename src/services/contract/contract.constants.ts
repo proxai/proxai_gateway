@@ -8,7 +8,12 @@ import type {
   WatermarkKind,
 } from 'services/contract/contract.types.ts';
 
-export const VALID_SOURCE_APPS: readonly SourceApp[] = ['claude-code', 'cursor', 'codex'];
+export const VALID_SOURCE_APPS: readonly SourceApp[] = [
+  'claude-code',
+  'cursor',
+  'codex',
+  'gemini-cli',
+];
 
 export const VALID_SOURCE_KINDS: readonly SourceKind[] = [
   'jsonl_append',
@@ -60,6 +65,13 @@ export const SOURCE_VARIANTS: readonly SourceVariantSpec[] = [
     bodyFormat: 'sqlite_rows_json',
     watermarkKind: 'rowid_range',
     watermarkTableRequired: true,
+  },
+  {
+    sourceApp: 'gemini-cli',
+    sourceKind: 'jsonl_append',
+    bodyFormat: 'jsonl',
+    watermarkKind: 'byte_range',
+    watermarkTableRequired: false,
   },
 ];
 

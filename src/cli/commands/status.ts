@@ -42,7 +42,12 @@ import {
 
 export { formatBytes };
 
-const SOURCE_ORDER: ('claude-code' | 'cursor' | 'codex')[] = ['claude-code', 'cursor', 'codex'];
+const SOURCE_ORDER: ('claude-code' | 'cursor' | 'codex' | 'gemini-cli')[] = [
+  'claude-code',
+  'cursor',
+  'codex',
+  'gemini-cli',
+];
 
 export interface StatusCommandDeps {
   output: OutputSink;

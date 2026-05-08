@@ -5,6 +5,7 @@ export * from 'services/polling/pause-sentinel.ts';
 export * from 'services/polling/poll-claude-code.ts';
 export * from 'services/polling/poll-codex.ts';
 export * from 'services/polling/poll-cursor.ts';
+export * from 'services/polling/poll-gemini-cli.ts';
 export * from 'services/polling/poll-cycle.ts';
 export * from 'services/polling/poll-loop.ts';
 export * from 'services/polling/polling.constants.ts';

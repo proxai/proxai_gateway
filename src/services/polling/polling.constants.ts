@@ -7,3 +7,4 @@ export const MAX_POLL_INTERVAL_MS = 3_600_000;
 export const SOURCE_NAME_CLAUDE_CODE: SourceApp = 'claude-code';
 export const SOURCE_NAME_CURSOR: SourceApp = 'cursor';
 export const SOURCE_NAME_CODEX: SourceApp = 'codex';
+export const SOURCE_NAME_GEMINI_CLI: SourceApp = 'gemini-cli';

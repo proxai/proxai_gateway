@@ -76,6 +76,7 @@ export function countsBySource(db: Database): CountsBySource {
     'claude-code': { pending: 0, failed: 0, delivered: 0 },
     cursor: { pending: 0, failed: 0, delivered: 0 },
     codex: { pending: 0, failed: 0, delivered: 0 },
+    'gemini-cli': { pending: 0, failed: 0, delivered: 0 },
   };
   const batchRows = db
     .query<{ source_app: string; status: string; count: number }, []>(COUNT_BATCHES_BY_SOURCE_SQL)

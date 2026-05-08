@@ -130,7 +130,7 @@ export function setCursorFromRegression(
   watermarkEnd: number,
 ): void {
   setCursor(db, {
-    sourceApp: batch.sourceApp as 'claude-code' | 'cursor' | 'codex',
+    sourceApp: batch.sourceApp as 'claude-code' | 'cursor' | 'codex' | 'gemini-cli',
     sourcePathHash: batch.sourcePathHash,
     sourcePath: batch.sourcePath,
     sourceInode: batch.sourceInode,

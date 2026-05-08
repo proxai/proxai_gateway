@@ -91,6 +91,7 @@ test('renderBufferSection prints per-source pending sub-rows when any source has
       'claude-code': { pending: 3, failed: 0, delivered: 0 },
       cursor: { pending: 2, failed: 0, delivered: 0 },
       codex: { pending: 0, failed: 0, delivered: 0 },
+      'gemini-cli': { pending: 0, failed: 0, delivered: 0 },
     },
     now: NOW,
   });
