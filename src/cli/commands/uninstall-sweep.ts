@@ -1,8 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execFileAsync = promisify(execFile);
-
 export type SweepablePm = 'npm' | 'pnpm' | 'yarn' | 'bun';
 
 export interface PmDetection {
@@ -68,21 +63,17 @@ export function parseBunPmLs(text: string): boolean {
 export const realCommandRunner: CommandRunner = {
   exec: async (file, args) => {
     try {
-      const { stdout } = await execFileAsync(file, args);
-      return { stdout, ok: true };
-    } catch (err) {
-      const e = err as { stdout?: string };
-      return { stdout: typeof e.stdout === 'string' ? e.stdout : '', ok: false };
+      const proc = Bun.spawn([file, ...args], { stdout: 'pipe', stderr: 'pipe' });
+      const stdout = await new Response(proc.stdout).text();
+      await proc.exited;
+      return { stdout, ok: proc.exitCode === 0 };
+    } catch {
+      return { stdout: '', ok: false };
     }
   },
   has: async (cmd) => {
     const lookup = process.platform === 'win32' ? 'where' : 'which';
-    try {
-      await execFileAsync(lookup, [cmd]);
-      return true;
-    } catch {
-      return false;
-    }
+    return (await realCommandRunner.exec(lookup, [cmd])).ok;
   },
 };
 
