@@ -32,7 +32,7 @@ test('emits last N lines when not following', async () => {
   const lines: string[] = [];
   const result = await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { lines: 2, json: true },
+    { lines: 2, raw: true },
   );
   expect(result.exitCode).toBe(0);
   expect(lines).toHaveLength(2);
@@ -44,7 +44,7 @@ test('returns 0 with no output when log file is missing', async () => {
   const lines: string[] = [];
   const result = await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { lines: 50, json: true },
+    { lines: 50, raw: true },
   );
   expect(result.exitCode).toBe(0);
   expect(lines).toEqual([]);
@@ -61,7 +61,7 @@ test('--source filters by source_app', async () => {
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { source: 'claude-code', json: true },
+    { source: 'claude-code', raw: true },
   );
   expect(lines).toHaveLength(2);
   expect(lines.every((l) => JSON.parse(l).source_app === 'claude-code')).toBe(true);
@@ -79,7 +79,7 @@ test('--level filters out lines below threshold', async () => {
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { level: 'warn', json: true },
+    { level: 'warn', raw: true },
   );
   expect(lines).toHaveLength(2);
   expect(lines.every((l) => JSON.parse(l).level >= 40)).toBe(true);
@@ -93,7 +93,7 @@ test('--since filters by time window', async () => {
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { since: '1h', json: true },
+    { since: '1h', raw: true },
   );
   expect(lines).toHaveLength(1);
   expect(JSON.parse(lines[0]!).msg).toBe('recent');
@@ -124,7 +124,7 @@ test('--json passthrough emits raw lines unmodified', async () => {
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { json: true },
+    { raw: true },
   );
   expect(lines).toHaveLength(1);
   expect(lines[0]).toBe(raw);
@@ -135,7 +135,7 @@ test('without --json, applies pretty formatting', async () => {
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { json: false },
+    { raw: false },
   );
   expect(lines).toHaveLength(1);
   expect(lines[0]).toContain('pretty-test');
@@ -156,7 +156,7 @@ test('--follow emits new lines and stops on abort', async () => {
       abortSignal: ctrl.signal,
       pollIntervalMs: 1,
     },
-    { follow: true, json: true },
+    { follow: true, raw: true },
   );
   await Bun.sleep(10);
   await Bun.write(todaysLogPath(dir), `${makeLine(30, 'first')}\n${makeLine(30, 'second')}\n`);
@@ -175,7 +175,7 @@ test('--follow exits immediately when signal is already aborted', async () => {
   const lines: string[] = [];
   const result = await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l), abortSignal: ctrl.signal },
-    { follow: true, json: true },
+    { follow: true, raw: true },
   );
   expect(result.exitCode).toBe(0);
 });
@@ -191,7 +191,7 @@ test('--follow handles missing log file gracefully (exits cleanly on abort)', as
       abortSignal: ctrl.signal,
       pollIntervalMs: 1,
     },
-    { follow: true, json: true },
+    { follow: true, raw: true },
   );
   await Bun.sleep(20);
   ctrl.abort();
@@ -211,14 +211,101 @@ test('formatLine produces a colored, structured line for valid input', () => {
     time: Date.parse('2026-05-05T14:32:08Z'),
     msg: 'something failed',
     source_app: 'claude-code',
+    event: 'upload.fatal',
     capture_id: '01943f5a',
   });
   const out = formatLine(raw);
-  expect(out).toContain('2026-05-05 14:32:08');
+  expect(out).toMatch(/\d{2}:\d{2}:\d{2}/);
   expect(out).toContain('ERROR');
   expect(out).toContain('claude-code');
+  expect(out).toContain('upload.fatal');
   expect(out).toContain('something failed');
   expect(out).toContain('capture_id');
+});
+
+test('shows waiting-for-log message when --follow and log missing', async () => {
+  const out = captureOutput();
+  const lines: string[] = [];
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), 50);
+  await runTail(
+    {
+      output: out,
+      logDir: dir,
+      emit: (l) => lines.push(l),
+      abortSignal: ctrl.signal,
+      pollIntervalMs: 5,
+    },
+    { follow: true, raw: true },
+  );
+  expect(out.lines.some((l) => l.msg.includes('Waiting for daemon'))).toBe(true);
+});
+
+test('shows no-logs hint when not following and log missing in pretty mode', async () => {
+  const out = captureOutput();
+  const lines: string[] = [];
+  await runTail({ output: out, logDir: dir, emit: (l) => lines.push(l) }, { lines: 50 });
+  expect(out.lines.some((l) => l.msg.includes('No logs yet'))).toBe(true);
+});
+
+test('does not show no-logs hint in raw mode', async () => {
+  const out = captureOutput();
+  const lines: string[] = [];
+  await runTail({ output: out, logDir: dir, emit: (l) => lines.push(l) }, { lines: 50, raw: true });
+  expect(out.lines.some((l) => l.msg.includes('No logs yet'))).toBe(false);
+});
+
+test('appears-streaming message when log file is created during follow', async () => {
+  const out = captureOutput();
+  const lines: string[] = [];
+  const ctrl = new AbortController();
+  setTimeout(async () => {
+    await writeFile(
+      todaysLogPath(dir),
+      JSON.stringify({ level: 30, time: Date.now(), msg: 'hello' }) + '\n',
+    );
+  }, 20);
+  setTimeout(() => ctrl.abort(), 200);
+  await runTail(
+    {
+      output: out,
+      logDir: dir,
+      emit: (l) => lines.push(l),
+      abortSignal: ctrl.signal,
+      pollIntervalMs: 10,
+    },
+    { follow: true, raw: true },
+  );
+  expect(out.lines.some((l) => l.msg.includes('Waiting for daemon'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('Log file appeared'))).toBe(true);
+});
+
+test('formatLine colorizes each level distinctly', () => {
+  const cases: Array<[number, string]> = [
+    [10, 'TRACE'],
+    [20, 'DEBUG'],
+    [30, 'INFO'],
+    [40, 'WARN'],
+    [50, 'ERROR'],
+    [60, 'FATAL'],
+  ];
+  for (const [level, label] of cases) {
+    const raw = JSON.stringify({ level, time: Date.now(), msg: 'm' });
+    expect(formatLine(raw)).toContain(label);
+  }
+});
+
+test('formatLine handles missing time/level/msg fields gracefully', () => {
+  const raw = JSON.stringify({});
+  const out = formatLine(raw);
+  expect(out).toMatch(/\d{2}:\d{2}:\d{2}/);
+  expect(out).toContain('INFO');
+});
+
+test('formatLine renders unknown level as numeric label', () => {
+  const raw = JSON.stringify({ level: 99, time: Date.now(), msg: 'm' });
+  const out = formatLine(raw);
+  expect(out).toContain('99');
 });
 
 test('todaysLogPath uses the current UTC date', () => {
@@ -238,7 +325,7 @@ test('parses different --since unit suffixes (s, m, h, d)', async () => {
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { since: '1d', json: true },
+    { since: '1d', raw: true },
   );
   expect(lines).toHaveLength(1);
   expect(JSON.parse(lines[0]!).msg).toBe('recent');
@@ -285,7 +372,7 @@ test('--follow resets read position when the log file rotates mid-loop', async (
       abortSignal: ctrl.signal,
       pathProvider,
     },
-    { follow: true, json: true },
+    { follow: true, raw: true },
   );
   await Bun.sleep(50);
 
@@ -303,7 +390,7 @@ test('skips malformed JSON lines silently', async () => {
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { json: true },
+    { raw: true },
   );
   expect(lines).toHaveLength(1);
   expect(JSON.parse(lines[0]!).msg).toBe('good');

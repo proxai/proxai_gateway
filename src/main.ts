@@ -453,7 +453,7 @@ program
     'limit to entries newer than now minus this duration. Format: Nm (minutes), Nh (hours), Nd (days). Examples: 30m, 2h, 7d.',
   )
   .option(
-    '--json',
+    '--raw',
     'emit raw ndjson lines as written on disk, bypassing pretty formatting (useful for piping to jq)',
     false,
   )
@@ -465,7 +465,7 @@ program
       source?: string;
       level?: string;
       since?: string;
-      json?: boolean;
+      raw?: boolean;
       config?: string;
     }) => {
       let dir = logDir();
@@ -482,7 +482,7 @@ program
       if (opts.source !== undefined) tailOptions.source = opts.source;
       if (opts.level !== undefined) tailOptions.level = opts.level as LogLevel;
       if (opts.since !== undefined) tailOptions.since = opts.since;
-      if (opts.json === true) tailOptions.json = true;
+      if (opts.raw === true) tailOptions.raw = true;
       const result = await runTail(
         {
           output: consoleOutput(),

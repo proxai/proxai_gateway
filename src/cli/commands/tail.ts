@@ -45,7 +45,7 @@ export interface TailCommandOptions {
   source?: string;
   level?: LogLevel;
   since?: string;
-  json?: boolean;
+  raw?: boolean;
 }
 
 interface ResolvedFilters {
@@ -69,17 +69,26 @@ export async function runTail(
   }
 
   const lineLimit = options.lines ?? 50;
-  const json = options.json === true;
+  const raw = options.raw === true;
   const emit = deps.emit;
 
   const resolvePath = deps.pathProvider ?? ((): string => todaysLogPath(deps.logDir));
   let path = resolvePath();
   let position = 0;
 
+  const initialExists = await Bun.file(path).exists();
+  if (!initialExists) {
+    if (options.follow === true) {
+      deps.output.info(chalk.dim('Waiting for daemon to start writing logs...'));
+    } else if (!raw) {
+      deps.output.info(chalk.dim('No logs yet. Start the daemon with `proxai-gateway start`.'));
+    }
+  }
+
   const initial = await readMatchingTail(path, lineLimit, filters);
   position = initial.endPosition;
   for (const line of initial.lines) {
-    emit(json ? line : formatLine(line));
+    emit(raw ? line : formatLine(line));
   }
 
   if (options.follow !== true) {
@@ -87,6 +96,7 @@ export async function runTail(
   }
 
   const pollIntervalMs = deps.pollIntervalMs ?? POLL_INTERVAL_MS;
+  let logArrivedNotified = initialExists;
   while (deps.abortSignal === undefined || !deps.abortSignal.aborted) {
     await sleep(pollIntervalMs, deps.abortSignal);
     if (deps.abortSignal !== undefined && deps.abortSignal.aborted) break;
@@ -95,12 +105,20 @@ export async function runTail(
     if (currentPath !== path) {
       path = currentPath;
       position = 0;
+      logArrivedNotified = false;
+    }
+
+    if (!logArrivedNotified) {
+      const exists = await Bun.file(path).exists();
+      if (!exists) continue;
+      deps.output.info(chalk.dim('Log file appeared; streaming...'));
+      logArrivedNotified = true;
     }
 
     const next = await readMatchingFrom(path, position, filters);
     position = next.endPosition;
     for (const line of next.lines) {
-      emit(json ? line : formatLine(line));
+      emit(raw ? line : formatLine(line));
     }
   }
 
@@ -211,14 +229,24 @@ export function formatLine(line: string): string {
   const level = typeof parsed['level'] === 'number' ? parsed['level'] : 30;
   const msg = typeof parsed['msg'] === 'string' ? parsed['msg'] : '';
   const sourceApp = typeof parsed['source_app'] === 'string' ? parsed['source_app'] : null;
+  const event = typeof parsed['event'] === 'string' ? parsed['event'] : null;
 
-  const timeStr = new Date(time).toISOString().replace('T', ' ').slice(0, 19);
+  const timeStr = formatLocalTime(time);
   const levelLabel = PINO_LEVEL_LABEL[level] ?? String(level);
   const levelColored = colorLevel(level, levelLabel.padEnd(5));
   const sourceTag = sourceApp !== null ? chalk.cyan(`[${sourceApp}] `) : '';
+  const eventTag = event !== null ? `${chalk.dim(event.padEnd(24))} ` : '';
 
   const extras = formatExtras(parsed);
-  return `${chalk.gray(timeStr)} ${levelColored} ${sourceTag}${msg}${extras}`;
+  return `${chalk.gray(timeStr)}  ${levelColored}  ${sourceTag}${eventTag}${msg}${extras}`;
+}
+
+function formatLocalTime(timeMs: number): string {
+  const d = new Date(timeMs);
+  const hh = d.getHours().toString().padStart(2, '0');
+  const mm = d.getMinutes().toString().padStart(2, '0');
+  const ss = d.getSeconds().toString().padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
 }
 
 function colorLevel(level: number, label: string): string {
@@ -235,6 +263,7 @@ const RESERVED_KEYS = new Set([
   'time',
   'msg',
   'source_app',
+  'event',
   'pid',
   'hostname',
   'service',
