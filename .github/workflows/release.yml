@@ -203,7 +203,7 @@ jobs:
         working-directory: npm-build
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+        run: npm publish --access public --tag latest
 
       - name: Skip npm publish (NPM_TOKEN not configured)
         if: ${{ env.NPM_TOKEN == '' }}
