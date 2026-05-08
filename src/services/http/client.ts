@@ -8,6 +8,7 @@ import {
   ValidationError,
   WatermarkRegressionError,
 } from 'core/utils';
+import type { GatewayError, HttpRequestContext } from 'core/utils';
 import { validateRawRecordDTO } from 'services/contract';
 import type { RawRecordDTO } from 'services/contract';
 import {
@@ -159,67 +160,103 @@ export class HttpClient {
       response = await this.fetchFn(options.url, init);
     } catch (err: unknown) {
       const e = err as Error;
+      const ctx = makeHttpContext(options.url, options.method, null, null);
       if (e.name === 'TimeoutError' || e.name === 'AbortError') {
-        throw new RetriableError(
-          `request timed out after ${this.timeoutMs.toString()}ms`,
-          null,
-          err,
+        throw withCtx(
+          new RetriableError(`request timed out after ${this.timeoutMs.toString()}ms`, null, err),
+          ctx,
         );
       }
-      throw new NetworkError(`network failure: ${e.message}`, err);
+      throw withCtx(new NetworkError(`network failure: ${e.message}`, err), ctx);
     }
 
-    return this.dispatch<T>(response);
+    return this.dispatch<T>(response, options);
   }
 
-  private async dispatch<T>(response: Response): Promise<T> {
+  private async dispatch<T>(response: Response, options: RequestOptions): Promise<T> {
     const status = response.status;
 
     if (status === HTTP_STATUS.ok || status === HTTP_STATUS.created) {
       const text = await response.text();
       if (text.length === 0) {
-        throw new FatalError(`server returned ${status.toString()} with empty body`);
+        throw withCtx(
+          new FatalError(`server returned ${status.toString()} with empty body`),
+          makeHttpContext(options.url, options.method, status, ''),
+        );
       }
       try {
         return JSON.parse(text) as T;
       } catch (err) {
-        throw new FatalError(`failed to parse response JSON: ${(err as Error).message}`, err);
-      }
-    }
-    if (status === HTTP_STATUS.badRequest) {
-      const text = await response.text();
-      const regression = parseWatermarkRegression(text);
-      if (regression !== null) {
-        throw new WatermarkRegressionError(
-          `server reported watermark_regression at ${regression.currentServerWatermarkEnd.toString()}`,
-          regression.currentServerWatermarkEnd,
-          regression.sourcePathHash,
+        throw withCtx(
+          new FatalError(`failed to parse response JSON: ${(err as Error).message}`, err),
+          makeHttpContext(options.url, options.method, status, text),
         );
       }
-      throw new ValidationError(`server returned 400 ${response.statusText}`);
+    }
+    const errorBody = await response.text();
+    const ctx = makeHttpContext(options.url, options.method, status, errorBody);
+    if (status === HTTP_STATUS.badRequest) {
+      const regression = parseWatermarkRegression(errorBody);
+      if (regression !== null) {
+        throw withCtx(
+          new WatermarkRegressionError(
+            `server reported watermark_regression at ${regression.currentServerWatermarkEnd.toString()}`,
+            regression.currentServerWatermarkEnd,
+            regression.sourcePathHash,
+          ),
+          ctx,
+        );
+      }
+      throw withCtx(new ValidationError(`server returned 400 ${response.statusText}`), ctx);
     }
     if (status === HTTP_STATUS.unauthorized) {
-      throw new AuthError('server returned 401: ingestion key missing or invalid');
+      throw withCtx(new AuthError('server returned 401: ingestion key missing or invalid'), ctx);
     }
     if (status === HTTP_STATUS.forbidden) {
-      throw new AuthError('server returned 403: ingestion key invalid or revoked');
+      throw withCtx(new AuthError('server returned 403: ingestion key invalid or revoked'), ctx);
     }
     if (status === HTTP_STATUS.requestTimeout) {
-      throw new ValidationError('server returned 408 (decompress timeout — gateway bug)');
+      throw withCtx(
+        new ValidationError('server returned 408 (decompress timeout — gateway bug)'),
+        ctx,
+      );
     }
     if (status === HTTP_STATUS.payloadTooLarge) {
-      throw new ValidationError('server returned 413 (payload too large)');
+      throw withCtx(new ValidationError('server returned 413 (payload too large)'), ctx);
     }
     if (status === HTTP_STATUS.tooManyRequests) {
       const retryAfter = parseRetryAfter(response.headers.get(HEADER_RETRY_AFTER));
-      throw new RateLimitError('server returned 429 (rate limit)', retryAfter);
+      throw withCtx(new RateLimitError('server returned 429 (rate limit)', retryAfter), ctx);
     }
     if (status >= 500 && status < 600) {
       const retryAfter = parseRetryAfter(response.headers.get(HEADER_RETRY_AFTER));
-      throw new RetriableError(`server returned ${status.toString()}`, retryAfter);
+      throw withCtx(new RetriableError(`server returned ${status.toString()}`, retryAfter), ctx);
     }
-    throw new FatalError(`unexpected status: ${status.toString()}`);
+    throw withCtx(new FatalError(`unexpected status: ${status.toString()}`), ctx);
   }
+}
+
+const RESPONSE_BODY_EXCERPT_LIMIT = 512;
+
+function makeHttpContext(
+  url: string,
+  method: string,
+  status: number | null,
+  body: string | null,
+): HttpRequestContext {
+  let bodyExcerpt: string | null = null;
+  if (body !== null) {
+    bodyExcerpt =
+      body.length > RESPONSE_BODY_EXCERPT_LIMIT
+        ? `${body.slice(0, RESPONSE_BODY_EXCERPT_LIMIT)}…`
+        : body;
+  }
+  return { url, method, status, bodyExcerpt };
+}
+
+function withCtx<E extends GatewayError>(err: E, ctx: HttpRequestContext): E {
+  err.withHttpContext(ctx);
+  return err;
 }
 
 function parseWatermarkRegression(

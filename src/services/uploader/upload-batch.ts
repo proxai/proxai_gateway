@@ -70,7 +70,12 @@ async function classifyAndPersist(
   if (err instanceof RateLimitError) {
     recordRetriableFailure(ctx.db, captureId, err.message);
     log?.warn(
-      { event: 'upload.rate_limited', retry_after_ms: err.retryAfterMs, error: err.message },
+      {
+        event: 'upload.rate_limited',
+        retry_after_ms: err.retryAfterMs,
+        error: err.message,
+        ...httpFields(err),
+      },
       'upload rate-limited',
     );
     return {
@@ -92,6 +97,7 @@ async function classifyAndPersist(
         kind: err.constructor.name,
         retry_after_ms: err.retryAfterMs,
         error: err.message,
+        ...httpFields(err),
       },
       'upload failed (retriable)',
     );
@@ -106,7 +112,12 @@ async function classifyAndPersist(
   if (err instanceof NetworkError) {
     recordRetriableFailure(ctx.db, captureId, err.message);
     log?.warn(
-      { event: 'upload.retriable', kind: err.constructor.name, error: err.message },
+      {
+        event: 'upload.retriable',
+        kind: err.constructor.name,
+        error: err.message,
+        ...httpFields(err),
+      },
       'upload failed (retriable)',
     );
     return {
@@ -127,6 +138,7 @@ async function classifyAndPersist(
       compressed_bytes: batch.body.byteLength,
       watermark_start: batch.watermarkStart,
       watermark_end: batch.watermarkEnd,
+      ...httpFields(err),
     };
     if (err instanceof OversizedDecompressedSliceError) {
       baseFields['raw_bytes'] = err.rawBytes;
@@ -164,6 +176,8 @@ async function handleAuthError(
         event: 'upload.auth_unconfirmed',
         kind: verifyErr instanceof Error ? verifyErr.constructor.name : typeof verifyErr,
         error: verifyErr instanceof Error ? verifyErr.message : String(verifyErr),
+        ...(verifyErr instanceof GatewayError ? httpFields(verifyErr) : {}),
+        ...httpFields(authErr),
       },
       'upload auth error; verify-key inconclusive, treating as retriable',
     );
@@ -183,7 +197,7 @@ async function handleAuthError(
 
   recordRetriableFailure(ctx.db, captureId, authErr.message);
   log?.warn(
-    { event: 'upload.auth_transient', error: authErr.message },
+    { event: 'upload.auth_transient', error: authErr.message, ...httpFields(authErr) },
     'upload auth error; verify-key still success, treating as retriable',
   );
   return {
@@ -193,6 +207,17 @@ async function handleAuthError(
     retryAfterMs: null,
     reason: 'auth_unconfirmed',
   };
+}
+
+function httpFields(err: GatewayError): Record<string, unknown> {
+  const ctx = err.httpContext;
+  if (ctx === undefined) return {};
+  const out: Record<string, unknown> = { http_url: ctx.url, http_method: ctx.method };
+  if (ctx.status !== null) out['http_status'] = ctx.status;
+  if (ctx.bodyExcerpt !== null && ctx.bodyExcerpt.length > 0) {
+    out['http_body'] = ctx.bodyExcerpt;
+  }
+  return out;
 }
 
 async function finalizeAuthFailure(

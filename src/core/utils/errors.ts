@@ -1,14 +1,27 @@
 import type { ErrorCategory } from 'core/utils/utils.types.ts';
 
+export interface HttpRequestContext {
+  url: string;
+  method: string;
+  status: number | null;
+  bodyExcerpt: string | null;
+}
+
 export class GatewayError extends Error {
   readonly category: ErrorCategory;
   override readonly cause: unknown;
+  httpContext?: HttpRequestContext;
 
   constructor(category: ErrorCategory, message: string, cause?: unknown) {
     super(message);
     this.name = this.constructor.name;
     this.category = category;
     this.cause = cause;
+  }
+
+  withHttpContext(context: HttpRequestContext): this {
+    this.httpContext = context;
+    return this;
   }
 }
 

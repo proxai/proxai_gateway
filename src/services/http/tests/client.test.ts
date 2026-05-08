@@ -220,6 +220,107 @@ describe('uploadRawRecord', () => {
     await expect(client.uploadRawRecord(validDto())).rejects.toThrow(FatalError);
   });
 
+  test('thrown error carries http context with url, method, status, and body excerpt', async () => {
+    const body = JSON.stringify({ success: false, error: { message: 'Internal Server Error' } });
+    const client = createClient(
+      mockFetch(
+        () => new Response(body, { status: 500, headers: { 'Content-Type': 'application/json' } }),
+      ),
+    );
+    let caught: unknown;
+    try {
+      await client.uploadRawRecord(validDto());
+    } catch (e) {
+      caught = e;
+    }
+    const err = caught as {
+      httpContext?: {
+        url: string;
+        method: string;
+        status: number | null;
+        bodyExcerpt: string | null;
+      };
+    };
+    expect(err.httpContext?.method).toBe('POST');
+    expect(err.httpContext?.url).toBe('https://api.example.com/v1/raw_records');
+    expect(err.httpContext?.status).toBe(500);
+    expect(err.httpContext?.bodyExcerpt).toContain('Internal Server Error');
+  });
+
+  test('http context body excerpt is truncated at 512 chars with ellipsis', async () => {
+    const body = 'x'.repeat(2000);
+    const client = createClient(mockFetch(() => new Response(body, { status: 500 })));
+    let caught: unknown;
+    try {
+      await client.uploadRawRecord(validDto());
+    } catch (e) {
+      caught = e;
+    }
+    const err = caught as { httpContext?: { bodyExcerpt: string | null } };
+    expect(err.httpContext?.bodyExcerpt?.length).toBe(513);
+    expect(err.httpContext?.bodyExcerpt?.endsWith('…')).toBe(true);
+  });
+
+  test('http context records null status on network failure', async () => {
+    const client = createClient(mockFetch(() => new Error('connection refused')));
+    let caught: unknown;
+    try {
+      await client.uploadRawRecord(validDto());
+    } catch (e) {
+      caught = e;
+    }
+    const err = caught as {
+      httpContext?: { url: string; status: number | null; bodyExcerpt: string | null };
+    };
+    expect(err.httpContext?.url).toBe('https://api.example.com/v1/raw_records');
+    expect(err.httpContext?.status).toBeNull();
+    expect(err.httpContext?.bodyExcerpt).toBeNull();
+  });
+
+  test('http context attaches to FatalError on empty 200 body', async () => {
+    const client = createClient(mockFetch(() => new Response('', { status: 200 })));
+    let caught: unknown;
+    try {
+      await client.uploadRawRecord(validDto());
+    } catch (e) {
+      caught = e;
+    }
+    const err = caught as { httpContext?: { status: number | null; bodyExcerpt: string | null } };
+    expect(err.httpContext?.status).toBe(200);
+    expect(err.httpContext?.bodyExcerpt).toBe('');
+  });
+
+  test('http context attaches to FatalError when 200 body is invalid JSON', async () => {
+    const client = createClient(mockFetch(() => new Response('not-json', { status: 200 })));
+    let caught: unknown;
+    try {
+      await client.uploadRawRecord(validDto());
+    } catch (e) {
+      caught = e;
+    }
+    const err = caught as { httpContext?: { status: number | null; bodyExcerpt: string | null } };
+    expect(err.httpContext?.status).toBe(200);
+    expect(err.httpContext?.bodyExcerpt).toBe('not-json');
+  });
+
+  test('http context records request timeout with null status', async () => {
+    const client = createClient(
+      mockFetch(() => {
+        const e: Error & { name: string } = new Error('timeout') as Error & { name: string };
+        e.name = 'TimeoutError';
+        return e;
+      }),
+    );
+    let caught: unknown;
+    try {
+      await client.uploadRawRecord(validDto());
+    } catch (e) {
+      caught = e;
+    }
+    const err = caught as { httpContext?: { status: number | null } };
+    expect(err.httpContext?.status).toBeNull();
+  });
+
   test('sends X-API-Key header on upload', async () => {
     const log: MockCall[] = [];
     const client = createClient(

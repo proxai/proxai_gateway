@@ -180,6 +180,28 @@ test('--follow exits immediately when signal is already aborted', async () => {
   expect(result.exitCode).toBe(0);
 });
 
+test('--follow swallows stat errors mid-stream when log file disappears', async () => {
+  await seedTodaysLog(`${makeLine(30, 'first')}\n`);
+  const ctrl = new AbortController();
+  const lines: string[] = [];
+  const promise = runTail(
+    {
+      output: captureOutput(),
+      logDir: dir,
+      emit: (l) => lines.push(l),
+      abortSignal: ctrl.signal,
+      pollIntervalMs: 1,
+    },
+    { follow: true, raw: true },
+  );
+  await Bun.sleep(10);
+  await rmRecursive(todaysLogPath(dir));
+  await Bun.sleep(20);
+  ctrl.abort();
+  const result = await promise;
+  expect(result.exitCode).toBe(0);
+});
+
 test('--follow handles missing log file gracefully (exits cleanly on abort)', async () => {
   const ctrl = new AbortController();
   const lines: string[] = [];
