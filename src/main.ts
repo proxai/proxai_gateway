@@ -15,6 +15,8 @@ import {
 } from 'core/io/fs';
 import type { LogLevel } from 'core/log';
 import { readMachineUuid } from 'core/system';
+import { GatewayError, UserAbortedError } from 'core/utils';
+import chalk from 'chalk';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import { runSetup } from 'cli/commands/setup.ts';
 import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup.ts';
@@ -141,10 +143,17 @@ program
     '--no-start',
     'finish setup without registering or starting the platform service. Run `proxai-gateway start` manually when ready.',
   )
-  .action(async (opts: { apiKey?: string; installSource: string; start?: boolean }) => {
-    const result = await runSetup(buildSetupDeps(), buildSetupOptions(opts));
-    process.exit(result.exitCode);
-  });
+  .option(
+    '--force',
+    're-run setup even if a configuration already exists. Overwrites the stored ingestion key.',
+    false,
+  )
+  .action(
+    async (opts: { apiKey?: string; installSource: string; start?: boolean; force?: boolean }) => {
+      const result = await runSetup(buildSetupDeps(), buildSetupOptions(opts));
+      process.exit(result.exitCode);
+    },
+  );
 
 program
   .command('start')
@@ -544,24 +553,49 @@ redaction
   });
 
 program.parseAsync().catch((err: unknown) => {
-  console.error(err instanceof Error ? err.message : String(err));
+  if (err instanceof UserAbortedError) {
+    console.error(`${chalk.red('✗')} aborted ${chalk.dim('— no changes were made')}`);
+    process.exit(130);
+  }
+  if (err instanceof GatewayError) {
+    console.error(`${chalk.red('✗')} ${err.message}`);
+    process.exit(EXIT_CODE.error);
+  }
+  if (err instanceof Error) {
+    console.error(`${chalk.red('✗')} unexpected error: ${err.message}`);
+    if (err.stack !== undefined) console.error(chalk.dim(err.stack));
+    process.exit(EXIT_CODE.error);
+  }
+  console.error(`${chalk.red('✗')} unexpected error: ${String(err)}`);
   process.exit(EXIT_CODE.error);
 });
 
-function buildSetupOptions(opts: { apiKey?: string; installSource: string; start?: boolean }): {
+function buildSetupOptions(opts: {
+  apiKey?: string;
+  installSource: string;
+  start?: boolean;
+  force?: boolean;
+}): {
   apiKey?: string;
   installSource?: InstallSource;
   noStart?: boolean;
+  force?: boolean;
 } {
   const VALID = ['bun', 'pnpm', 'yarn', 'npm', 'brew', 'github_release'] as const;
   type Source = (typeof VALID)[number];
   const installSource = (VALID as readonly string[]).includes(opts.installSource)
     ? (opts.installSource as Source)
     : ('github_release' as Source);
-  const out: { apiKey?: string; installSource?: InstallSource; noStart?: boolean } = {
+  const out: {
+    apiKey?: string;
+    installSource?: InstallSource;
+    noStart?: boolean;
+    force?: boolean;
+  } = {
     installSource,
   };
   if (opts.apiKey !== undefined) out.apiKey = opts.apiKey;
   if (opts.start === false) out.noStart = true;
+  if (opts.force === true) out.force = true;
   return out;
 }

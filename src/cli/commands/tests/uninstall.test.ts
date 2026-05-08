@@ -218,7 +218,7 @@ test('--reset requires confirmation; abort returns exit 5 and preserves configDi
   const result = await runUninstall({ ...depsFor(sm, { reset: false }), output }, { reset: true });
   expect(result.exitCode).toBe(5);
   expect(await Bun.file(configPath).exists()).toBe(true);
-  expect(output.lines.some((l) => l.msg === 'reset aborted')).toBe(true);
+  expect(output.lines.some((l) => l.msg.includes('reset aborted'))).toBe(true);
 });
 
 test('--reset confirmed wipes configDir and logDir', async () => {

@@ -65,6 +65,13 @@ export class FatalError extends GatewayError {
   }
 }
 
+export class UserAbortedError extends Error {
+  constructor(message = 'aborted by user') {
+    super(message);
+    this.name = 'UserAbortedError';
+  }
+}
+
 export class WatermarkRegressionError extends ValidationError {
   readonly currentServerWatermarkEnd: number;
   readonly sourcePathHash: string;

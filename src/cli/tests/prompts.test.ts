@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 
+import { UserAbortedError } from 'core/utils';
 import { inquirerPrompts, scriptedPrompts } from 'cli/prompts.ts';
 
 test('scriptedPrompts.askApiKey returns the configured value (back-compat shim)', async () => {
@@ -69,6 +70,95 @@ test('inquirerPrompts.confirmReset and confirmUpgrade wire up to @inquirer/promp
   expect(calls[1]!.default).toBe(true);
 
   mock.restore();
+});
+
+test('inquirerPrompts.askApiKey converts ExitPromptError (Ctrl+C) to UserAbortedError', async () => {
+  await mock.module('@inquirer/prompts', () => ({
+    confirm: () => Promise.resolve(true),
+    input: () => {
+      const err = new Error('User force closed the prompt with SIGINT');
+      err.name = 'ExitPromptError';
+      throw err;
+    },
+  }));
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  await expect(fresh().askApiKey()).rejects.toBeInstanceOf(UserAbortedError);
+  mock.restore();
+});
+
+test('inquirerPrompts.confirmReset converts AbortPromptError to UserAbortedError', async () => {
+  await mock.module('@inquirer/prompts', () => ({
+    confirm: () => {
+      const err = new Error('aborted');
+      err.name = 'AbortPromptError';
+      throw err;
+    },
+    input: () => Promise.resolve('unused'),
+  }));
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  await expect(fresh().confirmReset('reset?')).rejects.toBeInstanceOf(UserAbortedError);
+  mock.restore();
+});
+
+test('inquirerPrompts.confirmUpgrade converts CancelPromptError to UserAbortedError', async () => {
+  await mock.module('@inquirer/prompts', () => ({
+    confirm: () => {
+      const err = new Error('cancelled');
+      err.name = 'CancelPromptError';
+      throw err;
+    },
+    input: () => Promise.resolve('unused'),
+  }));
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  await expect(fresh().confirmUpgrade('upgrade?')).rejects.toBeInstanceOf(UserAbortedError);
+  mock.restore();
+});
+
+test('inquirerPrompts.askApiKey detects abort by message text when error name is generic', async () => {
+  await mock.module('@inquirer/prompts', () => ({
+    confirm: () => Promise.resolve(true),
+    input: () => {
+      throw new Error('User force closed the prompt with SIGINT');
+    },
+  }));
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  await expect(fresh().askApiKey()).rejects.toBeInstanceOf(UserAbortedError);
+  mock.restore();
+});
+
+test('inquirerPrompts.askApiKey rethrows non-abort errors unchanged', async () => {
+  await mock.module('@inquirer/prompts', () => ({
+    confirm: () => Promise.resolve(true),
+    input: () => {
+      throw new Error('something else broke');
+    },
+  }));
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  await expect(fresh().askApiKey()).rejects.toThrow('something else broke');
+  mock.restore();
+});
+
+test('inquirerPrompts.askApiKey rethrows non-Error throws unchanged', async () => {
+  await mock.module('@inquirer/prompts', () => ({
+    confirm: () => Promise.resolve(true),
+    input: () => {
+      throw 'string-error';
+    },
+  }));
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  await expect(fresh().askApiKey()).rejects.toBe('string-error');
+  mock.restore();
+});
+
+test('UserAbortedError has the expected default message', () => {
+  const err = new UserAbortedError();
+  expect(err.name).toBe('UserAbortedError');
+  expect(err.message).toBe('aborted by user');
+});
+
+test('UserAbortedError accepts a custom message', () => {
+  const err = new UserAbortedError('custom abort');
+  expect(err.message).toBe('custom abort');
 });
 
 test('inquirerPrompts.askApiKey wires up to @inquirer/prompts and accepts a custom message', async () => {

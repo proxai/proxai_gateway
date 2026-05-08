@@ -6,8 +6,8 @@ export function consoleOutput(): OutputSink {
   return {
     info: (msg) => console.log(msg),
     warn: (msg) => console.warn(chalk.yellow(`! ${msg}`)),
-    error: (msg) => console.error(chalk.red(`x ${msg}`)),
-    success: (msg) => console.log(chalk.green(`+ ${msg}`)),
+    error: (msg) => console.error(chalk.red(`✗ ${msg}`)),
+    success: (msg) => console.log(chalk.green(`✓ ${msg}`)),
   };
 }
 

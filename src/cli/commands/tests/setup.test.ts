@@ -424,7 +424,7 @@ test('replaces api key when re-entry matches (interactive)', async () => {
   await writeExistingConfig();
   const control = newControl();
   const d = { ...deps(control), prompts: scriptedPrompts({ apiKeys: [NEW_KEY, NEW_KEY] }) };
-  const result = await runSetup(d, {});
+  const result = await runSetup(d, { force: true });
   expect(result.exitCode).toBe(0);
   expect(control.verifyCalls).toBe(1);
   const config = await loadConfigFromFile(configPath);
@@ -435,11 +435,35 @@ test('aborts when re-entry does not match (existing config preserved)', async ()
   await writeExistingConfig();
   const control = newControl();
   const d = { ...deps(control), prompts: scriptedPrompts({ apiKeys: [NEW_KEY, OTHER_KEY] }) };
-  const result = await runSetup(d, {});
+  const result = await runSetup(d, { force: true });
   expect(result.exitCode).toBe(5);
   expect(control.verifyCalls).toBe(0);
   const config = await loadConfigFromFile(configPath);
   expect(config.account.apiKey).toBe(VALID_KEY);
+});
+
+test('without --api-key or --force, existing config triggers a guided exit (alreadyInstalled)', async () => {
+  await writeExistingConfig();
+  const control = newControl();
+  const out = captureOutput();
+  const d = { ...deps(control), output: out };
+  const result = await runSetup(d, {});
+  expect(result.exitCode).toBe(5);
+  expect(control.verifyCalls).toBe(0);
+  expect(out.lines.some((l) => l.msg.includes('already configured'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('--force'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('uninstall --reset'))).toBe(true);
+});
+
+test('guided exit falls back to a generic message when the existing config fails to parse', async () => {
+  await Bun.write(configPath, 'not = [valid] toml }}}');
+  const control = newControl();
+  const out = captureOutput();
+  const d = { ...deps(control), output: out };
+  const result = await runSetup(d, {});
+  expect(result.exitCode).toBe(5);
+  expect(out.lines.some((l) => l.msg.includes('already configured'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('host_id'))).toBe(false);
 });
 
 test('preserves installedAt and installSource on replace; rederives host_id from same user', async () => {
@@ -450,7 +474,7 @@ test('preserves installedAt and installSource on replace; rederives host_id from
   });
   const control = newControl();
   const d = { ...deps(control), prompts: scriptedPrompts({ apiKeys: [NEW_KEY, NEW_KEY] }) };
-  const result = await runSetup(d, {});
+  const result = await runSetup(d, { force: true });
   expect(result.exitCode).toBe(0);
   const config = await loadConfigFromFile(configPath);
   expect(config.account.apiKey).toBe(NEW_KEY);

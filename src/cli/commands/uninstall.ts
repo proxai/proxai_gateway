@@ -96,7 +96,7 @@ export async function runUninstall(
         `Continue?`;
       const confirmed = await deps.prompts.confirmReset(message);
       if (!confirmed) {
-        deps.output.info('reset aborted');
+        deps.output.info('reset aborted — local state preserved');
         return { exitCode: EXIT_CODE.alreadyInstalled };
       }
     }

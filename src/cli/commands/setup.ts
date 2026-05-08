@@ -60,6 +60,7 @@ export interface SetupCommandOptions {
   installSource?: InstallSource;
   skipKeyFormatCheck?: boolean;
   noStart?: boolean;
+  force?: boolean;
 }
 
 export async function runSetup(
@@ -67,6 +68,24 @@ export async function runSetup(
   options: SetupCommandOptions = {},
 ): Promise<CommandResult> {
   const isReplace = await deps.configExists();
+
+  if (isReplace && options.apiKey === undefined && options.force !== true) {
+    try {
+      const existing = await loadConfigFromFile(deps.configPath);
+      deps.output.info(`already configured (host_id: ${existing.account.hostId})`);
+      deps.output.info(`  installed at  ${existing.account.installedAt}`);
+      deps.output.info(`  install src   ${existing.account.installSource}`);
+      deps.output.info('');
+      deps.output.info(
+        `Run ${chalk.cyan('proxai-gateway setup --force')} to re-enter your ingestion key, or ${chalk.cyan('proxai-gateway uninstall --reset')} to wipe and start fresh.`,
+      );
+    } catch {
+      deps.output.info(
+        `already configured. Run ${chalk.cyan('proxai-gateway setup --force')} to re-enter your ingestion key, or ${chalk.cyan('proxai-gateway uninstall --reset')} to wipe and start fresh.`,
+      );
+    }
+    return { exitCode: EXIT_CODE.alreadyInstalled };
+  }
 
   let apiKey: string;
   if (isReplace) {

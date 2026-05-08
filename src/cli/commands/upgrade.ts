@@ -68,7 +68,7 @@ export async function runUpgrade(
     if (prompts !== undefined) {
       const ok = await prompts.confirmUpgrade(`upgrade to ${latestVersion}?`);
       if (!ok) {
-        deps.output.info('upgrade cancelled');
+        deps.output.info('upgrade cancelled — current version retained');
         return { exitCode: EXIT_CODE.ok };
       }
     }
