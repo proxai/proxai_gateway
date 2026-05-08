@@ -8,7 +8,7 @@ import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import { countCursors, openBufferDb } from 'services/buffer';
 import { resolveMaxDecompressed } from 'services/config';
-import type { GatewayConfig } from 'services/config';
+import type { GatewayConfig, InstallSource } from 'services/config';
 import { HttpClient } from 'services/http';
 import {
   buildDefaultSources,
@@ -29,6 +29,11 @@ export interface RunCommandDeps {
   updateAvailableSentinelPath?: string;
   abortSignal: AbortSignal;
   gatewayVersion: string;
+  currentVersion?: string;
+  binaryPath?: string;
+  installSource?: InstallSource;
+  devMode?: boolean;
+  exitProcess?: () => void;
   sources?: readonly RegisteredSource[];
   onCycleComplete?: (result: PollCycleResult) => void;
   logger?: Logger;
@@ -163,6 +168,11 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
       ...(deps.updateAvailableSentinelPath !== undefined
         ? { updateAvailableSentinelPath: deps.updateAvailableSentinelPath }
         : {}),
+      ...(deps.currentVersion !== undefined ? { currentVersion: deps.currentVersion } : {}),
+      ...(deps.binaryPath !== undefined ? { binaryPath: deps.binaryPath } : {}),
+      installSource: deps.installSource ?? deps.config.account.installSource,
+      ...(deps.devMode !== undefined ? { devMode: deps.devMode } : {}),
+      ...(deps.exitProcess !== undefined ? { exitProcess: deps.exitProcess } : {}),
       installedAt: deps.config.account.installedAt,
       staleBinary: {
         warnAfterDays: deps.config.staleBinary.warnAfterDays,

@@ -28,6 +28,7 @@ import type {
   SourcePollerContext,
   SourcePollerResult,
 } from 'services/polling/polling.types.ts';
+import { runAutoUpgrade } from 'services/upgrade';
 
 export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResult> {
   const startedAt = nowIsoUtc();
@@ -120,9 +121,9 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     };
   }
 
-  if (ctx.updateAvailableSentinelPath !== undefined) {
+  if (shouldRunAutoUpgrade(ctx)) {
     try {
-      await maybeRunVersionCheck(ctx);
+      await maybeRunAutoUpgrade(ctx);
     } catch (err) {
       log?.warn(
         { event: 'version_check.failed', error: (err as Error).message ?? String(err) },
@@ -313,24 +314,51 @@ function persistDaemonState(
 
 const DEFAULT_VERSION_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
-async function maybeRunVersionCheck(ctx: PollCycleContext): Promise<void> {
-  const sentinelPath = ctx.updateAvailableSentinelPath;
-  if (sentinelPath === undefined) return;
+function shouldRunAutoUpgrade(ctx: PollCycleContext): boolean {
+  if (ctx.installSource === 'brew') {
+    return ctx.updateAvailableSentinelPath !== undefined;
+  }
+  return ctx.binaryPath !== undefined && ctx.currentVersion !== undefined;
+}
 
+async function maybeRunAutoUpgrade(ctx: PollCycleContext): Promise<void> {
   const interval = ctx.versionCheckIntervalMs ?? DEFAULT_VERSION_CHECK_INTERVAL_MS;
-  const log = ctx.logger;
   const lastCheck = getMetadata(ctx.buffer, METADATA_KEYS.lastVersionCheckAt);
   const lastMs = lastCheck === null ? 0 : Date.parse(lastCheck);
   if (lastCheck !== null && Number.isFinite(lastMs) && Date.now() - lastMs < interval) {
     return;
   }
 
+  if (ctx.installSource === 'brew') {
+    await runBrewSentinelCheck(ctx);
+    setMetadata(ctx.buffer, METADATA_KEYS.lastVersionCheckAt, nowIsoUtc());
+    return;
+  }
+
+  if (ctx.binaryPath === undefined || ctx.currentVersion === undefined) return;
+  const autoDeps: Parameters<typeof runAutoUpgrade>[0] = {
+    binaryPath: ctx.binaryPath,
+    currentVersion: ctx.currentVersion,
+  };
+  if (ctx.devMode !== undefined) autoDeps.devMode = ctx.devMode;
+  if (ctx.installSource !== undefined) autoDeps.installSource = ctx.installSource;
+  if (ctx.versionCheckFetch !== undefined) autoDeps.fetch = ctx.versionCheckFetch;
+  if (ctx.logger !== undefined) autoDeps.logger = ctx.logger;
+  if (ctx.exitProcess !== undefined) autoDeps.exitProcess = ctx.exitProcess;
+  await runAutoUpgrade(autoDeps);
+  setMetadata(ctx.buffer, METADATA_KEYS.lastVersionCheckAt, nowIsoUtc());
+}
+
+async function runBrewSentinelCheck(ctx: PollCycleContext): Promise<void> {
+  const sentinelPath = ctx.updateAvailableSentinelPath;
+  if (sentinelPath === undefined) return;
+  const log = ctx.logger;
   const fetchFn = ctx.versionCheckFetch ?? globalThis.fetch;
+  const compareVersion = ctx.currentVersion ?? ctx.gatewayVersion;
   const outcome = await checkLatestVersion({
-    currentVersion: ctx.gatewayVersion,
+    currentVersion: compareVersion,
     fetch: fetchFn,
   });
-  setMetadata(ctx.buffer, METADATA_KEYS.lastVersionCheckAt, nowIsoUtc());
 
   if (outcome.kind === 'no_release') {
     log?.debug(
@@ -352,17 +380,13 @@ async function maybeRunVersionCheck(ctx: PollCycleContext): Promise<void> {
   if (result.hasUpdate) {
     const sentinelInput: Parameters<typeof writeUpdateAvailableSentinel>[1] = {
       latest_version: result.latestVersion,
-      current_version: ctx.gatewayVersion,
+      current_version: compareVersion,
       detected_at: nowIsoUtc(),
     };
     if (result.assetUrl !== undefined) sentinelInput.asset_url = result.assetUrl;
     await writeUpdateAvailableSentinel(sentinelPath, sentinelInput);
     log?.info(
-      {
-        event: 'update_available',
-        latest: result.latestVersion,
-        current: ctx.gatewayVersion,
-      },
+      { event: 'update_available', latest: result.latestVersion, current: compareVersion },
       'newer gateway version available',
     );
   } else {

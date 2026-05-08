@@ -491,11 +491,12 @@ function makeVersionFetch(tagName: string): typeof globalThis.fetch {
   }) as unknown as typeof globalThis.fetch;
 }
 
-test('version check writes UPDATE_AVAILABLE sentinel when newer release exists', async () => {
+test('brew install: version check writes UPDATE_AVAILABLE sentinel when newer release exists', async () => {
   const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
   const ctx: PollCycleContext = {
     ...makeContext([noopSource('s')]),
-    gatewayVersion: '2026.5.7',
+    currentVersion: '2026.5.7',
+    installSource: 'brew',
     updateAvailableSentinelPath: sentinelPath,
     versionCheckFetch: makeVersionFetch('v2026.5.10'),
   };
@@ -503,13 +504,35 @@ test('version check writes UPDATE_AVAILABLE sentinel when newer release exists',
   expect(await Bun.file(sentinelPath).exists()).toBe(true);
 });
 
-test('version check does not write sentinel when up to date', async () => {
+test('brew install: version check does not write sentinel when up to date', async () => {
   const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
   const ctx: PollCycleContext = {
     ...makeContext([noopSource('s')]),
-    gatewayVersion: '2026.5.7',
+    currentVersion: '2026.5.7',
+    installSource: 'brew',
     updateAvailableSentinelPath: sentinelPath,
     versionCheckFetch: makeVersionFetch('v2026.5.7'),
+  };
+  await runPollCycle(ctx);
+  expect(await Bun.file(sentinelPath).exists()).toBe(false);
+});
+
+test('brew install: clears sentinel when up to date and sentinel previously existed', async () => {
+  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
+  await Bun.write(
+    sentinelPath,
+    JSON.stringify({
+      latest_version: '2026.5.10',
+      current_version: '2026.5.7',
+      detected_at: '2026-05-01T00:00:00Z',
+    }),
+  );
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    currentVersion: '2026.5.10',
+    installSource: 'brew',
+    updateAvailableSentinelPath: sentinelPath,
+    versionCheckFetch: makeVersionFetch('v2026.5.10'),
   };
   await runPollCycle(ctx);
   expect(await Bun.file(sentinelPath).exists()).toBe(false);
@@ -537,7 +560,8 @@ test('version check fires once per interval and skips on subsequent cycles withi
 
   const baseCtx: PollCycleContext = {
     ...makeContext([noopSource('s')]),
-    gatewayVersion: '2026.5.7',
+    currentVersion: '2026.5.7',
+    installSource: 'brew',
     updateAvailableSentinelPath: sentinelPath,
     versionCheckFetch: trackingFetch,
     versionCheckIntervalMs: 4 * 60 * 60 * 1000,
@@ -549,14 +573,15 @@ test('version check fires once per interval and skips on subsequent cycles withi
   expect(calls).toBe(1);
 });
 
-test('version check failure logs warn and continues the cycle', async () => {
+test('brew install: version check failure logs warn and continues the cycle', async () => {
   const sentinelPath = join(dir, 'UPDATE_AVAILABLE_DIR');
   const { mkdir } = await import('node:fs/promises');
   await mkdir(sentinelPath, { recursive: true });
   const entries: FakeLogEntry[] = [];
   const ctx: PollCycleContext = {
     ...makeContext([noopSource('s')]),
-    gatewayVersion: '2026.5.7',
+    currentVersion: '2026.5.7',
+    installSource: 'brew',
     updateAvailableSentinelPath: sentinelPath,
     versionCheckFetch: makeVersionFetch('v2026.5.7'),
     logger: makeFakeLogger(entries),
@@ -567,14 +592,15 @@ test('version check failure logs warn and continues the cycle', async () => {
   );
 });
 
-test('version check 503 is logged as warn version_check.unavailable with reason', async () => {
+test('brew install: version check 503 is logged as warn version_check.unavailable with reason', async () => {
   const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
   const entries: FakeLogEntry[] = [];
   const fetchFn: typeof globalThis.fetch = (async () =>
     new Response('upstream error', { status: 503 })) as unknown as typeof globalThis.fetch;
   const ctx: PollCycleContext = {
     ...makeContext([noopSource('s')]),
-    gatewayVersion: '2026.5.7',
+    currentVersion: '2026.5.7',
+    installSource: 'brew',
     updateAvailableSentinelPath: sentinelPath,
     versionCheckFetch: fetchFn,
     logger: makeFakeLogger(entries),
@@ -588,14 +614,15 @@ test('version check 503 is logged as warn version_check.unavailable with reason'
   expect(await Bun.file(sentinelPath).exists()).toBe(false);
 });
 
-test('version check 404 (no published releases) is silent at warn level', async () => {
+test('brew install: version check 404 (no published releases) is silent at warn level', async () => {
   const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
   const entries: FakeLogEntry[] = [];
   const fetchFn: typeof globalThis.fetch = (async () =>
     new Response('not found', { status: 404 })) as unknown as typeof globalThis.fetch;
   const ctx: PollCycleContext = {
     ...makeContext([noopSource('s')]),
-    gatewayVersion: '2026.5.7',
+    currentVersion: '2026.5.7',
+    installSource: 'brew',
     updateAvailableSentinelPath: sentinelPath,
     versionCheckFetch: fetchFn,
     logger: makeFakeLogger(entries),
@@ -603,6 +630,124 @@ test('version check 404 (no published releases) is silent at warn level', async 
   await runPollCycle(ctx);
   expect(entries.every((e) => e.obj['event'] !== 'version_check.unavailable')).toBe(true);
   expect(await Bun.file(sentinelPath).exists()).toBe(false);
+});
+
+test('brew install with no sentinel path is a no-op', async () => {
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    currentVersion: '2026.5.7',
+    installSource: 'brew',
+    versionCheckFetch: makeVersionFetch('v2026.5.10'),
+  };
+  const result = await runPollCycle(ctx);
+  expect(result.paused).toBe(false);
+});
+
+test('brew install falls back to gatewayVersion when currentVersion is omitted', async () => {
+  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    gatewayVersion: '2026.5.7',
+    installSource: 'brew',
+    updateAvailableSentinelPath: sentinelPath,
+    versionCheckFetch: makeVersionFetch('v2026.5.10'),
+  };
+  await runPollCycle(ctx);
+  expect(await Bun.file(sentinelPath).exists()).toBe(true);
+});
+
+test('non-brew install: triggers auto-upgrade, calls exitProcess on success', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  const binaryPath = join(dir, 'gw');
+  await writeFile(binaryPath, 'old');
+  const newBinary = new TextEncoder().encode('new');
+  const ext = process.platform === 'win32' ? '.exe' : '';
+  const assetName = `proxai-gateway-${process.platform}-${process.arch}${ext}`;
+  const fetchFn = (async (url: string | URL | Request) => {
+    const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
+    if (u.includes('api.github.com')) {
+      return new Response(
+        JSON.stringify({
+          tag_name: 'v2026.5.10',
+          assets: [{ name: assetName, browser_download_url: 'https://example.com/a' }],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    return new Response(newBinary, {
+      status: 200,
+      headers: { 'Content-Type': 'application/octet-stream' },
+    });
+  }) as unknown as typeof globalThis.fetch;
+
+  const entries: FakeLogEntry[] = [];
+  let exitCalls = 0;
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    currentVersion: '2026.5.7',
+    binaryPath,
+    installSource: 'github_release',
+    versionCheckFetch: fetchFn,
+    logger: makeFakeLogger(entries),
+    exitProcess: () => {
+      exitCalls++;
+    },
+  };
+  await runPollCycle(ctx);
+  expect(exitCalls).toBe(1);
+});
+
+test('non-brew install: skips when devMode is true', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  const binaryPath = join(dir, 'gw');
+  await writeFile(binaryPath, 'old');
+  const fetchFn = makeVersionFetch('v2026.5.10');
+  let exitCalls = 0;
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    currentVersion: '2026.5.7',
+    binaryPath,
+    installSource: 'github_release',
+    devMode: true,
+    versionCheckFetch: fetchFn,
+    exitProcess: () => {
+      exitCalls++;
+    },
+  };
+  await runPollCycle(ctx);
+  expect(exitCalls).toBe(0);
+});
+
+test('non-brew install: skipped when binaryPath is missing', async () => {
+  const fetchFn = makeVersionFetch('v2026.5.10');
+  let exitCalls = 0;
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    currentVersion: '2026.5.7',
+    installSource: 'github_release',
+    versionCheckFetch: fetchFn,
+    exitProcess: () => {
+      exitCalls++;
+    },
+  };
+  await runPollCycle(ctx);
+  expect(exitCalls).toBe(0);
+});
+
+test('non-brew install: skipped when currentVersion is missing', async () => {
+  const fetchFn = makeVersionFetch('v2026.5.10');
+  let exitCalls = 0;
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    binaryPath: join(dir, 'gw'),
+    installSource: 'github_release',
+    versionCheckFetch: fetchFn,
+    exitProcess: () => {
+      exitCalls++;
+    },
+  };
+  await runPollCycle(ctx);
+  expect(exitCalls).toBe(0);
 });
 
 test('cycle logs pressure_failed warn when pressure check throws', async () => {

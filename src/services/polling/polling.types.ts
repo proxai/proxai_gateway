@@ -2,6 +2,7 @@ import type { Database } from 'bun:sqlite';
 
 import type { Logger } from 'core/log';
 import type { PendingPressureResult, PruneResult } from 'services/buffer';
+import type { InstallSource } from 'services/config';
 import type { HttpClient } from 'services/http';
 import type { DrainResult, Pacer } from 'services/uploader';
 
@@ -70,6 +71,12 @@ export interface PollCycleContext {
 
   versionCheckFetch?: typeof globalThis.fetch;
   versionCheckIntervalMs?: number;
+
+  devMode?: boolean;
+  installSource?: InstallSource;
+  currentVersion?: string;
+  binaryPath?: string;
+  exitProcess?: () => void;
 
   minimumMtimeOverride?: Date | null;
 }
