@@ -142,9 +142,6 @@ export async function runStatus(
     deps.output.info(`Status: ${statusDot('inactive')} not configured`);
     deps.output.info('');
     deps.output.info(`Run ${chalk.cyan('proxai-gateway setup')} to begin.`);
-    deps.output.info(
-      `If you have not installed it yet, see ${chalk.cyan('https://proxai.co')} for install instructions.`,
-    );
     return { exitCode: EXIT_CODE.notInstalled };
   }
 

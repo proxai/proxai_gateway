@@ -140,7 +140,6 @@ program
   .option(
     '--no-start',
     'finish setup without registering or starting the platform service. Run `proxai-gateway start` manually when ready.',
-    false,
   )
   .action(async (opts: { apiKey?: string; installSource: string; start?: boolean }) => {
     const result = await runSetup(buildSetupDeps(), buildSetupOptions(opts));
