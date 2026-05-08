@@ -145,6 +145,7 @@ function invokeSetupInteractive(): Promise<CommandResult> {
 
 program
   .command('setup')
+  .alias('init')
   .description(
     'Configure the gateway with your ingestion key. Verifies the key, writes ~/.proxai/proxai-gateway/config.toml, installs the platform service unit, and starts the daemon.',
   )
@@ -175,6 +176,7 @@ program
 
 program
   .command('start')
+  .alias('s')
   .description(
     'Register the gateway as a managed service (launchd / systemd / Scheduled Task) and start the daemon. Auto-restarts on reboot. Requires a prior `setup`.',
   )
@@ -213,6 +215,7 @@ program
 
 program
   .command('stop')
+  .alias('x')
   .description(
     'Halt the running gateway daemon for this session. The service remains registered and will start again automatically on next reboot. Use `uninstall` to fully decommission.',
   )
@@ -238,6 +241,7 @@ program
 
 program
   .command('restart')
+  .alias('r')
   .description('Stop and start the gateway daemon. Equivalent to `stop` followed by `start`.')
   .action(async () => {
     const platform = process.platform;
@@ -301,27 +305,30 @@ program
     process.exit(result.exitCode);
   });
 
-program.command('dev', { hidden: true }).action(async () => {
-  const ctrl = new AbortController();
-  process.on('SIGINT', () => ctrl.abort());
-  process.on('SIGTERM', () => ctrl.abort());
-  const result = await runDev({
-    output: consoleOutput(),
-    abortSignal: ctrl.signal,
-    gatewayVersion: `@proxai/gateway ${packageJson.version}`,
-    currentVersion: packageJson.version,
-    binaryPath: process.execPath,
-    pauseSentinelPath: pausedSentinelPath(),
-    authFailedSentinelPath: authFailedSentinelPath(),
-    bufferFullSentinelPath: bufferFullSentinelPath(),
-    sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
-    updateAvailableSentinelPath: updateAvailableSentinelPath(),
-    loadConfig: () => loadConfigFromFile(),
-    runDaemon,
-    createLogger,
+program
+  .command('dev', { hidden: true })
+  .alias('d')
+  .action(async () => {
+    const ctrl = new AbortController();
+    process.on('SIGINT', () => ctrl.abort());
+    process.on('SIGTERM', () => ctrl.abort());
+    const result = await runDev({
+      output: consoleOutput(),
+      abortSignal: ctrl.signal,
+      gatewayVersion: `@proxai/gateway ${packageJson.version}`,
+      currentVersion: packageJson.version,
+      binaryPath: process.execPath,
+      pauseSentinelPath: pausedSentinelPath(),
+      authFailedSentinelPath: authFailedSentinelPath(),
+      bufferFullSentinelPath: bufferFullSentinelPath(),
+      sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
+      updateAvailableSentinelPath: updateAvailableSentinelPath(),
+      loadConfig: () => loadConfigFromFile(),
+      runDaemon,
+      createLogger,
+    });
+    process.exit(result.exitCode);
   });
-  process.exit(result.exitCode);
-});
 
 program
   .command('backfill')
@@ -362,6 +369,7 @@ program
 
 program
   .command('status')
+  .alias('i')
   .description(
     'Print gateway state: health dot, per-source captures, buffer occupancy, last-cycle drain results, sentinel flags.',
   )
@@ -451,6 +459,7 @@ program
 
 program
   .command('uninstall')
+  .alias('rm')
   .description(
     'Stop the daemon and unregister the platform service unit. Local config and logs are preserved unless `--reset` is passed.',
   )
@@ -518,6 +527,7 @@ program
 
 program
   .command('tail')
+  .alias('t')
   .description(
     'Stream structured (ndjson) log entries from the active gateway log file. Pretty-prints by default; combine filters as needed.',
   )
