@@ -1,9 +1,15 @@
-import { setMode } from 'core/io/fs';
 import { basename } from 'node:path';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import type { PromptSink } from 'cli/prompts.ts';
+import {
+  downloadAsset,
+  expectedAssetName,
+  fetchLatestRelease,
+  findAssetForPlatform,
+  replaceBinary,
+} from 'services/upgrade/release-fetch.ts';
 
 export interface UpgradeCommandDeps {
   output: OutputSink;
@@ -20,19 +26,7 @@ export interface UpgradeCommandOptions {
   force?: boolean;
 }
 
-interface ReleaseAsset {
-  readonly name: string;
-  readonly browser_download_url: string;
-}
-
-interface ReleaseInfo {
-  readonly tag_name: string;
-  readonly assets: readonly ReleaseAsset[];
-}
-
-const RELEASE_API_URL = 'https://api.github.com/repos/proxai/proxai_gateway/releases/latest';
-const NETWORK_TIMEOUT_MS = 5000;
-const DOWNLOAD_TIMEOUT_MS = 120_000;
+const USER_AGENT = 'proxai-gateway-upgrade';
 
 export async function runUpgrade(
   deps: UpgradeCommandDeps,
@@ -40,10 +34,13 @@ export async function runUpgrade(
 ): Promise<CommandResult> {
   const fetchFn = deps.fetch ?? globalThis.fetch;
   const platform = deps.platform ?? process.platform;
+  const arch = process.arch;
 
-  let release: ReleaseInfo;
+  const fetchOpts: Parameters<typeof fetchLatestRelease>[0] = { userAgent: USER_AGENT };
+  if (deps.fetch !== undefined) fetchOpts.fetch = fetchFn;
+  let release;
   try {
-    release = await fetchLatestRelease(fetchFn);
+    release = await fetchLatestRelease(fetchOpts);
   } catch (err) {
     deps.output.error(`failed to check for updates: ${(err as Error).message ?? String(err)}`);
     return { exitCode: EXIT_CODE.error };
@@ -74,18 +71,17 @@ export async function runUpgrade(
     }
   }
 
-  const arch = process.arch;
-  const ext = platform === 'win32' ? '.exe' : '';
-  const expectedAssetName = `proxai-gateway-${platform}-${arch}${ext}`;
-  const asset = release.assets.find((a) => a.name === expectedAssetName);
+  const asset = findAssetForPlatform(release, platform, arch);
   if (asset === undefined) {
-    deps.output.error(`no asset found for this platform: ${expectedAssetName}`);
+    deps.output.error(`no asset found for this platform: ${expectedAssetName(platform, arch)}`);
     return { exitCode: EXIT_CODE.error };
   }
 
+  const dlOpts: Parameters<typeof downloadAsset>[1] = { userAgent: USER_AGENT };
+  if (deps.fetch !== undefined) dlOpts.fetch = fetchFn;
   let downloadedBytes: Uint8Array;
   try {
-    downloadedBytes = await downloadAsset(fetchFn, asset.browser_download_url);
+    downloadedBytes = await downloadAsset(asset.browser_download_url, dlOpts);
   } catch (err) {
     deps.output.error(`download failed: ${(err as Error).message ?? String(err)}`);
     return { exitCode: EXIT_CODE.error };
@@ -97,22 +93,22 @@ export async function runUpgrade(
   }
 
   if (platform === 'win32') {
-    const sibling = `${deps.binaryPath}.new`;
     try {
-      await Bun.write(sibling, downloadedBytes);
+      await replaceBinary(deps.binaryPath, downloadedBytes, platform);
     } catch (err) {
-      deps.output.error(`failed to write ${sibling}: ${(err as Error).message ?? String(err)}`);
+      deps.output.error(
+        `failed to write ${deps.binaryPath}.new: ${(err as Error).message ?? String(err)}`,
+      );
       return { exitCode: EXIT_CODE.error };
     }
     deps.output.success(
-      `downloaded to ${sibling}; restart the service to apply (replace ${basename(deps.binaryPath)} with ${basename(sibling)} after stopping the daemon)`,
+      `downloaded to ${deps.binaryPath}.new; restart the service to apply (replace ${basename(deps.binaryPath)} with ${basename(deps.binaryPath)}.new after stopping the daemon)`,
     );
     return { exitCode: EXIT_CODE.ok };
   }
 
   try {
-    await Bun.write(deps.binaryPath, downloadedBytes);
-    await setMode(deps.binaryPath, 0o755);
+    await replaceBinary(deps.binaryPath, downloadedBytes, platform);
   } catch (err) {
     deps.output.error(
       `failed to install upgrade at ${deps.binaryPath}: ${(err as Error).message ?? String(err)}`,
@@ -122,53 +118,6 @@ export async function runUpgrade(
 
   deps.output.success(`upgraded to ${latestVersion}; restart the daemon to apply`);
   return { exitCode: EXIT_CODE.ok };
-}
-
-async function fetchLatestRelease(fetchFn: typeof globalThis.fetch): Promise<ReleaseInfo> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), NETWORK_TIMEOUT_MS);
-  try {
-    const res = await fetchFn(RELEASE_API_URL, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'proxai-gateway-upgrade',
-      },
-      signal: ctrl.signal,
-    });
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status.toString()} from ${RELEASE_API_URL}`);
-    }
-    const body = (await res.json()) as ReleaseInfo;
-    if (typeof body.tag_name !== 'string' || !Array.isArray(body.assets)) {
-      throw new Error('malformed release payload');
-    }
-    return body;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function downloadAsset(fetchFn: typeof globalThis.fetch, url: string): Promise<Uint8Array> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), DOWNLOAD_TIMEOUT_MS);
-  try {
-    const res = await fetchFn(url, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/octet-stream',
-        'User-Agent': 'proxai-gateway-upgrade',
-      },
-      signal: ctrl.signal,
-    });
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status.toString()} from ${url}`);
-    }
-    const buf = await res.arrayBuffer();
-    return new Uint8Array(buf);
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 function stripV(tag: string): string {

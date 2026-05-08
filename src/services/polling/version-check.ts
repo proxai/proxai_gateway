@@ -2,6 +2,8 @@ export interface VersionCheckDeps {
   currentVersion: string;
   fetch?: typeof globalThis.fetch;
   now?: () => Date;
+  platform?: NodeJS.Platform;
+  arch?: string;
 }
 
 export interface VersionCheckResult {
@@ -72,8 +74,8 @@ export async function checkLatestVersion(deps: VersionCheckDeps): Promise<Versio
 
   const hasUpdate = compareVersionStrings(latestVersion, deps.currentVersion) > 0;
 
-  const arch = process.arch;
-  const platform = process.platform;
+  const arch = deps.arch ?? process.arch;
+  const platform = deps.platform ?? process.platform;
   const ext = platform === 'win32' ? '.exe' : '';
   const expectedAssetName = `proxai-gateway-${platform}-${arch}${ext}`;
   const asset = body.assets.find((a) => a.name === expectedAssetName);
