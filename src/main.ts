@@ -34,6 +34,7 @@ import { runStatus } from 'cli/commands/status.ts';
 import { runStop } from 'cli/commands/stop.ts';
 import { runTail } from 'cli/commands/tail.ts';
 import { runUninstall } from 'cli/commands/uninstall.ts';
+import { createDefaultSweep } from 'cli/commands/uninstall-sweep.ts';
 import { runUpgrade } from 'cli/commands/upgrade.ts';
 import {
   defaultLaunchdPlistPath,
@@ -460,6 +461,8 @@ program
         serviceUnitPath: unitPath,
         serviceManager: sm,
         configExists: () => Bun.file(configFilePath()).exists(),
+        sweep: createDefaultSweep(),
+        currentExecPath: process.execPath,
       },
       uninstallOptions,
     );

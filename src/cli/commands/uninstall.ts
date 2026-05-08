@@ -4,6 +4,8 @@ import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import type { PromptSink } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager.ts';
+import { isDirectBinary } from 'cli/commands/uninstall-sweep.ts';
+import type { PackageManagerSweep } from 'cli/commands/uninstall-sweep.ts';
 import { rmRecursive } from 'core/io/fs';
 import { loadConfigFromFile } from 'services/config';
 import type { GatewayConfig, InstallSource } from 'services/config';
@@ -18,6 +20,8 @@ export interface UninstallCommandDeps {
   serviceManager: ServiceManager;
   configExists: () => Promise<boolean>;
   loadConfig?: (path: string) => Promise<GatewayConfig>;
+  sweep?: PackageManagerSweep;
+  currentExecPath?: string;
 }
 
 export interface UninstallCommandOptions {
@@ -106,7 +110,11 @@ export async function runUninstall(
     deps.output.success('local state wiped');
   }
 
-  deps.output.info(binaryRemovalHint(installSource));
+  if (deps.sweep !== undefined) {
+    await runSweep(deps, deps.sweep);
+  } else {
+    deps.output.info(binaryRemovalHint(installSource));
+  }
 
   if (reset) {
     deps.output.success('uninstalled and reset');
@@ -114,6 +122,67 @@ export async function runUninstall(
     deps.output.success('uninstalled');
   }
   return { exitCode: EXIT_CODE.ok };
+}
+
+async function runSweep(deps: UninstallCommandDeps, sweep: PackageManagerSweep): Promise<void> {
+  let anyFound = false;
+
+  let detections: Awaited<ReturnType<PackageManagerSweep['detectAll']>>;
+  try {
+    detections = await sweep.detectAll();
+  } catch (err) {
+    deps.output.warn(`package-manager detection failed: ${(err as Error).message ?? String(err)}`);
+    detections = [];
+  }
+
+  for (const det of detections) {
+    if (!det.available) {
+      deps.output.info(`${det.name} not available — skipped`);
+      continue;
+    }
+    if (!det.installed) {
+      deps.output.info(`not installed via ${det.name}`);
+      continue;
+    }
+    anyFound = true;
+    try {
+      const res = await sweep.uninstall(det.name);
+      if (res.ok) deps.output.info(res.message);
+      else deps.output.warn(res.message);
+    } catch (err) {
+      deps.output.warn(`${det.name} uninstall threw: ${(err as Error).message ?? String(err)}`);
+    }
+  }
+
+  try {
+    const brew = await sweep.detectBrew();
+    if (!brew.available) {
+      deps.output.info('brew not available — skipped');
+    } else if (!brew.installed) {
+      deps.output.info('not installed via brew');
+    } else {
+      anyFound = true;
+      try {
+        const res = await sweep.uninstallBrew();
+        if (res.ok) deps.output.info(res.message);
+        else deps.output.warn(res.message);
+      } catch (err) {
+        deps.output.warn(`brew uninstall threw: ${(err as Error).message ?? String(err)}`);
+      }
+    }
+  } catch (err) {
+    deps.output.warn(`brew detection failed: ${(err as Error).message ?? String(err)}`);
+  }
+
+  const execPath = deps.currentExecPath ?? process.execPath;
+  if (isDirectBinary(execPath)) {
+    anyFound = true;
+    deps.output.info(`to remove the binary itself, run: rm ${execPath}`);
+  }
+
+  if (!anyFound) {
+    deps.output.info('no package-manager install detected');
+  }
 }
 
 function binaryRemovalHint(source: InstallSource | null): string {

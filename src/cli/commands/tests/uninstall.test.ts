@@ -6,6 +6,11 @@ import { join } from 'node:path';
 
 import { runUninstall } from 'cli/commands/uninstall.ts';
 import type { UninstallCommandDeps } from 'cli/commands/uninstall.ts';
+import type {
+  PackageManagerSweep,
+  PmDetection,
+  SweepablePm,
+} from 'cli/commands/uninstall-sweep.ts';
 import { captureOutput } from 'cli/output.ts';
 import { scriptedPrompts } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager.ts';
@@ -427,4 +432,309 @@ test('unit-file removal warns when unlink fails with non-ENOENT error', async ()
       (l) => l.level === 'warn' && l.msg.includes('could not remove service unit file'),
     ),
   ).toBe(true);
+});
+
+interface FakeSweepCalls {
+  detectAll: number;
+  detectBrew: number;
+  uninstall: SweepablePm[];
+  uninstallBrew: number;
+}
+
+function fakeSweep(opts: {
+  detections?: PmDetection[];
+  brew?: { available: boolean; installed: boolean };
+  uninstallResult?: (name: SweepablePm) => { ok: boolean; message: string };
+  uninstallBrewResult?: { ok: boolean; message: string };
+  detectAllThrows?: boolean;
+  detectBrewThrows?: boolean;
+  uninstallThrows?: SweepablePm;
+  uninstallBrewThrows?: boolean;
+}): { sweep: PackageManagerSweep; calls: FakeSweepCalls } {
+  const calls: FakeSweepCalls = { detectAll: 0, detectBrew: 0, uninstall: [], uninstallBrew: 0 };
+  const sweep: PackageManagerSweep = {
+    detectAll: async () => {
+      calls.detectAll++;
+      if (opts.detectAllThrows === true) throw new Error('detect-all-broken');
+      return (
+        opts.detections ?? [
+          { name: 'npm', available: false, installed: false },
+          { name: 'pnpm', available: false, installed: false },
+          { name: 'yarn', available: false, installed: false },
+          { name: 'bun', available: false, installed: false },
+        ]
+      );
+    },
+    uninstall: async (name) => {
+      calls.uninstall.push(name);
+      if (opts.uninstallThrows === name) throw new Error(`${name}-throw`);
+      return opts.uninstallResult?.(name) ?? { ok: true, message: `removed via ${name}` };
+    },
+    detectBrew: async () => {
+      calls.detectBrew++;
+      if (opts.detectBrewThrows === true) throw new Error('brew-detect-broken');
+      return opts.brew ?? { available: false, installed: false };
+    },
+    uninstallBrew: async () => {
+      calls.uninstallBrew++;
+      if (opts.uninstallBrewThrows === true) throw new Error('brew-uninstall-throw');
+      return opts.uninstallBrewResult ?? { ok: true, message: 'removed via brew' };
+    },
+  };
+  return { sweep, calls };
+}
+
+test('sweep: removes via every installed PM and reports each', async () => {
+  await writeConfig('npm');
+  await writeFile(serviceUnitPath, '<plist/>');
+  const { sweep, calls } = fakeSweep({
+    detections: [
+      { name: 'npm', available: true, installed: true },
+      { name: 'pnpm', available: true, installed: false },
+      { name: 'yarn', available: false, installed: false },
+      { name: 'bun', available: true, installed: true },
+    ],
+    brew: { available: true, installed: true },
+  });
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({
+    ...depsFor(sm),
+    output,
+    sweep,
+    currentExecPath:
+      '/Users/x/.nvm/versions/node/v24/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+  });
+  expect(result.exitCode).toBe(0);
+  expect(calls.uninstall).toEqual(['npm', 'bun']);
+  expect(calls.uninstallBrew).toBe(1);
+  expect(output.lines.some((l) => l.msg === 'removed via npm')).toBe(true);
+  expect(output.lines.some((l) => l.msg === 'not installed via pnpm')).toBe(true);
+  expect(output.lines.some((l) => l.msg === 'yarn not available — skipped')).toBe(true);
+  expect(output.lines.some((l) => l.msg === 'removed via bun')).toBe(true);
+  expect(output.lines.some((l) => l.msg === 'removed via brew')).toBe(true);
+});
+
+test('sweep: warns and continues when one PM uninstall reports failure', async () => {
+  await writeConfig('npm');
+  const { sweep } = fakeSweep({
+    detections: [
+      { name: 'npm', available: true, installed: true },
+      { name: 'pnpm', available: false, installed: false },
+      { name: 'yarn', available: false, installed: false },
+      { name: 'bun', available: true, installed: true },
+    ],
+    uninstallResult: (n) =>
+      n === 'npm'
+        ? { ok: false, message: 'npm uninstall failed: EACCES' }
+        : { ok: true, message: `removed via ${n}` },
+  });
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({
+    ...depsFor(sm),
+    output,
+    sweep,
+    currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+  });
+  expect(result.exitCode).toBe(0);
+  expect(
+    output.lines.some((l) => l.level === 'warn' && l.msg === 'npm uninstall failed: EACCES'),
+  ).toBe(true);
+  expect(output.lines.some((l) => l.msg === 'removed via bun')).toBe(true);
+});
+
+test('sweep: catches throws inside individual uninstall and continues', async () => {
+  await writeConfig('npm');
+  const { sweep } = fakeSweep({
+    detections: [
+      { name: 'npm', available: true, installed: true },
+      { name: 'pnpm', available: false, installed: false },
+      { name: 'yarn', available: false, installed: false },
+      { name: 'bun', available: true, installed: true },
+    ],
+    uninstallThrows: 'npm',
+  });
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({
+    ...depsFor(sm),
+    output,
+    sweep,
+    currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+  });
+  expect(result.exitCode).toBe(0);
+  expect(
+    output.lines.some((l) => l.level === 'warn' && l.msg.includes('npm uninstall threw')),
+  ).toBe(true);
+  expect(output.lines.some((l) => l.msg === 'removed via bun')).toBe(true);
+});
+
+test('sweep: warns when detectAll throws but still proceeds to brew + direct', async () => {
+  await writeConfig('npm');
+  const { sweep } = fakeSweep({
+    detectAllThrows: true,
+    brew: { available: true, installed: true },
+  });
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({
+    ...depsFor(sm),
+    output,
+    sweep,
+    currentExecPath: '/usr/local/bin/proxai-gateway',
+  });
+  expect(result.exitCode).toBe(0);
+  expect(
+    output.lines.some(
+      (l) => l.level === 'warn' && l.msg.includes('package-manager detection failed'),
+    ),
+  ).toBe(true);
+  expect(output.lines.some((l) => l.msg === 'removed via brew')).toBe(true);
+  expect(
+    output.lines.some(
+      (l) => l.msg === 'to remove the binary itself, run: rm /usr/local/bin/proxai-gateway',
+    ),
+  ).toBe(true);
+});
+
+test('sweep: warns when detectBrew throws and continues', async () => {
+  await writeConfig('npm');
+  const { sweep } = fakeSweep({
+    detections: [
+      { name: 'npm', available: false, installed: false },
+      { name: 'pnpm', available: false, installed: false },
+      { name: 'yarn', available: false, installed: false },
+      { name: 'bun', available: false, installed: false },
+    ],
+    detectBrewThrows: true,
+  });
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({
+    ...depsFor(sm),
+    output,
+    sweep,
+    currentExecPath: '/usr/local/bin/proxai-gateway',
+  });
+  expect(result.exitCode).toBe(0);
+  expect(
+    output.lines.some((l) => l.level === 'warn' && l.msg.includes('brew detection failed')),
+  ).toBe(true);
+});
+
+test('sweep: warns when uninstallBrew throws', async () => {
+  await writeConfig('npm');
+  const { sweep } = fakeSweep({
+    brew: { available: true, installed: true },
+    uninstallBrewThrows: true,
+  });
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({
+    ...depsFor(sm),
+    output,
+    sweep,
+    currentExecPath: '/usr/local/bin/proxai-gateway',
+  });
+  expect(result.exitCode).toBe(0);
+  expect(
+    output.lines.some((l) => l.level === 'warn' && l.msg.includes('brew uninstall threw')),
+  ).toBe(true);
+});
+
+test('sweep: warns on uninstallBrew failure result', async () => {
+  await writeConfig('npm');
+  const { sweep } = fakeSweep({
+    brew: { available: true, installed: true },
+    uninstallBrewResult: { ok: false, message: 'brew uninstall failed: locked' },
+  });
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({
+    ...depsFor(sm),
+    output,
+    sweep,
+    currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+  });
+  expect(result.exitCode).toBe(0);
+  expect(
+    output.lines.some((l) => l.level === 'warn' && l.msg === 'brew uninstall failed: locked'),
+  ).toBe(true);
+});
+
+test('sweep: brew not available — skipped', async () => {
+  await writeConfig('npm');
+  const { sweep } = fakeSweep({
+    brew: { available: false, installed: false },
+  });
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  await runUninstall({
+    ...depsFor(sm),
+    output,
+    sweep,
+    currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+  });
+  expect(output.lines.some((l) => l.msg === 'brew not available — skipped')).toBe(true);
+});
+
+test('sweep: brew available but not installed', async () => {
+  await writeConfig('npm');
+  const { sweep } = fakeSweep({
+    brew: { available: true, installed: false },
+  });
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  await runUninstall({
+    ...depsFor(sm),
+    output,
+    sweep,
+    currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+  });
+  expect(output.lines.some((l) => l.msg === 'not installed via brew')).toBe(true);
+});
+
+test('sweep: emits "no package-manager install detected" when nothing found anywhere', async () => {
+  await writeConfig('npm');
+  const { sweep } = fakeSweep({});
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({
+    ...depsFor(sm),
+    output,
+    sweep,
+    currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+  });
+  expect(result.exitCode).toBe(0);
+  expect(output.lines.some((l) => l.msg === 'no package-manager install detected')).toBe(true);
+});
+
+test('sweep: direct binary at execPath produces rm hint', async () => {
+  await writeConfig('github_release');
+  const { sweep } = fakeSweep({});
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({
+    ...depsFor(sm),
+    output,
+    sweep,
+    currentExecPath: '/usr/local/bin/proxai-gateway',
+  });
+  expect(result.exitCode).toBe(0);
+  expect(
+    output.lines.some(
+      (l) => l.msg === 'to remove the binary itself, run: rm /usr/local/bin/proxai-gateway',
+    ),
+  ).toBe(true);
+  expect(output.lines.some((l) => l.msg === 'no package-manager install detected')).toBe(false);
+});
+
+test('sweep: defaults currentExecPath to process.execPath when not provided', async () => {
+  await writeConfig('npm');
+  const { sweep } = fakeSweep({});
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({ ...depsFor(sm), output, sweep });
+  expect(result.exitCode).toBe(0);
 });
