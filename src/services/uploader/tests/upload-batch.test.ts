@@ -516,14 +516,14 @@ test('AuthError + verify-key throws non-Error → retriable, log uses typeof and
       },
     });
 
-    const loggedWarns: Array<{ obj: Record<string, unknown>; msg: string }> = [];
+    const loggedErrors: Array<{ obj: Record<string, unknown>; msg: string }> = [];
     const fakeLogger = {
       child: () => fakeLogger,
       fatal: () => undefined,
-      error: () => undefined,
-      warn: (obj: Record<string, unknown>, msg: string) => {
-        loggedWarns.push({ obj, msg });
+      error: (obj: Record<string, unknown>, msg: string) => {
+        loggedErrors.push({ obj, msg });
       },
+      warn: () => undefined,
       info: () => undefined,
       debug: () => undefined,
       trace: () => undefined,
@@ -541,7 +541,7 @@ test('AuthError + verify-key throws non-Error → retriable, log uses typeof and
     expect(outcome.kind).toBe('retriable');
     expect(getBatch(db, batch.captureId)!.status).toBe('pending');
     expect(await Bun.file(sentinelPath).exists()).toBe(false);
-    const inconclusive = loggedWarns.find((w) => w.msg.includes('verify-key inconclusive'));
+    const inconclusive = loggedErrors.find((w) => w.msg.includes('verify-key inconclusive'));
     expect(inconclusive).toBeDefined();
     expect(inconclusive?.obj['kind']).toBe('string');
     expect(inconclusive?.obj['error']).toBe('string-thrown-not-error');

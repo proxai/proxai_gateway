@@ -69,7 +69,7 @@ async function classifyAndPersist(
   }
   if (err instanceof RateLimitError) {
     recordRetriableFailure(ctx.db, captureId, err.message);
-    log?.warn(
+    log?.error(
       {
         event: 'upload.rate_limited',
         retry_after_ms: err.retryAfterMs,
@@ -91,7 +91,7 @@ async function classifyAndPersist(
   }
   if (err instanceof RetriableError) {
     recordRetriableFailure(ctx.db, captureId, err.message);
-    log?.warn(
+    log?.error(
       {
         event: 'upload.retriable',
         kind: err.constructor.name,
@@ -111,7 +111,7 @@ async function classifyAndPersist(
   }
   if (err instanceof NetworkError) {
     recordRetriableFailure(ctx.db, captureId, err.message);
-    log?.warn(
+    log?.error(
       {
         event: 'upload.retriable',
         kind: err.constructor.name,
@@ -171,7 +171,7 @@ async function handleAuthError(
     }
 
     recordRetriableFailure(ctx.db, captureId, authErr.message);
-    log?.warn(
+    log?.error(
       {
         event: 'upload.auth_unconfirmed',
         kind: verifyErr instanceof Error ? verifyErr.constructor.name : typeof verifyErr,
@@ -196,7 +196,7 @@ async function handleAuthError(
   }
 
   recordRetriableFailure(ctx.db, captureId, authErr.message);
-  log?.warn(
+  log?.error(
     { event: 'upload.auth_transient', error: authErr.message, ...httpFields(authErr) },
     'upload auth error; verify-key still success, treating as retriable',
   );
