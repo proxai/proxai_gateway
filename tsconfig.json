@@ -27,7 +27,8 @@
       "cli/*": ["./src/cli/*"],
       "core/*": ["./src/core/*"],
       "services/*": ["./src/services/*"],
-      "sources/*": ["./src/sources/*"]
+      "sources/*": ["./src/sources/*"],
+      "scripts/*": ["./scripts/*"]
     },
 
     "types": ["bun"]
