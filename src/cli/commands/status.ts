@@ -13,6 +13,8 @@ import {
   METADATA_KEYS,
   totalFailedBytes,
   totalPendingBytes,
+  uploadBatchesShippedKey,
+  uploadBytesShippedKey,
 } from 'services/buffer';
 import type { CountsBySource, DaemonStateSnapshot, SourceCycleResult } from 'services/buffer';
 import type { GatewayConfig, InstallSource } from 'services/config';
@@ -39,6 +41,7 @@ import {
   sectionHeader,
   statusDot,
 } from 'cli/commands/format-status.ts';
+import type { UploadBySource } from 'cli/commands/format-status.ts';
 
 export { formatBytes };
 
@@ -112,6 +115,7 @@ export interface StatusJsonOutput {
     lastSuccessAt: string | null;
     lastSuccessBatches: number | null;
     lastSuccessBytes: number | null;
+    shippedBySource: UploadBySource;
   };
   system: {
     daemon: { isRunning: boolean; pid: number | null; startedAt: string | null };
@@ -170,6 +174,7 @@ export async function runStatus(
           lastSuccessAt: null,
           lastSuccessBatches: null,
           lastSuccessBytes: null,
+          shippedBySource: {},
         },
         system: {
           daemon: { isRunning: false, pid: null, startedAt: null },
@@ -204,6 +209,7 @@ export async function runStatus(
   const cyclesTotalDurationMs = readNumber(buffer, METADATA_KEYS.cyclesTotalDurationMs);
   const totalBatchesShipped = readNumber(buffer, METADATA_KEYS.uploadTotalBatchesShipped);
   const totalBytesShipped = readNumber(buffer, METADATA_KEYS.uploadTotalBytesShipped);
+  const shippedBySource = readShippedBySource(buffer);
   const lastSuccessAt = getMetadata(buffer, METADATA_KEYS.uploadLastSuccessAt);
   const lastSuccessBatches = readNumberOrNull(buffer, METADATA_KEYS.uploadLastSuccessBatches);
   const lastSuccessBytes = readNumberOrNull(buffer, METADATA_KEYS.uploadLastSuccessBytes);
@@ -320,6 +326,7 @@ export async function runStatus(
         lastSuccessAt,
         lastSuccessBatches,
         lastSuccessBytes,
+        shippedBySource,
       },
       system: {
         daemon: {
@@ -362,6 +369,7 @@ export async function runStatus(
     cyclesTotalDurationMs,
     totalBatchesShipped,
     totalBytesShipped,
+    shippedBySource,
     lastSuccessAt,
     lastSuccessBatches,
     lastSuccessBytes,
@@ -399,6 +407,7 @@ interface RenderInput {
   cyclesTotalDurationMs: number;
   totalBatchesShipped: number;
   totalBytesShipped: number;
+  shippedBySource: UploadBySource;
   lastSuccessAt: string | null;
   lastSuccessBatches: number | null;
   lastSuccessBytes: number | null;
@@ -442,7 +451,7 @@ function renderHumanStatus(deps: StatusCommandDeps, input: RenderInput): void {
     pressurePendingBytes: input.pendingBytes,
     pressureSoftPauseBytes: softPause,
     lastPruneAt: input.lastPruneAt,
-    pendingBySource: input.sourceCounts,
+    bySource: input.sourceCounts,
     now: input.now,
   })) {
     out.info(line);
@@ -454,6 +463,7 @@ function renderHumanStatus(deps: StatusCommandDeps, input: RenderInput): void {
     totalBytesShipped: input.totalBytesShipped,
     cyclesTotal: input.cyclesTotal,
     cyclesTotalDurationMs: input.cyclesTotalDurationMs,
+    shippedBySource: input.shippedBySource,
     lastCycleCompletedAt: input.daemonState?.lastCycleCompletedAt ?? null,
     lastCycleAttempted: input.daemonState?.lastDrainAttempted ?? null,
     lastCycleAccepted: input.daemonState?.lastDrainAccepted ?? null,
@@ -585,6 +595,18 @@ function readNumberOrNull(db: Database, key: string): number | null {
   if (raw === null) return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
+}
+
+function readShippedBySource(db: Database): UploadBySource {
+  const result: UploadBySource = {};
+  for (const app of SOURCE_ORDER) {
+    const batches = readNumber(db, uploadBatchesShippedKey(app));
+    const bytes = readNumber(db, uploadBytesShippedKey(app));
+    if (batches > 0 || bytes > 0) {
+      result[app] = { batches, bytes };
+    }
+  }
+  return result;
 }
 
 function daysSince(iso: string, now: Date): number | null {

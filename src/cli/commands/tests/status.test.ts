@@ -556,7 +556,12 @@ test('deriveHealth returns healthy when drain is clean', () => {
   ).toBe('healthy');
 });
 
-import { setMetadata, METADATA_KEYS } from 'services/buffer';
+import {
+  setMetadata,
+  METADATA_KEYS,
+  uploadBatchesShippedKey,
+  uploadBytesShippedKey,
+} from 'services/buffer';
 
 test('runStatus: loadConfig dep that throws falls back gracefully', async () => {
   const out = captureOutput();
@@ -692,4 +697,23 @@ test('runStatus default loadConfig path also catches throws (no dep override)', 
   const out = captureOutput();
   const result = await runStatus(makeDeps({ output: out }));
   expect(result.exitCode).toBe(0);
+});
+
+test('runStatus surfaces per-source upload counters in JSON output when metadata populated', async () => {
+  setMetadata(buffer, uploadBatchesShippedKey('claude-code'), '70');
+  setMetadata(buffer, uploadBytesShippedKey('claude-code'), (9 * 1024 * 1024).toString());
+  setMetadata(buffer, uploadBatchesShippedKey('cursor'), '14');
+  setMetadata(buffer, uploadBytesShippedKey('cursor'), (2 * 1024 * 1024).toString());
+  const out = captureOutput();
+  const result = await runStatus(makeDeps({ output: out }), { json: true });
+  expect(result.exitCode).toBe(0);
+  const json = JSON.parse(out.lines[0]?.msg ?? '{}') as {
+    upload: { shippedBySource: Record<string, { batches: number; bytes: number }> };
+  };
+  expect(json.upload.shippedBySource['claude-code']).toEqual({
+    batches: 70,
+    bytes: 9 * 1024 * 1024,
+  });
+  expect(json.upload.shippedBySource['cursor']).toEqual({ batches: 14, bytes: 2 * 1024 * 1024 });
+  expect(json.upload.shippedBySource['codex']).toBeUndefined();
 });

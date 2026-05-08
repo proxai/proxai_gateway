@@ -51,8 +51,11 @@ export function countByStatus(db: Database): BufferCounts {
   return counts;
 }
 
-const COUNT_BATCHES_BY_SOURCE_SQL = `
-  SELECT ${BATCH_COLS.sourceApp} AS source_app, ${BATCH_COLS.status} AS status, COUNT(*) AS count
+const STATS_BATCHES_BY_SOURCE_SQL = `
+  SELECT ${BATCH_COLS.sourceApp} AS source_app,
+         ${BATCH_COLS.status} AS status,
+         COUNT(*) AS count,
+         COALESCE(SUM(LENGTH(${BATCH_COLS.body})), 0) AS bytes
   FROM ${BUFFER_TABLES.batches}
   GROUP BY ${BATCH_COLS.sourceApp}, ${BATCH_COLS.status}
 `;
@@ -65,27 +68,41 @@ const COUNT_RECEIPTS_BY_SOURCE_SQL = `
 
 export interface SourceCounts {
   pending: number;
+  pendingBytes: number;
   failed: number;
+  failedBytes: number;
   delivered: number;
 }
 
 export type CountsBySource = Record<SourceApp, SourceCounts>;
 
+function emptySourceCounts(): SourceCounts {
+  return { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 };
+}
+
 export function countsBySource(db: Database): CountsBySource {
   const result: CountsBySource = {
-    'claude-code': { pending: 0, failed: 0, delivered: 0 },
-    cursor: { pending: 0, failed: 0, delivered: 0 },
-    codex: { pending: 0, failed: 0, delivered: 0 },
-    'gemini-cli': { pending: 0, failed: 0, delivered: 0 },
+    'claude-code': emptySourceCounts(),
+    cursor: emptySourceCounts(),
+    codex: emptySourceCounts(),
+    'gemini-cli': emptySourceCounts(),
   };
   const batchRows = db
-    .query<{ source_app: string; status: string; count: number }, []>(COUNT_BATCHES_BY_SOURCE_SQL)
+    .query<
+      { source_app: string; status: string; count: number; bytes: number },
+      []
+    >(STATS_BATCHES_BY_SOURCE_SQL)
     .all();
   for (const row of batchRows) {
     const app = row.source_app as SourceApp;
     if (result[app] === undefined) continue;
-    if (row.status === BATCH_STATUS.pending) result[app].pending = row.count;
-    else if (row.status === BATCH_STATUS.failed) result[app].failed = row.count;
+    if (row.status === BATCH_STATUS.pending) {
+      result[app].pending = row.count;
+      result[app].pendingBytes = row.bytes;
+    } else if (row.status === BATCH_STATUS.failed) {
+      result[app].failed = row.count;
+      result[app].failedBytes = row.bytes;
+    }
   }
   const receiptRows = db
     .query<{ source_app: string; count: number }, []>(COUNT_RECEIPTS_BY_SOURCE_SQL)

@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite';
 
 import type { Logger } from 'core/log';
+import type { SourceApp } from 'services/contract';
 import type { HttpClient } from 'services/http';
 import type { Pacer } from 'services/uploader/pacer.ts';
 
@@ -47,10 +48,18 @@ export interface DrainOptions {
   maxConsecutiveRetriable?: number;
 }
 
+export interface DrainSourceTotals {
+  batches: number;
+  bytes: number;
+}
+
+export type AcceptedBySource = Partial<Record<SourceApp, DrainSourceTotals>>;
+
 export interface DrainResult {
   attempted: number;
   accepted: number;
   acceptedBytes: number;
+  acceptedBySource: AcceptedBySource;
   retriable: number;
   fatal: number;
   recovered: number;

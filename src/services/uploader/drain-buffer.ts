@@ -22,6 +22,7 @@ export async function drainBuffer(
     attempted: 0,
     accepted: 0,
     acceptedBytes: 0,
+    acceptedBySource: {},
     retriable: 0,
     fatal: 0,
     recovered: 0,
@@ -48,6 +49,10 @@ export async function drainBuffer(
     if (outcome.kind === 'accepted') {
       result.accepted++;
       result.acceptedBytes += batch.body.byteLength;
+      const tally = result.acceptedBySource[batch.sourceApp] ?? { batches: 0, bytes: 0 };
+      tally.batches++;
+      tally.bytes += batch.body.byteLength;
+      result.acceptedBySource[batch.sourceApp] = tally;
       consecutiveRetriable = 0;
       continue;
     }

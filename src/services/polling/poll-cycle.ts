@@ -6,7 +6,7 @@ import {
   setDaemonState,
   setMetadata,
 } from 'services/buffer';
-import { METADATA_KEYS } from 'services/buffer';
+import { METADATA_KEYS, uploadBatchesShippedKey, uploadBytesShippedKey } from 'services/buffer';
 import type { DaemonStateSnapshot, PendingPressureResult, PruneResult } from 'services/buffer';
 import { drainBuffer } from 'services/uploader';
 import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
@@ -355,6 +355,15 @@ function persistCumulativeMetrics(
         METADATA_KEYS.uploadLastSuccessBytes,
         drainResult.acceptedBytes.toString(),
       );
+      for (const [app, totals] of Object.entries(drainResult.acceptedBySource)) {
+        if (totals === undefined) continue;
+        const batchesKey = uploadBatchesShippedKey(app);
+        const bytesKey = uploadBytesShippedKey(app);
+        const prevBatches = readNumberMetadata(ctx.buffer, batchesKey);
+        const prevBytes = readNumberMetadata(ctx.buffer, bytesKey);
+        setMetadata(ctx.buffer, batchesKey, (prevBatches + totals.batches).toString());
+        setMetadata(ctx.buffer, bytesKey, (prevBytes + totals.bytes).toString());
+      }
     }
   } catch (err) {
     ctx.logger?.warn(

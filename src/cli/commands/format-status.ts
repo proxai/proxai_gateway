@@ -190,39 +190,59 @@ export interface BufferSectionInput {
   pressurePendingBytes: number;
   pressureSoftPauseBytes: number;
   lastPruneAt: string | null;
-  pendingBySource: CountsBySource | null;
+  bySource: CountsBySource | null;
   now: Date;
 }
 
 const KEY_WIDTH = 14;
+const SUB_LABEL_WIDTH = 12;
+const COUNT_COL = 5;
+const BYTES_COL = 9;
 
 function keyCol(label: string): string {
   return label.padEnd(KEY_WIDTH);
 }
 
+function summaryHeadline(count: number, bytes: number, headline: string): string {
+  const c = count.toString().padStart(COUNT_COL);
+  const b = formatBytes(bytes).padStart(BYTES_COL);
+  return `${c} ${chalk.dim('batches')}    (${b})        ${chalk.dim(headline)}`;
+}
+
+function subRow(label: string, count: number, bytes: number): string {
+  const c = count.toString().padStart(COUNT_COL);
+  const b = formatBytes(bytes).padStart(BYTES_COL);
+  return `    ${chalk.dim('·')} ${label.padEnd(SUB_LABEL_WIDTH)}${c} ${chalk.dim('batches')}    (${b})`;
+}
+
 export function renderBufferSection(input: BufferSectionInput): string[] {
   const lines: string[] = [sectionHeader('Buffer')];
   lines.push(
-    `  ${keyCol('Pending')}${input.pendingCount.toString().padStart(4)} batches    (${formatBytes(input.pendingBytes)})        ${chalk.dim('held for delivery')}`,
+    `  ${keyCol('Pending')}${summaryHeadline(input.pendingCount, input.pendingBytes, 'held for delivery')}`,
   );
-  if (input.pendingBySource !== null) {
-    for (const [name, c] of Object.entries(input.pendingBySource)) {
+  if (input.bySource !== null && input.pendingCount > 0) {
+    for (const [name, c] of Object.entries(input.bySource)) {
       if (c.pending > 0) {
-        lines.push(
-          `    ${chalk.dim('·')} ${name.padEnd(SOURCE_LABEL_PAD - 2)}${c.pending.toString().padStart(4)} batches`,
-        );
+        lines.push(subRow(name, c.pending, c.pendingBytes));
       }
     }
   }
   lines.push(
-    `  ${keyCol('Failed')}${input.failedCount.toString().padStart(4)} batches    (${formatBytes(input.failedBytes)})        ${chalk.dim('permanent errors retained for review')}`,
+    `  ${keyCol('Failed')}${summaryHeadline(input.failedCount, input.failedBytes, 'permanent errors retained for review')}`,
   );
+  if (input.bySource !== null && input.failedCount > 0) {
+    for (const [name, c] of Object.entries(input.bySource)) {
+      if (c.failed > 0) {
+        lines.push(subRow(name, c.failed, c.failedBytes));
+      }
+    }
+  }
   lines.push(
-    `  ${keyCol('Receipts')}${input.receiptsCount.toString().padStart(4)} records                ${chalk.dim('successful uploads tracked')}`,
+    `  ${keyCol('Receipts')}${input.receiptsCount.toString().padStart(COUNT_COL)} ${chalk.dim('records')}                ${chalk.dim('delivery confirmations on file')}`,
   );
   const pct = formatPercent(input.pressurePendingBytes, input.pressureSoftPauseBytes);
   lines.push(
-    `  ${keyCol('Pressure')}${formatBytes(input.pressurePendingBytes)} / ${formatBytes(input.pressureSoftPauseBytes)}  (${pct} ${chalk.dim('soft-pause threshold')})`,
+    `  ${keyCol('Pressure')}${formatBytes(input.pressurePendingBytes)} / ${formatBytes(input.pressureSoftPauseBytes)}  (${pct} ${chalk.dim('of soft-pause threshold')})`,
   );
   if (input.lastPruneAt !== null) {
     lines.push(
@@ -234,11 +254,19 @@ export function renderBufferSection(input: BufferSectionInput): string[] {
   return lines;
 }
 
+export interface UploadSourceTotals {
+  batches: number;
+  bytes: number;
+}
+
+export type UploadBySource = Record<string, UploadSourceTotals>;
+
 export interface UploadSectionInput {
   totalBatchesShipped: number;
   totalBytesShipped: number;
   cyclesTotal: number;
   cyclesTotalDurationMs: number;
+  shippedBySource: UploadBySource | null;
   lastCycleCompletedAt: string | null;
   lastCycleAttempted: number | null;
   lastCycleAccepted: number | null;
@@ -253,16 +281,34 @@ export interface UploadSectionInput {
 export function renderUploadSection(input: UploadSectionInput): string[] {
   const lines: string[] = [sectionHeader('Upload')];
 
-  lines.push(
-    `  ${keyCol('All-time')}${input.totalBatchesShipped.toString().padStart(4)} batches shipped   /   ${formatBytes(input.totalBytesShipped)} compressed   /   ${input.cyclesTotal.toString()} cycles`,
-  );
+  if (input.cyclesTotal > 0 || input.totalBatchesShipped > 0) {
+    const c = input.totalBatchesShipped.toString().padStart(COUNT_COL);
+    const b = formatBytes(input.totalBytesShipped).padStart(BYTES_COL);
+    const cy = input.cyclesTotal.toString();
+    lines.push(
+      `  ${keyCol('All-time')}${c} ${chalk.dim('batches shipped')}   ·   ${b} ${chalk.dim('compressed')}   ·   ${cy} ${chalk.dim('cycles')}`,
+    );
+
+    if (input.shippedBySource !== null) {
+      for (const [name, totals] of Object.entries(input.shippedBySource)) {
+        if (totals.batches > 0) {
+          lines.push(subRow(name, totals.batches, totals.bytes));
+        }
+      }
+    }
+  } else {
+    lines.push(`  ${keyCol('All-time')}${chalk.dim('— no upload cycles completed yet')}`);
+  }
 
   if (input.cyclesTotal > 0) {
     const avgBatches = input.totalBatchesShipped / input.cyclesTotal;
     const avgBytes = input.totalBytesShipped / input.cyclesTotal;
     const avgMs = input.cyclesTotalDurationMs / input.cyclesTotal;
+    const ab = avgBatches.toFixed(1).padStart(COUNT_COL);
+    const aby = formatBytes(avgBytes).padStart(BYTES_COL);
+    const ams = formatDuration(avgMs);
     lines.push(
-      `  ${keyCol('Avg / cycle')}${avgBatches.toFixed(1).padStart(4)} batches          /   ${formatBytes(avgBytes)}             /   ${formatDuration(avgMs)}`,
+      `  ${keyCol('Avg / cycle')}${ab} ${chalk.dim('batches')}        ·   ${aby} ${chalk.dim('compressed')}   ·   ${ams}`,
     );
   } else {
     lines.push(`  ${keyCol('Avg / cycle')}${chalk.dim('— no cycles completed yet')}`);

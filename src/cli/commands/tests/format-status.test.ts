@@ -63,7 +63,7 @@ test('renderBufferSection emits Pending/Failed/Receipts/Pressure/Last prune line
     pressurePendingBytes: 0,
     pressureSoftPauseBytes: 700 * 1024 * 1024,
     lastPruneAt: '2026-05-08T13:28:50Z',
-    pendingBySource: null,
+    bySource: null,
     now: NOW,
   });
   const joined = lines.join('\n');
@@ -71,13 +71,14 @@ test('renderBufferSection emits Pending/Failed/Receipts/Pressure/Last prune line
   expect(joined).toContain('Pending');
   expect(joined).toContain('Failed');
   expect(joined).toContain('Receipts');
-  expect(joined).toContain('86 records');
+  expect(joined).toContain('86');
+  expect(joined).toContain('records');
   expect(joined).toContain('Pressure');
   expect(joined).toContain('soft-pause threshold');
   expect(joined).toContain('Last prune');
 });
 
-test('renderBufferSection prints per-source pending sub-rows when any source has pending', () => {
+test('renderBufferSection prints per-source pending sub-rows with bytes when any source has pending', () => {
   const lines = renderBufferSection({
     pendingCount: 5,
     pendingBytes: 1024,
@@ -87,18 +88,50 @@ test('renderBufferSection prints per-source pending sub-rows when any source has
     pressurePendingBytes: 1024,
     pressureSoftPauseBytes: 1024 * 1024,
     lastPruneAt: null,
-    pendingBySource: {
-      'claude-code': { pending: 3, failed: 0, delivered: 0 },
-      cursor: { pending: 2, failed: 0, delivered: 0 },
-      codex: { pending: 0, failed: 0, delivered: 0 },
-      'gemini-cli': { pending: 0, failed: 0, delivered: 0 },
+    bySource: {
+      'claude-code': { pending: 3, pendingBytes: 700, failed: 0, failedBytes: 0, delivered: 0 },
+      cursor: { pending: 2, pendingBytes: 324, failed: 0, failedBytes: 0, delivered: 0 },
+      codex: { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
+      'gemini-cli': { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
     },
     now: NOW,
   });
   const joined = lines.join('\n');
   expect(joined).toContain('claude-code');
   expect(joined).toContain('cursor');
+  expect(joined).not.toContain('codex'); // omitted when zero
   expect(joined).toContain('never');
+  expect(joined).toContain('700 B');
+  expect(joined).toContain('324 B');
+});
+
+test('renderBufferSection prints per-source failed sub-rows when failed count > 0', () => {
+  const lines = renderBufferSection({
+    pendingCount: 0,
+    pendingBytes: 0,
+    failedCount: 4,
+    failedBytes: 4096,
+    receiptsCount: 0,
+    pressurePendingBytes: 0,
+    pressureSoftPauseBytes: 1024 * 1024,
+    lastPruneAt: null,
+    bySource: {
+      'claude-code': {
+        pending: 0,
+        pendingBytes: 0,
+        failed: 3,
+        failedBytes: 3 * 1024,
+        delivered: 0,
+      },
+      cursor: { pending: 0, pendingBytes: 0, failed: 1, failedBytes: 1024, delivered: 0 },
+      codex: { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
+      'gemini-cli': { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
+    },
+    now: NOW,
+  });
+  const joined = lines.join('\n');
+  expect(joined).toContain('claude-code');
+  expect(joined).toContain('cursor');
 });
 
 test('renderUploadSection writes all-time, avg, last cycle, last success when populated', () => {
@@ -107,6 +140,12 @@ test('renderUploadSection writes all-time, avg, last cycle, last success when po
     totalBytesShipped: 12 * 1024 * 1024,
     cyclesTotal: 54,
     cyclesTotalDurationMs: 22_000,
+    shippedBySource: {
+      'claude-code': { batches: 70, bytes: 9 * 1024 * 1024 },
+      cursor: { batches: 14, bytes: 2 * 1024 * 1024 },
+      codex: { batches: 2, bytes: 512 * 1024 },
+      'gemini-cli': { batches: 0, bytes: 0 },
+    },
     lastCycleCompletedAt: '2026-05-08T13:28:50Z',
     lastCycleAttempted: 0,
     lastCycleAccepted: 0,
@@ -119,19 +158,25 @@ test('renderUploadSection writes all-time, avg, last cycle, last success when po
   });
   const joined = lines.join('\n');
   expect(joined).toContain('All-time');
-  expect(joined).toContain('86 batches shipped');
+  expect(joined).toContain('86');
+  expect(joined).toContain('batches shipped');
+  expect(joined).toContain('claude-code');
+  expect(joined).toContain('cursor');
+  expect(joined).toContain('codex');
+  expect(joined).not.toMatch(/gemini-cli\s+0 batches/); // omitted when zero
   expect(joined).toContain('Avg / cycle');
   expect(joined).toContain('Last cycle');
   expect(joined).toContain('Last success');
   expect(joined).toContain('3 batches');
 });
 
-test('renderUploadSection highlights retriable + fatal counts and falls back to dim placeholders', () => {
+test('renderUploadSection falls back to dim placeholders when no cycles completed', () => {
   const lines = renderUploadSection({
     totalBatchesShipped: 0,
     totalBytesShipped: 0,
     cyclesTotal: 0,
     cyclesTotalDurationMs: 0,
+    shippedBySource: null,
     lastCycleCompletedAt: null,
     lastCycleAttempted: null,
     lastCycleAccepted: null,
@@ -143,17 +188,24 @@ test('renderUploadSection highlights retriable + fatal counts and falls back to 
     now: NOW,
   });
   const joined = lines.join('\n');
+  expect(joined).toContain('no upload cycles completed yet');
   expect(joined).toContain('no cycles completed yet');
   expect(joined).toContain('no cycle completed yet');
   expect(joined).toContain('no successful upload yet');
 });
 
-test('renderUploadSection colors retriable and fatal when nonzero', () => {
+test('renderUploadSection colors retriable and fatal when nonzero, omits zero per-source rows', () => {
   const lines = renderUploadSection({
     totalBatchesShipped: 1,
     totalBytesShipped: 1,
     cyclesTotal: 1,
     cyclesTotalDurationMs: 100,
+    shippedBySource: {
+      'claude-code': { batches: 1, bytes: 1 },
+      cursor: { batches: 0, bytes: 0 },
+      codex: { batches: 0, bytes: 0 },
+      'gemini-cli': { batches: 0, bytes: 0 },
+    },
     lastCycleCompletedAt: '2026-05-08T13:28:50Z',
     lastCycleAttempted: 5,
     lastCycleAccepted: 1,
@@ -167,6 +219,31 @@ test('renderUploadSection colors retriable and fatal when nonzero', () => {
   const joined = lines.join('\n');
   expect(joined).toContain('2 retriable');
   expect(joined).toContain('2 fatal');
+  expect(joined).toContain('claude-code');
+  expect(joined).not.toMatch(/cursor\s+0 batches/);
+});
+
+test('renderUploadSection: all-time data without bysource shows summary line only', () => {
+  const lines = renderUploadSection({
+    totalBatchesShipped: 5,
+    totalBytesShipped: 4096,
+    cyclesTotal: 1,
+    cyclesTotalDurationMs: 100,
+    shippedBySource: null,
+    lastCycleCompletedAt: null,
+    lastCycleAttempted: null,
+    lastCycleAccepted: null,
+    lastCycleRetriable: null,
+    lastCycleFatal: null,
+    lastSuccessAt: null,
+    lastSuccessBatches: null,
+    lastSuccessBytes: null,
+    now: NOW,
+  });
+  const joined = lines.join('\n');
+  expect(joined).toContain('All-time');
+  expect(joined).toContain('batches shipped');
+  expect(joined).toContain('compressed');
 });
 
 test('renderHealthSection covers running daemon, no sentinels, current=latest, fresh binary', () => {

@@ -32,6 +32,14 @@ export const METADATA_KEYS = {
   latestKnownVersion: 'latest_known_version',
 } as const;
 
+export function uploadBatchesShippedKey(sourceApp: string): string {
+  return `upload_batches_shipped_by_source.${sourceApp}`;
+}
+
+export function uploadBytesShippedKey(sourceApp: string): string {
+  return `upload_bytes_shipped_by_source.${sourceApp}`;
+}
+
 export const BATCH_COLS = {
   captureId: 'capture_id',
   sourceApp: 'source_app',

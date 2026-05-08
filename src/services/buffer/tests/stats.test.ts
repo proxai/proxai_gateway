@@ -70,16 +70,41 @@ import { countsBySource } from 'services/buffer';
 
 test('countsBySource reports zero for all known apps on empty buffer', () => {
   const counts = countsBySource(db);
-  expect(counts['claude-code']).toEqual({ pending: 0, failed: 0, delivered: 0 });
-  expect(counts.cursor).toEqual({ pending: 0, failed: 0, delivered: 0 });
-  expect(counts.codex).toEqual({ pending: 0, failed: 0, delivered: 0 });
+  expect(counts['claude-code']).toEqual({
+    pending: 0,
+    pendingBytes: 0,
+    failed: 0,
+    failedBytes: 0,
+    delivered: 0,
+  });
+  expect(counts.cursor).toEqual({
+    pending: 0,
+    pendingBytes: 0,
+    failed: 0,
+    failedBytes: 0,
+    delivered: 0,
+  });
+  expect(counts.codex).toEqual({
+    pending: 0,
+    pendingBytes: 0,
+    failed: 0,
+    failedBytes: 0,
+    delivered: 0,
+  });
+  expect(counts['gemini-cli']).toEqual({
+    pending: 0,
+    pendingBytes: 0,
+    failed: 0,
+    failedBytes: 0,
+    delivered: 0,
+  });
 });
 
-test('countsBySource aggregates pending failed and delivered per source', () => {
-  const a = newBatch({ sourceApp: 'claude-code' });
-  const b = newBatch({ sourceApp: 'claude-code' });
-  const c = newBatch({ sourceApp: 'cursor' });
-  const d = newBatch({ sourceApp: 'codex' });
+test('countsBySource aggregates pending failed and delivered per source with bytes', () => {
+  const a = newBatch({ sourceApp: 'claude-code', body: new Uint8Array(100) });
+  const b = newBatch({ sourceApp: 'claude-code', body: new Uint8Array(200) });
+  const c = newBatch({ sourceApp: 'cursor', body: new Uint8Array(300) });
+  const d = newBatch({ sourceApp: 'codex', body: new Uint8Array(400) });
   insertBatch(db, a);
   insertBatch(db, b);
   insertBatch(db, c);
@@ -87,9 +112,27 @@ test('countsBySource aggregates pending failed and delivered per source', () => 
   markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
   markBatchFailed(db, b.captureId, 'err');
   const counts = countsBySource(db);
-  expect(counts['claude-code']).toEqual({ pending: 0, failed: 1, delivered: 1 });
-  expect(counts.cursor).toEqual({ pending: 1, failed: 0, delivered: 0 });
-  expect(counts.codex).toEqual({ pending: 1, failed: 0, delivered: 0 });
+  expect(counts['claude-code']).toEqual({
+    pending: 0,
+    pendingBytes: 0,
+    failed: 1,
+    failedBytes: 200,
+    delivered: 1,
+  });
+  expect(counts.cursor).toEqual({
+    pending: 1,
+    pendingBytes: 300,
+    failed: 0,
+    failedBytes: 0,
+    delivered: 0,
+  });
+  expect(counts.codex).toEqual({
+    pending: 1,
+    pendingBytes: 400,
+    failed: 0,
+    failedBytes: 0,
+    delivered: 0,
+  });
 });
 
 test('countsBySource ignores unknown source_app values defensively', () => {
