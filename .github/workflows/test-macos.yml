@@ -1,4 +1,4 @@
-name: Test macOS
+name: macOS
 
 on:
   push:
@@ -10,9 +10,12 @@ concurrency:
   group: test-macos-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   test:
-    name: Test (${{ matrix.arch }})
+    name: ${{ matrix.arch }} Unit Tests
     strategy:
       fail-fast: false
       matrix:

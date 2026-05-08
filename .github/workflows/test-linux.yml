@@ -1,4 +1,4 @@
-name: Test Linux
+name: Linux
 
 on:
   push:
@@ -10,18 +10,13 @@ concurrency:
   group: test-linux-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   test:
-    name: Test (${{ matrix.arch }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-latest
-            arch: x64
-          - runner: ubuntu-24.04-arm
-            arch: arm64
-    runs-on: ${{ matrix.runner }}
+    name: arm64 Unit Tests
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
