@@ -64,22 +64,88 @@ proxai-gateway status      # check it's working
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `setup` | Configure the gateway with your ingestion key. Re-run to replace. |
-| `start` | Register the gateway as a managed service and start the daemon. |
-| `stop` | Halt the daemon for this session. Auto-restarts on next reboot. |
-| `restart` | Stop and start. |
-| `status` | Print buffer state, cursors, and sentinel status. |
-| `pause` | Pause polling indefinitely. Persists across reboots until `resume`. |
-| `resume` | Clear an active pause. |
-| `tail` | Stream structured logs from the active log file. |
-| `redaction list` | List secret-redaction rules by category. |
-| `redaction test <file>` | Run the redaction pipeline on a file and show what would be redacted. |
-| `backfill` | Capture extended history beyond the default 30-day window. |
-| `uninstall` | Decommission the service. Use `--reset` to also wipe local data. |
+Every long-form command also has a short alias.
+
+| Command | Alias | What it does |
+| --- | --- | --- |
+| `setup` | `init` | Configure the gateway with your ingestion key. Re-run to replace. |
+| `start` | `s` | Register the gateway as a managed service and start the daemon. |
+| `stop` | `x` | Halt the daemon for this session. Auto-restarts on next reboot. |
+| `restart` | `r` | Stop and start. |
+| `status` | `i` | Print health, buffer state, upload metrics, and sentinel flags. |
+| `tail` | `t` | Stream structured logs from the active log file. |
+| `pause` | — | Pause polling indefinitely. Persists across reboots until `resume`. |
+| `resume` | — | Clear an active pause. |
+| `redaction list` | — | List secret-redaction rules by category. |
+| `redaction test <file>` | — | Run the redaction pipeline on a file and show what would be redacted. |
+| `backfill` | — | Capture extended history beyond the default 30-day window. |
+| `upgrade` | — | Manually fetch the latest release from GitHub and replace the binary. |
+| `uninstall` | `rm` | Decommission the service. Use `--reset` to also wipe local data. |
 
 Run any command with `--help` for full option details.
+
+### Version flag
+
+Both `-v` and `--version` print the gateway version plus how this binary was installed (read from `~/.proxai/proxai-gateway/config.toml`):
+
+```
+$ proxai-gateway --version
+proxai-gateway 2026.5.9-3
+installed via npm
+```
+
+Recognized install sources are `bun`, `pnpm`, `yarn`, `npm`, `brew`, and `github_release`. If the config does not yet exist (before `setup`), the source falls back to `unknown`.
+
+### Status output
+
+`proxai-gateway status` (alias `i`) renders four sections — Capture, Buffer, Upload, Health — using the cumulative counters maintained inside the buffer database:
+
+```
+Status: ● active
+
+── Capture ──
+  claude-code      0 captured   /   64 files scanned   /  0 errors
+  cursor           0 captured   /    7 files scanned   /  0 errors
+  codex            0 captured   /    3 files scanned   /  0 errors
+
+── Buffer ──
+  Pending          0 batches    (0 B)        held for delivery
+  Failed           0 batches    (0 B)        permanent errors retained for review
+  Receipts        86 records                 successful uploads tracked
+  Pressure        0 B / 700 MB  (0% soft-pause threshold)
+  Last prune      8 May 13:28:50  (3 min ago)
+
+── Upload ──
+  All-time         86 batches shipped   /   12.4 MB compressed   /   54 cycles
+  Avg / cycle       1.6 batches          /   0.23 MB             /   421 ms
+  Last cycle       8 May 13:28:50  (3 min ago)   ·  0 attempted   0 accepted   0 retriable   0 fatal
+  Last success    8 May 13:25:42  (6 min ago)   ·  3 batches      0.41 MB shipped
+
+── Health ──
+  Daemon          running          (pid 78321, uptime 3h 14m)
+  Sentinels       none active
+  Auto-upgrade    last check 8 May 13:28:50  ·  current 2026.5.9-3  ·  latest 2026.5.9-3 (up to date)
+  Binary age      14 days  (warn ≥ 90 d, pause ≥ 180 d)
+```
+
+What each line means:
+
+- **Capture** — last completed cycle's per-source stats: batches captured, files scanned for new content, and errors hit while reading source databases or jsonl files.
+- **Buffer.Pending** — batches captured locally but not yet shipped, with the compressed byte total. When any source has pending batches, sub-rows break it down per source.
+- **Buffer.Failed** — batches the server rejected as unrecoverable; kept for review until the failed-retention window expires.
+- **Buffer.Receipts** — total number of successful upload receipts kept in the local buffer (a rolling window).
+- **Buffer.Pressure** — current pending-byte total against the soft-pause threshold. When pressure crosses the threshold, captures pause until the buffer drains below the soft-resume threshold.
+- **Buffer.Last prune** — most recent buffer-cleanup cycle (receipts and failed batches past their retention).
+- **Upload.All-time** — cumulative batches shipped to the backend, total compressed bytes shipped, and total poll cycles run since install.
+- **Upload.Avg / cycle** — averages derived from all-time totals.
+- **Upload.Last cycle** — most recent cycle's drain results: how many batches were attempted, accepted, deferred (retriable), or rejected (fatal).
+- **Upload.Last success** — most recent cycle that actually accepted at least one batch.
+- **Health.Daemon** — service-manager-reported state with PID and uptime.
+- **Health.Sentinels** — active sentinel flags (`paused`, `auth-failed`, `buffer-full`, `session-stopped`, `update-available`) or `none active`.
+- **Health.Auto-upgrade** — when the daemon last checked GitHub for a newer release, the running version, and the latest known version. Brew installs surface a sentinel on update; npm/pnpm/yarn/bun/github_release installs auto-replace the binary in-place.
+- **Health.Binary age** — days since this binary was installed, plus the configured warn / pause thresholds for stale binaries.
+
+Add `--json` to emit a machine-readable payload of the same data.
 
 ## Where things live
 
