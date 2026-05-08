@@ -35,15 +35,20 @@ test('schema initialization creates the buffer_metadata table', () => {
   expect(tableExists(db, BUFFER_TABLES.metadata)).toBe(true);
 });
 
-test('listTables shows the four buffer tables', () => {
+test('listTables shows the five buffer tables', () => {
   expect(listTables(db).toSorted()).toEqual(
     [
       BUFFER_TABLES.batches,
       BUFFER_TABLES.cursors,
       BUFFER_TABLES.receipts,
       BUFFER_TABLES.metadata,
+      BUFFER_TABLES.daemonState,
     ].toSorted(),
   );
+});
+
+test('schema initialization creates the daemon_state table', () => {
+  expect(tableExists(db, BUFFER_TABLES.daemonState)).toBe(true);
 });
 
 test('opening twice produces equivalent schemas (CREATE IF NOT EXISTS)', () => {

@@ -1,7 +1,13 @@
 import { nowIsoUtc } from 'core/utils';
-import { checkPendingPressure, getMetadata, pruneBuffer, setMetadata } from 'services/buffer';
+import {
+  checkPendingPressure,
+  getMetadata,
+  pruneBuffer,
+  setDaemonState,
+  setMetadata,
+} from 'services/buffer';
 import { METADATA_KEYS } from 'services/buffer';
-import type { PendingPressureResult, PruneResult } from 'services/buffer';
+import type { DaemonStateSnapshot, PendingPressureResult, PruneResult } from 'services/buffer';
 import { drainBuffer } from 'services/uploader';
 import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 import {
@@ -248,6 +254,9 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     },
     'poll cycle complete',
   );
+
+  persistDaemonState(ctx, startedAt, completedAt, durationMs, sourceResults, drainResult);
+
   return {
     paused: false,
     authFailed: false,
@@ -260,6 +269,46 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     pruneResult,
     pressureResult,
   };
+}
+
+function persistDaemonState(
+  ctx: PollCycleContext,
+  startedAt: string,
+  completedAt: string,
+  durationMs: number,
+  sourceResults: Record<string, SourcePollerResult>,
+  drainResult: PollCycleResult['drainResult'],
+): void {
+  try {
+    const sources: DaemonStateSnapshot['lastSourceCaptures'] = {};
+    for (const [name, r] of Object.entries(sourceResults)) {
+      sources[name] = {
+        filesProcessed: r.filesProcessed,
+        capturedBatches: r.capturedBatches,
+        capturedBytes: r.capturedBytes,
+        errorsCount: r.errors.length,
+      };
+    }
+    const snapshot: DaemonStateSnapshot = {
+      lastCycleStartedAt: startedAt,
+      lastCycleCompletedAt: completedAt,
+      lastCycleDurationMs: durationMs,
+      lastDrainAttempted: drainResult?.attempted ?? null,
+      lastDrainAccepted: drainResult?.accepted ?? null,
+      lastDrainRetriable: drainResult?.retriable ?? null,
+      lastDrainFatal: drainResult?.fatal ?? null,
+      lastDrainRecovered: drainResult?.recovered ?? null,
+      lastUploadError: drainResult?.lastUploadError ?? null,
+      lastConsecutiveRetriableBreak: drainResult?.consecutiveRetriableBreak ?? null,
+      lastSourceCaptures: sources,
+    };
+    setDaemonState(ctx.buffer, snapshot);
+  } catch (err) {
+    ctx.logger?.warn(
+      { event: 'daemon_state.persist_failed', error: (err as Error).message ?? String(err) },
+      'failed to persist daemon state',
+    );
+  }
 }
 
 const DEFAULT_VERSION_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;

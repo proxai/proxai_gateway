@@ -65,3 +65,46 @@ test('countByStatus reports one of each bucket', () => {
   markBatchFailed(db, b.captureId, 'err');
   expect(countByStatus(db)).toEqual({ pending: 1, failed: 1, delivered: 1 });
 });
+
+import { countsBySource } from 'services/buffer';
+
+test('countsBySource reports zero for all known apps on empty buffer', () => {
+  const counts = countsBySource(db);
+  expect(counts['claude-code']).toEqual({ pending: 0, failed: 0, delivered: 0 });
+  expect(counts.cursor).toEqual({ pending: 0, failed: 0, delivered: 0 });
+  expect(counts.codex).toEqual({ pending: 0, failed: 0, delivered: 0 });
+});
+
+test('countsBySource aggregates pending failed and delivered per source', () => {
+  const a = newBatch({ sourceApp: 'claude-code' });
+  const b = newBatch({ sourceApp: 'claude-code' });
+  const c = newBatch({ sourceApp: 'cursor' });
+  const d = newBatch({ sourceApp: 'codex' });
+  insertBatch(db, a);
+  insertBatch(db, b);
+  insertBatch(db, c);
+  insertBatch(db, d);
+  markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
+  markBatchFailed(db, b.captureId, 'err');
+  const counts = countsBySource(db);
+  expect(counts['claude-code']).toEqual({ pending: 0, failed: 1, delivered: 1 });
+  expect(counts.cursor).toEqual({ pending: 1, failed: 0, delivered: 0 });
+  expect(counts.codex).toEqual({ pending: 1, failed: 0, delivered: 0 });
+});
+
+test('countsBySource ignores unknown source_app values defensively', () => {
+  const a = newBatch({ sourceApp: 'claude-code' });
+  insertBatch(db, a);
+  db.run("UPDATE upload_batches SET source_app = 'unknown' WHERE capture_id = ?", a.captureId);
+  const counts = countsBySource(db);
+  expect(counts['claude-code'].pending).toBe(0);
+});
+
+test('countsBySource ignores unknown source_app values in receipts defensively', () => {
+  const a = newBatch({ sourceApp: 'claude-code' });
+  insertBatch(db, a);
+  markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
+  db.run("UPDATE upload_receipts SET source_app = 'unknown' WHERE capture_id = ?", a.captureId);
+  const counts = countsBySource(db);
+  expect(counts['claude-code'].delivered).toBe(0);
+});

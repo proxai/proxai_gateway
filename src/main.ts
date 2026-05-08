@@ -275,10 +275,29 @@ program
 program
   .command('status')
   .description(
-    'Print gateway state: per-source cursors, capture buffer occupancy, sentinel flags (paused, auth-failed, buffer-full, session-stopped).',
+    'Print gateway state: health dot, per-source captures, buffer occupancy, last-cycle drain results, sentinel flags.',
   )
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
-  .action(async (opts: { config?: string }) => {
+  .option('--json', 'emit machine-readable JSON instead of the human-readable layout', false)
+  .action(async (opts: { config?: string; json?: boolean }) => {
+    const configPath = configFilePath();
+    const exists = await Bun.file(configPath).exists();
+    if (!exists) {
+      const result = await runStatus(
+        {
+          output: consoleOutput(),
+          configPath,
+          configExists: () => Promise.resolve(false),
+          pauseSentinelPath: pausedSentinelPath(),
+          bufferFullSentinelPath: bufferFullSentinelPath(),
+          authFailedSentinelPath: authFailedSentinelPath(),
+          sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
+          updateAvailableSentinelPath: updateAvailableSentinelPath(),
+        },
+        opts.json === true ? { json: true } : {},
+      );
+      process.exit(result.exitCode);
+    }
     let bufferPath = bufferDbPath();
     try {
       const config = await loadConfigFromFile(opts.config);
@@ -286,13 +305,20 @@ program
     } catch {}
     const buffer = openBufferDb(bufferPath);
     try {
-      const result = await runStatus({
-        output: consoleOutput(),
-        buffer,
-        sentinelPath: pausedSentinelPath(),
-        bufferFullSentinelPath: bufferFullSentinelPath(),
-        updateAvailableSentinelPath: updateAvailableSentinelPath(),
-      });
+      const result = await runStatus(
+        {
+          output: consoleOutput(),
+          buffer,
+          configPath,
+          configExists: () => Promise.resolve(true),
+          pauseSentinelPath: pausedSentinelPath(),
+          bufferFullSentinelPath: bufferFullSentinelPath(),
+          authFailedSentinelPath: authFailedSentinelPath(),
+          sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
+          updateAvailableSentinelPath: updateAvailableSentinelPath(),
+        },
+        opts.json === true ? { json: true } : {},
+      );
       process.exit(result.exitCode);
     } finally {
       buffer.close();

@@ -44,6 +44,7 @@ export type UploadOutcome = AcceptedOutcome | RetriableOutcome | FatalOutcome | 
 
 export interface DrainOptions {
   maxBatches?: number;
+  maxConsecutiveRetriable?: number;
 }
 
 export interface DrainResult {
@@ -53,4 +54,6 @@ export interface DrainResult {
   fatal: number;
   recovered: number;
   rateLimitedRetryAfterMs: number | null;
+  consecutiveRetriableBreak: boolean;
+  lastUploadError: string | null;
 }

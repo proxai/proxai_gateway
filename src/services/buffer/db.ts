@@ -15,6 +15,7 @@ import {
   RECEIPT_PATH_HASH_INDEX_DDL,
   RECEIPT_TABLE_DDL,
 } from 'services/buffer/buffer.constants.ts';
+import { DAEMON_STATE_TABLE_DDL } from 'services/buffer/daemon-state.ts';
 
 export function openBufferDb(path: string): Database {
   const db = openReadWrite(path);
@@ -39,6 +40,7 @@ function initializeSchema(db: Database): void {
   db.run(RECEIPT_PATH_HASH_INDEX_DDL);
   db.run(RECEIPT_DELIVERED_AT_INDEX_DDL);
   db.run(METADATA_TABLE_DDL);
+  db.run(DAEMON_STATE_TABLE_DDL);
 }
 
 function migrateCursorVacuumColumns(db: Database): void {

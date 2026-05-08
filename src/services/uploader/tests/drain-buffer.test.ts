@@ -72,26 +72,91 @@ test('drains all pending batches when server accepts each', async () => {
   }
 });
 
-test('stops on first retriable outcome, leaves later batches pending', async () => {
-  const ids = await insertN(3);
+test('continues past intermittent retriable failures and resets consecutive counter on success', async () => {
+  const ids = await insertN(5);
   let calls = 0;
   const ctx = ctxWith(
-    mockFetch(() => {
+    mockFetch((call) => {
       calls++;
-      if (calls === 1) {
-        return jsonResponse({ capture_id: ids[0], accepted: true, idempotent: false });
-      }
-      return emptyResponse(503);
+      if (calls === 2 || calls === 3) return emptyResponse(503);
+      const parsed = JSON.parse(call.init.body as string);
+      return jsonResponse({ capture_id: parsed.capture_id, accepted: true, idempotent: false });
     }),
   );
   const result = await drainBuffer(ctx);
-  expect(result.attempted).toBe(2);
-  expect(result.accepted).toBe(1);
-  expect(result.retriable).toBe(1);
+  expect(result.attempted).toBe(5);
+  expect(result.accepted).toBe(3);
+  expect(result.retriable).toBe(2);
+  expect(result.consecutiveRetriableBreak).toBe(false);
   expect(getBatch(db, ids[0]!)).toBeNull();
   expect(getReceipt(db, ids[0]!)).not.toBeNull();
-  expect(getBatch(db, ids[1]!)!.status).toBe('pending');
-  expect(getBatch(db, ids[2]!)!.status).toBe('pending');
+});
+
+test('breaks after DRAIN_MAX_CONSECUTIVE_RETRIABLE consecutive retriable failures', async () => {
+  const ids = await insertN(6);
+  const ctx = ctxWith(mockFetch(() => emptyResponse(503)));
+  const result = await drainBuffer(ctx);
+  expect(result.attempted).toBe(3);
+  expect(result.retriable).toBe(3);
+  expect(result.accepted).toBe(0);
+  expect(result.consecutiveRetriableBreak).toBe(true);
+  expect(result.lastUploadError).not.toBeNull();
+  for (const id of ids) {
+    expect(getBatch(db, id)!.status).toBe('pending');
+  }
+});
+
+test('honors maxConsecutiveRetriable option override', async () => {
+  await insertN(5);
+  const ctx = ctxWith(mockFetch(() => emptyResponse(503)));
+  const result = await drainBuffer(ctx, { maxConsecutiveRetriable: 1 });
+  expect(result.attempted).toBe(1);
+  expect(result.retriable).toBe(1);
+  expect(result.consecutiveRetriableBreak).toBe(true);
+});
+
+test('a successful batch resets the consecutive retriable counter', async () => {
+  await insertN(7);
+  let calls = 0;
+  const ctx = ctxWith(
+    mockFetch((call) => {
+      calls++;
+      if (calls === 1 || calls === 2) return emptyResponse(503);
+      if (calls === 3) {
+        const parsed = JSON.parse(call.init.body as string);
+        return jsonResponse({ capture_id: parsed.capture_id, accepted: true, idempotent: false });
+      }
+      if (calls === 4 || calls === 5) return emptyResponse(503);
+      const parsed = JSON.parse(call.init.body as string);
+      return jsonResponse({ capture_id: parsed.capture_id, accepted: true, idempotent: false });
+    }),
+  );
+  const result = await drainBuffer(ctx);
+  expect(result.attempted).toBe(7);
+  expect(result.accepted).toBe(3);
+  expect(result.retriable).toBe(4);
+  expect(result.consecutiveRetriableBreak).toBe(false);
+});
+
+test('a fatal outcome resets the consecutive retriable counter', async () => {
+  await insertN(7);
+  let calls = 0;
+  const ctx = ctxWith(
+    mockFetch((call) => {
+      calls++;
+      if (calls === 1 || calls === 2) return emptyResponse(503);
+      if (calls === 3) return emptyResponse(400);
+      if (calls === 4 || calls === 5) return emptyResponse(503);
+      const parsed = JSON.parse(call.init.body as string);
+      return jsonResponse({ capture_id: parsed.capture_id, accepted: true, idempotent: false });
+    }),
+  );
+  const result = await drainBuffer(ctx);
+  expect(result.attempted).toBe(7);
+  expect(result.fatal).toBe(1);
+  expect(result.retriable).toBe(4);
+  expect(result.accepted).toBe(2);
+  expect(result.consecutiveRetriableBreak).toBe(false);
 });
 
 test('continues past fatal outcomes', async () => {
@@ -132,13 +197,14 @@ test('honors maxBatches cap', async () => {
   expect(result.accepted).toBe(2);
 });
 
-test('surfaces rate-limit retryAfterMs from the stopping batch', async () => {
-  await insertN(2);
+test('surfaces rate-limit retryAfterMs from the most recent retriable batch', async () => {
+  await insertN(5);
   const ctx = ctxWith(mockFetch(() => emptyResponse(429, { 'Retry-After': '12' })));
   const result = await drainBuffer(ctx);
-  expect(result.attempted).toBe(1);
-  expect(result.retriable).toBe(1);
+  expect(result.attempted).toBe(3);
+  expect(result.retriable).toBe(3);
   expect(result.rateLimitedRetryAfterMs).toBe(12_000);
+  expect(result.consecutiveRetriableBreak).toBe(true);
 });
 
 test('drains in oldest-first order', async () => {
@@ -219,7 +285,7 @@ test('pacer.acquire is called once per batch with the body byte length', async (
 });
 
 test('rate-limited response triggers notifyRetryAfter and notify429 only', async () => {
-  await insertN(2);
+  await insertN(5);
   const spy = makePacerSpy();
   const ctx: UploaderContext = {
     db,
@@ -228,10 +294,9 @@ test('rate-limited response triggers notifyRetryAfter and notify429 only', async
     pacer: spy.pacer,
   };
   const result = await drainBuffer(ctx);
-  expect(result.retriable).toBe(1);
-  expect(spy.retryAfters).toEqual([15_000]);
-  expect(spy.notify429Count.value).toBe(1);
-
+  expect(result.retriable).toBe(3);
+  expect(spy.retryAfters).toEqual([15_000, 15_000, 15_000]);
+  expect(spy.notify429Count.value).toBe(3);
   expect(spy.serviceUnavailableCalls).toEqual([]);
 });
 
@@ -246,7 +311,6 @@ test('503 response triggers notifyServiceUnavailable, not notify429', async () =
   };
   const result = await drainBuffer(ctx);
   expect(result.retriable).toBe(1);
-
   expect(spy.retryAfters).toEqual([]);
   expect(spy.notify429Count.value).toBe(0);
   expect(spy.serviceUnavailableCalls).toEqual([undefined]);
@@ -263,7 +327,6 @@ test('503 with Retry-After threads the hint into notifyServiceUnavailable', asyn
   };
   const result = await drainBuffer(ctx);
   expect(result.retriable).toBe(1);
-
   expect(spy.retryAfters).toEqual([20_000]);
   expect(spy.notify429Count.value).toBe(0);
   expect(spy.serviceUnavailableCalls).toEqual([20_000]);

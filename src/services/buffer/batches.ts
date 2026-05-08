@@ -68,6 +68,15 @@ const NEXT_PENDING_SQL = `
   LIMIT 1
 `;
 
+const NEXT_PENDING_AFTER_SQL = `
+  SELECT * FROM ${BUFFER_TABLES.batches}
+  WHERE ${BATCH_COLS.status} = '${BATCH_STATUS.pending}'
+    AND (${BATCH_COLS.createdAt} > ?
+         OR (${BATCH_COLS.createdAt} = ? AND ${BATCH_COLS.captureId} > ?))
+  ORDER BY ${BATCH_COLS.createdAt} ASC, ${BATCH_COLS.captureId} ASC
+  LIMIT 1
+`;
+
 const DELETE_BATCH_SQL = `
   DELETE FROM ${BUFFER_TABLES.batches}
   WHERE ${BATCH_COLS.captureId} = ?
@@ -128,6 +137,16 @@ export function getBatch(db: Database, captureId: string): StoredBatch | null {
 
 export function nextPendingBatch(db: Database): StoredBatch | null {
   const row = db.query<BatchRow, []>(NEXT_PENDING_SQL).get();
+  return row === null ? null : rowToBatch(row);
+}
+
+export function nextPendingBatchAfter(
+  db: Database,
+  cursor: { createdAt: string; captureId: string },
+): StoredBatch | null {
+  const row = db
+    .query<BatchRow, [string, string, string]>(NEXT_PENDING_AFTER_SQL)
+    .get(cursor.createdAt, cursor.createdAt, cursor.captureId);
   return row === null ? null : rowToBatch(row);
 }
 

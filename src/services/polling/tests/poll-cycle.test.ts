@@ -599,3 +599,17 @@ test('cycle logs pressure_failed warn when pressure check throws', async () => {
     entries.some((e) => e.level === 'warn' && e.msg.includes('buffer pressure check failed')),
   ).toBe(true);
 });
+
+test('cycle logs daemon_state.persist_failed warn when setDaemonState throws', async () => {
+  const entries: FakeLogEntry[] = [];
+  const wrapped = makeQueryThrowingBuffer(buffer, (sql) => sql.includes('daemon_state'));
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    buffer: wrapped,
+    logger: makeFakeLogger(entries),
+  };
+  await runPollCycle(ctx);
+  expect(
+    entries.some((e) => e.level === 'warn' && e.msg.includes('failed to persist daemon state')),
+  ).toBe(true);
+});

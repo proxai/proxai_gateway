@@ -10,6 +10,7 @@ export const BUFFER_TABLES = {
   cursors: 'source_cursors',
   receipts: 'upload_receipts',
   metadata: 'buffer_metadata',
+  daemonState: 'daemon_state',
 } as const;
 
 export const METADATA_COLS = {
