@@ -8,7 +8,7 @@ import type { Snapshot } from 'core/io/sqlite/sqlite.types.ts';
 
 export async function snapshotSqlite(sourcePath: string): Promise<Snapshot> {
   const tmpPath = join(tmpdir(), `proxai-snap-${randomUUID()}.sqlite`);
-  const db = openReadOnly(sourcePath);
+  const db = openReadOnly(sourcePath, { immutable: true });
   try {
     db.run(`VACUUM INTO '${escapeSqliteString(tmpPath)}'`);
   } finally {

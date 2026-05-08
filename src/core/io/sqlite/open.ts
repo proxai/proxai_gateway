@@ -1,8 +1,18 @@
 import { chmodSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 import { Database } from 'bun:sqlite';
 
-export function openReadOnly(path: string): Database {
+export interface OpenReadOnlyOptions {
+  immutable?: boolean;
+}
+
+export function openReadOnly(path: string, options: OpenReadOnlyOptions = {}): Database {
+  if (options.immutable === true) {
+    const url = pathToFileURL(path);
+    url.searchParams.set('immutable', '1');
+    return new Database(url.toString(), { readonly: true, create: false });
+  }
   return new Database(path, { readonly: true, create: false });
 }
 

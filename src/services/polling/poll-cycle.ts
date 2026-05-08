@@ -158,7 +158,7 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
       'source poll complete',
     );
     for (const err of result.errors) {
-      sourceLog?.warn(
+      sourceLog?.error(
         { event: 'source.poll.error', source_path: err.sourcePath, reason: err.reason },
         'source poll captured an error',
       );
