@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { GatewayError } from 'core/utils';
 
 export interface BootIdSpawnResult {
@@ -101,7 +99,7 @@ async function readWin32(spawn: BootIdSpawnFn): Promise<string> {
 }
 
 function sha256Hex(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
+  return new Bun.CryptoHasher('sha256').update(value).digest('hex');
 }
 
 export function defaultBootIdSpawn(): BootIdSpawnFn {
