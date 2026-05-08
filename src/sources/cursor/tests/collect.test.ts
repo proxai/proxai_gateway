@@ -101,6 +101,23 @@ test('inserts a batch covering filtered composer and bubble rows', async () => {
   expect(totalPendingBytes(buffer)).toBeGreaterThan(0);
 });
 
+test('body is wrapped as { rows: [...] } per nest kv_pairs_json contract', async () => {
+  const file = await makeDb([
+    { key: 'composerData:c1', value: '{"_v":13}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
+  ]);
+  await collectCursorFile(file, ctx(buffer));
+  const batch = nextPendingBatch(buffer)!;
+  const decoded = DECODER.decode(zstdDecompressSync(batch.body));
+  const parsed = JSON.parse(decoded) as { rows: { rowid: number; key: string; value: string }[] };
+  expect(parsed).not.toBeInstanceOf(Array);
+  expect(Array.isArray(parsed.rows)).toBe(true);
+  expect(parsed.rows.length).toBeGreaterThan(0);
+  expect(parsed.rows[0]).toHaveProperty('rowid');
+  expect(parsed.rows[0]).toHaveProperty('key');
+  expect(parsed.rows[0]).toHaveProperty('value');
+});
+
 test('skip-listed keys are filtered out of the body', async () => {
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },

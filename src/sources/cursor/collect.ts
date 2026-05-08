@@ -143,7 +143,7 @@ export async function collectCursorFile(
       ): { redactedJson: string; rawBytes: number; compressedBytes: number } => {
         let entry = sliceMeasureCache.get(slice);
         if (entry === undefined) {
-          const redactedJson = applyRedaction(JSON.stringify(slice)).redacted;
+          const redactedJson = applyRedaction(JSON.stringify({ rows: slice })).redacted;
           const rawBytes = Buffer.byteLength(redactedJson, 'utf8');
           const compressedBytes = zstdCompressSync(redactedJson).byteLength;
           entry = { redactedJson, rawBytes, compressedBytes };
@@ -186,7 +186,7 @@ export async function collectCursorFile(
         const lastRowidInSlice = slice[slice.length - 1]!.rowid;
         const sliceWatermarkEnd = lastRowidInSlice + 1;
 
-        const redactedJson = applyRedaction(JSON.stringify(slice)).redacted;
+        const redactedJson = applyRedaction(JSON.stringify({ rows: slice })).redacted;
         const redactedBytes = Buffer.byteLength(redactedJson, 'utf8');
         const compressed = zstdCompressSync(redactedJson);
 
