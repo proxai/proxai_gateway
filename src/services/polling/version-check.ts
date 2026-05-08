@@ -11,6 +11,11 @@ export interface VersionCheckResult {
   assetUrl?: string;
 }
 
+export type VersionCheckOutcome =
+  | { kind: 'ok'; result: VersionCheckResult }
+  | { kind: 'no_release'; reason: string }
+  | { kind: 'error'; reason: string };
+
 const RELEASE_API_URL = 'https://api.github.com/repos/proxai/proxai_gateway/releases/latest';
 const REQUEST_TIMEOUT_MS = 5000;
 
@@ -24,9 +29,7 @@ interface ReleaseInfo {
   readonly assets: readonly ReleaseAsset[];
 }
 
-export async function checkLatestVersion(
-  deps: VersionCheckDeps,
-): Promise<VersionCheckResult | null> {
+export async function checkLatestVersion(deps: VersionCheckDeps): Promise<VersionCheckOutcome> {
   const fetchFn = deps.fetch ?? globalThis.fetch;
   const now = deps.now ?? (() => new Date());
 
@@ -42,20 +45,30 @@ export async function checkLatestVersion(
       },
       signal: ctrl.signal,
     });
-    if (!res.ok) return null;
+    if (res.status === 404) {
+      return { kind: 'no_release', reason: 'github returned 404 (no published releases for repo)' };
+    }
+    if (!res.ok) {
+      return { kind: 'error', reason: `github returned ${res.status.toString()}` };
+    }
     body = (await res.json()) as ReleaseInfo;
-  } catch {
-    return null;
+  } catch (err) {
+    return {
+      kind: 'error',
+      reason: err instanceof Error ? `request failed: ${err.message}` : 'request failed',
+    };
   } finally {
     clearTimeout(timer);
   }
 
   if (typeof body.tag_name !== 'string' || !Array.isArray(body.assets)) {
-    return null;
+    return { kind: 'error', reason: 'release payload missing tag_name or assets array' };
   }
 
   const latestVersion = stripV(body.tag_name);
-  if (latestVersion.length === 0) return null;
+  if (latestVersion.length === 0) {
+    return { kind: 'error', reason: 'release tag_name is empty after stripping v prefix' };
+  }
 
   const hasUpdate = compareVersionStrings(latestVersion, deps.currentVersion) > 0;
 
@@ -73,7 +86,7 @@ export async function checkLatestVersion(
   if (asset !== undefined) {
     result.assetUrl = asset.browser_download_url;
   }
-  return result;
+  return { kind: 'ok', result };
 }
 
 function stripV(tag: string): string {

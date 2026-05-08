@@ -567,7 +567,7 @@ test('version check failure logs warn and continues the cycle', async () => {
   );
 });
 
-test('version check returning null is logged as unavailable and clears no sentinel', async () => {
+test('version check 503 is logged as warn version_check.unavailable with reason', async () => {
   const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
   const entries: FakeLogEntry[] = [];
   const fetchFn: typeof globalThis.fetch = (async () =>
@@ -580,9 +580,28 @@ test('version check returning null is logged as unavailable and clears no sentin
     logger: makeFakeLogger(entries),
   };
   await runPollCycle(ctx);
-  expect(
-    entries.some((e) => e.level === 'warn' && e.msg.includes('version check returned no result')),
-  ).toBe(true);
+  const warnEntry = entries.find(
+    (e) => e.level === 'warn' && e.obj['event'] === 'version_check.unavailable',
+  );
+  expect(warnEntry).toBeDefined();
+  expect(warnEntry?.obj['reason']).toContain('503');
+  expect(await Bun.file(sentinelPath).exists()).toBe(false);
+});
+
+test('version check 404 (no published releases) is silent at warn level', async () => {
+  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
+  const entries: FakeLogEntry[] = [];
+  const fetchFn: typeof globalThis.fetch = (async () =>
+    new Response('not found', { status: 404 })) as unknown as typeof globalThis.fetch;
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    gatewayVersion: '2026.5.7',
+    updateAvailableSentinelPath: sentinelPath,
+    versionCheckFetch: fetchFn,
+    logger: makeFakeLogger(entries),
+  };
+  await runPollCycle(ctx);
+  expect(entries.every((e) => e.obj['event'] !== 'version_check.unavailable')).toBe(true);
   expect(await Bun.file(sentinelPath).exists()).toBe(false);
 });
 

@@ -326,19 +326,29 @@ async function maybeRunVersionCheck(ctx: PollCycleContext): Promise<void> {
   }
 
   const fetchFn = ctx.versionCheckFetch ?? globalThis.fetch;
-  const result = await checkLatestVersion({
+  const outcome = await checkLatestVersion({
     currentVersion: ctx.gatewayVersion,
     fetch: fetchFn,
   });
   setMetadata(ctx.buffer, METADATA_KEYS.lastVersionCheckAt, nowIsoUtc());
-  if (result === null) {
-    log?.warn(
-      { event: 'version_check.unavailable' },
-      'version check returned no result; will retry next interval',
+
+  if (outcome.kind === 'no_release') {
+    log?.debug(
+      { event: 'version_check.no_release', reason: outcome.reason },
+      'no published releases for gateway repo; skipping update sentinel',
     );
     return;
   }
 
+  if (outcome.kind === 'error') {
+    log?.warn(
+      { event: 'version_check.unavailable', reason: outcome.reason },
+      'version check failed; will retry next interval',
+    );
+    return;
+  }
+
+  const result = outcome.result;
   if (result.hasUpdate) {
     const sentinelInput: Parameters<typeof writeUpdateAvailableSentinel>[1] = {
       latest_version: result.latestVersion,

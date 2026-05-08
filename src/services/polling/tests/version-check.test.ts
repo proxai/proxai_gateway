@@ -29,48 +29,63 @@ function makeFetch(
   }) as unknown as typeof globalThis.fetch;
 }
 
-test('returns hasUpdate=true when remote tag is newer', async () => {
+test('returns ok with hasUpdate=true when remote tag is newer', async () => {
   const fetchFn = makeFetch({
     tag_name: 'v2026.5.10',
     assets: [{ name: 'asset', browser_download_url: 'https://example.com/asset' }],
   });
-  const result = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
-  expect(result).not.toBeNull();
-  expect(result?.latestVersion).toBe('2026.5.10');
-  expect(result?.hasUpdate).toBe(true);
-  expect(typeof result?.checkedAt).toBe('string');
+  const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
+  expect(outcome.kind).toBe('ok');
+  if (outcome.kind === 'ok') {
+    expect(outcome.result.latestVersion).toBe('2026.5.10');
+    expect(outcome.result.hasUpdate).toBe(true);
+    expect(typeof outcome.result.checkedAt).toBe('string');
+  }
 });
 
-test('returns hasUpdate=false when remote tag is the same', async () => {
-  const fetchFn = makeFetch({
-    tag_name: 'v2026.5.7',
-    assets: [],
-  });
-  const result = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
-  expect(result).not.toBeNull();
-  expect(result?.hasUpdate).toBe(false);
+test('returns ok with hasUpdate=false when remote tag is the same', async () => {
+  const fetchFn = makeFetch({ tag_name: 'v2026.5.7', assets: [] });
+  const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
+  expect(outcome.kind).toBe('ok');
+  if (outcome.kind === 'ok') {
+    expect(outcome.result.hasUpdate).toBe(false);
+  }
 });
 
-test('returns hasUpdate=false when remote tag is older', async () => {
-  const fetchFn = makeFetch({
-    tag_name: 'v2026.5.5',
-    assets: [],
-  });
-  const result = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
-  expect(result).not.toBeNull();
-  expect(result?.hasUpdate).toBe(false);
+test('returns ok with hasUpdate=false when remote tag is older', async () => {
+  const fetchFn = makeFetch({ tag_name: 'v2026.5.5', assets: [] });
+  const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
+  expect(outcome.kind).toBe('ok');
+  if (outcome.kind === 'ok') {
+    expect(outcome.result.hasUpdate).toBe(false);
+  }
 });
 
-test('returns null on network failure', async () => {
+test('returns no_release on 404 (repo has no published releases yet)', async () => {
+  const fetchFn = makeFetch({ status: 404 });
+  const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
+  expect(outcome.kind).toBe('no_release');
+  if (outcome.kind === 'no_release') {
+    expect(outcome.reason).toContain('404');
+  }
+});
+
+test('returns error on network failure', async () => {
   const fetchFn = makeFetch({ error: true });
-  const result = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
-  expect(result).toBeNull();
+  const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
+  expect(outcome.kind).toBe('error');
+  if (outcome.kind === 'error') {
+    expect(outcome.reason).toContain('boom');
+  }
 });
 
-test('returns null on non-200 response', async () => {
+test('returns error on non-404 non-200 response (e.g. 503)', async () => {
   const fetchFn = makeFetch({ status: 503 });
-  const result = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
-  expect(result).toBeNull();
+  const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
+  expect(outcome.kind).toBe('error');
+  if (outcome.kind === 'error') {
+    expect(outcome.reason).toContain('503');
+  }
 });
 
 test('populates assetUrl when matching asset exists for current platform', async () => {
@@ -83,11 +98,14 @@ test('populates assetUrl when matching asset exists for current platform', async
     tag_name: 'v2026.5.10',
     assets: [{ name: expectedAssetName, browser_download_url: url }],
   });
-  const result = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
-  expect(result?.assetUrl).toBe(url);
+  const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
+  expect(outcome.kind).toBe('ok');
+  if (outcome.kind === 'ok') {
+    expect(outcome.result.assetUrl).toBe(url);
+  }
 });
 
-test('request timeout invokes ctrl.abort() and returns null', async () => {
+test('request timeout invokes ctrl.abort() and returns error', async () => {
   const origSetTimeout = globalThis.setTimeout;
   let capturedAbort: (() => void) | null = null;
   (globalThis as { setTimeout: typeof setTimeout }).setTimeout = ((cb: () => void, ms?: number) => {
@@ -114,25 +132,42 @@ test('request timeout invokes ctrl.abort() and returns null', async () => {
   }) as unknown as typeof globalThis.fetch;
 
   try {
-    const result = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
-    expect(result).toBeNull();
+    const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
+    expect(outcome.kind).toBe('error');
   } finally {
     globalThis.setTimeout = origSetTimeout;
   }
 });
 
-test('returns null when remote tag is empty after stripping v prefix', async () => {
-  const fetchFn = makeFetch({ tag_name: 'v', assets: [] });
-  const result = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
-  expect(result).toBeNull();
+test('returns error when fetch rejects with a non-Error value', async () => {
+  const fetchFn: typeof globalThis.fetch = (async () => {
+    throw 'string-thrown';
+  }) as unknown as typeof globalThis.fetch;
+  const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
+  expect(outcome.kind).toBe('error');
+  if (outcome.kind === 'error') {
+    expect(outcome.reason).toBe('request failed');
+  }
 });
 
-test('returns null on malformed payload', async () => {
+test('returns error when remote tag is empty after stripping v prefix', async () => {
+  const fetchFn = makeFetch({ tag_name: 'v', assets: [] });
+  const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
+  expect(outcome.kind).toBe('error');
+  if (outcome.kind === 'error') {
+    expect(outcome.reason).toContain('empty');
+  }
+});
+
+test('returns error on malformed payload (missing tag_name)', async () => {
   const fetchFn = (async () =>
     new Response(JSON.stringify({ foo: 'bar' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })) as unknown as typeof globalThis.fetch;
-  const result = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
-  expect(result).toBeNull();
+  const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
+  expect(outcome.kind).toBe('error');
+  if (outcome.kind === 'error') {
+    expect(outcome.reason).toContain('tag_name');
+  }
 });
