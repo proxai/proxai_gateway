@@ -13,6 +13,7 @@ export interface AutoUpgradeDeps {
   exitProcess?: () => void;
   platform?: NodeJS.Platform;
   arch?: string;
+  onLatestVersionKnown?: (latestVersion: string) => void;
 }
 
 export async function runAutoUpgrade(deps: AutoUpgradeDeps): Promise<void> {
@@ -40,6 +41,7 @@ export async function runAutoUpgrade(deps: AutoUpgradeDeps): Promise<void> {
     return;
   }
   if (outcome.kind === 'no_release') return;
+  deps.onLatestVersionKnown?.(outcome.result.latestVersion);
   if (!outcome.result.hasUpdate) return;
 
   const assetUrl = outcome.result.assetUrl;

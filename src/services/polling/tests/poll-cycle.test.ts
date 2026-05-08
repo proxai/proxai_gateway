@@ -777,3 +777,29 @@ test('cycle logs daemon_state.persist_failed warn when setDaemonState throws', a
     entries.some((e) => e.level === 'warn' && e.msg.includes('failed to persist daemon state')),
   ).toBe(true);
 });
+
+import { setMetadata, METADATA_KEYS, getMetadata } from 'services/buffer';
+
+test('cumulative metrics: invalid stored numbers fall back to 0 and are overwritten with valid totals', async () => {
+  setMetadata(buffer, METADATA_KEYS.cyclesTotal, 'not-a-number');
+  setMetadata(buffer, METADATA_KEYS.cyclesTotalDurationMs, 'NaN');
+  const ctx = makeContext([noopSource('s')]);
+  await runPollCycle(ctx);
+  expect(getMetadata(buffer, METADATA_KEYS.cyclesTotal)).toBe('1');
+  const dur = getMetadata(buffer, METADATA_KEYS.cyclesTotalDurationMs);
+  expect(dur !== null).toBe(true);
+});
+
+test('cumulative metrics: persist swallows errors via logger.warn', async () => {
+  const entries: FakeLogEntry[] = [];
+  const wrapped = makeQueryThrowingBuffer(buffer, (sql) => sql.includes('buffer_metadata'));
+  const ctx: PollCycleContext = {
+    ...makeContext([noopSource('s')]),
+    buffer: wrapped,
+    logger: makeFakeLogger(entries),
+  };
+  await runPollCycle(ctx);
+  expect(
+    entries.some((e) => e.level === 'warn' && e.msg.includes('failed to persist cumulative')),
+  ).toBe(true);
+});

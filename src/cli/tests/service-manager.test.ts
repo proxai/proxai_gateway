@@ -1,6 +1,12 @@
 import { expect, test } from 'bun:test';
 
-import { getServiceManager, runCommand } from 'cli/service-manager.ts';
+import {
+  getServiceManager,
+  parseLaunchctlPrint,
+  parseSchtasksQuery,
+  parseSystemctlShow,
+  runCommand,
+} from 'cli/service-manager.ts';
 import type { SpawnFn } from 'cli/service-manager.ts';
 
 interface SpawnInvocation {
@@ -1062,4 +1068,123 @@ test('win32: unregister is no-op when task not registered', async () => {
   });
   await sm.unregister();
   expect(invocations.some((i) => i.argv[1] === '/Delete')).toBe(false);
+});
+
+test('darwin: runtimeInfo extracts pid from launchctl print output', async () => {
+  const { spawn } = mockSpawn(() => ({
+    exitCode: 0,
+    stdout: 'state = running\npid = 12345\n',
+  }));
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/u.plist',
+    programPath: '/p',
+    spawn,
+  });
+  const info = await sm.runtimeInfo();
+  expect(info.pid).toBe(12345);
+});
+
+test('darwin: runtimeInfo returns nulls when launchctl print fails', async () => {
+  const { spawn } = mockSpawn(() => ({ exitCode: 1, stdout: '' }));
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/u.plist',
+    programPath: '/p',
+    spawn,
+  });
+  const info = await sm.runtimeInfo();
+  expect(info.pid).toBeNull();
+  expect(info.startedAt).toBeNull();
+});
+
+test('parseLaunchctlPrint returns null pid when missing', () => {
+  expect(parseLaunchctlPrint('state = idle\n')).toEqual({ pid: null, startedAt: null });
+});
+
+test('linux: runtimeInfo extracts MainPID and ActiveEnterTimestamp', async () => {
+  const { spawn } = mockSpawn(() => ({
+    exitCode: 0,
+    stdout: 'MainPID=2345\nActiveEnterTimestamp=Thu 2026-05-08 13:25:42 UTC\n',
+  }));
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/u',
+    programPath: '/p',
+    spawn,
+  });
+  const info = await sm.runtimeInfo();
+  expect(info.pid).toBe(2345);
+  expect(info.startedAt).not.toBeNull();
+});
+
+test('linux: runtimeInfo returns nulls when systemctl show fails', async () => {
+  const { spawn } = mockSpawn(() => ({ exitCode: 1, stdout: '' }));
+  const sm = getServiceManager({
+    platform: 'linux',
+    unitPath: '/u',
+    programPath: '/p',
+    spawn,
+  });
+  const info = await sm.runtimeInfo();
+  expect(info.pid).toBeNull();
+  expect(info.startedAt).toBeNull();
+});
+
+test('parseSystemctlShow handles MainPID=0 (not running) and missing timestamp', () => {
+  expect(parseSystemctlShow('MainPID=0\nActiveEnterTimestamp=\n')).toEqual({
+    pid: null,
+    startedAt: null,
+  });
+});
+
+test('parseSystemctlShow ignores garbage timestamps', () => {
+  expect(parseSystemctlShow('MainPID=42\nActiveEnterTimestamp=garbage\n')).toEqual({
+    pid: 42,
+    startedAt: null,
+  });
+});
+
+test('parseSystemctlShow returns null pid when MainPID line absent', () => {
+  expect(parseSystemctlShow('ActiveEnterTimestamp=\n')).toEqual({ pid: null, startedAt: null });
+});
+
+test('win32: runtimeInfo parses Start Date and Start Time from schtasks', async () => {
+  const { spawn } = mockSpawn(() => ({
+    exitCode: 0,
+    stdout: 'Start Date:    5/8/2026\r\nStart Time:    13:25:42\r\n',
+  }));
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  const info = await sm.runtimeInfo();
+  expect(info.pid).toBeNull();
+  expect(info.startedAt).not.toBeNull();
+});
+
+test('win32: runtimeInfo returns nulls when schtasks query fails', async () => {
+  const { spawn } = mockSpawn(() => ({ exitCode: 1, stdout: '' }));
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  const info = await sm.runtimeInfo();
+  expect(info.pid).toBeNull();
+  expect(info.startedAt).toBeNull();
+});
+
+test('parseSchtasksQuery returns nulls without Start Date or Time', () => {
+  expect(parseSchtasksQuery('Status: Running\n')).toEqual({ pid: null, startedAt: null });
+});
+
+test('parseSchtasksQuery returns nulls when timestamp is unparseable', () => {
+  expect(parseSchtasksQuery('Start Date: zzz\nStart Time: yyy\n')).toEqual({
+    pid: null,
+    startedAt: null,
+  });
 });

@@ -58,6 +58,7 @@ function fakeManager(
       if (overrides.failOn === 'restart') throw new Error('boom-restart');
     },
     unregister: async () => undefined,
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
   return { sm, calls };
 }
@@ -215,6 +216,7 @@ test('formatError stringifies non-Error throws', async () => {
       throw 'rope-throw';
     },
     unregister: async () => undefined,
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
   const output = captureOutput();
   const result = await runRestart({

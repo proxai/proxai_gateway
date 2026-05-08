@@ -3,15 +3,20 @@ import chalk from 'chalk';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
+import type { ServiceManager } from 'cli/service-manager.ts';
 import {
   countByStatus,
   countsBySource,
   getDaemonState,
   getLastPruneAt,
+  getMetadata,
+  METADATA_KEYS,
   totalFailedBytes,
   totalPendingBytes,
 } from 'services/buffer';
 import type { CountsBySource, DaemonStateSnapshot, SourceCycleResult } from 'services/buffer';
+import type { GatewayConfig, InstallSource } from 'services/config';
+import { loadConfigFromFile } from 'services/config';
 import {
   isAuthFailed,
   isBufferFull,
@@ -27,7 +32,10 @@ import {
   formatBytes,
   formatLocalTimestamp,
   formatRelative,
-  formatTimeWithRelative,
+  renderBufferSection,
+  renderCaptureRow,
+  renderHealthSection,
+  renderUploadSection,
   sectionHeader,
   statusDot,
 } from 'cli/commands/format-status.ts';
@@ -35,7 +43,6 @@ import {
 export { formatBytes };
 
 const SOURCE_ORDER: ('claude-code' | 'cursor' | 'codex')[] = ['claude-code', 'cursor', 'codex'];
-const SOURCE_LABEL_WIDTH = 12;
 
 export interface StatusCommandDeps {
   output: OutputSink;
@@ -47,6 +54,9 @@ export interface StatusCommandDeps {
   authFailedSentinelPath: string;
   sessionStoppedSentinelPath: string;
   updateAvailableSentinelPath?: string;
+  serviceManager?: ServiceManager;
+  loadConfig?: (path?: string) => Promise<GatewayConfig>;
+  currentVersion?: string;
   now?: () => Date;
 }
 
@@ -89,6 +99,19 @@ export interface StatusJsonOutput {
     recovered: number | null;
     lastUploadError: string | null;
     consecutiveRetriableBreak: boolean | null;
+    totalBatchesShipped: number;
+    totalBytesShipped: number;
+    cyclesTotal: number;
+    cyclesWithErrors: number;
+    cyclesTotalDurationMs: number;
+    lastSuccessAt: string | null;
+    lastSuccessBatches: number | null;
+    lastSuccessBytes: number | null;
+  };
+  system: {
+    daemon: { isRunning: boolean; pid: number | null; startedAt: string | null };
+    autoUpgrade: { lastCheckAt: string | null; latestKnownVersion: string | null };
+    binaryAge: { installedAt: string | null; days: number | null };
   };
 }
 
@@ -134,6 +157,19 @@ export async function runStatus(
           recovered: null,
           lastUploadError: null,
           consecutiveRetriableBreak: null,
+          totalBatchesShipped: 0,
+          totalBytesShipped: 0,
+          cyclesTotal: 0,
+          cyclesWithErrors: 0,
+          cyclesTotalDurationMs: 0,
+          lastSuccessAt: null,
+          lastSuccessBatches: null,
+          lastSuccessBytes: null,
+        },
+        system: {
+          daemon: { isRunning: false, pid: null, startedAt: null },
+          autoUpgrade: { lastCheckAt: null, latestKnownVersion: null },
+          binaryAge: { installedAt: null, days: null },
         },
       };
       deps.output.info(JSON.stringify(empty));
@@ -158,6 +194,17 @@ export async function runStatus(
   const lastPruneAt = getLastPruneAt(buffer);
   const daemonState = getDaemonState(buffer);
 
+  const cyclesTotal = readNumber(buffer, METADATA_KEYS.cyclesTotal);
+  const cyclesWithErrors = readNumber(buffer, METADATA_KEYS.cyclesWithErrors);
+  const cyclesTotalDurationMs = readNumber(buffer, METADATA_KEYS.cyclesTotalDurationMs);
+  const totalBatchesShipped = readNumber(buffer, METADATA_KEYS.uploadTotalBatchesShipped);
+  const totalBytesShipped = readNumber(buffer, METADATA_KEYS.uploadTotalBytesShipped);
+  const lastSuccessAt = getMetadata(buffer, METADATA_KEYS.uploadLastSuccessAt);
+  const lastSuccessBatches = readNumberOrNull(buffer, METADATA_KEYS.uploadLastSuccessBatches);
+  const lastSuccessBytes = readNumberOrNull(buffer, METADATA_KEYS.uploadLastSuccessBytes);
+  const lastVersionCheckAt = getMetadata(buffer, METADATA_KEYS.lastVersionCheckAt);
+  const latestKnownVersion = getMetadata(buffer, METADATA_KEYS.latestKnownVersion);
+
   const paused = await isPaused(deps.pauseSentinelPath);
   const pausedReason = paused ? (await readPauseReason(deps.pauseSentinelPath)).trim() : '';
   const authFailed = await isAuthFailed(deps.authFailedSentinelPath);
@@ -175,6 +222,38 @@ export async function runStatus(
       ? await readUpdateAvailableSentinel(deps.updateAvailableSentinelPath)
       : null;
 
+  const now = (deps.now ?? ((): Date => new Date()))();
+
+  let cfg: GatewayConfig | null = null;
+  if (deps.loadConfig !== undefined) {
+    try {
+      cfg = await deps.loadConfig(deps.configPath);
+    } catch {
+      cfg = null;
+    }
+  } else {
+    try {
+      cfg = await loadConfigFromFile(deps.configPath);
+    } catch {
+      cfg = null;
+    }
+  }
+
+  let runtime: { isRunning: boolean; pid: number | null; startedAt: Date | null } = {
+    isRunning: false,
+    pid: null,
+    startedAt: null,
+  };
+  if (deps.serviceManager !== undefined) {
+    try {
+      const isRunning = await deps.serviceManager.isRunning();
+      const info = await deps.serviceManager.runtimeInfo();
+      runtime = { isRunning, pid: info.pid, startedAt: info.startedAt };
+    } catch {
+      runtime = { isRunning: false, pid: null, startedAt: null };
+    }
+  }
+
   const hasRecentActivity = daemonState !== null && daemonState.lastCycleCompletedAt !== null;
   const health = deriveHealth({
     paused,
@@ -186,6 +265,7 @@ export async function runStatus(
   });
 
   if (options.json === true) {
+    const installedAt = cfg?.account.installedAt ?? null;
     const json: StatusJsonOutput = {
       configured: true,
       health,
@@ -227,6 +307,26 @@ export async function runStatus(
         recovered: daemonState?.lastDrainRecovered ?? null,
         lastUploadError: daemonState?.lastUploadError ?? null,
         consecutiveRetriableBreak: daemonState?.lastConsecutiveRetriableBreak ?? null,
+        totalBatchesShipped,
+        totalBytesShipped,
+        cyclesTotal,
+        cyclesWithErrors,
+        cyclesTotalDurationMs,
+        lastSuccessAt,
+        lastSuccessBatches,
+        lastSuccessBytes,
+      },
+      system: {
+        daemon: {
+          isRunning: runtime.isRunning,
+          pid: runtime.pid,
+          startedAt: runtime.startedAt === null ? null : runtime.startedAt.toISOString(),
+        },
+        autoUpgrade: { lastCheckAt: lastVersionCheckAt, latestKnownVersion },
+        binaryAge: {
+          installedAt,
+          days: installedAt === null ? null : daysSince(installedAt, now),
+        },
       },
     };
     deps.output.info(JSON.stringify(json));
@@ -253,7 +353,18 @@ export async function runStatus(
     sourceCounts,
     lastPruneAt,
     daemonState,
-    now: deps.now ?? ((): Date => new Date()),
+    cyclesTotal,
+    cyclesTotalDurationMs,
+    totalBatchesShipped,
+    totalBytesShipped,
+    lastSuccessAt,
+    lastSuccessBatches,
+    lastSuccessBytes,
+    lastVersionCheckAt,
+    latestKnownVersion,
+    runtime,
+    cfg,
+    now,
   });
 
   return { exitCode: EXIT_CODE.ok };
@@ -279,7 +390,18 @@ interface RenderInput {
   sourceCounts: CountsBySource;
   lastPruneAt: string | null;
   daemonState: DaemonStateSnapshot | null;
-  now: () => Date;
+  cyclesTotal: number;
+  cyclesTotalDurationMs: number;
+  totalBatchesShipped: number;
+  totalBytesShipped: number;
+  lastSuccessAt: string | null;
+  lastSuccessBatches: number | null;
+  lastSuccessBytes: number | null;
+  lastVersionCheckAt: string | null;
+  latestKnownVersion: string | null;
+  runtime: { isRunning: boolean; pid: number | null; startedAt: Date | null };
+  cfg: GatewayConfig | null;
+  now: Date;
 }
 
 function renderHumanStatus(deps: StatusCommandDeps, input: RenderInput): void {
@@ -290,58 +412,99 @@ function renderHumanStatus(deps: StatusCommandDeps, input: RenderInput): void {
 
   renderSentinelLines(out, input);
 
-  const lastCompletedAt = input.daemonState?.lastCycleCompletedAt ?? null;
-
   out.info('');
   out.info(sectionHeader('Capture'));
   for (const app of SOURCE_ORDER) {
-    out.info(renderSourceRow(app, input.daemonState?.lastSourceCaptures[app]));
+    const cap = input.daemonState?.lastSourceCaptures[app];
+    out.info(
+      renderCaptureRow({
+        name: app,
+        capturedBatches: cap?.capturedBatches ?? 0,
+        filesProcessed: cap?.filesProcessed ?? 0,
+        errorsCount: cap?.errorsCount ?? 0,
+      }),
+    );
   }
 
   out.info('');
-  out.info(sectionHeader('Buffer'));
-  out.info(
-    `  Pending      ${input.counts.pending.toString().padStart(4)} batches  (${formatBytes(input.pendingBytes)})`,
-  );
-  out.info(
-    `  Failed       ${input.counts.failed.toString().padStart(4)} batches  (${formatBytes(input.failedBytes)})`,
-  );
-  out.info(`  Receipts     ${input.counts.delivered.toString().padStart(4)}`);
-  out.info(`  Buffer full   ${input.bufferFull ? chalk.yellow('yes') : 'no'}`);
-  if (input.lastPruneAt !== null) {
-    out.info(`  Last prune    ${formatTimeWithRelative(input.lastPruneAt, { now: input.now() })}`);
-  } else {
-    out.info(`  Last prune    ${chalk.dim('never')}`);
+  const softPause = input.cfg?.capture.bufferSoftPauseBytes ?? 700 * 1024 * 1024;
+  for (const line of renderBufferSection({
+    pendingCount: input.counts.pending,
+    pendingBytes: input.pendingBytes,
+    failedCount: input.counts.failed,
+    failedBytes: input.failedBytes,
+    receiptsCount: input.counts.delivered,
+    pressurePendingBytes: input.pendingBytes,
+    pressureSoftPauseBytes: softPause,
+    lastPruneAt: input.lastPruneAt,
+    pendingBySource: input.sourceCounts,
+    now: input.now,
+  })) {
+    out.info(line);
   }
 
   out.info('');
-  out.info(sectionHeader('Upload'));
-  if (input.daemonState !== null && lastCompletedAt !== null) {
-    const opts = { now: input.now() };
-    out.info(`  Last cycle    ${formatTimeWithRelative(lastCompletedAt, opts)}`);
+  for (const line of renderUploadSection({
+    totalBatchesShipped: input.totalBatchesShipped,
+    totalBytesShipped: input.totalBytesShipped,
+    cyclesTotal: input.cyclesTotal,
+    cyclesTotalDurationMs: input.cyclesTotalDurationMs,
+    lastCycleCompletedAt: input.daemonState?.lastCycleCompletedAt ?? null,
+    lastCycleAttempted: input.daemonState?.lastDrainAttempted ?? null,
+    lastCycleAccepted: input.daemonState?.lastDrainAccepted ?? null,
+    lastCycleRetriable: input.daemonState?.lastDrainRetriable ?? null,
+    lastCycleFatal: input.daemonState?.lastDrainFatal ?? null,
+    lastSuccessAt: input.lastSuccessAt,
+    lastSuccessBatches: input.lastSuccessBatches,
+    lastSuccessBytes: input.lastSuccessBytes,
+    now: input.now,
+  })) {
+    out.info(line);
+  }
+
+  if (input.daemonState !== null && input.daemonState.lastUploadError !== null) {
+    out.info(`  Last error    ${chalk.red(input.daemonState.lastUploadError)}`);
+  }
+  if (input.daemonState !== null && input.daemonState.lastConsecutiveRetriableBreak === true) {
     out.info(
-      `  Attempted     ${(input.daemonState.lastDrainAttempted ?? 0).toString()} batch${(input.daemonState.lastDrainAttempted ?? 0) === 1 ? '' : 'es'}     Accepted: ${(input.daemonState.lastDrainAccepted ?? 0).toString()}     ${
-        (input.daemonState.lastDrainRetriable ?? 0) > 0
-          ? chalk.yellow(`Retriable: ${(input.daemonState.lastDrainRetriable ?? 0).toString()}`)
-          : `Retriable: ${(input.daemonState.lastDrainRetriable ?? 0).toString()}`
-      }     ${
-        (input.daemonState.lastDrainFatal ?? 0) > 0
-          ? chalk.red(`Fatal: ${(input.daemonState.lastDrainFatal ?? 0).toString()}`)
-          : `Fatal: ${(input.daemonState.lastDrainFatal ?? 0).toString()}`
-      }`,
+      `  ${chalk.yellow('Drain backed off after consecutive retriable failures; will retry next cycle')}`,
     );
-    if (input.daemonState.lastUploadError !== null) {
-      out.info(`  Last error    ${chalk.red(input.daemonState.lastUploadError)}`);
-    }
-    if (input.daemonState.lastConsecutiveRetriableBreak === true) {
-      out.info(
-        `  ${chalk.yellow('Drain backed off after consecutive retriable failures; will retry next cycle')}`,
-      );
-    }
-  } else {
-    out.info(
-      `  ${chalk.dim('No upload cycle has completed yet (the daemon may still be running its first cycle).')}`,
-    );
+  }
+
+  const installSource: InstallSource | null = input.cfg?.account.installSource ?? null;
+  out.info('');
+  for (const line of renderHealthSection({
+    daemon: {
+      isRunning: input.runtime.isRunning,
+      pid: input.runtime.pid,
+      startedAt: input.runtime.startedAt,
+      now: input.now,
+      installSource,
+    },
+    sentinels: {
+      paused: input.paused,
+      authFailed: input.authFailed,
+      bufferFull: input.bufferFull,
+      sessionStopped: input.sessionStopped,
+      updateAvailable: input.updateAvailable !== null,
+    },
+    autoUpgrade: {
+      lastCheckAt: input.lastVersionCheckAt,
+      currentVersion:
+        input.cfg !== null ? (deps.currentVersion ?? '') : (deps.currentVersion ?? ''),
+      latestKnownVersion: input.latestKnownVersion,
+      installSource,
+      updateAvailableSentinelPresent: input.updateAvailable !== null,
+      now: input.now,
+    },
+    binaryAge: {
+      installedAt: input.cfg?.account.installedAt ?? null,
+      warnAfterDays: input.cfg?.staleBinary.warnAfterDays ?? 90,
+      pauseAfterDays: input.cfg?.staleBinary.pauseAfterDays ?? 180,
+      now: input.now,
+    },
+  })) {
+    out.info(line);
   }
 
   if (input.updateAvailable !== null) {
@@ -405,17 +568,23 @@ function renderSentinelLines(out: OutputSink, input: RenderInput): void {
   }
 }
 
-function renderSourceRow(app: string, capture: SourceCycleResult | undefined): string {
-  const padded = app.padEnd(SOURCE_LABEL_WIDTH);
-  if (capture === undefined) {
-    return `  ${padded}${chalk.dim('  0 captured  /   0 files scanned  /  0 errors')}`;
-  }
-  const captured = capture.capturedBatches.toString().padStart(3);
-  const files = capture.filesProcessed.toString().padStart(3);
-  const errors = capture.errorsCount;
-  const errorsStr =
-    errors === 0
-      ? `${errors.toString()} errors`
-      : chalk.yellow(`${errors.toString()} errors${errors > 0 ? ' (locked)' : ''}`);
-  return `  ${padded}${captured} captured  /  ${files} files scanned  /  ${errorsStr}`;
+function readNumber(db: Database, key: string): number {
+  const raw = getMetadata(db, key);
+  if (raw === null) return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function readNumberOrNull(db: Database, key: string): number | null {
+  const raw = getMetadata(db, key);
+  if (raw === null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function daysSince(iso: string, now: Date): number | null {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return null;
+  const diff = Math.floor((now.getTime() - ms) / 86_400_000);
+  return diff < 0 ? 0 : diff;
 }

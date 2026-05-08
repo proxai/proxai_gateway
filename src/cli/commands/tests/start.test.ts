@@ -62,6 +62,7 @@ function fakeManager(
       if (overrides.failOn === 'restart') throw new Error('boom-restart');
     },
     unregister: async () => undefined,
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
   return { sm, calls };
 }
@@ -133,6 +134,7 @@ test('clears the SESSION_STOPPED sentinel before serviceManager.start()', async 
     stop: async () => undefined,
     restart: async () => undefined,
     unregister: async () => undefined,
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
   const output = captureOutput();
   const result = await runStart({
@@ -258,6 +260,7 @@ test('runAutoUpgrade dep is invoked before ensureRegistered when provided', asyn
     stop: async () => undefined,
     restart: async () => undefined,
     unregister: async () => undefined,
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
   const result = await runStart({
     output,
@@ -313,6 +316,7 @@ test('formatError stringifies non-Error throws', async () => {
     stop: async () => undefined,
     restart: async () => undefined,
     unregister: async () => undefined,
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
   const output = captureOutput();
   const result = await runStart({

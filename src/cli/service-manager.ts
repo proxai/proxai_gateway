@@ -1,5 +1,10 @@
 import { LAUNCHD_LABEL, SYSTEMD_UNIT_NAME, WINDOWS_TASK_NAME } from 'cli/cli.constants.ts';
 
+export interface ServiceRuntimeInfo {
+  pid: number | null;
+  startedAt: Date | null;
+}
+
 export interface ServiceManager {
   ensureRegistered(): Promise<void>;
   start(): Promise<void>;
@@ -8,6 +13,7 @@ export interface ServiceManager {
   unregister(): Promise<void>;
   isRegistered(): Promise<boolean>;
   isRunning(): Promise<boolean>;
+  runtimeInfo(): Promise<ServiceRuntimeInfo>;
 }
 
 export interface CommandRunResult {
@@ -179,7 +185,18 @@ function createLaunchctlManager(spawn: SpawnFn, unitPath: string): ServiceManage
         );
       }
     },
+    runtimeInfo: async () => {
+      const result = await runCommand(spawn, ['launchctl', 'print', darwinTarget()]);
+      if (result.exitCode !== 0) return { pid: null, startedAt: null };
+      return parseLaunchctlPrint(result.stdout);
+    },
   };
+}
+
+export function parseLaunchctlPrint(stdout: string): ServiceRuntimeInfo {
+  const pidMatch = /\bpid\s*=\s*(\d+)/i.exec(stdout);
+  const pid = pidMatch !== null && pidMatch[1] !== undefined ? Number(pidMatch[1]) : null;
+  return { pid, startedAt: null };
 }
 
 function createSystemctlManager(spawn: SpawnFn): ServiceManager {
@@ -304,7 +321,40 @@ function createSystemctlManager(spawn: SpawnFn): ServiceManager {
         );
       }
     },
+    runtimeInfo: async () => {
+      const result = await runCommand(spawn, [
+        'systemctl',
+        '--user',
+        'show',
+        '-p',
+        'MainPID',
+        '-p',
+        'ActiveEnterTimestamp',
+        unit,
+      ]);
+      if (result.exitCode !== 0) return { pid: null, startedAt: null };
+      return parseSystemctlShow(result.stdout);
+    },
   };
+}
+
+export function parseSystemctlShow(stdout: string): ServiceRuntimeInfo {
+  const pidMatch = /^MainPID=(\d+)\s*$/m.exec(stdout);
+  let pid: number | null = null;
+  if (pidMatch !== null && pidMatch[1] !== undefined) {
+    const n = Number(pidMatch[1]);
+    pid = n > 0 ? n : null;
+  }
+  const tsMatch = /^ActiveEnterTimestamp=(.*)$/m.exec(stdout);
+  let startedAt: Date | null = null;
+  if (tsMatch !== null && tsMatch[1] !== undefined) {
+    const trimmed = tsMatch[1].trim();
+    if (trimmed.length > 0) {
+      const ms = Date.parse(trimmed);
+      if (Number.isFinite(ms)) startedAt = new Date(ms);
+    }
+  }
+  return { pid, startedAt };
 }
 
 function createSchtasksManager(spawn: SpawnFn, unitPath: string): ServiceManager {
@@ -414,5 +464,35 @@ function createSchtasksManager(spawn: SpawnFn, unitPath: string): ServiceManager
       if (query.exitCode !== 0) return;
       await runCommand(spawn, ['schtasks', '/Delete', '/TN', taskName, '/F']);
     },
+    runtimeInfo: async () => {
+      const result = await runCommand(spawn, [
+        'schtasks',
+        '/Query',
+        '/TN',
+        taskName,
+        '/FO',
+        'LIST',
+        '/V',
+      ]);
+      if (result.exitCode !== 0) return { pid: null, startedAt: null };
+      return parseSchtasksQuery(result.stdout);
+    },
   };
+}
+
+export function parseSchtasksQuery(stdout: string): ServiceRuntimeInfo {
+  const startMatch = /^Start Time:\s*(.+)$/im.exec(stdout);
+  const dateMatch = /^Start Date:\s*(.+)$/im.exec(stdout);
+  let startedAt: Date | null = null;
+  if (
+    startMatch !== null &&
+    startMatch[1] !== undefined &&
+    dateMatch !== null &&
+    dateMatch[1] !== undefined
+  ) {
+    const combined = `${dateMatch[1].trim()} ${startMatch[1].trim()}`;
+    const ms = Date.parse(combined);
+    if (Number.isFinite(ms)) startedAt = new Date(ms);
+  }
+  return { pid: null, startedAt };
 }

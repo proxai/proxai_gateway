@@ -55,6 +55,7 @@ function fakeManager(
       calls.restart++;
     },
     unregister: async () => undefined,
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
   return { sm, calls };
 }
@@ -133,6 +134,7 @@ test('writes the sentinel BEFORE invoking serviceManager.stop()', async () => {
     },
     restart: async () => undefined,
     unregister: async () => undefined,
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
   const output = captureOutput();
   const result = await runStop({
@@ -172,6 +174,7 @@ test('formatError stringifies non-Error throws', async () => {
     },
     restart: async () => undefined,
     unregister: async () => undefined,
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
   const output = captureOutput();
   const result = await runStop({

@@ -379,21 +379,32 @@ program
       bufferPath = config.capture.bufferPath;
     } catch {}
     const buffer = openBufferDb(bufferPath);
+    const platform = process.platform;
+    const unitPathForStatus = platformServiceUnitPath(platform);
+    const sm =
+      unitPathForStatus !== null
+        ? getServiceManager({
+            platform,
+            unitPath: unitPathForStatus,
+            programPath: process.execPath,
+          })
+        : undefined;
+    const statusDeps: Parameters<typeof runStatus>[0] = {
+      output: consoleOutput(),
+      buffer,
+      configPath,
+      configExists: () => Promise.resolve(true),
+      pauseSentinelPath: pausedSentinelPath(),
+      bufferFullSentinelPath: bufferFullSentinelPath(),
+      authFailedSentinelPath: authFailedSentinelPath(),
+      sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
+      updateAvailableSentinelPath: updateAvailableSentinelPath(),
+      currentVersion: packageJson.version,
+      loadConfig: (path) => loadConfigFromFile(path),
+    };
+    if (sm !== undefined) statusDeps.serviceManager = sm;
     try {
-      const result = await runStatus(
-        {
-          output: consoleOutput(),
-          buffer,
-          configPath,
-          configExists: () => Promise.resolve(true),
-          pauseSentinelPath: pausedSentinelPath(),
-          bufferFullSentinelPath: bufferFullSentinelPath(),
-          authFailedSentinelPath: authFailedSentinelPath(),
-          sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
-          updateAvailableSentinelPath: updateAvailableSentinelPath(),
-        },
-        opts.json === true ? { json: true } : {},
-      );
+      const result = await runStatus(statusDeps, opts.json === true ? { json: true } : {});
       process.exit(result.exitCode);
     } finally {
       buffer.close();

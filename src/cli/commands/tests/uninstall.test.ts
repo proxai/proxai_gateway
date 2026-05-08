@@ -70,6 +70,7 @@ function fakeManager(
       calls.unregister++;
       if (overrides.unregisterThrows === true) throw new Error('unregister-broken');
     },
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
   return { sm, calls };
 }
@@ -400,6 +401,7 @@ test('isRegistered throw treated as not-registered (idempotent path)', async () 
     stop: async () => undefined,
     restart: async () => undefined,
     unregister: async () => undefined,
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
   const output = captureOutput();
   const result = await runUninstall({ ...depsFor(sm), output });

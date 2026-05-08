@@ -50,6 +50,7 @@ export interface DrainOptions {
 export interface DrainResult {
   attempted: number;
   accepted: number;
+  acceptedBytes: number;
   retriable: number;
   fatal: number;
   recovered: number;

@@ -650,6 +650,7 @@ function fakeServiceManager(opts: { failStart?: boolean } = {}): FakeServiceMana
     unregister: async () => {},
     isRegistered: async () => true,
     isRunning: async () => true,
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
 }
 

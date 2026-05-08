@@ -111,7 +111,7 @@ test('reports configured but no recent activity when daemon has not run yet', as
   expect(result.exitCode).toBe(0);
   expect(out.lines.some((l) => l.msg.includes('Status:'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('starting'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('No upload cycle has completed yet'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('no cycle completed yet'))).toBe(true);
 });
 
 test('renders per-source row with capture stats from daemon_state', async () => {
@@ -148,7 +148,7 @@ test('renders per-source row with capture stats from daemon_state', async () => 
   expect(out.lines.some((l) => l.msg.includes('codex'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('Last error'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('server returned 500'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('Retriable: 1'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('1 retriable'))).toBe(true);
 });
 
 test('renders sectioned headers with bold formatting', async () => {
@@ -554,4 +554,142 @@ test('deriveHealth returns healthy when drain is clean', () => {
       },
     }),
   ).toBe('healthy');
+});
+
+import { setMetadata, METADATA_KEYS } from 'services/buffer';
+
+test('runStatus: loadConfig dep that throws falls back gracefully', async () => {
+  const out = captureOutput();
+  const result = await runStatus(
+    makeDeps({
+      output: out,
+      loadConfig: async () => {
+        throw new Error('config blew up');
+      },
+    }),
+  );
+  expect(result.exitCode).toBe(0);
+});
+
+test('runStatus: serviceManager whose isRunning throws yields no daemon line crash', async () => {
+  const out = captureOutput();
+  const sm = {
+    isRegistered: async () => true,
+    isRunning: async () => {
+      throw new Error('launchctl gone');
+    },
+    ensureRegistered: async () => {},
+    start: async () => {},
+    stop: async () => {},
+    restart: async () => {},
+    unregister: async () => {},
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
+  };
+  const result = await runStatus(makeDeps({ output: out, serviceManager: sm }));
+  expect(result.exitCode).toBe(0);
+});
+
+test('runStatus: invalid stored cumulative numbers degrade to zero', async () => {
+  setMetadata(buffer, METADATA_KEYS.uploadTotalBatchesShipped, 'garbage');
+  setMetadata(buffer, METADATA_KEYS.uploadLastSuccessBytes, 'NaN');
+  const out = captureOutput();
+  const result = await runStatus(makeDeps({ output: out }));
+  expect(result.exitCode).toBe(0);
+});
+
+test('runStatus JSON mode reports binary age days when installedAt is set via loadConfig dep', async () => {
+  const out = captureOutput();
+  const result = await runStatus(
+    makeDeps({
+      output: out,
+      loadConfig: async () =>
+        ({
+          account: {
+            apiKey: 'k',
+            userId: 'u',
+            hostId: 'h',
+            installedAt: new Date(Date.now() - 14 * 86_400_000).toISOString(),
+            installSource: 'npm',
+          },
+          backend: {
+            ingestUrl: '',
+            verifyKeyUrl: '',
+            watermarksUrl: '',
+            registerHostIdUrl: '',
+          },
+          capture: {
+            pollIntervalSec: 60,
+            bufferPath: '',
+            receiptRetentionDays: 30,
+            failedRetentionDays: 30,
+            bufferSoftPauseBytes: 700_000_000,
+            bufferSoftResumeBytes: 600_000_000,
+            initialScanWindowDays: 30,
+            uploadMaxBatchesPerSec: 1,
+            uploadMaxBytesPerMinute: 1,
+            uploadBackoffOn429Multiplier: 1,
+          },
+          logging: { level: 'info', logDir: '' },
+          staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
+        }) as never,
+      currentVersion: '2026.5.9-3',
+    }),
+    { json: true },
+  );
+  expect(result.exitCode).toBe(0);
+  const json = JSON.parse(out.lines[0]!.msg) as {
+    system: { binaryAge: { days: number | null } };
+  };
+  expect(json.system.binaryAge.days).toBeGreaterThanOrEqual(13);
+});
+
+test('runStatus JSON mode handles invalid installedAt timestamp gracefully (days=null path)', async () => {
+  const out = captureOutput();
+  const result = await runStatus(
+    makeDeps({
+      output: out,
+      loadConfig: async () =>
+        ({
+          account: {
+            apiKey: 'k',
+            userId: 'u',
+            hostId: 'h',
+            installedAt: 'not-a-date',
+            installSource: 'npm',
+          },
+          backend: {
+            ingestUrl: '',
+            verifyKeyUrl: '',
+            watermarksUrl: '',
+            registerHostIdUrl: '',
+          },
+          capture: {
+            pollIntervalSec: 60,
+            bufferPath: '',
+            receiptRetentionDays: 30,
+            failedRetentionDays: 30,
+            bufferSoftPauseBytes: 700_000_000,
+            bufferSoftResumeBytes: 600_000_000,
+            initialScanWindowDays: 30,
+            uploadMaxBatchesPerSec: 1,
+            uploadMaxBytesPerMinute: 1,
+            uploadBackoffOn429Multiplier: 1,
+          },
+          logging: { level: 'info', logDir: '' },
+          staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
+        }) as never,
+    }),
+    { json: true },
+  );
+  expect(result.exitCode).toBe(0);
+  const json = JSON.parse(out.lines[0]!.msg) as {
+    system: { binaryAge: { days: number | null } };
+  };
+  expect(json.system.binaryAge.days).toBeNull();
+});
+
+test('runStatus default loadConfig path also catches throws (no dep override)', async () => {
+  const out = captureOutput();
+  const result = await runStatus(makeDeps({ output: out }));
+  expect(result.exitCode).toBe(0);
 });

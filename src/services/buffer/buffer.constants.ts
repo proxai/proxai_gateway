@@ -21,6 +21,15 @@ export const METADATA_COLS = {
 export const METADATA_KEYS = {
   lastPruneAt: 'last_prune_at',
   lastVersionCheckAt: 'last_version_check_at',
+  cyclesTotal: 'cycles_total',
+  cyclesWithErrors: 'cycles_with_errors',
+  cyclesTotalDurationMs: 'cycles_total_duration_ms',
+  uploadTotalBatchesShipped: 'upload_total_batches_shipped',
+  uploadTotalBytesShipped: 'upload_total_bytes_shipped',
+  uploadLastSuccessAt: 'upload_last_success_at',
+  uploadLastSuccessBatches: 'upload_last_success_batches',
+  uploadLastSuccessBytes: 'upload_last_success_bytes',
+  latestKnownVersion: 'latest_known_version',
 } as const;
 
 export const BATCH_COLS = {

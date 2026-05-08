@@ -257,6 +257,7 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
   );
 
   persistDaemonState(ctx, startedAt, completedAt, durationMs, sourceResults, drainResult);
+  persistCumulativeMetrics(ctx, completedAt, durationMs, sourceResults, drainResult);
 
   return {
     paused: false,
@@ -312,6 +313,64 @@ function persistDaemonState(
   }
 }
 
+function persistCumulativeMetrics(
+  ctx: PollCycleContext,
+  completedAt: string,
+  durationMs: number,
+  sourceResults: Record<string, SourcePollerResult>,
+  drainResult: PollCycleResult['drainResult'],
+): void {
+  try {
+    const incTotal = readNumberMetadata(ctx.buffer, METADATA_KEYS.cyclesTotal) + 1;
+    setMetadata(ctx.buffer, METADATA_KEYS.cyclesTotal, incTotal.toString());
+
+    const incDuration =
+      readNumberMetadata(ctx.buffer, METADATA_KEYS.cyclesTotalDurationMs) + durationMs;
+    setMetadata(ctx.buffer, METADATA_KEYS.cyclesTotalDurationMs, incDuration.toString());
+
+    const hadSourceErrors = Object.values(sourceResults).some((r) => r.errors.length > 0);
+    const hadDrainFatal = drainResult !== null && drainResult.fatal > 0;
+    if (hadSourceErrors || hadDrainFatal) {
+      const incErr = readNumberMetadata(ctx.buffer, METADATA_KEYS.cyclesWithErrors) + 1;
+      setMetadata(ctx.buffer, METADATA_KEYS.cyclesWithErrors, incErr.toString());
+    }
+
+    if (drainResult !== null && drainResult.accepted > 0) {
+      const totBatches =
+        readNumberMetadata(ctx.buffer, METADATA_KEYS.uploadTotalBatchesShipped) +
+        drainResult.accepted;
+      setMetadata(ctx.buffer, METADATA_KEYS.uploadTotalBatchesShipped, totBatches.toString());
+      const totBytes =
+        readNumberMetadata(ctx.buffer, METADATA_KEYS.uploadTotalBytesShipped) +
+        drainResult.acceptedBytes;
+      setMetadata(ctx.buffer, METADATA_KEYS.uploadTotalBytesShipped, totBytes.toString());
+      setMetadata(ctx.buffer, METADATA_KEYS.uploadLastSuccessAt, completedAt);
+      setMetadata(
+        ctx.buffer,
+        METADATA_KEYS.uploadLastSuccessBatches,
+        drainResult.accepted.toString(),
+      );
+      setMetadata(
+        ctx.buffer,
+        METADATA_KEYS.uploadLastSuccessBytes,
+        drainResult.acceptedBytes.toString(),
+      );
+    }
+  } catch (err) {
+    ctx.logger?.warn(
+      { event: 'metrics.persist_failed', error: (err as Error).message ?? String(err) },
+      'failed to persist cumulative metrics',
+    );
+  }
+}
+
+function readNumberMetadata(buffer: PollCycleContext['buffer'], key: string): number {
+  const raw = getMetadata(buffer, key);
+  if (raw === null) return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
 const DEFAULT_VERSION_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
 function shouldRunAutoUpgrade(ctx: PollCycleContext): boolean {
@@ -339,6 +398,9 @@ async function maybeRunAutoUpgrade(ctx: PollCycleContext): Promise<void> {
   const autoDeps: Parameters<typeof runAutoUpgrade>[0] = {
     binaryPath: ctx.binaryPath,
     currentVersion: ctx.currentVersion,
+    onLatestVersionKnown: (v) => {
+      setMetadata(ctx.buffer, METADATA_KEYS.latestKnownVersion, v);
+    },
   };
   if (ctx.devMode !== undefined) autoDeps.devMode = ctx.devMode;
   if (ctx.installSource !== undefined) autoDeps.installSource = ctx.installSource;
@@ -377,6 +439,7 @@ async function runBrewSentinelCheck(ctx: PollCycleContext): Promise<void> {
   }
 
   const result = outcome.result;
+  setMetadata(ctx.buffer, METADATA_KEYS.latestKnownVersion, result.latestVersion);
   if (result.hasUpdate) {
     const sentinelInput: Parameters<typeof writeUpdateAvailableSentinel>[1] = {
       latest_version: result.latestVersion,
