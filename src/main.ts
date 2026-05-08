@@ -44,6 +44,11 @@ import {
 } from 'cli/index.ts';
 import { defaultScheduledTaskXmlPath } from 'cli/scheduled-task-xml.ts';
 import { getServiceManager } from 'cli/service-manager.ts';
+import {
+  formatVersionString,
+  readInstallSourceSync,
+  type VersionInstallSource,
+} from 'cli/version-string.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
 import { openBufferDb } from 'services/buffer';
 import {
@@ -58,7 +63,15 @@ import { HttpClient } from 'services/http';
 import { runAutoUpgrade } from 'services/upgrade';
 
 const program = new Command();
-program.name('proxai-gateway').description(packageJson.description).version(packageJson.version);
+program
+  .name('proxai-gateway')
+  .description(packageJson.description)
+  .version(buildVersionString(), '-v, --version', 'output the version and install source');
+
+function buildVersionString(): string {
+  const source: VersionInstallSource = readInstallSourceSync(configFilePath());
+  return formatVersionString(packageJson.version, source);
+}
 
 function platformServiceUnitPath(platform: NodeJS.Platform): string | null {
   if (platform === 'darwin') return defaultLaunchdPlistPath();
