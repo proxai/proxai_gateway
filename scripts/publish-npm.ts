@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
-import { mkdir, readFile, rm, writeFile, copyFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 const REPO_ROOT = resolve(import.meta.dir, '..');
 const NPM_BUILD_DIR = resolve(REPO_ROOT, 'npm-build');
@@ -24,18 +24,16 @@ interface RootPkg {
 }
 
 async function readRootPackage(): Promise<RootPkg> {
-  const text = await readFile(ROOT_PKG, 'utf8');
+  const text = await Bun.file(ROOT_PKG).text();
   return JSON.parse(text) as RootPkg;
 }
 
 async function writeJson(path: string, value: unknown): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  await Bun.write(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 async function copyTo(src: string, dest: string): Promise<void> {
-  await mkdir(dirname(dest), { recursive: true });
-  await copyFile(src, dest);
+  await Bun.write(dest, Bun.file(src));
 }
 
 async function buildNpmPackage(root: RootPkg): Promise<string> {
