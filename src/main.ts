@@ -52,6 +52,7 @@ import {
 } from 'services/config';
 import type { InstallSource } from 'services/config';
 import { HttpClient } from 'services/http';
+import { runAutoUpgrade } from 'services/upgrade';
 
 const program = new Command();
 program.name('proxai-gateway').description(packageJson.description).version(packageJson.version);
@@ -189,6 +190,7 @@ program
       sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
       invokeSetup: invokeSetupInteractive,
       serviceUnitRecreate: recreate,
+      runAutoUpgrade: () => autoUpgradeFromConfig(false),
     });
     process.exit(result.exitCode);
   });
@@ -274,6 +276,11 @@ program
       updateAvailableSentinelPath: updateAvailableSentinelPath(),
       abortSignal: ctrl.signal,
       gatewayVersion: `@proxai/gateway ${packageJson.version}`,
+      currentVersion: packageJson.version,
+      binaryPath: process.execPath,
+      installSource: config.account.installSource,
+      devMode: false,
+      exitProcess: () => process.exit(0),
     });
     process.exit(result.exitCode);
   });
@@ -590,6 +597,23 @@ program.parseAsync().catch((err: unknown) => {
   console.error(`${chalk.red('✗')} unexpected error: ${String(err)}`);
   process.exit(EXIT_CODE.error);
 });
+
+async function autoUpgradeFromConfig(devMode: boolean): Promise<void> {
+  let installSource: InstallSource | undefined;
+  try {
+    const cfg = await loadConfigFromFile();
+    installSource = cfg.account.installSource;
+  } catch {
+    return;
+  }
+  await runAutoUpgrade({
+    binaryPath: process.execPath,
+    currentVersion: packageJson.version,
+    installSource,
+    devMode,
+    exitProcess: () => process.exit(0),
+  });
+}
 
 function buildSetupOptions(opts: {
   apiKey?: string;

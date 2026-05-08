@@ -243,6 +243,54 @@ test('does not rewrite service unit when it already exists', async () => {
   expect(output.lines.every((l) => !l.msg.includes('service unit missing'))).toBe(true);
 });
 
+test('runAutoUpgrade dep is invoked before ensureRegistered when provided', async () => {
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  let autoCalls = 0;
+  let autoCalledBeforeRegister = false;
+  const sequenceSm: ServiceManager = {
+    isRegistered: async () => false,
+    isRunning: async () => false,
+    ensureRegistered: async () => {
+      autoCalledBeforeRegister = autoCalls > 0;
+    },
+    start: async () => undefined,
+    stop: async () => undefined,
+    restart: async () => undefined,
+    unregister: async () => undefined,
+  };
+  const result = await runStart({
+    output,
+    configExists: async () => true,
+    serviceManager: sequenceSm,
+    sessionStoppedSentinelPath: sentinelPath,
+    runAutoUpgrade: async () => {
+      autoCalls++;
+    },
+  });
+  expect(sm).toBeDefined();
+  expect(result.exitCode).toBe(0);
+  expect(autoCalls).toBe(1);
+  expect(autoCalledBeforeRegister).toBe(true);
+});
+
+test('runAutoUpgrade errors are swallowed and start proceeds', async () => {
+  const { sm, calls } = fakeManager();
+  const output = captureOutput();
+  const result = await runStart({
+    output,
+    configExists: async () => true,
+    serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
+    runAutoUpgrade: async () => {
+      throw new Error('boom');
+    },
+  });
+  expect(result.exitCode).toBe(0);
+  expect(calls.ensureRegistered).toBe(1);
+  expect(calls.start).toBe(1);
+});
+
 test('formatError stringifies non-Error throws', async () => {
   const calls: FakeCalls = {
     ensureRegistered: 0,

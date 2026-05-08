@@ -17,6 +17,7 @@ export interface StartCommandDeps {
   serviceUnitRecreate?: ServiceUnitRecreateConfig;
   serviceUnitFileExists?: EnsureServiceUnitDeps['fileExists'];
   writeServiceUnitFn?: EnsureServiceUnitDeps['writer'];
+  runAutoUpgrade?: () => Promise<void>;
 }
 
 export async function runStart(deps: StartCommandDeps): Promise<CommandResult> {
@@ -45,6 +46,11 @@ export async function runStart(deps: StartCommandDeps): Promise<CommandResult> {
         ensureDeps.writer = deps.writeServiceUnitFn;
       }
       await ensureServiceUnitExists(ensureDeps);
+    }
+    if (deps.runAutoUpgrade !== undefined) {
+      try {
+        await deps.runAutoUpgrade();
+      } catch {}
     }
     await deps.serviceManager.ensureRegistered();
     await deps.serviceManager.start();
