@@ -1,151 +1,69 @@
 #!/usr/bin/env bun
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-
+import chalk from 'chalk';
 import { Command } from 'commander';
 
-import packageJson from '../package.json' with { type: 'json' };
-import {
-  authFailedSentinelPath,
-  bufferDbPath,
-  bufferFullSentinelPath,
-  configDir,
-  configFilePath,
-  logDir,
-  pausedSentinelPath,
-  sessionStoppedSentinelPath,
-  updateAvailableSentinelPath,
-} from 'core/io/fs';
-import { createLogger } from 'core/log';
-import type { LogLevel } from 'core/log';
-import { readMachineUuid } from 'core/system';
-import { GatewayError, UserAbortedError } from 'core/utils';
-import chalk from 'chalk';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
-import { runSetup } from 'cli/commands/setup.ts';
-import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup.ts';
 import { runBackfill } from 'cli/commands/backfill.ts';
+import { runDev } from 'cli/commands/dev.ts';
 import { runPause } from 'cli/commands/pause.ts';
 import { runRedactionList, runRedactionTest } from 'cli/commands/redaction.ts';
 import { runRestart } from 'cli/commands/restart.ts';
 import { runResume } from 'cli/commands/resume.ts';
 import { runDaemon } from 'cli/commands/run.ts';
-import { runDev } from 'cli/commands/dev.ts';
+import { runSetup } from 'cli/commands/setup.ts';
 import { runStart } from 'cli/commands/start.ts';
-import type { ServiceUnitRecreateConfig } from 'cli/service-unit-writer.ts';
 import { runStatus } from 'cli/commands/status.ts';
 import { runStop } from 'cli/commands/stop.ts';
 import { runTail } from 'cli/commands/tail.ts';
 import { runUninstall } from 'cli/commands/uninstall.ts';
-import { createDefaultSweep } from 'cli/commands/uninstall-sweep.ts';
-import { createDefaultBinaryRemover } from 'cli/commands/binary-remove.ts';
-import { createDefaultShellPathCleaner } from 'cli/commands/path-cleanup.ts';
 import { runUpgrade } from 'cli/commands/upgrade.ts';
+import { autoUpgradeFromConfig } from 'cli/wiring/auto-upgrade.ts';
+import { buildBackfillDeps, buildBackfillOptions } from 'cli/wiring/backfill-deps.ts';
+import { buildDevDeps } from 'cli/wiring/dev-deps.ts';
+import { buildPauseDeps, buildPauseOptions } from 'cli/wiring/pause-deps.ts';
 import {
-  defaultLaunchdPlistPath,
-  defaultSystemdUnitPath,
-  consoleOutput,
-  inquirerPrompts,
-} from 'cli/index.ts';
-import { defaultScheduledTaskXmlPath } from 'cli/scheduled-task-xml.ts';
-import { getServiceManager } from 'cli/service-manager.ts';
+  buildPlatformServiceContext,
+  buildServiceUnitRecreate,
+  platformServiceUnitPath,
+} from 'cli/wiring/platform.ts';
 import {
-  formatVersionString,
-  readInstallSourceSync,
-  type VersionInstallSource,
-} from 'cli/version-string.ts';
-import type { CommandResult } from 'cli/cli.types.ts';
-import { openBufferDb } from 'services/buffer';
+  buildRedactionListDeps,
+  buildRedactionListOptions,
+  buildRedactionTestDeps,
+  buildRedactionTestOptions,
+} from 'cli/wiring/redaction-deps.ts';
+import { buildRestartDeps } from 'cli/wiring/restart-deps.ts';
+import { buildResumeDeps } from 'cli/wiring/resume-deps.ts';
+import { buildRunDeps } from 'cli/wiring/run-deps.ts';
 import {
-  loadConfigFromFile,
-  NEST_INGEST_URL,
-  NEST_REGISTER_HOST_ID_URL,
-  NEST_VERIFY_KEY_URL,
-  NEST_WATERMARKS_URL,
-} from 'services/config';
-import type { InstallSource } from 'services/config';
-import { HttpClient } from 'services/http';
-import { runAutoUpgrade } from 'services/upgrade';
+  buildSetupDeps,
+  buildSetupOptions,
+  invokeSetupInteractive,
+} from 'cli/wiring/setup-deps.ts';
+import { buildStartDeps } from 'cli/wiring/start-deps.ts';
+import { buildStatusContext } from 'cli/wiring/status-deps.ts';
+import { buildStopDeps } from 'cli/wiring/stop-deps.ts';
+import { buildTailDeps, buildTailOptions } from 'cli/wiring/tail-deps.ts';
+import { buildUninstallDeps, buildUninstallOptions } from 'cli/wiring/uninstall-deps.ts';
+import { buildUpgradeDeps, buildUpgradeOptions } from 'cli/wiring/upgrade-deps.ts';
+import { buildVersionString } from 'cli/wiring/version-string.ts';
+import { configFilePath, logDir as defaultLogDir } from 'core/io/fs';
+import { GatewayError, PACKAGE_DESCRIPTION, PACKAGE_VERSION, UserAbortedError } from 'core/utils';
+import { loadConfigFromFile } from 'services/config';
 
 const program = new Command();
 program
   .name('proxai-gateway')
-  .description(packageJson.description)
-  .version(buildVersionString(), '-v, --version', 'output the version and install source');
+  .description(PACKAGE_DESCRIPTION)
+  .version(
+    buildVersionString({ version: PACKAGE_VERSION, installSourcePath: configFilePath() }),
+    '-v, --version',
+    'output the version and install source',
+  );
 
-function buildVersionString(): string {
-  const source: VersionInstallSource = readInstallSourceSync(configFilePath());
-  return formatVersionString(packageJson.version, source);
-}
-
-function platformServiceUnitPath(platform: NodeJS.Platform): string | null {
-  if (platform === 'darwin') return defaultLaunchdPlistPath();
-  if (platform === 'linux') return defaultSystemdUnitPath();
-  if (platform === 'win32') return defaultScheduledTaskXmlPath();
-  return null;
-}
-
-function resolveWindowsUserId(): string | undefined {
-  const domain = process.env['USERDOMAIN'];
-  const user = process.env['USERNAME'];
-  if (domain !== undefined && domain.length > 0 && user !== undefined && user.length > 0) {
-    return `${domain}\\${user}`;
-  }
-  if (user !== undefined && user.length > 0) return user;
-  return undefined;
-}
-
-function buildSetupDeps(): SetupCommandDeps {
-  const platform = process.platform;
-  const unitPath = platformServiceUnitPath(platform);
-  const base: SetupCommandDeps = {
-    output: consoleOutput(),
-    prompts: inquirerPrompts(),
-    configPath: configFilePath(),
-    bufferDbPath: bufferDbPath(),
-    logDir: logDir(),
-    authFailedSentinelPath: authFailedSentinelPath(),
-    sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
-    serviceUnitPath: unitPath,
-    programPath: process.execPath,
-    configExists: () => Bun.file(configFilePath()).exists(),
-    httpClientFactory: (apiKey, hostId) =>
-      new HttpClient({
-        apiKey,
-        hostId,
-        endpoints: {
-          ingest: NEST_INGEST_URL,
-          verifyKey: NEST_VERIFY_KEY_URL,
-          watermarks: NEST_WATERMARKS_URL,
-          registerHostId: NEST_REGISTER_HOST_ID_URL,
-        },
-        gatewayVersion: `@proxai/gateway ${packageJson.version}`,
-      }),
-    readMachineUuid: () => readMachineUuid(),
-    platform,
-  };
-  if (unitPath !== null) {
-    base.serviceManager = getServiceManager({
-      platform,
-      unitPath,
-      programPath: process.execPath,
-    });
-  }
-  if (platform === 'win32') {
-    const userId = resolveWindowsUserId();
-    if (userId !== undefined) {
-      base.windowsUserId = userId;
-    } else {
-      base.output.warn(
-        'could not detect Windows user id (USERDOMAIN/USERNAME unset); using INTERACTIVE placeholder',
-      );
-    }
-  }
-  return base;
-}
-
-function invokeSetupInteractive(): Promise<CommandResult> {
-  return runSetup(buildSetupDeps(), {} as SetupCommandOptions);
+function exitUnsupportedPlatform(commandName: string): never {
+  console.error(`unsupported platform for ${commandName}: ${process.platform}`);
+  process.exit(EXIT_CODE.error);
 }
 
 program
@@ -174,7 +92,15 @@ program
   )
   .action(
     async (opts: { apiKey?: string; installSource: string; start?: boolean; force?: boolean }) => {
-      const result = await runSetup(buildSetupDeps(), buildSetupOptions(opts));
+      const ctx = buildPlatformServiceContext(process.platform, process.execPath);
+      const setupInputs = {
+        platform: process.platform,
+        programPath: process.execPath,
+        serviceUnitPath: ctx?.unitPath ?? null,
+        serviceManager: ctx?.serviceManager ?? null,
+        env: process.env,
+      };
+      const result = await runSetup(buildSetupDeps(setupInputs), buildSetupOptions(opts));
       process.exit(result.exitCode);
     },
   );
@@ -186,35 +112,35 @@ program
     'Register the gateway as a managed service (launchd / systemd / Scheduled Task) and start the daemon. Auto-restarts on reboot. Requires a prior `setup`.',
   )
   .action(async () => {
-    const platform = process.platform;
-    const unitPath = platformServiceUnitPath(platform);
-    if (unitPath === null) {
-      console.error(`unsupported platform for start: ${platform}`);
-      process.exit(EXIT_CODE.error);
-    }
-    const sm = getServiceManager({
-      platform,
-      unitPath,
+    const ctx = buildPlatformServiceContext(process.platform, process.execPath);
+    if (ctx === null) exitUnsupportedPlatform('start');
+    const setupInputs = {
+      platform: ctx.platform,
       programPath: process.execPath,
-    });
-    const recreate: ServiceUnitRecreateConfig = {
-      serviceUnitPath: unitPath,
-      programPath: process.execPath,
-      platform,
+      serviceUnitPath: ctx.unitPath,
+      serviceManager: ctx.serviceManager,
+      env: process.env,
     };
-    if (platform === 'win32') {
-      const windowsUserId = resolveWindowsUserId();
-      if (windowsUserId !== undefined) recreate.windowsUserId = windowsUserId;
-    }
-    const result = await runStart({
-      output: consoleOutput(),
-      configExists: () => Bun.file(configFilePath()).exists(),
-      serviceManager: sm,
-      sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
-      invokeSetup: invokeSetupInteractive,
-      serviceUnitRecreate: recreate,
-      runAutoUpgrade: () => autoUpgradeFromConfig(false),
-    });
+    const result = await runStart(
+      buildStartDeps({
+        serviceManager: ctx.serviceManager,
+        serviceUnitRecreate: buildServiceUnitRecreate(
+          ctx.platform,
+          ctx.unitPath,
+          process.execPath,
+          process.env,
+        ),
+        invokeSetup: invokeSetupInteractive(setupInputs),
+        runAutoUpgrade: () =>
+          autoUpgradeFromConfig({
+            binaryPath: process.execPath,
+            currentVersion: PACKAGE_VERSION,
+            devMode: false,
+            loadConfig: () => loadConfigFromFile(),
+            exitProcess: () => process.exit(0),
+          }),
+      }),
+    );
     process.exit(result.exitCode);
   });
 
@@ -225,22 +151,9 @@ program
     'Halt the running gateway daemon for this session. The service remains registered and will start again automatically on next reboot. Use `uninstall` to fully decommission.',
   )
   .action(async () => {
-    const platform = process.platform;
-    const unitPath = platformServiceUnitPath(platform);
-    if (unitPath === null) {
-      console.error(`unsupported platform for stop: ${platform}`);
-      process.exit(EXIT_CODE.error);
-    }
-    const sm = getServiceManager({
-      platform,
-      unitPath,
-      programPath: process.execPath,
-    });
-    const result = await runStop({
-      output: consoleOutput(),
-      serviceManager: sm,
-      sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
-    });
+    const ctx = buildPlatformServiceContext(process.platform, process.execPath);
+    if (ctx === null) exitUnsupportedPlatform('stop');
+    const result = await runStop(buildStopDeps(ctx.serviceManager));
     process.exit(result.exitCode);
   });
 
@@ -249,34 +162,27 @@ program
   .alias('r')
   .description('Stop and start the gateway daemon. Equivalent to `stop` followed by `start`.')
   .action(async () => {
-    const platform = process.platform;
-    const unitPath = platformServiceUnitPath(platform);
-    if (unitPath === null) {
-      console.error(`unsupported platform for restart: ${platform}`);
-      process.exit(EXIT_CODE.error);
-    }
-    const sm = getServiceManager({
-      platform,
-      unitPath,
+    const ctx = buildPlatformServiceContext(process.platform, process.execPath);
+    if (ctx === null) exitUnsupportedPlatform('restart');
+    const setupInputs = {
+      platform: ctx.platform,
       programPath: process.execPath,
-    });
-    const recreate: ServiceUnitRecreateConfig = {
-      serviceUnitPath: unitPath,
-      programPath: process.execPath,
-      platform,
+      serviceUnitPath: ctx.unitPath,
+      serviceManager: ctx.serviceManager,
+      env: process.env,
     };
-    if (platform === 'win32') {
-      const windowsUserId = resolveWindowsUserId();
-      if (windowsUserId !== undefined) recreate.windowsUserId = windowsUserId;
-    }
-    const result = await runRestart({
-      output: consoleOutput(),
-      configExists: () => Bun.file(configFilePath()).exists(),
-      serviceManager: sm,
-      sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
-      invokeSetup: invokeSetupInteractive,
-      serviceUnitRecreate: recreate,
-    });
+    const result = await runRestart(
+      buildRestartDeps({
+        serviceManager: ctx.serviceManager,
+        serviceUnitRecreate: buildServiceUnitRecreate(
+          ctx.platform,
+          ctx.unitPath,
+          process.execPath,
+          process.env,
+        ),
+        invokeSetup: invokeSetupInteractive(setupInputs),
+      }),
+    );
     process.exit(result.exitCode);
   });
 
@@ -291,22 +197,14 @@ program
     const ctrl = new AbortController();
     process.on('SIGINT', () => ctrl.abort());
     process.on('SIGTERM', () => ctrl.abort());
-    const result = await runDaemon({
-      output: consoleOutput(),
-      config,
-      pauseSentinelPath: pausedSentinelPath(),
-      authFailedSentinelPath: authFailedSentinelPath(),
-      bufferFullSentinelPath: bufferFullSentinelPath(),
-      sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
-      updateAvailableSentinelPath: updateAvailableSentinelPath(),
-      abortSignal: ctrl.signal,
-      gatewayVersion: `@proxai/gateway ${packageJson.version}`,
-      currentVersion: packageJson.version,
-      binaryPath: process.execPath,
-      installSource: config.account.installSource,
-      devMode: false,
-      exitProcess: () => process.exit(0),
-    });
+    const result = await runDaemon(
+      buildRunDeps({
+        config,
+        abortSignal: ctrl.signal,
+        binaryPath: process.execPath,
+        exitProcess: () => process.exit(0),
+      }),
+    );
     process.exit(result.exitCode);
   });
 
@@ -317,21 +215,12 @@ program
     const ctrl = new AbortController();
     process.on('SIGINT', () => ctrl.abort());
     process.on('SIGTERM', () => ctrl.abort());
-    const result = await runDev({
-      output: consoleOutput(),
-      abortSignal: ctrl.signal,
-      gatewayVersion: `@proxai/gateway ${packageJson.version}`,
-      currentVersion: packageJson.version,
-      binaryPath: process.execPath,
-      pauseSentinelPath: pausedSentinelPath(),
-      authFailedSentinelPath: authFailedSentinelPath(),
-      bufferFullSentinelPath: bufferFullSentinelPath(),
-      sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
-      updateAvailableSentinelPath: updateAvailableSentinelPath(),
-      loadConfig: () => loadConfigFromFile(),
-      runDaemon,
-      createLogger,
-    });
+    const result = await runDev(
+      buildDevDeps({
+        abortSignal: ctrl.signal,
+        binaryPath: process.execPath,
+      }),
+    );
     process.exit(result.exitCode);
   });
 
@@ -347,27 +236,13 @@ program
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .action(async (opts: { since: string; config?: string }) => {
     const config = await loadConfigFromFile(opts.config);
-    const platform = process.platform;
-    const unitPath = platformServiceUnitPath(platform);
-    const sm =
-      unitPath !== null
-        ? getServiceManager({
-            platform,
-            unitPath,
-            programPath: process.execPath,
-          })
-        : null;
+    const ctx = buildPlatformServiceContext(process.platform, process.execPath);
     const result = await runBackfill(
-      {
-        output: consoleOutput(),
+      buildBackfillDeps({
         config,
-        pauseSentinelPath: pausedSentinelPath(),
-        authFailedSentinelPath: authFailedSentinelPath(),
-        bufferFullSentinelPath: bufferFullSentinelPath(),
-        gatewayVersion: `@proxai/gateway ${packageJson.version}`,
-        ...(sm !== null ? { isDaemonRunning: () => sm.isRunning() } : {}),
-      },
-      { since: opts.since },
+        serviceManager: ctx?.serviceManager ?? null,
+      }),
+      buildBackfillOptions(opts),
     );
     process.exit(result.exitCode);
   });
@@ -381,59 +256,19 @@ program
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .option('--json', 'emit machine-readable JSON instead of the human-readable layout', false)
   .action(async (opts: { config?: string; json?: boolean }) => {
-    const configPath = configFilePath();
-    const exists = await Bun.file(configPath).exists();
-    if (!exists) {
-      const result = await runStatus(
-        {
-          output: consoleOutput(),
-          configPath,
-          configExists: () => Promise.resolve(false),
-          pauseSentinelPath: pausedSentinelPath(),
-          bufferFullSentinelPath: bufferFullSentinelPath(),
-          authFailedSentinelPath: authFailedSentinelPath(),
-          sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
-          updateAvailableSentinelPath: updateAvailableSentinelPath(),
-        },
-        opts.json === true ? { json: true } : {},
-      );
-      process.exit(result.exitCode);
-    }
-    let bufferPath = bufferDbPath();
-    try {
-      const config = await loadConfigFromFile(opts.config);
-      bufferPath = config.capture.bufferPath;
-    } catch {}
-    const buffer = openBufferDb(bufferPath);
-    const platform = process.platform;
-    const unitPathForStatus = platformServiceUnitPath(platform);
-    const sm =
-      unitPathForStatus !== null
-        ? getServiceManager({
-            platform,
-            unitPath: unitPathForStatus,
-            programPath: process.execPath,
-          })
-        : undefined;
-    const statusDeps: Parameters<typeof runStatus>[0] = {
-      output: consoleOutput(),
-      buffer,
-      configPath,
-      configExists: () => Promise.resolve(true),
-      pauseSentinelPath: pausedSentinelPath(),
-      bufferFullSentinelPath: bufferFullSentinelPath(),
-      authFailedSentinelPath: authFailedSentinelPath(),
-      sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
-      updateAvailableSentinelPath: updateAvailableSentinelPath(),
-      currentVersion: packageJson.version,
-      loadConfig: (path) => loadConfigFromFile(path),
+    const ctx = buildPlatformServiceContext(process.platform, process.execPath);
+    const statusContextInputs: Parameters<typeof buildStatusContext>[0] = {
+      json: opts.json === true,
+      serviceManager: ctx?.serviceManager ?? null,
+      configPath: configFilePath(),
     };
-    if (sm !== undefined) statusDeps.serviceManager = sm;
+    if (opts.config !== undefined) statusContextInputs.configOverride = opts.config;
+    const sCtx = await buildStatusContext(statusContextInputs);
     try {
-      const result = await runStatus(statusDeps, opts.json === true ? { json: true } : {});
+      const result = await runStatus(sCtx.deps, sCtx.options);
       process.exit(result.exitCode);
     } finally {
-      buffer.close();
+      sCtx.cleanup();
     }
   });
 
@@ -444,10 +279,7 @@ program
   )
   .option('--reason <reason>', 'free-form reason recorded in the sentinel file (shown by `status`)')
   .action(async (opts: { reason?: string }) => {
-    const result = await runPause(
-      { output: consoleOutput(), sentinelPath: pausedSentinelPath() },
-      opts.reason !== undefined ? { reason: opts.reason } : {},
-    );
+    const result = await runPause(buildPauseDeps(), buildPauseOptions(opts));
     process.exit(result.exitCode);
   });
 
@@ -455,10 +287,7 @@ program
   .command('resume')
   .description('Clear the PAUSED sentinel and resume capture cycles on the next polling tick.')
   .action(async () => {
-    const result = await runResume({
-      output: consoleOutput(),
-      sentinelPath: pausedSentinelPath(),
-    });
+    const result = await runResume(buildResumeDeps());
     process.exit(result.exitCode);
   });
 
@@ -477,35 +306,17 @@ program
   .action(async (opts: { reset?: boolean; yes?: boolean }) => {
     const platform = process.platform;
     const unitPath = platformServiceUnitPath(platform);
-    if (unitPath === null) {
-      console.error(`unsupported platform for uninstall: ${platform}`);
-      process.exit(EXIT_CODE.error);
-    }
-    const sm = getServiceManager({
-      platform,
-      unitPath,
-      programPath: process.execPath,
-    });
-    const uninstallOptions: { reset?: boolean; yes?: boolean } = {};
-    if (opts.reset === true) uninstallOptions.reset = true;
-    if (opts.yes === true) uninstallOptions.yes = true;
+    if (unitPath === null) exitUnsupportedPlatform('uninstall');
+    const ctx = buildPlatformServiceContext(platform, process.execPath);
+    if (ctx === null) exitUnsupportedPlatform('uninstall');
     const result = await runUninstall(
-      {
-        output: consoleOutput(),
-        prompts: inquirerPrompts(),
-        configPath: configFilePath(),
-        configDir: configDir(),
-        logDir: logDir(),
+      buildUninstallDeps({
+        platform,
+        programPath: process.execPath,
         serviceUnitPath: unitPath,
-        serviceManager: sm,
-        configExists: () => Bun.file(configFilePath()).exists(),
-        sweep: createDefaultSweep(),
-        binaryRemover: createDefaultBinaryRemover(platform),
-        pathCleaner: createDefaultShellPathCleaner(platform),
-        installDir: join(homedir(), '.proxai', 'bin'),
-        currentExecPath: process.execPath,
-      },
-      uninstallOptions,
+        serviceManager: ctx.serviceManager,
+      }),
+      buildUninstallOptions(opts),
     );
     process.exit(result.exitCode);
   });
@@ -518,17 +329,9 @@ program
   .option('-y, --yes', 'skip the interactive confirmation prompt', false)
   .option('--force', 'redownload and reinstall even if already on the latest version', false)
   .action(async (opts: { yes?: boolean; force?: boolean }) => {
-    const upgradeOptions: { yes?: boolean; force?: boolean } = {};
-    if (opts.yes === true) upgradeOptions.yes = true;
-    if (opts.force === true) upgradeOptions.force = true;
     const result = await runUpgrade(
-      {
-        output: consoleOutput(),
-        prompts: inquirerPrompts(),
-        currentVersion: packageJson.version,
-        binaryPath: process.execPath,
-      },
-      upgradeOptions,
+      buildUpgradeDeps({ binaryPath: process.execPath }),
+      buildUpgradeOptions(opts),
     );
     process.exit(result.exitCode);
   });
@@ -573,7 +376,7 @@ program
       raw?: boolean;
       config?: string;
     }) => {
-      let dir = logDir();
+      let dir = defaultLogDir();
       try {
         const config = await loadConfigFromFile(opts.config);
         dir = config.logging.logDir;
@@ -581,21 +384,9 @@ program
       const ctrl = new AbortController();
       process.on('SIGINT', () => ctrl.abort());
       process.on('SIGTERM', () => ctrl.abort());
-      const tailOptions: Parameters<typeof runTail>[1] = {};
-      if (opts.lines !== undefined) tailOptions.lines = Number(opts.lines);
-      if (opts.follow === true) tailOptions.follow = true;
-      if (opts.source !== undefined) tailOptions.source = opts.source;
-      if (opts.level !== undefined) tailOptions.level = opts.level as LogLevel;
-      if (opts.since !== undefined) tailOptions.since = opts.since;
-      if (opts.raw === true) tailOptions.raw = true;
       const result = await runTail(
-        {
-          output: consoleOutput(),
-          logDir: dir,
-          abortSignal: ctrl.signal,
-          emit: (line) => console.log(line),
-        },
-        tailOptions,
+        buildTailDeps({ logDir: dir, abortSignal: ctrl.signal }),
+        buildTailOptions(opts),
       );
       process.exit(result.exitCode);
     },
@@ -616,11 +407,9 @@ redaction
     false,
   )
   .action(async (filePath: string, opts: { showRules?: boolean }) => {
-    const options: Parameters<typeof runRedactionTest>[1] = { filePath };
-    if (opts.showRules === true) options.showRules = true;
     const result = await runRedactionTest(
-      { output: consoleOutput(), emit: (line) => console.log(line) },
-      options,
+      buildRedactionTestDeps(),
+      buildRedactionTestOptions(filePath, opts),
     );
     process.exit(result.exitCode);
   });
@@ -638,14 +427,7 @@ redaction
     false,
   )
   .action((opts: { categories?: boolean; category?: string; json?: boolean }) => {
-    const options: Parameters<typeof runRedactionList>[1] = {};
-    if (opts.categories === true) options.categories = true;
-    if (opts.category !== undefined) options.category = opts.category;
-    if (opts.json === true) options.json = true;
-    const result = runRedactionList(
-      { output: consoleOutput(), emit: (line) => console.log(line) },
-      options,
-    );
+    const result = runRedactionList(buildRedactionListDeps(), buildRedactionListOptions(opts));
     process.exit(result.exitCode);
   });
 
@@ -666,50 +448,3 @@ program.parseAsync().catch((err: unknown) => {
   console.error(`${chalk.red('✗')} unexpected error: ${String(err)}`);
   process.exit(EXIT_CODE.error);
 });
-
-async function autoUpgradeFromConfig(devMode: boolean): Promise<void> {
-  let installSource: InstallSource | undefined;
-  try {
-    const cfg = await loadConfigFromFile();
-    installSource = cfg.account.installSource;
-  } catch {
-    return;
-  }
-  await runAutoUpgrade({
-    binaryPath: process.execPath,
-    currentVersion: packageJson.version,
-    installSource,
-    devMode,
-    exitProcess: () => process.exit(0),
-  });
-}
-
-function buildSetupOptions(opts: {
-  apiKey?: string;
-  installSource: string;
-  start?: boolean;
-  force?: boolean;
-}): {
-  apiKey?: string;
-  installSource?: InstallSource;
-  noStart?: boolean;
-  force?: boolean;
-} {
-  const VALID = ['bun', 'pnpm', 'yarn', 'npm', 'brew', 'github_release'] as const;
-  type Source = (typeof VALID)[number];
-  const installSource = (VALID as readonly string[]).includes(opts.installSource)
-    ? (opts.installSource as Source)
-    : ('github_release' as Source);
-  const out: {
-    apiKey?: string;
-    installSource?: InstallSource;
-    noStart?: boolean;
-    force?: boolean;
-  } = {
-    installSource,
-  };
-  if (opts.apiKey !== undefined) out.apiKey = opts.apiKey;
-  if (opts.start === false) out.noStart = true;
-  if (opts.force === true) out.force = true;
-  return out;
-}
