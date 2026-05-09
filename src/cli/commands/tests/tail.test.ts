@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runTail, todaysLogPath, formatLine } from 'cli/commands/tail.ts';
+import { runTail, todaysLogPath, formatLine } from 'cli/commands/tail';
 import { captureOutput } from 'cli/output.ts';
 
 let dir: string;

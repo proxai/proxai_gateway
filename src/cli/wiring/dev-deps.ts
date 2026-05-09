@@ -1,5 +1,5 @@
 import type { DevCommandDeps } from 'cli/commands/dev.ts';
-import { runDaemon } from 'cli/commands/run.ts';
+import { runDaemon } from 'cli/commands/run';
 import { consoleOutput } from 'cli/output.ts';
 import { createLogger } from 'core/log';
 import {

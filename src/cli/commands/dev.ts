@@ -1,7 +1,7 @@
 import type { Logger, LoggerFactoryOptions } from 'core/log';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
-import type { RunCommandDeps } from 'cli/commands/run.ts';
+import type { RunCommandDeps } from 'cli/commands/run';
 import type { GatewayConfig } from 'services/config';
 
 export const DEV_NEST_URL = 'http://localhost:3001';

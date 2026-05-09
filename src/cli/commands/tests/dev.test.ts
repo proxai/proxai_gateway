@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Logger, LoggerFactoryOptions } from 'core/log';
 import type { CommandResult } from 'cli/cli.types.ts';
 import { DEV_NEST_URL, runDev } from 'cli/commands/dev.ts';
-import type { RunCommandDeps } from 'cli/commands/run.ts';
+import type { RunCommandDeps } from 'cli/commands/run';
 import { captureOutput } from 'cli/output.ts';
 import type { GatewayConfig } from 'services/config';
 

@@ -1,6 +1,6 @@
 import type { CommandResult } from 'cli/cli.types.ts';
-import { runSetup } from 'cli/commands/setup.ts';
-import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup.ts';
+import { runSetup } from 'cli/commands/setup';
+import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup';
 import { resolveWindowsUserId } from 'cli/wiring/platform.ts';
 import { consoleOutput } from 'cli/output.ts';
 import { inquirerPrompts } from 'cli/prompts.ts';

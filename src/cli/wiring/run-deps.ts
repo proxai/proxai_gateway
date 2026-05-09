@@ -1,4 +1,4 @@
-import type { RunCommandDeps } from 'cli/commands/run.ts';
+import type { RunCommandDeps } from 'cli/commands/run';
 import { consoleOutput } from 'cli/output.ts';
 import {
   authFailedSentinelPath,

@@ -4,7 +4,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runDaemon } from 'cli/commands/run.ts';
+import { runDaemon } from 'cli/commands/run';
 import { captureOutput } from 'cli/output.ts';
 import { countCursors, openBufferDb, setCursor } from 'services/buffer';
 import type { GatewayConfig } from 'services/config';

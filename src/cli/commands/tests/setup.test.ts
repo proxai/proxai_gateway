@@ -4,7 +4,7 @@ import { mkdtemp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runSetup } from 'cli/commands/setup.ts';
+import { runSetup } from 'cli/commands/setup';
 import { captureOutput } from 'cli/output.ts';
 import { scriptedPrompts } from 'cli/prompts.ts';
 import { deriveHostId } from 'core/system';

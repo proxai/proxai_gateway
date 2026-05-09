@@ -1,4 +1,4 @@
-import type { TailCommandDeps, TailCommandOptions } from 'cli/commands/tail.ts';
+import type { TailCommandDeps, TailCommandOptions } from 'cli/commands/tail';
 import { consoleOutput } from 'cli/output.ts';
 import type { LogLevel } from 'core/log';
 
