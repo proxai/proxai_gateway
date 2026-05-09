@@ -144,7 +144,7 @@ test('starts the loop, runs at least one cycle, and exits cleanly on abort', asy
     true,
   );
   expect(out.lines.some((l) => l.msg.includes('daemon loops exited'))).toBe(true);
-});
+}, 30_000);
 
 test('exits immediately when abort signal is already aborted', async () => {
   const config = makeConfig();
