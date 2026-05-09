@@ -57,7 +57,7 @@ export async function collectGeminiCliFile(
     }
 
     const detect = context.detectVersion ?? defaultDetectVersion;
-    const detected = detect();
+    const detected = await detect();
     const agentSchemaVersion =
       detected !== null
         ? `${GEMINI_CLI_AGENT_SCHEMA_PREFIX}${detected}`
@@ -200,6 +200,10 @@ async function readHeaderEnd(sourcePath: string): Promise<number | null> {
   return newlineIndex + 1;
 }
 
-function defaultDetectVersion(): string | null {
-  return detectGeminiCliVersion({ homedir: homedir(), platform: process.platform });
+function defaultDetectVersion(): Promise<string | null> {
+  return detectGeminiCliVersion({
+    homedir: homedir(),
+    platform: process.platform,
+    env: process.env,
+  });
 }

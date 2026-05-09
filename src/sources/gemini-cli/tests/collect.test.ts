@@ -56,7 +56,7 @@ function ctx(b: Database, detectedVersion: string | null = '0.41.2'): GeminiCliC
     buffer: b,
     gatewayVersion: '@proxai/gateway 0.1.0',
     maxDecompressedBytes: BODY_TARGET_DECOMPRESSED_BYTES,
-    detectVersion: () => detectedVersion,
+    detectVersion: async () => detectedVersion,
   };
 }
 
