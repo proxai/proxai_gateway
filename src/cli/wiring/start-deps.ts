@@ -1,7 +1,7 @@
 import type { CommandResult } from 'cli/cli.types.ts';
 import type { StartCommandDeps } from 'cli/commands/start.ts';
 import { consoleOutput } from 'cli/output.ts';
-import type { ServiceManager } from 'cli/service-manager.ts';
+import type { ServiceManager } from 'cli/service-manager';
 import type { ServiceUnitRecreateConfig } from 'cli/service-unit-writer.ts';
 import { configFilePath, sessionStoppedSentinelPath } from 'core/io/fs';
 

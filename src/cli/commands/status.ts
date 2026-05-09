@@ -3,7 +3,7 @@ import chalk from 'chalk';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
-import type { ServiceManager } from 'cli/service-manager.ts';
+import type { ServiceManager } from 'cli/service-manager';
 import {
   countByStatus,
   countsBySource,

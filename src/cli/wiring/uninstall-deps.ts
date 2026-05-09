@@ -7,7 +7,7 @@ import type { UninstallCommandDeps, UninstallCommandOptions } from 'cli/commands
 import { createDefaultSweep } from 'cli/commands/uninstall-sweep.ts';
 import { consoleOutput } from 'cli/output.ts';
 import { inquirerPrompts } from 'cli/prompts.ts';
-import type { ServiceManager } from 'cli/service-manager.ts';
+import type { ServiceManager } from 'cli/service-manager';
 import { configDir, configFilePath, logDir } from 'core/io/fs';
 
 export interface BuildUninstallDepsInputs {

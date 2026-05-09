@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import type { ServiceManager } from 'cli/service-manager.ts';
+import type { ServiceManager } from 'cli/service-manager';
 import { buildUninstallDeps, buildUninstallOptions } from 'cli/wiring/uninstall-deps.ts';
 
 const sm = {

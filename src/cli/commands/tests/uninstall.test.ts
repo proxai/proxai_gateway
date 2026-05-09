@@ -19,7 +19,7 @@ import type {
 import type { PathCleanupOutcome, ShellPathCleaner } from 'cli/commands/path-cleanup.ts';
 import { captureOutput } from 'cli/output.ts';
 import { scriptedPrompts } from 'cli/prompts.ts';
-import type { ServiceManager } from 'cli/service-manager.ts';
+import type { ServiceManager } from 'cli/service-manager';
 import { deriveHostId } from 'core/system';
 import {
   writeConfigToFile,

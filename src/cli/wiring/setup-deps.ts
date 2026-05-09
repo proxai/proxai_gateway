@@ -4,7 +4,7 @@ import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup.t
 import { resolveWindowsUserId } from 'cli/wiring/platform.ts';
 import { consoleOutput } from 'cli/output.ts';
 import { inquirerPrompts } from 'cli/prompts.ts';
-import type { ServiceManager } from 'cli/service-manager.ts';
+import type { ServiceManager } from 'cli/service-manager';
 import {
   authFailedSentinelPath,
   bufferDbPath,

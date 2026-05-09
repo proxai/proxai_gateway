@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import type { ServiceManager } from 'cli/service-manager.ts';
+import type { ServiceManager } from 'cli/service-manager';
 import { buildStopDeps } from 'cli/wiring/stop-deps.ts';
 
 const sm = {

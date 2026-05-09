@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import type { CommandResult } from 'cli/cli.types.ts';
-import type { ServiceManager } from 'cli/service-manager.ts';
+import type { ServiceManager } from 'cli/service-manager';
 import type { ServiceUnitRecreateConfig } from 'cli/service-unit-writer.ts';
 import { buildRestartDeps } from 'cli/wiring/restart-deps.ts';
 

@@ -628,7 +628,7 @@ test('register-host-id network error returns generic error', async () => {
   ).toBe(true);
 });
 
-import type { ServiceManager } from 'cli/service-manager.ts';
+import type { ServiceManager } from 'cli/service-manager';
 
 interface FakeServiceManager extends ServiceManager {
   calls: { ensureRegistered: number; start: number };

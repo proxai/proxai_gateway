@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import { runStop } from 'cli/commands/stop.ts';
 import { captureOutput } from 'cli/output.ts';
-import type { ServiceManager } from 'cli/service-manager.ts';
+import type { ServiceManager } from 'cli/service-manager';
 import { readSessionStoppedSentinel } from 'services/polling/session-stopped-sentinel.ts';
 
 interface FakeCalls {

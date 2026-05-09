@@ -1,7 +1,7 @@
 import { defaultLaunchdPlistPath } from 'cli/launchd-plist.ts';
 import { defaultScheduledTaskXmlPath } from 'cli/scheduled-task-xml.ts';
-import { getServiceManager } from 'cli/service-manager.ts';
-import type { ServiceManager } from 'cli/service-manager.ts';
+import { getServiceManager } from 'cli/service-manager';
+import type { ServiceManager } from 'cli/service-manager';
 import type { ServiceUnitRecreateConfig } from 'cli/service-unit-writer.ts';
 import { defaultSystemdUnitPath } from 'cli/systemd-unit.ts';
 

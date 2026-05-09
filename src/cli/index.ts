@@ -5,5 +5,5 @@ export * from 'cli/launchd-plist.ts';
 export * from 'cli/output.ts';
 export * from 'cli/prompts.ts';
 export * from 'cli/scheduled-task-xml.ts';
-export * from 'cli/service-manager.ts';
+export * from 'cli/service-manager';
 export * from 'cli/systemd-unit.ts';

@@ -2,7 +2,7 @@ import type { Database } from 'bun:sqlite';
 
 import type { StatusCommandDeps, StatusCommandOptions } from 'cli/commands/status.ts';
 import { consoleOutput } from 'cli/output.ts';
-import type { ServiceManager } from 'cli/service-manager.ts';
+import type { ServiceManager } from 'cli/service-manager';
 import {
   authFailedSentinelPath,
   bufferDbPath,

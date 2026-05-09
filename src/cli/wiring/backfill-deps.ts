@@ -1,6 +1,6 @@
 import type { BackfillCommandDeps, BackfillCommandOptions } from 'cli/commands/backfill.ts';
 import { consoleOutput } from 'cli/output.ts';
-import type { ServiceManager } from 'cli/service-manager.ts';
+import type { ServiceManager } from 'cli/service-manager';
 import { authFailedSentinelPath, bufferFullSentinelPath, pausedSentinelPath } from 'core/io/fs';
 import { GATEWAY_USER_AGENT } from 'core/utils';
 import type { GatewayConfig } from 'services/config';
