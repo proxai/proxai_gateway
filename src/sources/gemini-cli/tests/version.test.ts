@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import { detectGeminiCliVersion } from 'sources/gemini-cli/version.ts';
+import { defaultSpawn, defaultWhich, detectGeminiCliVersion } from 'sources/gemini-cli/version.ts';
 
 test('returns null when which returns null', async () => {
   const result = await detectGeminiCliVersion({
@@ -101,3 +101,23 @@ test('default real-fs path returns null or a valid version (no fakes)', async ()
     expect(result).toBeNull();
   }
 });
+
+test('defaultWhich resolves a known-present binary or returns null deterministically', () => {
+  const lookup = process.platform === 'win32' ? 'cmd' : 'sh';
+  const result = defaultWhich(lookup);
+  if (result !== null) {
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
+  }
+  expect(defaultWhich('__definitely_not_a_real_cmd_xyz__')).toBeNull();
+});
+
+test('defaultSpawn runs a portable command and returns stdout + exit code', async () => {
+  const argv =
+    process.platform === 'win32'
+      ? ['cmd', '/c', 'echo', 'gemini-test-version']
+      : ['/bin/sh', '-c', 'echo gemini-test-version'];
+  const { stdout, exitCode } = await defaultSpawn(argv);
+  expect(exitCode).toBe(0);
+  expect(stdout).toContain('gemini-test-version');
+}, 10_000);

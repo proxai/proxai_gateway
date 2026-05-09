@@ -29,11 +29,11 @@ export async function detectGeminiCliVersion(
   return firstLine;
 }
 
-function defaultWhich(cmd: string): string | null {
+export function defaultWhich(cmd: string): string | null {
   return Bun.which(cmd);
 }
 
-async function defaultSpawn(argv: string[]): Promise<{ stdout: string; exitCode: number }> {
+export async function defaultSpawn(argv: string[]): Promise<{ stdout: string; exitCode: number }> {
   const proc = Bun.spawn(argv, {
     stdout: 'pipe',
     stderr: 'pipe',
