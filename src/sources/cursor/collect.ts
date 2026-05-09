@@ -1,27 +1,12 @@
 import { statFile } from 'core/io/fs';
 import { maxRowid, openReadOnly, pageCount, snapshotSqlite, tableExists } from 'core/io/sqlite';
+import { nextGenerationSuffix, sha256Hex } from 'core/utils';
+import { detectVacuum, getCursorWithFallback, setCursor } from 'services/buffer';
 import {
-  OversizedDecompressedSliceError,
-  generateUuidV7,
-  nextGenerationSuffix,
-  nowIsoUtc,
-  sha256Hex,
-  splitRowsByCompressedSize,
-  zstdCompressSync,
-} from 'core/utils';
-import { detectVacuum, getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
-import type { NewBatch } from 'services/buffer';
-import { BODY_MAX_DECOMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
-import { applyRedaction } from 'services/redaction';
-import {
-  CURSOR_BODY_COMPRESSION,
-  CURSOR_BODY_FORMAT,
-  CURSOR_DEFAULT_AGENT_SCHEMA_VERSION,
   CURSOR_DISK_KV_TABLE,
   CURSOR_KEY_PREFIX_BUBBLE,
   CURSOR_KEY_PREFIX_COMPOSER,
   CURSOR_SOURCE_APP,
-  CURSOR_SOURCE_KIND,
 } from 'sources/cursor/cursor.constants.ts';
 import type {
   CursorCollectorContext,
@@ -29,6 +14,8 @@ import type {
   CursorDiskKvRow,
   DiscoveredCursorFile,
 } from 'sources/cursor/cursor.types.ts';
+import { extractAgentSchemaVersion } from 'sources/cursor/extract-version.ts';
+import { processRows } from 'sources/cursor/process-rows.ts';
 
 const SELECT_ROWS_SQL = `
   SELECT rowid, key, value
@@ -102,7 +89,6 @@ export async function collectCursorFile(
             },
             'sqlite vacuum detected; re-keying source via #gen suffix',
           );
-
           priorCursor = null;
         }
       }
@@ -133,123 +119,20 @@ export async function collectCursorFile(
       }));
 
       const agentSchemaVersion = extractAgentSchemaVersion(kvRows);
-
-      const sliceMeasureCache = new WeakMap<
-        readonly CursorDiskKvRow[],
-        { redactedJson: string; rawBytes: number; compressedBytes: number }
-      >();
-      const measureSlice = (
-        slice: readonly CursorDiskKvRow[],
-      ): { redactedJson: string; rawBytes: number; compressedBytes: number } => {
-        let entry = sliceMeasureCache.get(slice);
-        if (entry === undefined) {
-          const redactedJson = applyRedaction(JSON.stringify({ rows: slice })).redacted;
-          const rawBytes = Buffer.byteLength(redactedJson, 'utf8');
-          const compressedBytes = zstdCompressSync(redactedJson).byteLength;
-          entry = { redactedJson, rawBytes, compressedBytes };
-          sliceMeasureCache.set(slice, entry);
-        }
-        return entry;
-      };
-      const measureCompressed = (slice: readonly CursorDiskKvRow[]): number =>
-        measureSlice(slice).compressedBytes;
-      const measureUncompressed = (slice: readonly CursorDiskKvRow[]): number =>
-        measureSlice(slice).rawBytes;
-
-      const slices = splitRowsByCompressedSize(kvRows, {
-        targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
-        maxDecompressedBytes: context.maxDecompressedBytes,
-        measureCompressed,
-        measureUncompressed,
-      });
-
-      if (slices.length > 1) {
-        context.logger?.info(
-          {
-            event: 'capture.split_for_size',
-            source_app: CURSOR_SOURCE_APP,
-            source_path_hash: effectiveSourcePathHash,
-            total_slices: slices.length,
-            row_count: kvRows.length,
-          },
-          'oversized capture slice split into multiple batches',
-        );
-      }
-
       const lastRow = rows[rows.length - 1]!;
       const finalWatermarkEnd = lastRow.rowid + 1;
 
-      for (let i = 0; i < slices.length; i++) {
-        const slice = slices[i]!;
-        if (slice.length === 0) continue;
-        const firstRowidInSlice = slice[0]!.rowid;
-        const lastRowidInSlice = slice[slice.length - 1]!.rowid;
-        const sliceWatermarkEnd = lastRowidInSlice + 1;
-
-        const redactedJson = applyRedaction(JSON.stringify({ rows: slice })).redacted;
-        const redactedBytes = Buffer.byteLength(redactedJson, 'utf8');
-        const compressed = zstdCompressSync(redactedJson);
-
-        if (redactedBytes > BODY_MAX_DECOMPRESSED_BYTES) {
-          throw new OversizedDecompressedSliceError({
-            sourcePath: effectiveSourcePath,
-            sourcePathHash: effectiveSourcePathHash,
-            rawBytes: redactedBytes,
-            compressedBytes: compressed.byteLength,
-            sliceIndex: i,
-            cap: BODY_MAX_DECOMPRESSED_BYTES,
-          });
-        }
-
-        if (slices.length > 1) {
-          context.logger?.debug(
-            {
-              event: 'capture.chunked',
-              source_app: CURSOR_SOURCE_APP,
-              source_path_hash: effectiveSourcePathHash,
-              slice_index: i,
-              total_slices: slices.length,
-              compressed_bytes: compressed.byteLength,
-            },
-            'capture chunk insert',
-          );
-        }
-
-        const batch: NewBatch = {
-          captureId: generateUuidV7(),
-          sourceApp: CURSOR_SOURCE_APP,
-          sourceKind: CURSOR_SOURCE_KIND,
-          sourcePath: effectiveSourcePath,
-          sourcePathHash: effectiveSourcePathHash,
-          sourceInode: null,
-          watermarkKind: 'rowid_range',
-          watermarkStart: firstRowidInSlice,
-          watermarkEnd: sliceWatermarkEnd,
-          watermarkTable: null,
-          agentSchemaVersion,
-          gatewayVersion: context.gatewayVersion,
-          capturedAtUtc: nowIsoUtc(),
-          bodyFormat: CURSOR_BODY_FORMAT,
-          bodyCompression: CURSOR_BODY_COMPRESSION,
-          body: compressed,
-        };
-
-        insertBatch(context.buffer, batch);
-        result.capturedBytes += compressed.byteLength;
-      }
-
-      setCursor(context.buffer, {
-        sourceApp: CURSOR_SOURCE_APP,
-        sourcePathHash: effectiveSourcePathHash,
-        sourcePath: effectiveSourcePath,
-        sourceInode: null,
-        watermarkTable: null,
-        watermarkEnd: finalWatermarkEnd,
-        lastSeenSizeBytes: currentSizeBytes,
-        lastSeenPageCount: currentPageCount,
+      processRows({
+        rows: kvRows,
+        context,
+        agentSchemaVersion,
+        effectiveSourcePath,
+        effectiveSourcePathHash,
+        currentSizeBytes,
+        currentPageCount,
+        finalWatermarkEnd,
+        result,
       });
-
-      result.capturedBatches = slices.length;
     } finally {
       db.close();
     }
@@ -265,37 +148,4 @@ export async function collectCursorFile(
   }
 
   return result;
-}
-
-function extractAgentSchemaVersion(rows: CursorDiskKvRow[]): string {
-  let composerVersion: string | null = null;
-  let bubbleVersion: string | null = null;
-
-  for (const row of rows) {
-    if (composerVersion === null && row.key.startsWith(CURSOR_KEY_PREFIX_COMPOSER)) {
-      composerVersion = parseInnerVersion(row.value);
-    }
-    if (bubbleVersion === null && row.key.startsWith(CURSOR_KEY_PREFIX_BUBBLE)) {
-      bubbleVersion = parseInnerVersion(row.value);
-    }
-    if (composerVersion !== null && bubbleVersion !== null) break;
-  }
-
-  if (composerVersion === null && bubbleVersion === null) {
-    return CURSOR_DEFAULT_AGENT_SCHEMA_VERSION;
-  }
-  return `${composerVersion ?? CURSOR_DEFAULT_AGENT_SCHEMA_VERSION}:${bubbleVersion ?? CURSOR_DEFAULT_AGENT_SCHEMA_VERSION}`;
-}
-
-function parseInnerVersion(value: string): string | null {
-  try {
-    const parsed = JSON.parse(value) as Record<string, unknown>;
-    const v = parsed['_v'];
-    if (typeof v === 'number' || typeof v === 'string') {
-      return String(v);
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }

@@ -1,25 +1,16 @@
-import {
-  AuthError,
-  FatalError,
-  NetworkError,
-  parseRetryAfter,
-  RateLimitError,
-  RetriableError,
-  ValidationError,
-  WatermarkRegressionError,
-} from 'core/utils';
-import type { GatewayError, HttpRequestContext } from 'core/utils';
+import { NetworkError, RetriableError } from 'core/utils';
 import { validateRawRecordDTO } from 'services/contract';
 import type { RawRecordDTO } from 'services/contract';
+
+import { dispatchSuccessOrThrow } from 'services/http/error-mapping.ts';
+import { makeHttpContext, withCtx } from 'services/http/http-context.ts';
 import {
   CONTENT_TYPE_JSON,
   DEFAULT_TIMEOUT_MS,
   DEFAULT_USER_AGENT,
   HEADER_CONTENT_TYPE,
-  HEADER_RETRY_AFTER,
   HEADER_USER_AGENT,
   HEADER_X_API_KEY,
-  HTTP_STATUS,
 } from 'services/http/http.constants.ts';
 import type {
   FetchWatermarksResult,
@@ -31,6 +22,7 @@ import type {
   UploadResult,
   VerifyKeyResult,
 } from 'services/http/http.types.ts';
+import { parseServerWatermark } from 'services/http/parse-helpers.ts';
 
 export class HttpClient {
   private readonly apiKey: string;
@@ -170,150 +162,6 @@ export class HttpClient {
       throw withCtx(new NetworkError(`network failure: ${e.message}`, err), ctx);
     }
 
-    return this.dispatch<T>(response, options);
+    return dispatchSuccessOrThrow<T>(response, options.url, options.method);
   }
-
-  private async dispatch<T>(response: Response, options: RequestOptions): Promise<T> {
-    const status = response.status;
-
-    if (status === HTTP_STATUS.ok || status === HTTP_STATUS.created) {
-      const text = await response.text();
-      if (text.length === 0) {
-        throw withCtx(
-          new FatalError(`server returned ${status.toString()} with empty body`),
-          makeHttpContext(options.url, options.method, status, ''),
-        );
-      }
-      try {
-        return JSON.parse(text) as T;
-      } catch (err) {
-        throw withCtx(
-          new FatalError(`failed to parse response JSON: ${(err as Error).message}`, err),
-          makeHttpContext(options.url, options.method, status, text),
-        );
-      }
-    }
-    const errorBody = await response.text();
-    const ctx = makeHttpContext(options.url, options.method, status, errorBody);
-    if (status === HTTP_STATUS.badRequest) {
-      const regression = parseWatermarkRegression(errorBody);
-      if (regression !== null) {
-        throw withCtx(
-          new WatermarkRegressionError(
-            `server reported watermark_regression at ${regression.currentServerWatermarkEnd.toString()}`,
-            regression.currentServerWatermarkEnd,
-            regression.sourcePathHash,
-          ),
-          ctx,
-        );
-      }
-      throw withCtx(new ValidationError(`server returned 400 ${response.statusText}`), ctx);
-    }
-    if (status === HTTP_STATUS.unauthorized) {
-      throw withCtx(new AuthError('server returned 401: ingestion key missing or invalid'), ctx);
-    }
-    if (status === HTTP_STATUS.forbidden) {
-      throw withCtx(new AuthError('server returned 403: ingestion key invalid or revoked'), ctx);
-    }
-    if (status === HTTP_STATUS.requestTimeout) {
-      throw withCtx(
-        new ValidationError('server returned 408 (decompress timeout — gateway bug)'),
-        ctx,
-      );
-    }
-    if (status === HTTP_STATUS.payloadTooLarge) {
-      throw withCtx(new ValidationError('server returned 413 (payload too large)'), ctx);
-    }
-    if (status === HTTP_STATUS.tooManyRequests) {
-      const retryAfter = parseRetryAfter(response.headers.get(HEADER_RETRY_AFTER));
-      throw withCtx(new RateLimitError('server returned 429 (rate limit)', retryAfter), ctx);
-    }
-    if (status >= 500 && status < 600) {
-      const retryAfter = parseRetryAfter(response.headers.get(HEADER_RETRY_AFTER));
-      throw withCtx(new RetriableError(`server returned ${status.toString()}`, retryAfter), ctx);
-    }
-    throw withCtx(new FatalError(`unexpected status: ${status.toString()}`), ctx);
-  }
-}
-
-const RESPONSE_BODY_EXCERPT_LIMIT = 512;
-
-function makeHttpContext(
-  url: string,
-  method: string,
-  status: number | null,
-  body: string | null,
-): HttpRequestContext {
-  let bodyExcerpt: string | null = null;
-  if (body !== null) {
-    bodyExcerpt =
-      body.length > RESPONSE_BODY_EXCERPT_LIMIT
-        ? `${body.slice(0, RESPONSE_BODY_EXCERPT_LIMIT)}…`
-        : body;
-  }
-  return { url, method, status, bodyExcerpt };
-}
-
-function withCtx<E extends GatewayError>(err: E, ctx: HttpRequestContext): E {
-  err.withHttpContext(ctx);
-  return err;
-}
-
-function parseWatermarkRegression(
-  text: string,
-): { currentServerWatermarkEnd: number; sourcePathHash: string } | null {
-  if (text.length === 0) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return null;
-  }
-  if (parsed === null || typeof parsed !== 'object') return null;
-  const r = parsed as Record<string, unknown>;
-  if (r['error'] !== 'watermark_regression') return null;
-  const watermark = r['current_server_watermark_end'];
-  const hash = r['source_path_hash'];
-  if (typeof watermark !== 'number' || !Number.isFinite(watermark)) return null;
-  if (typeof hash !== 'string' || hash.length === 0) return null;
-  return { currentServerWatermarkEnd: watermark, sourcePathHash: hash };
-}
-
-function parseServerWatermark(item: unknown): ServerWatermark | null {
-  if (item === null || typeof item !== 'object') return null;
-  const r = item as Record<string, unknown>;
-  const sourceApp = typeof r['source_app'] === 'string' ? r['source_app'] : null;
-  const sourcePathHash = typeof r['source_path_hash'] === 'string' ? r['source_path_hash'] : null;
-  const watermarkKindRaw = typeof r['watermark_kind'] === 'string' ? r['watermark_kind'] : null;
-  const watermarkEnd = typeof r['watermark_end'] === 'number' ? r['watermark_end'] : null;
-  const watermarkTableRaw = r['watermark_table'];
-  const watermarkTable =
-    watermarkTableRaw === null || watermarkTableRaw === undefined
-      ? null
-      : typeof watermarkTableRaw === 'string'
-        ? watermarkTableRaw
-        : null;
-  const lastDeliveredAt =
-    typeof r['last_delivered_at'] === 'string' ? r['last_delivered_at'] : null;
-
-  if (
-    sourceApp === null ||
-    sourcePathHash === null ||
-    watermarkKindRaw === null ||
-    watermarkEnd === null ||
-    lastDeliveredAt === null
-  ) {
-    return null;
-  }
-  if (watermarkKindRaw !== 'byte_range' && watermarkKindRaw !== 'rowid_range') {
-    return null;
-  }
-  return {
-    sourceApp,
-    sourcePathHash,
-    watermarkKind: watermarkKindRaw,
-    watermarkEnd,
-    watermarkTable,
-    lastDeliveredAt,
-  };
 }
