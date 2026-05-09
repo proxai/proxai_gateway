@@ -35,6 +35,7 @@ import {
   formatLocalTimestamp,
   formatRelative,
   renderBufferSection,
+  renderCaptureCyclesLine,
   renderCaptureRow,
   renderHealthSection,
   renderUploadSection,
@@ -109,9 +110,11 @@ export interface StatusJsonOutput {
     consecutiveRetriableBreak: boolean | null;
     totalBatchesShipped: number;
     totalBytesShipped: number;
-    cyclesTotal: number;
-    cyclesWithErrors: number;
-    cyclesTotalDurationMs: number;
+    captureCyclesTotal: number;
+    captureCyclesWithErrors: number;
+    captureLastCycleAt: string | null;
+    drainCyclesTotal: number;
+    drainCyclesTotalDurationMs: number;
     lastSuccessAt: string | null;
     lastSuccessBatches: number | null;
     lastSuccessBytes: number | null;
@@ -168,9 +171,11 @@ export async function runStatus(
           consecutiveRetriableBreak: null,
           totalBatchesShipped: 0,
           totalBytesShipped: 0,
-          cyclesTotal: 0,
-          cyclesWithErrors: 0,
-          cyclesTotalDurationMs: 0,
+          captureCyclesTotal: 0,
+          captureCyclesWithErrors: 0,
+          captureLastCycleAt: null,
+          drainCyclesTotal: 0,
+          drainCyclesTotalDurationMs: 0,
           lastSuccessAt: null,
           lastSuccessBatches: null,
           lastSuccessBytes: null,
@@ -204,11 +209,33 @@ export async function runStatus(
   const lastPruneAt = getLastPruneAt(buffer);
   const daemonState = getDaemonState(buffer);
 
-  const cyclesTotal = readNumber(buffer, METADATA_KEYS.cyclesTotal);
-  const cyclesWithErrors = readNumber(buffer, METADATA_KEYS.cyclesWithErrors);
-  const cyclesTotalDurationMs = readNumber(buffer, METADATA_KEYS.cyclesTotalDurationMs);
-  const totalBatchesShipped = readNumber(buffer, METADATA_KEYS.uploadTotalBatchesShipped);
-  const totalBytesShipped = readNumber(buffer, METADATA_KEYS.uploadTotalBytesShipped);
+  const captureCyclesTotal = readNumberWithFallback(
+    buffer,
+    METADATA_KEYS.captureCyclesTotal,
+    METADATA_KEYS.cyclesTotal,
+  );
+  const captureCyclesWithErrors = readNumberWithFallback(
+    buffer,
+    METADATA_KEYS.captureCyclesWithErrors,
+    METADATA_KEYS.cyclesWithErrors,
+  );
+  const captureLastCycleAt = getMetadataWithFallback(
+    buffer,
+    METADATA_KEYS.captureLastCycleAt,
+    null,
+  );
+  const drainCyclesTotal = readNumber(buffer, METADATA_KEYS.drainCyclesTotal);
+  const drainCyclesTotalDurationMs = readNumber(buffer, METADATA_KEYS.drainLastCycleDurationMs);
+  const totalBatchesShipped = readNumberWithFallback(
+    buffer,
+    METADATA_KEYS.drainTotalBatchesShipped,
+    METADATA_KEYS.uploadTotalBatchesShipped,
+  );
+  const totalBytesShipped = readNumberWithFallback(
+    buffer,
+    METADATA_KEYS.drainTotalBytesShipped,
+    METADATA_KEYS.uploadTotalBytesShipped,
+  );
   const shippedBySource = readShippedBySource(buffer);
   const lastSuccessAt = getMetadata(buffer, METADATA_KEYS.uploadLastSuccessAt);
   const lastSuccessBatches = readNumberOrNull(buffer, METADATA_KEYS.uploadLastSuccessBatches);
@@ -320,9 +347,11 @@ export async function runStatus(
         consecutiveRetriableBreak: daemonState?.lastConsecutiveRetriableBreak ?? null,
         totalBatchesShipped,
         totalBytesShipped,
-        cyclesTotal,
-        cyclesWithErrors,
-        cyclesTotalDurationMs,
+        captureCyclesTotal,
+        captureCyclesWithErrors,
+        captureLastCycleAt,
+        drainCyclesTotal,
+        drainCyclesTotalDurationMs,
         lastSuccessAt,
         lastSuccessBatches,
         lastSuccessBytes,
@@ -365,8 +394,11 @@ export async function runStatus(
     sourceCounts,
     lastPruneAt,
     daemonState,
-    cyclesTotal,
-    cyclesTotalDurationMs,
+    captureCyclesTotal,
+    captureCyclesWithErrors,
+    captureLastCycleAt,
+    drainCyclesTotal,
+    drainCyclesTotalDurationMs,
     totalBatchesShipped,
     totalBytesShipped,
     shippedBySource,
@@ -403,8 +435,11 @@ interface RenderInput {
   sourceCounts: CountsBySource;
   lastPruneAt: string | null;
   daemonState: DaemonStateSnapshot | null;
-  cyclesTotal: number;
-  cyclesTotalDurationMs: number;
+  captureCyclesTotal: number;
+  captureCyclesWithErrors: number;
+  captureLastCycleAt: string | null;
+  drainCyclesTotal: number;
+  drainCyclesTotalDurationMs: number;
   totalBatchesShipped: number;
   totalBytesShipped: number;
   shippedBySource: UploadBySource;
@@ -457,12 +492,16 @@ function renderHumanStatus(deps: StatusCommandDeps, input: RenderInput): void {
     out.info(line);
   }
 
+  out.info(
+    `  Cycles        ${renderCaptureCyclesLine(input.captureCyclesTotal, input.captureCyclesWithErrors, input.captureLastCycleAt, input.now)}`,
+  );
+
   out.info('');
   for (const line of renderUploadSection({
     totalBatchesShipped: input.totalBatchesShipped,
     totalBytesShipped: input.totalBytesShipped,
-    cyclesTotal: input.cyclesTotal,
-    cyclesTotalDurationMs: input.cyclesTotalDurationMs,
+    drainCyclesTotal: input.drainCyclesTotal,
+    drainCyclesTotalDurationMs: input.drainCyclesTotalDurationMs,
     shippedBySource: input.shippedBySource,
     lastCycleCompletedAt: input.daemonState?.lastCycleCompletedAt ?? null,
     lastCycleAttempted: input.daemonState?.lastDrainAttempted ?? null,
@@ -588,6 +627,26 @@ function readNumber(db: Database, key: string): number {
   if (raw === null) return 0;
   const n = Number(raw);
   return Number.isFinite(n) ? n : 0;
+}
+
+export function readNumberWithFallback(db: Database, primary: string, legacy: string): number {
+  const raw = getMetadata(db, primary);
+  if (raw !== null) {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return readNumber(db, legacy);
+}
+
+export function getMetadataWithFallback(
+  db: Database,
+  primary: string,
+  legacy: string | null,
+): string | null {
+  const raw = getMetadata(db, primary);
+  if (raw !== null) return raw;
+  if (legacy === null) return null;
+  return getMetadata(db, legacy);
 }
 
 function readNumberOrNull(db: Database, key: string): number | null {

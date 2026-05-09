@@ -122,16 +122,28 @@ test('starts the loop, runs at least one cycle, and exits cleanly on abort', asy
         }),
       },
     ],
-    onCycleComplete: () => {
+    captureIntervalMs: 1,
+    drainIntervalMs: 1,
+    heartbeatIntervalMs: 1,
+    updateAvailableSentinelPath: join(dir, 'UPDATE_AVAILABLE'),
+    currentVersion: '1.0.0',
+    binaryPath: '/tmp/x',
+    devMode: false,
+    exitProcess: () => {},
+    onCaptureComplete: () => {
       cycles++;
       ctrl.abort();
     },
+    onDrainComplete: () => {},
+    onHeartbeatComplete: () => {},
   });
   const result = await promise;
   expect(result.exitCode).toBe(0);
   expect(cycles).toBeGreaterThanOrEqual(1);
-  expect(out.lines.some((l) => l.msg.includes('starting poll loop'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('poll loop exited'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('starting capture / drain / heartbeat loops'))).toBe(
+    true,
+  );
+  expect(out.lines.some((l) => l.msg.includes('daemon loops exited'))).toBe(true);
 });
 
 test('exits immediately when abort signal is already aborted', async () => {
@@ -194,7 +206,7 @@ test('empty cursor table triggers a watermark sync; populated cursors are seeded
     gatewayVersion: 'gw-test',
     httpClient,
     sources: [],
-    onCycleComplete: () => ctrl.abort(),
+    onCaptureComplete: () => ctrl.abort(),
   });
   const result = await promise;
   expect(result.exitCode).toBe(0);
@@ -238,7 +250,7 @@ test('non-empty cursor table skips the pre-flight sync', async () => {
     gatewayVersion: 'gw-test',
     httpClient,
     sources: [],
-    onCycleComplete: () => ctrl.abort(),
+    onCaptureComplete: () => ctrl.abort(),
   });
   expect(result.exitCode).toBe(0);
   expect(log.watermarkCalls).toBe(0);
@@ -318,7 +330,7 @@ test('deletes stale SESSION_STOPPED sentinel and proceeds when boot_id mismatche
         }),
       },
     ],
-    onCycleComplete: () => {
+    onCaptureComplete: () => {
       cycles++;
       ctrl.abort();
     },
@@ -357,7 +369,7 @@ test('proceeds normally when the SESSION_STOPPED sentinel does not exist', async
         }),
       },
     ],
-    onCycleComplete: () => {
+    onCaptureComplete: () => {
       cycles++;
       ctrl.abort();
     },
@@ -384,7 +396,7 @@ test('readBootId failure is logged as warn and does not abort the daemon', async
     gatewayVersion: 'gw-test',
     httpClient: mockHttp(config, emptyWatermarks),
     sources: [],
-    onCycleComplete: () => ctrl.abort(),
+    onCaptureComplete: () => ctrl.abort(),
   });
   expect(result.exitCode).toBe(0);
 });
@@ -406,7 +418,7 @@ test('watermark sync failure logs warn and does not abort the daemon', async () 
     gatewayVersion: 'gw-test',
     httpClient,
     sources: [],
-    onCycleComplete: () => ctrl.abort(),
+    onCaptureComplete: () => ctrl.abort(),
   });
   expect(result.exitCode).toBe(0);
 });

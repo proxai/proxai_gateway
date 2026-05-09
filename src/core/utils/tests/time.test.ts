@@ -18,3 +18,27 @@ test('monotonicMs advances over a sleep', async () => {
   const b = monotonicMs();
   expect(b - a).toBeGreaterThanOrEqual(8);
 });
+
+import { abortableSleep } from 'core/utils';
+
+test('abortableSleep resolves after the given delay when not aborted', async () => {
+  const start = Date.now();
+  await abortableSleep(20);
+  expect(Date.now() - start).toBeGreaterThanOrEqual(15);
+});
+
+test('abortableSleep resolves immediately when signal is already aborted', async () => {
+  const ctrl = new AbortController();
+  ctrl.abort();
+  const start = Date.now();
+  await abortableSleep(10_000, ctrl.signal);
+  expect(Date.now() - start).toBeLessThan(50);
+});
+
+test('abortableSleep resolves when signal aborts mid-sleep', async () => {
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), 5);
+  const start = Date.now();
+  await abortableSleep(10_000, ctrl.signal);
+  expect(Date.now() - start).toBeLessThan(500);
+});

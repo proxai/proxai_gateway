@@ -13,10 +13,19 @@ import { HttpClient } from 'services/http';
 import {
   buildDefaultSources,
   isCurrentSessionStopped,
-  runPollLoop,
+  runDaemonLoops,
   syncServerWatermarks,
 } from 'services/polling';
-import type { PollCycleContext, PollCycleResult, RegisteredSource } from 'services/polling';
+import type {
+  CaptureCycleContext,
+  CaptureCycleResult,
+  DaemonLoopContexts,
+  DrainCycleContext,
+  DrainCycleResult,
+  HeartbeatCycleContext,
+  HeartbeatCycleResult,
+  RegisteredSource,
+} from 'services/polling';
 import { createPacer } from 'services/uploader';
 
 export interface RunCommandDeps {
@@ -35,7 +44,12 @@ export interface RunCommandDeps {
   devMode?: boolean;
   exitProcess?: () => void;
   sources?: readonly RegisteredSource[];
-  onCycleComplete?: (result: PollCycleResult) => void;
+  onCaptureComplete?: (result: CaptureCycleResult) => void;
+  onDrainComplete?: (result: DrainCycleResult) => void;
+  onHeartbeatComplete?: (result: HeartbeatCycleResult) => void;
+  captureIntervalMs?: number;
+  drainIntervalMs?: number;
+  heartbeatIntervalMs?: number;
   logger?: Logger;
   httpClient?: HttpClient;
   readBootId?: () => Promise<string>;
@@ -103,7 +117,6 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
   logger.info(
     {
       event: 'daemon.start',
-      poll_interval_sec: deps.config.capture.pollIntervalSec,
       buffer_path: deps.config.capture.bufferPath,
     },
     'daemon starting',
@@ -134,50 +147,27 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
   }
 
   try {
-    deps.output.info(
-      `starting poll loop (interval: ${deps.config.capture.pollIntervalSec.toString()}s)`,
-    );
-    const loopOptions: {
-      intervalMs: number;
-      abortSignal: AbortSignal;
-      onCycleComplete?: (result: PollCycleResult) => void;
-    } = {
-      intervalMs: deps.config.capture.pollIntervalSec * 1000,
-      abortSignal: deps.abortSignal,
-    };
-    if (deps.onCycleComplete !== undefined) loopOptions.onCycleComplete = deps.onCycleComplete;
+    deps.output.info('starting capture / drain / heartbeat loops');
 
     const pacer = createPacer({
       maxBatchesPerSec: deps.config.capture.uploadMaxBatchesPerSec,
       maxBytesPerMinute: deps.config.capture.uploadMaxBytesPerMinute,
       backoffMultiplier: deps.config.capture.uploadBackoffOn429Multiplier,
     });
-    const cycleCtx: PollCycleContext = {
+
+    const sources =
+      deps.sources ??
+      buildDefaultSources({
+        initialScanWindowDays: deps.config.capture.initialScanWindowDays,
+      });
+
+    const captureCtx: CaptureCycleContext = {
       buffer,
-      http,
-      hostId: deps.config.account.hostId,
       gatewayVersion: deps.gatewayVersion,
-      sources:
-        deps.sources ??
-        buildDefaultSources({
-          initialScanWindowDays: deps.config.capture.initialScanWindowDays,
-        }),
+      sources,
       pauseSentinelPath: deps.pauseSentinelPath,
       authFailedSentinelPath: deps.authFailedSentinelPath,
       bufferFullSentinelPath: deps.bufferFullSentinelPath,
-      ...(deps.updateAvailableSentinelPath !== undefined
-        ? { updateAvailableSentinelPath: deps.updateAvailableSentinelPath }
-        : {}),
-      ...(deps.currentVersion !== undefined ? { currentVersion: deps.currentVersion } : {}),
-      ...(deps.binaryPath !== undefined ? { binaryPath: deps.binaryPath } : {}),
-      installSource: deps.installSource ?? deps.config.account.installSource,
-      ...(deps.devMode !== undefined ? { devMode: deps.devMode } : {}),
-      ...(deps.exitProcess !== undefined ? { exitProcess: deps.exitProcess } : {}),
-      installedAt: deps.config.account.installedAt,
-      staleBinary: {
-        warnAfterDays: deps.config.staleBinary.warnAfterDays,
-        pauseAfterDays: deps.config.staleBinary.pauseAfterDays,
-      },
       bufferPolicy: {
         receiptRetentionDays: deps.config.capture.receiptRetentionDays,
         failedRetentionDays: deps.config.capture.failedRetentionDays,
@@ -188,15 +178,73 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
         initialScanWindowDays: deps.config.capture.initialScanWindowDays,
         maxDecompressedBytes: resolveMaxDecompressed(deps.config.capture),
       },
+      logger,
+    };
+
+    const drainCtx: DrainCycleContext = {
+      buffer,
+      http,
+      hostId: deps.config.account.hostId,
+      pauseSentinelPath: deps.pauseSentinelPath,
+      authFailedSentinelPath: deps.authFailedSentinelPath,
+      bufferFullSentinelPath: deps.bufferFullSentinelPath,
+      bufferPolicy: {
+        receiptRetentionDays: deps.config.capture.receiptRetentionDays,
+        failedRetentionDays: deps.config.capture.failedRetentionDays,
+        softPauseBytes: deps.config.capture.bufferSoftPauseBytes,
+        softResumeBytes: deps.config.capture.bufferSoftResumeBytes,
+      },
       pacer,
       logger,
     };
-    await runPollLoop(cycleCtx, loopOptions);
+
+    const heartbeatCtx: HeartbeatCycleContext = {
+      buffer,
+      gatewayVersion: deps.gatewayVersion,
+      pauseSentinelPath: deps.pauseSentinelPath,
+      installedAt: deps.config.account.installedAt,
+      staleBinary: {
+        warnAfterDays: deps.config.staleBinary.warnAfterDays,
+        pauseAfterDays: deps.config.staleBinary.pauseAfterDays,
+      },
+      installSource: deps.installSource ?? deps.config.account.installSource,
+      logger,
+    };
+    if (deps.updateAvailableSentinelPath !== undefined) {
+      heartbeatCtx.updateAvailableSentinelPath = deps.updateAvailableSentinelPath;
+    }
+    if (deps.currentVersion !== undefined) heartbeatCtx.currentVersion = deps.currentVersion;
+    if (deps.binaryPath !== undefined) heartbeatCtx.binaryPath = deps.binaryPath;
+    if (deps.devMode !== undefined) heartbeatCtx.devMode = deps.devMode;
+    if (deps.exitProcess !== undefined) heartbeatCtx.exitProcess = deps.exitProcess;
+
+    const contexts: DaemonLoopContexts = {
+      capture: captureCtx,
+      drain: drainCtx,
+      heartbeat: heartbeatCtx,
+    };
+    const loopOptions: Parameters<typeof runDaemonLoops>[1] = {
+      abortSignal: deps.abortSignal,
+    };
+    if (deps.captureIntervalMs !== undefined)
+      loopOptions.captureIntervalMs = deps.captureIntervalMs;
+    if (deps.drainIntervalMs !== undefined) loopOptions.drainIntervalMs = deps.drainIntervalMs;
+    if (deps.heartbeatIntervalMs !== undefined) {
+      loopOptions.heartbeatIntervalMs = deps.heartbeatIntervalMs;
+    }
+    if (deps.onCaptureComplete !== undefined)
+      loopOptions.onCaptureComplete = deps.onCaptureComplete;
+    if (deps.onDrainComplete !== undefined) loopOptions.onDrainComplete = deps.onDrainComplete;
+    if (deps.onHeartbeatComplete !== undefined) {
+      loopOptions.onHeartbeatComplete = deps.onHeartbeatComplete;
+    }
+
+    await runDaemonLoops(contexts, loopOptions);
   } finally {
     logger.info({ event: 'daemon.stop' }, 'daemon shutting down');
     buffer.close();
   }
 
-  deps.output.info('poll loop exited');
+  deps.output.info('daemon loops exited');
   return { exitCode: EXIT_CODE.ok };
 }

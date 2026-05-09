@@ -111,7 +111,7 @@ test('reports configured but no recent activity when daemon has not run yet', as
   expect(result.exitCode).toBe(0);
   expect(out.lines.some((l) => l.msg.includes('Status:'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('starting'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('no cycle completed yet'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('no drain completed yet'))).toBe(true);
 });
 
 test('renders per-source row with capture stats from daemon_state', async () => {
@@ -716,4 +716,21 @@ test('runStatus surfaces per-source upload counters in JSON output when metadata
   });
   expect(json.upload.shippedBySource['cursor']).toEqual({ batches: 14, bytes: 2 * 1024 * 1024 });
   expect(json.upload.shippedBySource['codex']).toBeUndefined();
+});
+
+test('readNumberWithFallback: primary present but non-finite falls through to legacy', async () => {
+  setMetadata(buffer, METADATA_KEYS.drainTotalBatchesShipped, 'garbage');
+  setMetadata(buffer, METADATA_KEYS.uploadTotalBatchesShipped, '42');
+  const out = captureOutput();
+  const result = await runStatus(makeDeps({ output: out }), { json: true });
+  expect(result.exitCode).toBe(0);
+  const json = JSON.parse(out.lines[0]!.msg) as { upload: { totalBatchesShipped: number } };
+  expect(json.upload.totalBatchesShipped).toBe(42);
+});
+
+test('getMetadataWithFallback: primary present uses primary, no legacy lookup', async () => {
+  setMetadata(buffer, METADATA_KEYS.captureLastCycleAt, '2026-05-08T13:30:00.000Z');
+  const out = captureOutput();
+  const result = await runStatus(makeDeps({ output: out }), { json: true });
+  expect(result.exitCode).toBe(0);
 });

@@ -30,6 +30,16 @@ export const METADATA_KEYS = {
   uploadLastSuccessBatches: 'upload_last_success_batches',
   uploadLastSuccessBytes: 'upload_last_success_bytes',
   latestKnownVersion: 'latest_known_version',
+  captureCyclesTotal: 'capture_cycles_total',
+  captureCyclesWithErrors: 'capture_cycles_with_errors',
+  captureLastCycleAt: 'capture_last_cycle_at',
+  captureLastCycleDurationMs: 'capture_last_cycle_duration_ms',
+  drainCyclesTotal: 'drain_cycles_total',
+  drainCyclesWithErrors: 'drain_cycles_with_errors',
+  drainLastCycleAt: 'drain_last_cycle_at',
+  drainLastCycleDurationMs: 'drain_last_cycle_duration_ms',
+  drainTotalBatchesShipped: 'drain_total_batches_shipped',
+  drainTotalBytesShipped: 'drain_total_bytes_shipped',
 } as const;
 
 export function uploadBatchesShippedKey(sourceApp: string): string {

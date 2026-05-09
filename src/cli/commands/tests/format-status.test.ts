@@ -4,6 +4,7 @@ import {
   formatDuration,
   formatPercent,
   renderBufferSection,
+  renderCaptureCyclesLine,
   renderCaptureRow,
   renderHealthSection,
   renderUploadSection,
@@ -138,8 +139,8 @@ test('renderUploadSection writes all-time, avg, last cycle, last success when po
   const lines = renderUploadSection({
     totalBatchesShipped: 86,
     totalBytesShipped: 12 * 1024 * 1024,
-    cyclesTotal: 54,
-    cyclesTotalDurationMs: 22_000,
+    drainCyclesTotal: 54,
+    drainCyclesTotalDurationMs: 22_000,
     shippedBySource: {
       'claude-code': { batches: 70, bytes: 9 * 1024 * 1024 },
       cursor: { batches: 14, bytes: 2 * 1024 * 1024 },
@@ -164,8 +165,8 @@ test('renderUploadSection writes all-time, avg, last cycle, last success when po
   expect(joined).toContain('cursor');
   expect(joined).toContain('codex');
   expect(joined).not.toMatch(/gemini-cli\s+0 batches/); // omitted when zero
-  expect(joined).toContain('Avg / cycle');
-  expect(joined).toContain('Last cycle');
+  expect(joined).toContain('Avg / drain');
+  expect(joined).toContain('Last drain');
   expect(joined).toContain('Last success');
   expect(joined).toContain('3 batches');
 });
@@ -174,8 +175,8 @@ test('renderUploadSection falls back to dim placeholders when no cycles complete
   const lines = renderUploadSection({
     totalBatchesShipped: 0,
     totalBytesShipped: 0,
-    cyclesTotal: 0,
-    cyclesTotalDurationMs: 0,
+    drainCyclesTotal: 0,
+    drainCyclesTotalDurationMs: 0,
     shippedBySource: null,
     lastCycleCompletedAt: null,
     lastCycleAttempted: null,
@@ -188,9 +189,9 @@ test('renderUploadSection falls back to dim placeholders when no cycles complete
     now: NOW,
   });
   const joined = lines.join('\n');
-  expect(joined).toContain('no upload cycles completed yet');
-  expect(joined).toContain('no cycles completed yet');
-  expect(joined).toContain('no cycle completed yet');
+  expect(joined).toContain('no drain cycles completed yet');
+  expect(joined).toContain('no drain cycles yet');
+  expect(joined).toContain('no drain completed yet');
   expect(joined).toContain('no successful upload yet');
 });
 
@@ -198,8 +199,8 @@ test('renderUploadSection colors retriable and fatal when nonzero, omits zero pe
   const lines = renderUploadSection({
     totalBatchesShipped: 1,
     totalBytesShipped: 1,
-    cyclesTotal: 1,
-    cyclesTotalDurationMs: 100,
+    drainCyclesTotal: 1,
+    drainCyclesTotalDurationMs: 100,
     shippedBySource: {
       'claude-code': { batches: 1, bytes: 1 },
       cursor: { batches: 0, bytes: 0 },
@@ -227,8 +228,8 @@ test('renderUploadSection: all-time data without bysource shows summary line onl
   const lines = renderUploadSection({
     totalBatchesShipped: 5,
     totalBytesShipped: 4096,
-    cyclesTotal: 1,
-    cyclesTotalDurationMs: 100,
+    drainCyclesTotal: 1,
+    drainCyclesTotalDurationMs: 100,
     shippedBySource: null,
     lastCycleCompletedAt: null,
     lastCycleAttempted: null,
@@ -422,4 +423,23 @@ test('renderHealthSection: future-installed binary clamps to 0 days', () => {
     },
   });
   expect(lines.join('\n')).toContain('0 days');
+});
+
+test('renderCaptureCyclesLine: zero state shows no cycles yet', () => {
+  const line = renderCaptureCyclesLine(0, 0, null, NOW);
+  expect(line).toContain('0');
+  expect(line).toContain('no cycles yet');
+});
+
+test('renderCaptureCyclesLine: with errors and last timestamp', () => {
+  const line = renderCaptureCyclesLine(7, 2, '2026-05-08T13:31:00Z', NOW);
+  expect(line).toContain('7');
+  expect(line).toContain('2 with errors');
+  expect(line).toContain('last');
+});
+
+test('renderCaptureCyclesLine: zero errors shows dim-styled zero', () => {
+  const line = renderCaptureCyclesLine(3, 0, '2026-05-08T13:31:00Z', NOW);
+  expect(line).toContain('0');
+  expect(line).toContain('with errors');
 });

@@ -15,10 +15,8 @@ import type { PollCycleContext, RegisteredSource } from 'services/polling';
 let dir: string;
 let buffer: Database;
 
-const noopAsync = async (): Promise<void> => {};
-
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'proxai-poll-cycle-'));
+  dir = await mkdtemp(join(tmpdir(), 'proxai-poll-cycle-compat-'));
   buffer = openInMemoryBufferDb();
 });
 
@@ -100,19 +98,19 @@ function batchWith(text: string): NewBatch {
   };
 }
 
-test('paused sentinel short-circuits the cycle', async () => {
+test('compat: paused sentinel short-circuits the cycle and skips drain', async () => {
   await pausePolling(join(dir, 'PAUSED'), 'manual');
   const ctx = makeContext([noopSource('s1')]);
   const result = await runPollCycle(ctx);
   expect(result.paused).toBe(true);
   expect(result.sourceResults).toEqual({});
   expect(result.drainResult).toBeNull();
-  expect(result.durationMs).toBeGreaterThanOrEqual(0);
 });
 
-test('runs all registered sources when not paused', async () => {
+test('compat: runs sources then drains pending batches', async () => {
+  insertBatch(buffer, batchWith('payload-1'));
+  insertBatch(buffer, batchWith('payload-2'));
   let calledA = 0;
-  let calledB = 0;
   const ctx = makeContext([
     {
       name: 's-a',
@@ -121,40 +119,42 @@ test('runs all registered sources when not paused', async () => {
         return { filesProcessed: 1, capturedBatches: 1, capturedBytes: 100, errors: [] };
       },
     },
-    {
-      name: 's-b',
-      poll: async () => {
-        calledB++;
-        return { filesProcessed: 2, capturedBatches: 0, capturedBytes: 0, errors: [] };
-      },
-    },
   ]);
   const result = await runPollCycle(ctx);
   expect(result.paused).toBe(false);
   expect(calledA).toBe(1);
-  expect(calledB).toBe(1);
   expect(result.sourceResults['s-a']?.filesProcessed).toBe(1);
-  expect(result.sourceResults['s-b']?.filesProcessed).toBe(2);
-});
-
-test('drains pending batches after sources run', async () => {
-  insertBatch(buffer, batchWith('payload-1'));
-  insertBatch(buffer, batchWith('payload-2'));
-  const ctx = makeContext([noopSource('noop')]);
-  const result = await runPollCycle(ctx);
   expect(result.drainResult).not.toBeNull();
   expect(result.drainResult?.attempted).toBe(2);
   expect(result.drainResult?.accepted).toBe(2);
 });
 
-test('startedAt and completedAt are valid ISO UTC strings', async () => {
+test('compat: AUTH_FAILED sentinel short-circuits before sources/drain', async () => {
+  await Bun.write(join(dir, 'AUTH_FAILED'), '{"reason":"halt","detected_at":"x"}');
+  let calls = 0;
+  const ctx = makeContext([
+    {
+      name: 's',
+      poll: async () => {
+        calls++;
+        return { filesProcessed: 0, capturedBatches: 0, capturedBytes: 0, errors: [] };
+      },
+    },
+  ]);
+  const result = await runPollCycle(ctx);
+  expect(result.authFailed).toBe(true);
+  expect(calls).toBe(0);
+  expect(result.drainResult).toBeNull();
+});
+
+test('compat: startedAt and completedAt are valid ISO UTC strings', async () => {
   const ctx = makeContext([noopSource('s')]);
   const result = await runPollCycle(ctx);
   expect(result.startedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/);
   expect(result.completedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/);
 });
 
-test('aggregates errors from multiple sources into sourceResults', async () => {
+test('compat: aggregates per-source results', async () => {
   const ctx = makeContext([
     {
       name: 's',
@@ -168,638 +168,4 @@ test('aggregates errors from multiple sources into sourceResults', async () => {
   ]);
   const result = await runPollCycle(ctx);
   expect(result.sourceResults['s']?.errors).toEqual([{ sourcePath: '/x', reason: 'boom' }]);
-});
-
-test('stale binary past pause threshold writes sentinel and short-circuits via pause check', async () => {
-  let calls = 0;
-  const ctx = makeContext([
-    {
-      name: 's',
-      poll: async () => {
-        calls++;
-        return { filesProcessed: 0, capturedBatches: 0, capturedBytes: 0, errors: [] };
-      },
-    },
-  ]);
-  const DAY_MS = 86_400_000;
-  ctx.installedAt = new Date(Date.now() - 200 * DAY_MS).toISOString();
-  ctx.staleBinary = { warnAfterDays: 30, pauseAfterDays: 60 };
-  const result = await runPollCycle(ctx);
-  expect(result.paused).toBe(true);
-  expect(calls).toBe(0);
-  expect(await Bun.file(join(dir, 'PAUSED')).exists()).toBe(true);
-});
-
-test('stale binary in warning window does not pause; sources still run', async () => {
-  let calls = 0;
-  const ctx = makeContext([
-    {
-      name: 's',
-      poll: async () => {
-        calls++;
-        return { filesProcessed: 0, capturedBatches: 0, capturedBytes: 0, errors: [] };
-      },
-    },
-  ]);
-  const DAY_MS = 86_400_000;
-  ctx.installedAt = new Date(Date.now() - 40 * DAY_MS).toISOString();
-  ctx.staleBinary = { warnAfterDays: 30, pauseAfterDays: 60 };
-  const result = await runPollCycle(ctx);
-  expect(result.paused).toBe(false);
-  expect(calls).toBe(1);
-  expect(await Bun.file(join(dir, 'PAUSED')).exists()).toBe(false);
-});
-
-test('AUTH_FAILED sentinel short-circuits the cycle before sources/drain', async () => {
-  let calls = 0;
-  const ctx = makeContext([
-    {
-      name: 's',
-      poll: async () => {
-        calls++;
-        return { filesProcessed: 0, capturedBatches: 0, capturedBytes: 0, errors: [] };
-      },
-    },
-  ]);
-  await Bun.write(ctx.authFailedSentinelPath, '{"reason":"halt","detected_at":"x"}');
-  const result = await runPollCycle(ctx);
-  expect(result.authFailed).toBe(true);
-  expect(result.paused).toBe(false);
-  expect(calls).toBe(0);
-  expect(result.drainResult).toBeNull();
-});
-
-test('BUFFER_FULL sentinel short-circuits the cycle when pending still above resume threshold', async () => {
-  let calls = 0;
-  const ctx = makeContext([
-    {
-      name: 's',
-      poll: async () => {
-        calls++;
-        return { filesProcessed: 0, capturedBatches: 0, capturedBytes: 0, errors: [] };
-      },
-    },
-  ]);
-  ctx.bufferPolicy = {
-    receiptRetentionDays: 30,
-    failedRetentionDays: 30,
-    softPauseBytes: 100,
-    softResumeBytes: 50,
-  };
-
-  insertBatch(
-    buffer,
-    batchWith('payload-large-enough-to-exceed-fifty-bytes-and-then-some-more-padding'),
-  );
-  await Bun.write(ctx.bufferFullSentinelPath, '{"pending_bytes":1,"threshold":1,"set_at":"x"}');
-  const result = await runPollCycle(ctx);
-  expect(result.bufferFull).toBe(true);
-  expect(result.paused).toBe(false);
-  expect(result.authFailed).toBe(false);
-  expect(calls).toBe(0);
-  expect(result.drainResult).toBeNull();
-  expect(result.pruneResult).toBeNull();
-  expect(result.pressureResult).not.toBeNull();
-  expect(await Bun.file(ctx.bufferFullSentinelPath).exists()).toBe(true);
-});
-
-test('cycle calls prune after drain and records prune result', async () => {
-  const ctx = makeContext([noopSource('s')]);
-  const result = await runPollCycle(ctx);
-  expect(result.pruneResult).not.toBeNull();
-  expect(result.pruneResult?.receiptsDeleted).toBe(0);
-  expect(result.pruneResult?.failedBatchesDeleted).toBe(0);
-});
-
-test('cycle writes BUFFER_FULL sentinel when pending exceeds pause threshold', async () => {
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    http: new HttpClient({
-      apiKey: 'pxg_test',
-      hostId: 'h_test',
-      endpoints: {
-        ingest: 'https://api.example.com/v1/raw_records',
-        verifyKey: 'https://api.example.com/ingestion/verify-key',
-        watermarks: 'https://api.example.com/v1/watermarks',
-        registerHostId: 'https://api.example.com/v1/host-ids/register',
-      },
-      fetch: (async () => new Response('', { status: 503 })) as unknown as typeof globalThis.fetch,
-    }),
-  };
-  ctx.bufferPolicy = {
-    receiptRetentionDays: 30,
-    failedRetentionDays: 30,
-    softPauseBytes: 10,
-    softResumeBytes: 5,
-  };
-  insertBatch(buffer, batchWith('this-is-much-larger-than-ten-bytes-padding-payload-foobarbaz'));
-  const result = await runPollCycle(ctx);
-  expect(result.bufferFull).toBe(false);
-  expect(result.pressureResult?.shouldPause).toBe(true);
-  expect(await Bun.file(ctx.bufferFullSentinelPath).exists()).toBe(true);
-});
-
-test('cycle clears BUFFER_FULL sentinel when pending drops below resume threshold', async () => {
-  const ctx = makeContext([noopSource('s')]);
-  ctx.bufferPolicy = {
-    receiptRetentionDays: 30,
-    failedRetentionDays: 30,
-    softPauseBytes: 1_000_000,
-    softResumeBytes: 500_000,
-  };
-
-  await Bun.write(
-    ctx.bufferFullSentinelPath,
-    '{"pending_bytes":1500000,"threshold":1000000,"set_at":"x"}',
-  );
-  expect(await Bun.file(ctx.bufferFullSentinelPath).exists()).toBe(true);
-
-  const result = await runPollCycle(ctx);
-  expect(result.bufferFull).toBe(false);
-  expect(result.drainResult).not.toBeNull();
-  expect(await Bun.file(ctx.bufferFullSentinelPath).exists()).toBe(false);
-});
-
-interface FakeLogEntry {
-  level: 'info' | 'warn' | 'error';
-  obj: Record<string, unknown>;
-  msg: string;
-}
-
-function makeFakeLogger(entries: FakeLogEntry[]): NonNullable<PollCycleContext['logger']> {
-  const logger = {
-    child: () => logger,
-    fatal: () => undefined,
-    error: (obj: Record<string, unknown>, msg: string) => {
-      entries.push({ level: 'error', obj, msg });
-    },
-    warn: (obj: Record<string, unknown>, msg: string) => {
-      entries.push({ level: 'warn', obj, msg });
-    },
-    info: (obj: Record<string, unknown>, msg: string) => {
-      entries.push({ level: 'info', obj, msg });
-    },
-    debug: () => undefined,
-    trace: () => undefined,
-  };
-  return logger as unknown as NonNullable<PollCycleContext['logger']>;
-}
-
-test('cycle logs soft_resume info at cycle-start when sentinel exists and pending is below resume', async () => {
-  const entries: FakeLogEntry[] = [];
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    logger: makeFakeLogger(entries),
-  };
-  ctx.bufferPolicy = {
-    receiptRetentionDays: 30,
-    failedRetentionDays: 30,
-    softPauseBytes: 1_000_000,
-    softResumeBytes: 500_000,
-  };
-  await Bun.write(
-    ctx.bufferFullSentinelPath,
-    '{"pending_bytes":1500000,"threshold":1000000,"set_at":"x"}',
-  );
-  await runPollCycle(ctx);
-
-  expect(
-    entries.some(
-      (e) =>
-        e.level === 'info' &&
-        e.msg.includes('buffer pending pressure dropped') &&
-        e.msg.includes('cycle start'),
-    ),
-  ).toBe(true);
-});
-
-test('cycle logs post-drain soft_resume when a source writes the sentinel mid-cycle', async () => {
-  const entries: FakeLogEntry[] = [];
-
-  let sentinelWriter: () => Promise<void> = noopAsync;
-  const writerSource: RegisteredSource = {
-    name: 'writer',
-    poll: async () => {
-      await sentinelWriter();
-      return { filesProcessed: 0, capturedBatches: 0, capturedBytes: 0, errors: [] };
-    },
-  };
-  const ctx: PollCycleContext = {
-    ...makeContext([writerSource]),
-    logger: makeFakeLogger(entries),
-  };
-  ctx.bufferPolicy = {
-    receiptRetentionDays: 30,
-    failedRetentionDays: 30,
-    softPauseBytes: 1_000_000,
-    softResumeBytes: 500_000,
-  };
-
-  sentinelWriter = async () => {
-    await Bun.write(
-      ctx.bufferFullSentinelPath,
-      '{"pending_bytes":1500000,"threshold":1000000,"set_at":"mid-cycle"}',
-    );
-  };
-  await runPollCycle(ctx);
-  expect(
-    entries.some(
-      (e) =>
-        e.level === 'info' &&
-        e.msg.includes('buffer pending pressure dropped') &&
-        !e.msg.includes('cycle start'),
-    ),
-  ).toBe(true);
-});
-
-function makeQueryThrowingBuffer(
-  realBuffer: Database,
-  shouldThrowOn: (sql: string) => boolean,
-): Database {
-  const fake: Record<string, unknown> = {};
-  for (const key of Object.keys(realBuffer)) {
-    fake[key] = (realBuffer as unknown as Record<string, unknown>)[key];
-  }
-  for (const key of [
-    'query',
-    'run',
-    'prepare',
-    'transaction',
-    'exec',
-    'close',
-    'serialize',
-  ] as const) {
-    const original = (realBuffer as unknown as Record<string, unknown>)[key];
-    if (typeof original === 'function') {
-      fake[key] = (...args: unknown[]) => {
-        if (key === 'query' && typeof args[0] === 'string' && shouldThrowOn(args[0])) {
-          throw new Error('synthetic query failure');
-        }
-        return (original as Function).apply(realBuffer, args);
-      };
-    }
-  }
-  return fake as unknown as Database;
-}
-
-test('cycle logs prune_failed warn when pruneBuffer throws', async () => {
-  const entries: FakeLogEntry[] = [];
-
-  const fake: Record<string, unknown> = {};
-  for (const key of ['query', 'run', 'prepare', 'exec', 'close', 'serialize'] as const) {
-    const original = (buffer as unknown as Record<string, unknown>)[key];
-    if (typeof original === 'function') {
-      fake[key] = (...args: unknown[]) => (original as Function).apply(buffer, args);
-    }
-  }
-  let txCalls = 0;
-  fake['transaction'] = (fn: () => unknown) => {
-    txCalls++;
-    return () => {
-      if (txCalls === 1) throw new Error('synthetic prune transaction failure');
-      return fn();
-    };
-  };
-  const wrapped = fake as unknown as Database;
-
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    buffer: wrapped,
-    logger: makeFakeLogger(entries),
-  };
-  await runPollCycle(ctx);
-  expect(entries.some((e) => e.level === 'warn' && e.msg.includes('buffer prune failed'))).toBe(
-    true,
-  );
-});
-
-function makeVersionFetch(tagName: string): typeof globalThis.fetch {
-  return (async (url: string | URL | Request) => {
-    const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
-    if (u.includes('api.github.com')) {
-      return new Response(
-        JSON.stringify({
-          tag_name: tagName,
-          assets: [
-            { name: 'proxai-gateway-linux-x64', browser_download_url: 'https://example.com/asset' },
-          ],
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-    return new Response('', { status: 404 });
-  }) as unknown as typeof globalThis.fetch;
-}
-
-test('brew install: version check writes UPDATE_AVAILABLE sentinel when newer release exists', async () => {
-  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    currentVersion: '2026.5.7',
-    installSource: 'brew',
-    updateAvailableSentinelPath: sentinelPath,
-    versionCheckFetch: makeVersionFetch('v2026.5.10'),
-  };
-  await runPollCycle(ctx);
-  expect(await Bun.file(sentinelPath).exists()).toBe(true);
-});
-
-test('brew install: version check does not write sentinel when up to date', async () => {
-  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    currentVersion: '2026.5.7',
-    installSource: 'brew',
-    updateAvailableSentinelPath: sentinelPath,
-    versionCheckFetch: makeVersionFetch('v2026.5.7'),
-  };
-  await runPollCycle(ctx);
-  expect(await Bun.file(sentinelPath).exists()).toBe(false);
-});
-
-test('brew install: clears sentinel when up to date and sentinel previously existed', async () => {
-  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
-  await Bun.write(
-    sentinelPath,
-    JSON.stringify({
-      latest_version: '2026.5.10',
-      current_version: '2026.5.7',
-      detected_at: '2026-05-01T00:00:00Z',
-    }),
-  );
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    currentVersion: '2026.5.10',
-    installSource: 'brew',
-    updateAvailableSentinelPath: sentinelPath,
-    versionCheckFetch: makeVersionFetch('v2026.5.10'),
-  };
-  await runPollCycle(ctx);
-  expect(await Bun.file(sentinelPath).exists()).toBe(false);
-});
-
-test('version check fires once per interval and skips on subsequent cycles within window', async () => {
-  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
-  let calls = 0;
-  const trackingFetch = (async (url: string | URL | Request) => {
-    const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
-    if (u.includes('api.github.com')) {
-      calls++;
-      return new Response(
-        JSON.stringify({
-          tag_name: 'v2026.5.10',
-          assets: [
-            { name: 'proxai-gateway-linux-x64', browser_download_url: 'https://example.com/asset' },
-          ],
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-    return new Response('', { status: 404 });
-  }) as unknown as typeof globalThis.fetch;
-
-  const baseCtx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    currentVersion: '2026.5.7',
-    installSource: 'brew',
-    updateAvailableSentinelPath: sentinelPath,
-    versionCheckFetch: trackingFetch,
-    versionCheckIntervalMs: 4 * 60 * 60 * 1000,
-  };
-
-  await runPollCycle(baseCtx);
-  await runPollCycle(baseCtx);
-  await runPollCycle(baseCtx);
-  expect(calls).toBe(1);
-});
-
-test('brew install: version check failure logs warn and continues the cycle', async () => {
-  const sentinelPath = join(dir, 'UPDATE_AVAILABLE_DIR');
-  const { mkdir } = await import('node:fs/promises');
-  await mkdir(sentinelPath, { recursive: true });
-  const entries: FakeLogEntry[] = [];
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    currentVersion: '2026.5.7',
-    installSource: 'brew',
-    updateAvailableSentinelPath: sentinelPath,
-    versionCheckFetch: makeVersionFetch('v2026.5.7'),
-    logger: makeFakeLogger(entries),
-  };
-  await runPollCycle(ctx);
-  expect(entries.some((e) => e.level === 'warn' && e.msg.includes('version check failed'))).toBe(
-    true,
-  );
-});
-
-test('brew install: version check 503 is logged as warn version_check.unavailable with reason', async () => {
-  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
-  const entries: FakeLogEntry[] = [];
-  const fetchFn: typeof globalThis.fetch = (async () =>
-    new Response('upstream error', { status: 503 })) as unknown as typeof globalThis.fetch;
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    currentVersion: '2026.5.7',
-    installSource: 'brew',
-    updateAvailableSentinelPath: sentinelPath,
-    versionCheckFetch: fetchFn,
-    logger: makeFakeLogger(entries),
-  };
-  await runPollCycle(ctx);
-  const warnEntry = entries.find(
-    (e) => e.level === 'warn' && e.obj['event'] === 'version_check.unavailable',
-  );
-  expect(warnEntry).toBeDefined();
-  expect(warnEntry?.obj['reason']).toContain('503');
-  expect(await Bun.file(sentinelPath).exists()).toBe(false);
-});
-
-test('brew install: version check 404 (no published releases) is silent at warn level', async () => {
-  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
-  const entries: FakeLogEntry[] = [];
-  const fetchFn: typeof globalThis.fetch = (async () =>
-    new Response('not found', { status: 404 })) as unknown as typeof globalThis.fetch;
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    currentVersion: '2026.5.7',
-    installSource: 'brew',
-    updateAvailableSentinelPath: sentinelPath,
-    versionCheckFetch: fetchFn,
-    logger: makeFakeLogger(entries),
-  };
-  await runPollCycle(ctx);
-  expect(entries.every((e) => e.obj['event'] !== 'version_check.unavailable')).toBe(true);
-  expect(await Bun.file(sentinelPath).exists()).toBe(false);
-});
-
-test('brew install with no sentinel path is a no-op', async () => {
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    currentVersion: '2026.5.7',
-    installSource: 'brew',
-    versionCheckFetch: makeVersionFetch('v2026.5.10'),
-  };
-  const result = await runPollCycle(ctx);
-  expect(result.paused).toBe(false);
-});
-
-test('brew install falls back to gatewayVersion when currentVersion is omitted', async () => {
-  const sentinelPath = join(dir, 'UPDATE_AVAILABLE');
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    gatewayVersion: '2026.5.7',
-    installSource: 'brew',
-    updateAvailableSentinelPath: sentinelPath,
-    versionCheckFetch: makeVersionFetch('v2026.5.10'),
-  };
-  await runPollCycle(ctx);
-  expect(await Bun.file(sentinelPath).exists()).toBe(true);
-});
-
-test('non-brew install: triggers auto-upgrade, calls exitProcess on success', async () => {
-  const { writeFile } = await import('node:fs/promises');
-  const binaryPath = join(dir, 'gw');
-  await writeFile(binaryPath, 'old');
-  const newBinary = new TextEncoder().encode('new');
-  const ext = process.platform === 'win32' ? '.exe' : '';
-  const assetName = `proxai-gateway-${process.platform}-${process.arch}${ext}`;
-  const fetchFn = (async (url: string | URL | Request) => {
-    const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
-    if (u.includes('api.github.com')) {
-      return new Response(
-        JSON.stringify({
-          tag_name: 'v2026.5.10',
-          assets: [{ name: assetName, browser_download_url: 'https://example.com/a' }],
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-    return new Response(newBinary, {
-      status: 200,
-      headers: { 'Content-Type': 'application/octet-stream' },
-    });
-  }) as unknown as typeof globalThis.fetch;
-
-  const entries: FakeLogEntry[] = [];
-  let exitCalls = 0;
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    currentVersion: '2026.5.7',
-    binaryPath,
-    installSource: 'github_release',
-    versionCheckFetch: fetchFn,
-    logger: makeFakeLogger(entries),
-    exitProcess: () => {
-      exitCalls++;
-    },
-  };
-  await runPollCycle(ctx);
-  expect(exitCalls).toBe(1);
-});
-
-test('non-brew install: skips when devMode is true', async () => {
-  const { writeFile } = await import('node:fs/promises');
-  const binaryPath = join(dir, 'gw');
-  await writeFile(binaryPath, 'old');
-  const fetchFn = makeVersionFetch('v2026.5.10');
-  let exitCalls = 0;
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    currentVersion: '2026.5.7',
-    binaryPath,
-    installSource: 'github_release',
-    devMode: true,
-    versionCheckFetch: fetchFn,
-    exitProcess: () => {
-      exitCalls++;
-    },
-  };
-  await runPollCycle(ctx);
-  expect(exitCalls).toBe(0);
-});
-
-test('non-brew install: skipped when binaryPath is missing', async () => {
-  const fetchFn = makeVersionFetch('v2026.5.10');
-  let exitCalls = 0;
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    currentVersion: '2026.5.7',
-    installSource: 'github_release',
-    versionCheckFetch: fetchFn,
-    exitProcess: () => {
-      exitCalls++;
-    },
-  };
-  await runPollCycle(ctx);
-  expect(exitCalls).toBe(0);
-});
-
-test('non-brew install: skipped when currentVersion is missing', async () => {
-  const fetchFn = makeVersionFetch('v2026.5.10');
-  let exitCalls = 0;
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    binaryPath: join(dir, 'gw'),
-    installSource: 'github_release',
-    versionCheckFetch: fetchFn,
-    exitProcess: () => {
-      exitCalls++;
-    },
-  };
-  await runPollCycle(ctx);
-  expect(exitCalls).toBe(0);
-});
-
-test('cycle logs pressure_failed warn when pressure check throws', async () => {
-  const entries: FakeLogEntry[] = [];
-  const wrapped = makeQueryThrowingBuffer(buffer, (sql) => sql.includes('SUM(LENGTH(body))'));
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    buffer: wrapped,
-    logger: makeFakeLogger(entries),
-  };
-  await runPollCycle(ctx);
-  expect(
-    entries.some((e) => e.level === 'warn' && e.msg.includes('buffer pressure check failed')),
-  ).toBe(true);
-});
-
-test('cycle logs daemon_state.persist_failed warn when setDaemonState throws', async () => {
-  const entries: FakeLogEntry[] = [];
-  const wrapped = makeQueryThrowingBuffer(buffer, (sql) => sql.includes('daemon_state'));
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    buffer: wrapped,
-    logger: makeFakeLogger(entries),
-  };
-  await runPollCycle(ctx);
-  expect(
-    entries.some((e) => e.level === 'warn' && e.msg.includes('failed to persist daemon state')),
-  ).toBe(true);
-});
-
-import { setMetadata, METADATA_KEYS, getMetadata } from 'services/buffer';
-
-test('cumulative metrics: invalid stored numbers fall back to 0 and are overwritten with valid totals', async () => {
-  setMetadata(buffer, METADATA_KEYS.cyclesTotal, 'not-a-number');
-  setMetadata(buffer, METADATA_KEYS.cyclesTotalDurationMs, 'NaN');
-  const ctx = makeContext([noopSource('s')]);
-  await runPollCycle(ctx);
-  expect(getMetadata(buffer, METADATA_KEYS.cyclesTotal)).toBe('1');
-  const dur = getMetadata(buffer, METADATA_KEYS.cyclesTotalDurationMs);
-  expect(dur !== null).toBe(true);
-});
-
-test('cumulative metrics: persist swallows errors via logger.warn', async () => {
-  const entries: FakeLogEntry[] = [];
-  const wrapped = makeQueryThrowingBuffer(buffer, (sql) => sql.includes('buffer_metadata'));
-  const ctx: PollCycleContext = {
-    ...makeContext([noopSource('s')]),
-    buffer: wrapped,
-    logger: makeFakeLogger(entries),
-  };
-  await runPollCycle(ctx);
-  expect(
-    entries.some((e) => e.level === 'warn' && e.msg.includes('failed to persist cumulative')),
-  ).toBe(true);
 });

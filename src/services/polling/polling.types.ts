@@ -52,6 +52,80 @@ export interface CapturePolicy {
   maxDecompressedBytes: number;
 }
 
+export interface CaptureCycleContext {
+  buffer: Database;
+  gatewayVersion: string;
+  sources: readonly RegisteredSource[];
+  pauseSentinelPath: string;
+  authFailedSentinelPath: string;
+  bufferFullSentinelPath: string;
+  bufferPolicy: BufferRetentionPolicy;
+  capturePolicy: CapturePolicy;
+  logger?: Logger;
+  minimumMtimeOverride?: Date | null;
+}
+
+export interface CaptureCycleResult {
+  paused: boolean;
+  authFailed: boolean;
+  bufferFull: boolean;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  sourceResults: Record<string, SourcePollerResult>;
+  pressureResult: PendingPressureResult | null;
+}
+
+export interface DrainCycleContext {
+  buffer: Database;
+  http: HttpClient;
+  hostId: string;
+  pauseSentinelPath: string;
+  authFailedSentinelPath: string;
+  bufferFullSentinelPath: string;
+  bufferPolicy: BufferRetentionPolicy;
+  pacer?: Pacer;
+  logger?: Logger;
+}
+
+export interface DrainCycleResult {
+  paused: boolean;
+  authFailed: boolean;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  drainResult: DrainResult | null;
+  pruneResult: PruneResult | null;
+  pressureResult: PendingPressureResult | null;
+}
+
+export interface HeartbeatCycleContext {
+  buffer: Database;
+  gatewayVersion: string;
+  pauseSentinelPath: string;
+  installedAt: string;
+  staleBinary: StaleBinaryThresholds;
+  updateAvailableSentinelPath?: string;
+  logger?: Logger;
+
+  versionCheckFetch?: typeof globalThis.fetch;
+  versionCheckIntervalMs?: number;
+
+  devMode?: boolean;
+  installSource?: InstallSource;
+  currentVersion?: string;
+  binaryPath?: string;
+  exitProcess?: () => void;
+}
+
+export interface HeartbeatCycleResult {
+  paused: boolean;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  ranAutoUpgrade: boolean;
+}
+
 export interface PollCycleContext {
   buffer: Database;
   http: HttpClient;
@@ -94,8 +168,13 @@ export interface PollCycleResult {
   pressureResult: PendingPressureResult | null;
 }
 
-export interface PollLoopOptions {
-  intervalMs?: number;
+export interface DaemonLoopOptions {
+  captureIntervalMs?: number;
+  drainIntervalMs?: number;
+  heartbeatIntervalMs?: number;
   abortSignal?: AbortSignal;
-  onCycleComplete?: (result: PollCycleResult) => void;
+  onCaptureComplete?: (result: CaptureCycleResult) => void;
+  onDrainComplete?: (result: DrainCycleResult) => void;
+  onHeartbeatComplete?: (result: HeartbeatCycleResult) => void;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }

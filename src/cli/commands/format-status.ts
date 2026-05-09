@@ -171,6 +171,27 @@ export interface CaptureSourceSummary {
 
 const SOURCE_LABEL_PAD = 14;
 
+export function renderCaptureCyclesLine(
+  total: number,
+  withErrors: number,
+  lastAt: string | null,
+  now: Date,
+): string {
+  const parts: string[] = [];
+  parts.push(`${total.toString()} ${chalk.dim('completed')}`);
+  if (lastAt !== null) {
+    parts.push(`last ${formatRelative(lastAt, { now })}`);
+  } else {
+    parts.push(chalk.dim('no cycles yet'));
+  }
+  if (withErrors > 0) {
+    parts.push(chalk.yellow(`${withErrors.toString()} with errors`));
+  } else {
+    parts.push(`${withErrors.toString()} ${chalk.dim('with errors')}`);
+  }
+  return parts.join('  ' + chalk.dim('·') + '  ');
+}
+
 export function renderCaptureRow(s: CaptureSourceSummary): string {
   const padded = s.name.padEnd(SOURCE_LABEL_PAD);
   const captured = s.capturedBatches.toString().padStart(4);
@@ -264,8 +285,8 @@ export type UploadBySource = Record<string, UploadSourceTotals>;
 export interface UploadSectionInput {
   totalBatchesShipped: number;
   totalBytesShipped: number;
-  cyclesTotal: number;
-  cyclesTotalDurationMs: number;
+  drainCyclesTotal: number;
+  drainCyclesTotalDurationMs: number;
   shippedBySource: UploadBySource | null;
   lastCycleCompletedAt: string | null;
   lastCycleAttempted: number | null;
@@ -281,12 +302,12 @@ export interface UploadSectionInput {
 export function renderUploadSection(input: UploadSectionInput): string[] {
   const lines: string[] = [sectionHeader('Upload')];
 
-  if (input.cyclesTotal > 0 || input.totalBatchesShipped > 0) {
+  if (input.drainCyclesTotal > 0 || input.totalBatchesShipped > 0) {
     const c = input.totalBatchesShipped.toString().padStart(COUNT_COL);
     const b = formatBytes(input.totalBytesShipped).padStart(BYTES_COL);
-    const cy = input.cyclesTotal.toString();
+    const cy = input.drainCyclesTotal.toString();
     lines.push(
-      `  ${keyCol('All-time')}${c} ${chalk.dim('batches shipped')}   ·   ${b} ${chalk.dim('compressed')}   ·   ${cy} ${chalk.dim('cycles')}`,
+      `  ${keyCol('All-time')}${c} ${chalk.dim('batches shipped')}   ·   ${b} ${chalk.dim('compressed')}   ·   ${cy} ${chalk.dim('drain cycles')}`,
     );
 
     if (input.shippedBySource !== null) {
@@ -297,21 +318,21 @@ export function renderUploadSection(input: UploadSectionInput): string[] {
       }
     }
   } else {
-    lines.push(`  ${keyCol('All-time')}${chalk.dim('— no upload cycles completed yet')}`);
+    lines.push(`  ${keyCol('All-time')}${chalk.dim('— no drain cycles completed yet')}`);
   }
 
-  if (input.cyclesTotal > 0) {
-    const avgBatches = input.totalBatchesShipped / input.cyclesTotal;
-    const avgBytes = input.totalBytesShipped / input.cyclesTotal;
-    const avgMs = input.cyclesTotalDurationMs / input.cyclesTotal;
+  if (input.drainCyclesTotal > 0) {
+    const avgBatches = input.totalBatchesShipped / input.drainCyclesTotal;
+    const avgBytes = input.totalBytesShipped / input.drainCyclesTotal;
+    const avgMs = input.drainCyclesTotalDurationMs / input.drainCyclesTotal;
     const ab = avgBatches.toFixed(1).padStart(COUNT_COL);
     const aby = formatBytes(avgBytes).padStart(BYTES_COL);
     const ams = formatDuration(avgMs);
     lines.push(
-      `  ${keyCol('Avg / cycle')}${ab} ${chalk.dim('batches')}        ·   ${aby} ${chalk.dim('compressed')}   ·   ${ams}`,
+      `  ${keyCol('Avg / drain')}${ab} ${chalk.dim('batches')}        ·   ${aby} ${chalk.dim('compressed')}   ·   ${ams}`,
     );
   } else {
-    lines.push(`  ${keyCol('Avg / cycle')}${chalk.dim('— no cycles completed yet')}`);
+    lines.push(`  ${keyCol('Avg / drain')}${chalk.dim('— no drain cycles yet')}`);
   }
 
   if (input.lastCycleCompletedAt !== null) {
@@ -326,10 +347,10 @@ export function renderUploadSection(input: UploadSectionInput): string[] {
     const fatalStr =
       fatal > 0 ? chalk.red(`${fatal.toString()} fatal`) : `${fatal.toString()} fatal`;
     lines.push(
-      `  ${keyCol('Last cycle')}${formatTimeWithRelative(input.lastCycleCompletedAt, { now: input.now })}   ${chalk.dim('·')}  ${attempted.toString()} attempted   ${accepted.toString()} accepted   ${retriableStr}   ${fatalStr}`,
+      `  ${keyCol('Last drain')}${formatTimeWithRelative(input.lastCycleCompletedAt, { now: input.now })}   ${chalk.dim('·')}  ${attempted.toString()} attempted   ${accepted.toString()} accepted   ${retriableStr}   ${fatalStr}`,
     );
   } else {
-    lines.push(`  ${keyCol('Last cycle')}${chalk.dim('— no cycle completed yet')}`);
+    lines.push(`  ${keyCol('Last drain')}${chalk.dim('— no drain completed yet')}`);
   }
 
   if (input.lastSuccessAt !== null) {
