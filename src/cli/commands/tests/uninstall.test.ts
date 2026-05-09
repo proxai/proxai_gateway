@@ -4,8 +4,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runUninstall } from 'cli/commands/uninstall.ts';
-import type { UninstallCommandDeps } from 'cli/commands/uninstall.ts';
+import { runUninstall } from 'cli/commands/uninstall';
+import type { UninstallCommandDeps } from 'cli/commands/uninstall';
 import type { PackageManagerSweep, PmDetection, SweepablePm } from 'services/uninstall';
 import type {
   BinaryRemovalOptions,

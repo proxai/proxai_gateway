@@ -15,7 +15,7 @@ import { runStart } from 'cli/commands/start.ts';
 import { runStatus } from 'cli/commands/status';
 import { runStop } from 'cli/commands/stop.ts';
 import { runTail } from 'cli/commands/tail.ts';
-import { runUninstall } from 'cli/commands/uninstall.ts';
+import { runUninstall } from 'cli/commands/uninstall';
 import { runUpgrade } from 'cli/commands/upgrade.ts';
 import { autoUpgradeFromConfig } from 'cli/wiring/auto-upgrade.ts';
 import { buildBackfillDeps, buildBackfillOptions } from 'cli/wiring/backfill-deps.ts';

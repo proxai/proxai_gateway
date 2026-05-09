@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 
 import { createDefaultBinaryRemover } from 'services/uninstall';
 import { createDefaultShellPathCleaner } from 'services/uninstall';
-import type { UninstallCommandDeps, UninstallCommandOptions } from 'cli/commands/uninstall.ts';
+import type { UninstallCommandDeps, UninstallCommandOptions } from 'cli/commands/uninstall';
 import { createDefaultSweep } from 'services/uninstall';
 import { consoleOutput } from 'cli/output.ts';
 import { inquirerPrompts } from 'cli/prompts.ts';

@@ -8,5 +8,5 @@ export * from 'cli/commands/start.ts';
 export * from 'cli/commands/status';
 export * from 'cli/commands/stop.ts';
 export * from 'cli/commands/tail.ts';
-export * from 'cli/commands/uninstall.ts';
+export * from 'cli/commands/uninstall';
 export * from 'cli/commands/upgrade.ts';
