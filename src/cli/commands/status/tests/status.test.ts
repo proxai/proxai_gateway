@@ -27,6 +27,11 @@ import {
 import type { NewBatch } from 'services/buffer';
 import { pausePolling } from 'services/polling';
 
+const ANSI_PATTERN = /\[[0-9;]*m/g;
+function stripAnsi(s: string): string {
+  return s.replace(ANSI_PATTERN, '');
+}
+
 let dir: string;
 let buffer: Database;
 let configPath: string;
@@ -171,9 +176,9 @@ test('counts pending failed and delivered batches', async () => {
 
   const out = captureOutput();
   await runStatus(makeDeps({ output: out }));
-  expect(out.lines.some((l) => l.msg.match(/Pending\s+1 batches/))).toBe(true);
-  expect(out.lines.some((l) => l.msg.match(/Failed\s+1 batches/))).toBe(true);
-  expect(out.lines.some((l) => l.msg.match(/Receipts\s+1/))).toBe(true);
+  expect(out.lines.some((l) => stripAnsi(l.msg).match(/Pending\s+1 batches/))).toBe(true);
+  expect(out.lines.some((l) => stripAnsi(l.msg).match(/Failed\s+1 batches/))).toBe(true);
+  expect(out.lines.some((l) => stripAnsi(l.msg).match(/Receipts\s+1/))).toBe(true);
 });
 
 test('reports PAUSED with reason and resume hint', async () => {
