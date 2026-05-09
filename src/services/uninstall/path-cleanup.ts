@@ -1,6 +1,8 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+import { stripMarkerBlock } from 'core/utils';
+
 const MARKER = '# Added by ProxAI Gateway installer';
 const INSTALL_DIR_HINT = '.proxai/bin';
 
@@ -25,28 +27,10 @@ export function stripPathMarkerBlock(content: string): {
   newContent: string;
   unmatchedMarker: boolean;
 } {
-  const lines = content.split('\n');
-  const out: string[] = [];
-  let changed = false;
-  let unmatchedMarker = false;
-  let i = 0;
-  while (i < lines.length) {
-    if (lines[i] === MARKER) {
-      const next = lines[i + 1];
-      if (next !== undefined && next.includes(INSTALL_DIR_HINT)) {
-        if (out.length > 0 && out[out.length - 1] === '') {
-          out.pop();
-        }
-        changed = true;
-        i += 2;
-        continue;
-      }
-      unmatchedMarker = true;
-    }
-    out.push(lines[i] ?? '');
-    i += 1;
-  }
-  return { changed, newContent: out.join('\n'), unmatchedMarker };
+  return stripMarkerBlock(content, {
+    marker: MARKER,
+    followingLineSubstring: INSTALL_DIR_HINT,
+  });
 }
 
 const RC_BASENAMES = ['.zshrc', '.bashrc', '.bash_profile'] as const;

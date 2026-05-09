@@ -41,9 +41,7 @@ export function createPosixBinaryRemover(deps: PosixBinaryRemoverDeps = {}): Dir
       if (options.installDir !== undefined) {
         try {
           await rmdirImpl(options.installDir);
-        } catch {
-          // dir not empty or not present — leave it alone
-        }
+        } catch {}
       }
       return {
         ok: true,
@@ -89,11 +87,11 @@ export function createWindowsBinaryRemover(
           message: `failed to schedule binary removal: ${(err as Error).message ?? String(err)}`,
         };
       }
-      return {
+      return Promise.resolve({
         ok: true,
         deferred: true,
         message: `scheduled removal of ${execPath} on exit`,
-      };
+      });
     },
   };
 }

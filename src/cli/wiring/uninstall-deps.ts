@@ -1,10 +1,10 @@
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-import { createDefaultBinaryRemover } from 'cli/commands/binary-remove.ts';
-import { createDefaultShellPathCleaner } from 'cli/commands/path-cleanup.ts';
+import { createDefaultBinaryRemover } from 'services/uninstall';
+import { createDefaultShellPathCleaner } from 'services/uninstall';
 import type { UninstallCommandDeps, UninstallCommandOptions } from 'cli/commands/uninstall.ts';
-import { createDefaultSweep } from 'cli/commands/uninstall-sweep.ts';
+import { createDefaultSweep } from 'services/uninstall';
 import { consoleOutput } from 'cli/output.ts';
 import { inquirerPrompts } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager';

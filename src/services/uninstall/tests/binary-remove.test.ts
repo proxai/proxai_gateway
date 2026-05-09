@@ -9,7 +9,7 @@ import {
   createWindowsBinaryRemover,
   realDetachedSpawn,
   type DetachedSpawn,
-} from 'cli/commands/binary-remove.ts';
+} from 'services/uninstall';
 
 let tmpRoot: string;
 beforeEach(async () => {

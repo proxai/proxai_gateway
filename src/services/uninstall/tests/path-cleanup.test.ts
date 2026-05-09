@@ -10,7 +10,7 @@ import {
   realPowershellSpawn,
   stripPathMarkerBlock,
   type SpawnPathCleaner,
-} from 'cli/commands/path-cleanup.ts';
+} from 'services/uninstall';
 
 let homeDir: string;
 beforeEach(async () => {

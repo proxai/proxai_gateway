@@ -6,17 +6,13 @@ import { join } from 'node:path';
 
 import { runUninstall } from 'cli/commands/uninstall.ts';
 import type { UninstallCommandDeps } from 'cli/commands/uninstall.ts';
-import type {
-  PackageManagerSweep,
-  PmDetection,
-  SweepablePm,
-} from 'cli/commands/uninstall-sweep.ts';
+import type { PackageManagerSweep, PmDetection, SweepablePm } from 'services/uninstall';
 import type {
   BinaryRemovalOptions,
   BinaryRemovalResult,
   DirectBinaryRemover,
-} from 'cli/commands/binary-remove.ts';
-import type { PathCleanupOutcome, ShellPathCleaner } from 'cli/commands/path-cleanup.ts';
+} from 'services/uninstall';
+import type { PathCleanupOutcome, ShellPathCleaner } from 'services/uninstall';
 import { captureOutput } from 'cli/output.ts';
 import { scriptedPrompts } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager';

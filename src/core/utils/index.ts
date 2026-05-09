@@ -7,6 +7,7 @@ export * from 'core/utils/jsonl-split.ts';
 export * from 'core/utils/package-info.ts';
 export * from 'core/utils/rowid-split.ts';
 export * from 'core/utils/source-path.ts';
+export * from 'core/utils/strip-marker-block.ts';
 export * from 'core/utils/time.ts';
 export * from 'core/utils/utils.constants.ts';
 export * from 'core/utils/utils.types.ts';

@@ -4,10 +4,10 @@ import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import type { PromptSink } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager';
-import type { DirectBinaryRemover } from 'cli/commands/binary-remove.ts';
-import type { ShellPathCleaner } from 'cli/commands/path-cleanup.ts';
-import { isDirectBinary } from 'cli/commands/uninstall-sweep.ts';
-import type { PackageManagerSweep } from 'cli/commands/uninstall-sweep.ts';
+import type { DirectBinaryRemover } from 'services/uninstall';
+import type { ShellPathCleaner } from 'services/uninstall';
+import { isDirectBinary } from 'services/uninstall';
+import type { PackageManagerSweep } from 'services/uninstall';
 import { rmRecursive } from 'core/io/fs';
 
 export interface UninstallCommandDeps {

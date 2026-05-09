@@ -9,8 +9,8 @@ import {
   parsePnpmLs,
   parseYarnList,
   realCommandRunner,
-} from 'cli/commands/uninstall-sweep.ts';
-import type { CommandRunner } from 'cli/commands/uninstall-sweep.ts';
+} from 'services/uninstall';
+import type { CommandRunner } from 'services/uninstall';
 
 function fakeRunner(opts: {
   has?: Record<string, boolean>;
