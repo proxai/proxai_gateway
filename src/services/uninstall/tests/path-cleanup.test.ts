@@ -263,8 +263,8 @@ test('createDefaultShellPathCleaner posix: real readFile/writeFile against a tmp
 
 test('realPowershellSpawn: ok=true when child exits 0; stderr captured', async () => {
   const result = await realPowershellSpawn(
-    '/bin/sh',
-    ['-c', 'echo "stderr-msg" >&2; exit 0'],
+    'bun',
+    ['-e', 'process.stderr.write("stderr-msg\\n"); process.exit(0)'],
     process.env as Record<string, string>,
   );
   expect(result.ok).toBe(true);
@@ -273,8 +273,8 @@ test('realPowershellSpawn: ok=true when child exits 0; stderr captured', async (
 
 test('realPowershellSpawn: ok=false when child exits non-zero', async () => {
   const result = await realPowershellSpawn(
-    '/bin/sh',
-    ['-c', 'exit 7'],
+    'bun',
+    ['-e', 'process.exit(7)'],
     process.env as Record<string, string>,
   );
   expect(result.ok).toBe(false);

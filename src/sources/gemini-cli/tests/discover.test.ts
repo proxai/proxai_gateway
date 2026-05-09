@@ -49,7 +49,7 @@ test('discovers nested subagent session files under <project>/chats/<sessionUUID
   const found = await discoverGeminiCliFiles(dir);
   expect(found).toHaveLength(2);
   const paths = found.map((f) => f.sourcePath).toSorted();
-  expect(paths[0]).toContain('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/subagent.jsonl');
+  expect(paths[0]).toContain(join('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', 'subagent.jsonl'));
   expect(paths[1]).toContain('session-2026-01-01-aaa.jsonl');
 });
 
