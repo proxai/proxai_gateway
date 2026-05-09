@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import { buildSystemdUnit, defaultSystemdUnitPath } from 'cli/systemd-unit.ts';
+import { buildSystemdUnit, defaultSystemdUnitPath } from 'cli/service-unit/systemd-unit.ts';
 
 test('emits a [Service] block with ExecStart', () => {
   const unit = buildSystemdUnit({ programPath: '/usr/local/bin/proxai-gateway' });

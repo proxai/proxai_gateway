@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { sep as pathSep } from 'node:path';
 
-import { buildLaunchdPlist, defaultLaunchdPlistPath } from 'cli/launchd-plist.ts';
+import { buildLaunchdPlist, defaultLaunchdPlistPath } from 'cli/service-unit/launchd-plist.ts';
 
 test('contains required plist tags and Label', () => {
   const xml = buildLaunchdPlist({ programPath: '/usr/local/bin/proxai-gateway' });

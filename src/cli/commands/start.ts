@@ -5,7 +5,7 @@ import {
   ensureServiceUnitExists,
   type EnsureServiceUnitDeps,
   type ServiceUnitRecreateConfig,
-} from 'cli/service-unit-writer.ts';
+} from 'cli/service-unit/writer.ts';
 import { clearSessionStoppedSentinel } from 'services/polling';
 
 export interface StartCommandDeps {

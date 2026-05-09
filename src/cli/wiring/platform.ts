@@ -1,9 +1,9 @@
-import { defaultLaunchdPlistPath } from 'cli/launchd-plist.ts';
-import { defaultScheduledTaskXmlPath } from 'cli/scheduled-task-xml.ts';
+import { defaultLaunchdPlistPath } from 'cli/service-unit/launchd-plist.ts';
+import { defaultScheduledTaskXmlPath } from 'cli/service-unit/scheduled-task-xml.ts';
 import { getServiceManager } from 'cli/service-manager';
 import type { ServiceManager } from 'cli/service-manager';
-import type { ServiceUnitRecreateConfig } from 'cli/service-unit-writer.ts';
-import { defaultSystemdUnitPath } from 'cli/systemd-unit.ts';
+import type { ServiceUnitRecreateConfig } from 'cli/service-unit/writer.ts';
+import { defaultSystemdUnitPath } from 'cli/service-unit/systemd-unit.ts';
 
 export function platformServiceUnitPath(platform: NodeJS.Platform): string | null {
   if (platform === 'darwin') return defaultLaunchdPlistPath();

@@ -5,7 +5,7 @@ import {
   defaultScheduledTaskName,
   defaultScheduledTaskXmlPath,
   encodeScheduledTaskXml,
-} from 'cli/scheduled-task-xml.ts';
+} from 'cli/service-unit/scheduled-task-xml.ts';
 
 test('contains required Task tags', () => {
   const xml = buildScheduledTaskXml({

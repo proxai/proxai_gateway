@@ -1,9 +1,12 @@
 import { dirname } from 'node:path';
 
 import { ensureDir, setMode, writeAtomic } from 'core/io/fs';
-import { buildLaunchdPlist } from 'cli/launchd-plist.ts';
-import { buildScheduledTaskXml, encodeScheduledTaskXml } from 'cli/scheduled-task-xml.ts';
-import { buildSystemdUnit } from 'cli/systemd-unit.ts';
+import { buildLaunchdPlist } from 'cli/service-unit/launchd-plist.ts';
+import {
+  buildScheduledTaskXml,
+  encodeScheduledTaskXml,
+} from 'cli/service-unit/scheduled-task-xml.ts';
+import { buildSystemdUnit } from 'cli/service-unit/systemd-unit.ts';
 
 export interface WriteServiceUnitInput {
   serviceUnitPath: string;

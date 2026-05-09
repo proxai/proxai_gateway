@@ -8,7 +8,7 @@ import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import type { PromptSink } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager';
-import { writeServiceUnit } from 'cli/service-unit-writer.ts';
+import { writeServiceUnit } from 'cli/service-unit/writer.ts';
 import { clearSessionStoppedSentinel } from 'services/polling/session-stopped-sentinel.ts';
 import {
   DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
