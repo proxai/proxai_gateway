@@ -2,6 +2,7 @@ export * from 'core/utils/backoff.ts';
 export * from 'core/utils/compress.ts';
 export * from 'core/utils/duration.ts';
 export * from 'core/utils/errors.ts';
+export * from 'core/utils/format.ts';
 export * from 'core/utils/hash.ts';
 export * from 'core/utils/jsonl-split.ts';
 export * from 'core/utils/package-info.ts';
