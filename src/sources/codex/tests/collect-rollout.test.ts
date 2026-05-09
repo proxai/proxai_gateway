@@ -115,6 +115,24 @@ test('does not insert a batch when no complete line is present', async () => {
   expect(countByStatus(buffer).pending).toBe(0);
 });
 
+test('per-rollout cli_version from session_meta overrides the caller-provided default', async () => {
+  const file = await makeFile(
+    '{"type":"session_meta","payload":{"cli_version":"0.200.0-rc.1"}}\nentry-2\n',
+  );
+  await collectCodexRollout(file, ctx(buffer), 'caller-default');
+  const batch = nextPendingBatch(buffer);
+  expect(batch?.agentSchemaVersion).toBe('0.200.0-rc.1');
+});
+
+test('falls back to caller-provided default when reader returns null', async () => {
+  const file = await makeFile('{"type":"event","data":1}\nentry-2\n');
+  const fakeReader = async (): Promise<string | null> => null;
+  const fakeCtx: CodexCollectorContext = { ...ctx(buffer), rolloutVersionReader: fakeReader };
+  await collectCodexRollout(file, fakeCtx, 'caller-default');
+  const batch = nextPendingBatch(buffer);
+  expect(batch?.agentSchemaVersion).toBe('caller-default');
+});
+
 test('uses the provided agent_schema_version verbatim', async () => {
   const file = await makeFile('{"a":1}\n');
   await collectCodexRollout(file, ctx(buffer), '0.126.0-alpha.8');

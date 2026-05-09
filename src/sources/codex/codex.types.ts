@@ -24,6 +24,7 @@ export interface CodexCollectorContext {
   gatewayVersion: string;
   maxDecompressedBytes: number;
   logger?: Logger;
+  rolloutVersionReader?: (filePath: string) => Promise<string | null>;
 }
 
 export interface CodexCollectorError {

@@ -21,6 +21,7 @@ import type {
   CodexCollectorResult,
   DiscoveredCodexRolloutFile,
 } from 'sources/codex/codex.types.ts';
+import { extractRolloutCliVersion } from 'sources/codex/rollout-version.ts';
 
 const DECODER = new TextDecoder('utf-8', { fatal: false });
 const ENCODER = new TextEncoder();
@@ -37,6 +38,10 @@ export async function collectCodexRollout(
   };
 
   try {
+    const reader = context.rolloutVersionReader ?? extractRolloutCliVersion;
+    const extracted = await reader(file.sourcePath);
+    const effectiveAgentSchemaVersion = extracted ?? agentSchemaVersion;
+
     const cursor = getCursorWithFallback(context.buffer, {
       sourceApp: CODEX_SOURCE_APP,
       sourcePathHash: file.sourcePathHash,
@@ -120,7 +125,7 @@ export async function collectCodexRollout(
         watermarkStart: watermarkStart + offset,
         watermarkEnd: watermarkStart + sliceEndOffset,
         watermarkTable: null,
-        agentSchemaVersion,
+        agentSchemaVersion: effectiveAgentSchemaVersion,
         gatewayVersion: context.gatewayVersion,
         capturedAtUtc: nowIsoUtc(),
         bodyFormat: CODEX_ROLLOUT_BODY_FORMAT,
