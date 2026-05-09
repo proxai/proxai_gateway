@@ -11,6 +11,12 @@ import type {
   PmDetection,
   SweepablePm,
 } from 'cli/commands/uninstall-sweep.ts';
+import type {
+  BinaryRemovalOptions,
+  BinaryRemovalResult,
+  DirectBinaryRemover,
+} from 'cli/commands/binary-remove.ts';
+import type { PathCleanupOutcome, ShellPathCleaner } from 'cli/commands/path-cleanup.ts';
 import { captureOutput } from 'cli/output.ts';
 import { scriptedPrompts } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager.ts';
@@ -75,6 +81,45 @@ function fakeManager(
   return { sm, calls };
 }
 
+interface FakeRemoverCalls {
+  remove: Array<{ execPath: string; options: BinaryRemovalOptions | undefined }>;
+}
+
+function fakeRemover(
+  result: BinaryRemovalResult = { ok: true, deferred: false, message: 'removed' },
+): { remover: DirectBinaryRemover; calls: FakeRemoverCalls } {
+  const calls: FakeRemoverCalls = { remove: [] };
+  return {
+    calls,
+    remover: {
+      remove: async (execPath, options) => {
+        calls.remove.push({ execPath, options });
+        return result;
+      },
+    },
+  };
+}
+
+interface FakeCleanerCalls {
+  clean: string[];
+}
+
+function fakeCleaner(outcomes: PathCleanupOutcome[] | (() => Promise<PathCleanupOutcome[]>) = []): {
+  cleaner: ShellPathCleaner;
+  calls: FakeCleanerCalls;
+} {
+  const calls: FakeCleanerCalls = { clean: [] };
+  return {
+    calls,
+    cleaner: {
+      clean: async (installDir) => {
+        calls.clean.push(installDir);
+        return typeof outcomes === 'function' ? outcomes() : outcomes;
+      },
+    },
+  };
+}
+
 let tmpRoot: string;
 let configDirPath: string;
 let logDirPath: string;
@@ -131,7 +176,10 @@ async function writeConfig(installSource: InstallSource = 'github_release'): Pro
   await writeConfigToFile(config, configPath);
 }
 
-function depsFor(sm: ServiceManager, promptOpts: { reset?: boolean } = {}): UninstallCommandDeps {
+function depsFor(
+  sm: ServiceManager,
+  promptOpts: { phrase?: string | boolean } = {},
+): UninstallCommandDeps {
   return {
     output: captureOutput(),
     prompts: scriptedPrompts(promptOpts),
@@ -147,7 +195,7 @@ function depsFor(sm: ServiceManager, promptOpts: { reset?: boolean } = {}): Unin
 test('idempotent: returns ok and prints "no installation found" when nothing exists', async () => {
   const { sm, calls } = fakeManager({ registered: false });
   const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm), output });
+  const result = await runUninstall({ ...depsFor(sm), output }, { yes: true });
   expect(result.exitCode).toBe(0);
   expect(output.lines.some((l) => l.msg === 'no installation found')).toBe(true);
   expect(calls.stop).toBe(0);
@@ -159,7 +207,7 @@ test('idempotent: skips when config absent, no service unit file, and not regist
   expect(await Bun.file(serviceUnitPath).exists()).toBe(false);
   const { sm, calls } = fakeManager({ registered: false });
   const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm), output });
+  const result = await runUninstall({ ...depsFor(sm), output }, { yes: true });
   expect(result.exitCode).toBe(0);
   expect(calls.stop).toBe(0);
   expect(calls.unregister).toBe(0);
@@ -169,7 +217,7 @@ test('proceeds when only the service unit file exists (no config, not registered
   await writeFile(serviceUnitPath, '<plist/>');
   const { sm, calls } = fakeManager({ registered: false });
   const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm), output });
+  const result = await runUninstall({ ...depsFor(sm), output }, { yes: true });
   expect(result.exitCode).toBe(0);
   expect(calls.stop).toBe(1);
   expect(calls.unregister).toBe(1);
@@ -181,7 +229,7 @@ test('stop + unregister + unit-file removal on a fresh install', async () => {
   await writeFile(serviceUnitPath, '<plist/>');
   const { sm, calls } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm), output });
+  const result = await runUninstall({ ...depsFor(sm), output }, { yes: true });
   expect(result.exitCode).toBe(0);
   expect(calls.stop).toBe(1);
   expect(calls.unregister).toBe(1);
@@ -197,7 +245,7 @@ test('swallows stop errors and continues with unregister', async () => {
   await writeConfig();
   const { sm, calls } = fakeManager({ stopThrows: true });
   const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm), output });
+  const result = await runUninstall({ ...depsFor(sm), output }, { yes: true });
   expect(result.exitCode).toBe(0);
   expect(calls.stop).toBe(1);
   expect(calls.unregister).toBe(1);
@@ -209,31 +257,64 @@ test('swallows unregister errors and continues with file removal', async () => {
   await writeFile(serviceUnitPath, '<plist/>');
   const { sm, calls } = fakeManager({ unregisterThrows: true });
   const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm), output });
+  const result = await runUninstall({ ...depsFor(sm), output }, { yes: true });
   expect(result.exitCode).toBe(0);
   expect(calls.unregister).toBe(1);
   expect(output.lines.some((l) => l.msg === 'service was not registered')).toBe(true);
   expect(await Bun.file(serviceUnitPath).exists()).toBe(false);
 });
 
-test('--reset requires confirmation; abort returns exit 5 and preserves configDir', async () => {
+test('plain uninstall requires typed phrase "uninstall"; correct phrase proceeds', async () => {
+  await writeConfig();
+  await writeFile(serviceUnitPath, '<plist/>');
+  const { sm, calls } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({
+    ...depsFor(sm, { phrase: 'uninstall' }),
+    output,
+  });
+  expect(result.exitCode).toBe(0);
+  expect(calls.stop).toBe(1);
+  expect(calls.unregister).toBe(1);
+});
+
+test('plain uninstall: empty input aborts; service untouched and config preserved', async () => {
+  await writeConfig();
+  await writeFile(serviceUnitPath, '<plist/>');
+  const { sm, calls } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({ ...depsFor(sm, { phrase: false }), output });
+  expect(result.exitCode).toBe(5);
+  expect(calls.stop).toBe(0);
+  expect(calls.unregister).toBe(0);
+  expect(await Bun.file(serviceUnitPath).exists()).toBe(true);
+  expect(await Bun.file(configPath).exists()).toBe(true);
+  expect(output.lines.some((l) => l.msg.includes('aborted'))).toBe(true);
+});
+
+test('plain uninstall: wrong phrase string aborts (scripted shortcut)', async () => {
   await writeConfig();
   await writeFile(serviceUnitPath, '<plist/>');
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm, { reset: false }), output }, { reset: true });
+  const result = await runUninstall({
+    ...depsFor(sm, { phrase: 'wrong text' }),
+    output,
+  });
   expect(result.exitCode).toBe(5);
   expect(await Bun.file(configPath).exists()).toBe(true);
-  expect(output.lines.some((l) => l.msg.includes('reset aborted'))).toBe(true);
 });
 
-test('--reset confirmed wipes configDir and logDir', async () => {
+test('--reset requires typed phrase "uninstall --reset"; matching phrase wipes', async () => {
   await writeConfig();
   await writeFile(serviceUnitPath, '<plist/>');
   await writeFile(join(logDirPath, 'app.log'), 'log content');
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm, { reset: true }), output }, { reset: true });
+  const result = await runUninstall(
+    { ...depsFor(sm, { phrase: 'uninstall --reset' }), output },
+    { reset: true },
+  );
   expect(result.exitCode).toBe(0);
   expect(await Bun.file(configPath).exists()).toBe(false);
   expect(await Bun.file(join(logDirPath, 'app.log')).exists()).toBe(false);
@@ -245,11 +326,44 @@ test('--reset confirmed wipes configDir and logDir', async () => {
   );
 });
 
+test('--reset: empty input aborts; configDir preserved', async () => {
+  await writeConfig();
+  await writeFile(serviceUnitPath, '<plist/>');
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({ ...depsFor(sm, { phrase: false }), output }, { reset: true });
+  expect(result.exitCode).toBe(5);
+  expect(await Bun.file(configPath).exists()).toBe(true);
+  expect(output.lines.some((l) => l.msg.includes('aborted'))).toBe(true);
+});
+
+test('--reset: typing plain "uninstall" (insufficient phrase) aborts', async () => {
+  await writeConfig();
+  await writeFile(serviceUnitPath, '<plist/>');
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall(
+    { ...depsFor(sm, { phrase: 'uninstall' }), output },
+    { reset: true },
+  );
+  expect(result.exitCode).toBe(5);
+  expect(await Bun.file(configPath).exists()).toBe(true);
+});
+
+test('--yes skips both prompts on plain uninstall', async () => {
+  await writeConfig();
+  await writeFile(serviceUnitPath, '<plist/>');
+  const { sm, calls } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({ ...depsFor(sm), output }, { yes: true });
+  expect(result.exitCode).toBe(0);
+  expect(calls.stop).toBe(1);
+});
+
 test('--reset --yes skips the confirmation prompt and wipes state', async () => {
   await writeConfig();
   await writeFile(join(logDirPath, 'app.log'), 'log content');
   const { sm } = fakeManager();
-
   const output = captureOutput();
   const result = await runUninstall({ ...depsFor(sm), output }, { reset: true, yes: true });
   expect(result.exitCode).toBe(0);
@@ -257,109 +371,12 @@ test('--reset --yes skips the confirmation prompt and wipes state', async () => 
   expect(await Bun.file(join(logDirPath, 'app.log')).exists()).toBe(false);
 });
 
-test('binary-removal hint: github_release maps to rm $(which proxai-gateway)', async () => {
-  await writeConfig('github_release');
-  const { sm } = fakeManager();
-  const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm), output });
-  expect(result.exitCode).toBe(0);
-  expect(
-    output.lines.some(
-      (l) =>
-        l.level === 'info' &&
-        l.msg === 'to remove the binary itself, run: rm $(which proxai-gateway)',
-    ),
-  ).toBe(true);
-});
-
-test('binary-removal hint: brew maps to brew uninstall', async () => {
-  await writeConfig('brew');
-  const { sm } = fakeManager();
-  const output = captureOutput();
-  await runUninstall({ ...depsFor(sm), output });
-  expect(
-    output.lines.some(
-      (l) =>
-        l.level === 'info' &&
-        l.msg === 'to remove the binary itself, run: brew uninstall proxai-gateway',
-    ),
-  ).toBe(true);
-});
-
-test.each(['npm', 'pnpm', 'yarn', 'bun'] as const)(
-  'binary-removal hint: %s maps to <pm> uninstall -g',
-  async (pm) => {
-    await writeConfig(pm);
-    const { sm } = fakeManager();
-    const output = captureOutput();
-    await runUninstall({ ...depsFor(sm), output });
-    expect(
-      output.lines.some(
-        (l) =>
-          l.level === 'info' &&
-          l.msg === `to remove the binary itself, run: ${pm} uninstall -g @proxai/gateway`,
-      ),
-    ).toBe(true);
-  },
-);
-
-test('binary-removal hint with --reset: install_source captured before wipe', async () => {
-  await writeConfig('brew');
-  const { sm } = fakeManager();
-  const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm), output }, { reset: true, yes: true });
-  expect(result.exitCode).toBe(0);
-  expect(await Bun.file(configPath).exists()).toBe(false);
-  expect(
-    output.lines.some(
-      (l) =>
-        l.level === 'info' &&
-        l.msg === 'to remove the binary itself, run: brew uninstall proxai-gateway',
-    ),
-  ).toBe(true);
-});
-
-test('generic hint when config cannot be loaded', async () => {
-  await writeFile(serviceUnitPath, '<plist/>');
-  const { sm } = fakeManager({ registered: false });
-  const output = captureOutput();
-  await runUninstall({ ...depsFor(sm), output });
-  expect(
-    output.lines.some(
-      (l) =>
-        l.level === 'info' &&
-        l.msg ===
-          'remove the binary using your package manager (npm, brew, etc.) or rm $(which proxai-gateway)',
-    ),
-  ).toBe(true);
-});
-
-test('generic hint when loadConfig throws', async () => {
-  await writeConfig('npm');
-  const { sm } = fakeManager();
-  const output = captureOutput();
-  const result = await runUninstall({
-    ...depsFor(sm),
-    output,
-    loadConfig: () => Promise.reject(new Error('cannot parse')),
-  });
-  expect(result.exitCode).toBe(0);
-  expect(
-    output.lines.some(
-      (l) =>
-        l.level === 'info' &&
-        l.msg ===
-          'remove the binary using your package manager (npm, brew, etc.) or rm $(which proxai-gateway)',
-    ),
-  ).toBe(true);
-});
-
 test('no service unit file: skips file removal cleanly', async () => {
   await writeConfig();
   await rm(serviceUnitPath, { force: true });
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm), output });
+  const result = await runUninstall({ ...depsFor(sm), output }, { yes: true });
   expect(result.exitCode).toBe(0);
 });
 
@@ -367,11 +384,10 @@ test('serviceUnitPath null: skips unit-file removal', async () => {
   await writeConfig();
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({
-    ...depsFor(sm),
-    output,
-    serviceUnitPath: null,
-  });
+  const result = await runUninstall(
+    { ...depsFor(sm), output, serviceUnitPath: null },
+    { yes: true },
+  );
   expect(result.exitCode).toBe(0);
 });
 
@@ -380,7 +396,7 @@ test('per-platform smoke: stop + unregister called regardless of platform shim',
     await writeConfig();
     await writeFile(serviceUnitPath, '<plist/>');
     const { sm, calls } = fakeManager();
-    const result = await runUninstall(depsFor(sm));
+    const result = await runUninstall(depsFor(sm), { yes: true });
     expect(result.exitCode).toBe(0);
     expect(calls.stop).toBe(1);
     expect(calls.unregister).toBe(1);
@@ -404,17 +420,16 @@ test('isRegistered throw treated as not-registered (idempotent path)', async () 
     runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
   const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm), output });
+  const result = await runUninstall({ ...depsFor(sm), output }, { yes: true });
   expect(result.exitCode).toBe(0);
   expect(output.lines.some((l) => l.msg === 'no installation found')).toBe(true);
 });
 
 test('unit-file removal swallows ENOENT silently', async () => {
   await writeConfig();
-
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm), output });
+  const result = await runUninstall({ ...depsFor(sm), output }, { yes: true });
   expect(result.exitCode).toBe(0);
   expect(output.lines.some((l) => l.level === 'warn')).toBe(false);
 });
@@ -424,10 +439,9 @@ test('unit-file removal warns when unlink fails with non-ENOENT error', async ()
   await rm(serviceUnitPath, { force: true });
   await mkdir(serviceUnitPath, { recursive: true });
   await writeFile(join(serviceUnitPath, 'inner'), 'block-the-unlink');
-
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm), output });
+  const result = await runUninstall({ ...depsFor(sm), output }, { yes: true });
   expect(result.exitCode).toBe(0);
   expect(
     output.lines.some(
@@ -500,13 +514,16 @@ test('sweep: removes via every installed PM and reports each', async () => {
   });
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({
-    ...depsFor(sm),
-    output,
-    sweep,
-    currentExecPath:
-      '/Users/x/.nvm/versions/node/v24/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
-  });
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      sweep,
+      currentExecPath:
+        '/Users/x/.nvm/versions/node/v24/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
   expect(result.exitCode).toBe(0);
   expect(calls.uninstall).toEqual(['npm', 'bun']);
   expect(calls.uninstallBrew).toBe(1);
@@ -533,12 +550,15 @@ test('sweep: warns and continues when one PM uninstall reports failure', async (
   });
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({
-    ...depsFor(sm),
-    output,
-    sweep,
-    currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
-  });
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      sweep,
+      currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
   expect(result.exitCode).toBe(0);
   expect(
     output.lines.some((l) => l.level === 'warn' && l.msg === 'npm uninstall failed: EACCES'),
@@ -559,12 +579,15 @@ test('sweep: catches throws inside individual uninstall and continues', async ()
   });
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({
-    ...depsFor(sm),
-    output,
-    sweep,
-    currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
-  });
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      sweep,
+      currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
   expect(result.exitCode).toBe(0);
   expect(
     output.lines.some((l) => l.level === 'warn' && l.msg.includes('npm uninstall threw')),
@@ -572,7 +595,7 @@ test('sweep: catches throws inside individual uninstall and continues', async ()
   expect(output.lines.some((l) => l.msg === 'removed via bun')).toBe(true);
 });
 
-test('sweep: warns when detectAll throws but still proceeds to brew + direct', async () => {
+test('sweep: warns when detectAll throws but still proceeds to brew', async () => {
   await writeConfig('npm');
   const { sweep } = fakeSweep({
     detectAllThrows: true,
@@ -580,12 +603,15 @@ test('sweep: warns when detectAll throws but still proceeds to brew + direct', a
   });
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({
-    ...depsFor(sm),
-    output,
-    sweep,
-    currentExecPath: '/usr/local/bin/proxai-gateway',
-  });
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      sweep,
+      currentExecPath: '/usr/local/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
   expect(result.exitCode).toBe(0);
   expect(
     output.lines.some(
@@ -593,11 +619,6 @@ test('sweep: warns when detectAll throws but still proceeds to brew + direct', a
     ),
   ).toBe(true);
   expect(output.lines.some((l) => l.msg === 'removed via brew')).toBe(true);
-  expect(
-    output.lines.some(
-      (l) => l.msg === 'to remove the binary itself, run: rm /usr/local/bin/proxai-gateway',
-    ),
-  ).toBe(true);
 });
 
 test('sweep: warns when detectBrew throws and continues', async () => {
@@ -613,12 +634,15 @@ test('sweep: warns when detectBrew throws and continues', async () => {
   });
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({
-    ...depsFor(sm),
-    output,
-    sweep,
-    currentExecPath: '/usr/local/bin/proxai-gateway',
-  });
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      sweep,
+      currentExecPath: '/usr/local/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
   expect(result.exitCode).toBe(0);
   expect(
     output.lines.some((l) => l.level === 'warn' && l.msg.includes('brew detection failed')),
@@ -633,12 +657,15 @@ test('sweep: warns when uninstallBrew throws', async () => {
   });
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({
-    ...depsFor(sm),
-    output,
-    sweep,
-    currentExecPath: '/usr/local/bin/proxai-gateway',
-  });
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      sweep,
+      currentExecPath: '/usr/local/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
   expect(result.exitCode).toBe(0);
   expect(
     output.lines.some((l) => l.level === 'warn' && l.msg.includes('brew uninstall threw')),
@@ -653,12 +680,15 @@ test('sweep: warns on uninstallBrew failure result', async () => {
   });
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({
-    ...depsFor(sm),
-    output,
-    sweep,
-    currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
-  });
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      sweep,
+      currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
   expect(result.exitCode).toBe(0);
   expect(
     output.lines.some((l) => l.level === 'warn' && l.msg === 'brew uninstall failed: locked'),
@@ -667,76 +697,268 @@ test('sweep: warns on uninstallBrew failure result', async () => {
 
 test('sweep: brew not available — skipped', async () => {
   await writeConfig('npm');
-  const { sweep } = fakeSweep({
-    brew: { available: false, installed: false },
-  });
+  const { sweep } = fakeSweep({ brew: { available: false, installed: false } });
   const { sm } = fakeManager();
   const output = captureOutput();
-  await runUninstall({
-    ...depsFor(sm),
-    output,
-    sweep,
-    currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
-  });
+  await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      sweep,
+      currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
   expect(output.lines.some((l) => l.msg === 'brew not available — skipped')).toBe(true);
 });
 
 test('sweep: brew available but not installed', async () => {
   await writeConfig('npm');
-  const { sweep } = fakeSweep({
-    brew: { available: true, installed: false },
-  });
+  const { sweep } = fakeSweep({ brew: { available: true, installed: false } });
   const { sm } = fakeManager();
   const output = captureOutput();
-  await runUninstall({
-    ...depsFor(sm),
-    output,
-    sweep,
-    currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
-  });
+  await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      sweep,
+      currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
   expect(output.lines.some((l) => l.msg === 'not installed via brew')).toBe(true);
 });
 
-test('sweep: emits "no package-manager install detected" when nothing found anywhere', async () => {
-  await writeConfig('npm');
-  const { sweep } = fakeSweep({});
+test('binary remover: invoked when execPath is a direct binary; installDir forwarded', async () => {
+  await writeConfig('github_release');
   const { sm } = fakeManager();
-  const output = captureOutput();
-  const result = await runUninstall({
-    ...depsFor(sm),
-    output,
-    sweep,
-    currentExecPath: '/Users/x/.nvm/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+  const { remover, calls } = fakeRemover({
+    ok: true,
+    deferred: false,
+    message: 'removed /usr/local/bin/proxai-gateway',
   });
+  const output = captureOutput();
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      binaryRemover: remover,
+      installDir: '/Users/x/.proxai/bin',
+      currentExecPath: '/usr/local/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
   expect(result.exitCode).toBe(0);
-  expect(output.lines.some((l) => l.msg === 'no package-manager install detected')).toBe(true);
+  expect(calls.remove).toEqual([
+    {
+      execPath: '/usr/local/bin/proxai-gateway',
+      options: { installDir: '/Users/x/.proxai/bin' },
+    },
+  ]);
+  expect(output.lines.some((l) => l.msg === 'removed /usr/local/bin/proxai-gateway')).toBe(true);
 });
 
-test('sweep: direct binary at execPath produces rm hint', async () => {
+test('binary remover: NOT invoked when execPath is under node_modules (PM-managed)', async () => {
+  await writeConfig('npm');
+  const { sm } = fakeManager();
+  const { remover, calls } = fakeRemover();
+  const output = captureOutput();
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      binaryRemover: remover,
+      currentExecPath:
+        '/Users/x/.nvm/versions/node/v24/lib/node_modules/@proxai/gateway/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
+  expect(result.exitCode).toBe(0);
+  expect(calls.remove).toHaveLength(0);
+});
+
+test('binary remover: deferred result still printed as info', async () => {
   await writeConfig('github_release');
-  const { sweep } = fakeSweep({});
+  const { sm } = fakeManager();
+  const { remover } = fakeRemover({
+    ok: true,
+    deferred: true,
+    message: 'scheduled removal of C:\\bin\\proxai.exe on exit',
+  });
+  const output = captureOutput();
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      binaryRemover: remover,
+      currentExecPath: 'C:\\bin\\proxai.exe',
+    },
+    { yes: true },
+  );
+  expect(result.exitCode).toBe(0);
+  expect(
+    output.lines.some(
+      (l) => l.level === 'info' && l.msg === 'scheduled removal of C:\\bin\\proxai.exe on exit',
+    ),
+  ).toBe(true);
+});
+
+test('binary remover: failure result is surfaced as a warn', async () => {
+  await writeConfig('github_release');
+  const { sm } = fakeManager();
+  const { remover } = fakeRemover({
+    ok: false,
+    deferred: false,
+    message: 'failed to remove binary at /usr/local/bin/proxai-gateway: EACCES',
+  });
+  const output = captureOutput();
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      binaryRemover: remover,
+      currentExecPath: '/usr/local/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
+  expect(result.exitCode).toBe(0);
+  expect(
+    output.lines.some(
+      (l) =>
+        l.level === 'warn' &&
+        l.msg === 'failed to remove binary at /usr/local/bin/proxai-gateway: EACCES',
+    ),
+  ).toBe(true);
+});
+
+test('binary remover: omitted → fallback hint printed for direct binaries', async () => {
+  await writeConfig('github_release');
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({
-    ...depsFor(sm),
-    output,
-    sweep,
-    currentExecPath: '/usr/local/bin/proxai-gateway',
-  });
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      currentExecPath: '/usr/local/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
   expect(result.exitCode).toBe(0);
   expect(
     output.lines.some(
       (l) => l.msg === 'to remove the binary itself, run: rm /usr/local/bin/proxai-gateway',
     ),
   ).toBe(true);
-  expect(output.lines.some((l) => l.msg === 'no package-manager install detected')).toBe(false);
 });
 
-test('sweep: defaults currentExecPath to process.execPath when not provided', async () => {
+test('binary remover: defaults currentExecPath to process.execPath when not provided', async () => {
   await writeConfig('npm');
-  const { sweep } = fakeSweep({});
+  const { sm } = fakeManager();
+  const { remover } = fakeRemover();
+  const output = captureOutput();
+  const result = await runUninstall(
+    { ...depsFor(sm), output, binaryRemover: remover },
+    { yes: true },
+  );
+  expect(result.exitCode).toBe(0);
+});
+
+test('binary remover: omits installDir option when installDir is absent', async () => {
+  await writeConfig('github_release');
+  const { sm } = fakeManager();
+  const { remover, calls } = fakeRemover();
+  const output = captureOutput();
+  await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      binaryRemover: remover,
+      currentExecPath: '/usr/local/bin/proxai-gateway',
+    },
+    { yes: true },
+  );
+  expect(calls.remove).toEqual([{ execPath: '/usr/local/bin/proxai-gateway', options: undefined }]);
+});
+
+test('path cleaner: invoked with installDir; outcomes printed', async () => {
+  await writeConfig();
+  const { sm } = fakeManager();
+  const { cleaner, calls } = fakeCleaner([
+    { path: '/h/.zshrc', cleaned: true, reason: 'removed installer PATH block' },
+    { path: '/h/.bashrc', cleaned: false, reason: 'no installer marker found' },
+  ]);
+  const output = captureOutput();
+  await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      pathCleaner: cleaner,
+      installDir: '/h/.proxai/bin',
+    },
+    { yes: true },
+  );
+  expect(calls.clean).toEqual(['/h/.proxai/bin']);
+  expect(
+    output.lines.some(
+      (l) => l.level === 'info' && l.msg === '/h/.zshrc: removed installer PATH block',
+    ),
+  ).toBe(true);
+  expect(
+    output.lines.some(
+      (l) => l.level === 'info' && l.msg === '/h/.bashrc: no installer marker found',
+    ),
+  ).toBe(true);
+});
+
+test('path cleaner: throws → warn printed, exit still 0', async () => {
+  await writeConfig();
+  const { sm } = fakeManager();
+  const { cleaner } = fakeCleaner(async () => {
+    throw new Error('rc-write-EROFS');
+  });
+  const output = captureOutput();
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      pathCleaner: cleaner,
+      installDir: '/h/.proxai/bin',
+    },
+    { yes: true },
+  );
+  expect(result.exitCode).toBe(0);
+  expect(
+    output.lines.some((l) => l.level === 'warn' && l.msg === 'PATH cleanup failed: rc-write-EROFS'),
+  ).toBe(true);
+});
+
+test('path cleaner: skipped when pathCleaner is missing', async () => {
+  await writeConfig();
   const { sm } = fakeManager();
   const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm), output, sweep });
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      installDir: '/h/.proxai/bin',
+    },
+    { yes: true },
+  );
   expect(result.exitCode).toBe(0);
+});
+
+test('path cleaner: skipped when installDir is missing even if cleaner provided', async () => {
+  await writeConfig();
+  const { sm } = fakeManager();
+  const { cleaner, calls } = fakeCleaner();
+  const output = captureOutput();
+  await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      pathCleaner: cleaner,
+    },
+    { yes: true },
+  );
+  expect(calls.clean).toHaveLength(0);
 });

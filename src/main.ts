@@ -1,4 +1,7 @@
 #!/usr/bin/env bun
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
 import { Command } from 'commander';
 
 import packageJson from '../package.json' with { type: 'json' };
@@ -35,6 +38,8 @@ import { runStop } from 'cli/commands/stop.ts';
 import { runTail } from 'cli/commands/tail.ts';
 import { runUninstall } from 'cli/commands/uninstall.ts';
 import { createDefaultSweep } from 'cli/commands/uninstall-sweep.ts';
+import { createDefaultBinaryRemover } from 'cli/commands/binary-remove.ts';
+import { createDefaultShellPathCleaner } from 'cli/commands/path-cleanup.ts';
 import { runUpgrade } from 'cli/commands/upgrade.ts';
 import {
   defaultLaunchdPlistPath,
@@ -495,6 +500,9 @@ program
         serviceManager: sm,
         configExists: () => Bun.file(configFilePath()).exists(),
         sweep: createDefaultSweep(),
+        binaryRemover: createDefaultBinaryRemover(platform),
+        pathCleaner: createDefaultShellPathCleaner(platform),
+        installDir: join(homedir(), '.proxai', 'bin'),
         currentExecPath: process.execPath,
       },
       uninstallOptions,

@@ -25,16 +25,23 @@ test('inquirerPrompts exposes askApiKey', () => {
   expect(typeof p.askApiKey).toBe('function');
 });
 
-test('scriptedPrompts.confirmReset returns the configured answer', async () => {
-  const yes = scriptedPrompts({ reset: true });
-  expect(await yes.confirmReset('please?')).toBe(true);
-  const no = scriptedPrompts({ reset: false });
-  expect(await no.confirmReset('please?')).toBe(false);
+test('scriptedPrompts.confirmPhrase: boolean shortcut returns the literal answer', async () => {
+  const yes = scriptedPrompts({ phrase: true });
+  expect(await yes.confirmPhrase('please?', 'uninstall')).toBe(true);
+  const no = scriptedPrompts({ phrase: false });
+  expect(await no.confirmPhrase('please?', 'uninstall')).toBe(false);
 });
 
-test('scriptedPrompts.confirmReset throws when no reset answer is configured', async () => {
+test('scriptedPrompts.confirmPhrase: string answer compared to required phrase', async () => {
+  const exact = scriptedPrompts({ phrase: 'uninstall' });
+  expect(await exact.confirmPhrase('please?', 'uninstall')).toBe(true);
+  const wrong = scriptedPrompts({ phrase: 'wrong text' });
+  expect(await wrong.confirmPhrase('please?', 'uninstall')).toBe(false);
+});
+
+test('scriptedPrompts.confirmPhrase throws when no phrase answer is configured', async () => {
   const p = scriptedPrompts({});
-  await expect(p.confirmReset('please?')).rejects.toThrow('scripted prompt');
+  await expect(p.confirmPhrase('please?', 'uninstall')).rejects.toThrow('scripted prompt');
 });
 
 test('scriptedPrompts.confirmUpgrade returns the configured answer', async () => {
@@ -49,7 +56,39 @@ test('scriptedPrompts.confirmUpgrade throws when no upgrade answer is configured
   await expect(p.confirmUpgrade('upgrade?')).rejects.toThrow('scripted prompt');
 });
 
-test('inquirerPrompts.confirmReset and confirmUpgrade wire up to @inquirer/prompts confirm', async () => {
+test('inquirerPrompts.confirmPhrase: typing the exact phrase resolves to true', async () => {
+  const inputCalls: { message: string; validate?: (v: string) => boolean | string }[] = [];
+  await mock.module('@inquirer/prompts', () => ({
+    confirm: () => Promise.resolve(true),
+    input: (opts: { message: string; validate?: (v: string) => boolean | string }) => {
+      inputCalls.push(opts);
+      return Promise.resolve('uninstall');
+    },
+  }));
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  expect(await fresh().confirmPhrase('Type uninstall:', 'uninstall')).toBe(true);
+  expect(inputCalls).toHaveLength(1);
+  expect(inputCalls[0]!.message).toBe('Type uninstall:');
+  const validate = inputCalls[0]!.validate!;
+  expect(validate('uninstall')).toBe(true);
+  expect(validate('   uninstall   ')).toBe(true);
+  expect(validate('')).toBe(true);
+  expect(validate('   ')).toBe(true);
+  expect(validate('something else')).toBe("type 'uninstall' to confirm, or leave empty to abort");
+  mock.restore();
+});
+
+test('inquirerPrompts.confirmPhrase: empty submission resolves to false (abort)', async () => {
+  await mock.module('@inquirer/prompts', () => ({
+    confirm: () => Promise.resolve(true),
+    input: () => Promise.resolve(''),
+  }));
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  expect(await fresh().confirmPhrase('Type uninstall:', 'uninstall')).toBe(false);
+  mock.restore();
+});
+
+test('inquirerPrompts.confirmUpgrade wires up to @inquirer/prompts confirm with default true', async () => {
   const calls: { message: string; default?: boolean }[] = [];
   await mock.module('@inquirer/prompts', () => ({
     confirm: (opts: { message: string; default?: boolean }) => {
@@ -58,17 +97,11 @@ test('inquirerPrompts.confirmReset and confirmUpgrade wire up to @inquirer/promp
     },
     input: () => Promise.resolve('unused'),
   }));
-
-  const { inquirerPrompts: freshInquirerPrompts } = await import('cli/prompts.ts');
-  const p = freshInquirerPrompts();
-  expect(await p.confirmReset('reset?')).toBe(true);
-  expect(await p.confirmUpgrade('upgrade?')).toBe(true);
-  expect(calls).toHaveLength(2);
-  expect(calls[0]!.message).toBe('reset?');
-  expect(calls[0]!.default).toBe(false);
-  expect(calls[1]!.message).toBe('upgrade?');
-  expect(calls[1]!.default).toBe(true);
-
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  expect(await fresh().confirmUpgrade('upgrade?')).toBe(true);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.message).toBe('upgrade?');
+  expect(calls[0]!.default).toBe(true);
   mock.restore();
 });
 
@@ -86,17 +119,17 @@ test('inquirerPrompts.askApiKey converts ExitPromptError (Ctrl+C) to UserAborted
   mock.restore();
 });
 
-test('inquirerPrompts.confirmReset converts AbortPromptError to UserAbortedError', async () => {
+test('inquirerPrompts.confirmPhrase converts AbortPromptError to UserAbortedError', async () => {
   await mock.module('@inquirer/prompts', () => ({
-    confirm: () => {
+    confirm: () => Promise.resolve(true),
+    input: () => {
       const err = new Error('aborted');
       err.name = 'AbortPromptError';
       throw err;
     },
-    input: () => Promise.resolve('unused'),
   }));
   const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
-  await expect(fresh().confirmReset('reset?')).rejects.toBeInstanceOf(UserAbortedError);
+  await expect(fresh().confirmPhrase('Type x:', 'x')).rejects.toBeInstanceOf(UserAbortedError);
   mock.restore();
 });
 

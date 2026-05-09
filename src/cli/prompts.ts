@@ -4,7 +4,7 @@ import { UserAbortedError } from 'core/utils';
 
 export interface PromptSink {
   askApiKey(message?: string): Promise<string>;
-  confirmReset(message: string): Promise<boolean>;
+  confirmPhrase(message: string, requiredPhrase: string): Promise<boolean>;
   confirmUpgrade(message: string): Promise<boolean>;
 }
 
@@ -35,7 +35,18 @@ export function inquirerPrompts(): PromptSink {
           validate: (v) => (v.trim().length > 0 ? true : 'ingestion key is required'),
         }),
       ),
-    confirmReset: (message) => rethrowAborts(() => confirm({ message, default: false })),
+    confirmPhrase: (message, requiredPhrase) =>
+      rethrowAborts(async () => {
+        const answer = await input({
+          message,
+          validate: (v) => {
+            const trimmed = v.trim();
+            if (trimmed === '' || trimmed === requiredPhrase) return true;
+            return `type '${requiredPhrase}' to confirm, or leave empty to abort`;
+          },
+        });
+        return answer.trim() === requiredPhrase;
+      }),
     confirmUpgrade: (message) => rethrowAborts(() => confirm({ message, default: true })),
   };
 }
@@ -43,7 +54,7 @@ export function inquirerPrompts(): PromptSink {
 export function scriptedPrompts(answers: {
   apiKey?: string;
   apiKeys?: string[];
-  reset?: boolean;
+  phrase?: string | boolean;
   upgrade?: boolean;
 }): PromptSink {
   const queue: string[] = [
@@ -56,11 +67,12 @@ export function scriptedPrompts(answers: {
       if (next === undefined) throw new Error('scripted prompt: no apiKey provided');
       return next;
     },
-    confirmReset: async () => {
-      if (answers.reset === undefined) {
-        throw new Error('scripted prompt: no reset answer provided');
+    confirmPhrase: async (_message, requiredPhrase) => {
+      if (answers.phrase === undefined) {
+        throw new Error('scripted prompt: no phrase answer provided');
       }
-      return answers.reset;
+      if (typeof answers.phrase === 'boolean') return answers.phrase;
+      return answers.phrase === requiredPhrase;
     },
     confirmUpgrade: async () => {
       if (answers.upgrade === undefined) {
