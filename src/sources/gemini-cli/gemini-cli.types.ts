@@ -15,6 +15,7 @@ export interface GeminiCliCollectorContext {
   gatewayVersion: string;
   maxDecompressedBytes: number;
   logger?: Logger;
+  detectVersion?: () => string | null;
 }
 
 export interface GeminiCliCollectorResult {

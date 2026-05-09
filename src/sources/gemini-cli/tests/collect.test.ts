@@ -51,19 +51,18 @@ async function makeFile(content: string, name = 'session.jsonl'): Promise<Discov
   };
 }
 
-function ctx(b: Database): GeminiCliCollectorContext {
+function ctx(b: Database, detectedVersion: string | null = '0.41.2'): GeminiCliCollectorContext {
   return {
     buffer: b,
     gatewayVersion: '@proxai/gateway 0.1.0',
     maxDecompressedBytes: BODY_TARGET_DECOMPRESSED_BYTES,
+    detectVersion: () => detectedVersion,
   };
 }
 
 const DECODER = new TextDecoder();
 const HEADER_MAIN = '{"sessionId":"abc","projectHash":"hex","kind":"main"}';
 const HEADER_SUBAGENT = '{"sessionId":"abc","projectHash":"hex","kind":"subagent"}';
-const HEADER_NO_KIND = '{"sessionId":"abc","projectHash":"hex"}';
-const HEADER_BAD_JSON = 'not-json-at-all';
 const EVENT_1 =
   '{"id":"e1","timestamp":"2026-01-01T00:00:00Z","type":"user","content":[{"text":"hi"}]}';
 const EVENT_2 =
@@ -86,28 +85,22 @@ test('first poll: header on line 1, three events on lines 2-4 produce one batch 
   expect(totalPendingBytes(buffer)).toBeGreaterThan(0);
 });
 
-test('first poll: agent_schema_version is gemini-cli/main when header.kind is "main"', async () => {
+test('first poll: agent_schema_version uses prefix + detected installed package version', async () => {
   const file = await makeFile(`${HEADER_MAIN}\n${EVENT_1}\n`);
-  await collectGeminiCliFile(file, ctx(buffer));
-  expect(nextPendingBatch(buffer)?.agentSchemaVersion).toBe('gemini-cli/main');
+  await collectGeminiCliFile(file, ctx(buffer, '0.41.2'));
+  expect(nextPendingBatch(buffer)?.agentSchemaVersion).toBe('gemini-cli/0.41.2');
 });
 
-test('first poll: agent_schema_version is gemini-cli/subagent when header.kind is "subagent"', async () => {
+test('first poll: agent_schema_version is independent of header kind', async () => {
   const file = await makeFile(`${HEADER_SUBAGENT}\n${EVENT_1}\n`);
-  await collectGeminiCliFile(file, ctx(buffer));
-  expect(nextPendingBatch(buffer)?.agentSchemaVersion).toBe('gemini-cli/subagent');
+  await collectGeminiCliFile(file, ctx(buffer, '0.41.2'));
+  expect(nextPendingBatch(buffer)?.agentSchemaVersion).toBe('gemini-cli/0.41.2');
 });
 
-test('first poll: agent_schema_version falls back to default when header has no kind field', async () => {
-  const file = await makeFile(`${HEADER_NO_KIND}\n${EVENT_1}\n`);
-  await collectGeminiCliFile(file, ctx(buffer));
-  expect(nextPendingBatch(buffer)?.agentSchemaVersion).toBe('gemini-cli/1');
-});
-
-test('first poll: agent_schema_version falls back to default when header is unparseable JSON', async () => {
-  const file = await makeFile(`${HEADER_BAD_JSON}\n${EVENT_1}\n`);
-  await collectGeminiCliFile(file, ctx(buffer));
-  expect(nextPendingBatch(buffer)?.agentSchemaVersion).toBe('gemini-cli/1');
+test('first poll: agent_schema_version falls back to default when version detection returns null', async () => {
+  const file = await makeFile(`${HEADER_MAIN}\n${EVENT_1}\n`);
+  await collectGeminiCliFile(file, ctx(buffer, null));
+  expect(nextPendingBatch(buffer)?.agentSchemaVersion).toBe('gemini-cli/unknown');
 });
 
 test('first poll: cursor advances past header + emitted events', async () => {
@@ -189,13 +182,13 @@ test('subsequent poll: appended event captured without re-reading the header', a
   const lines = decoded.split('\n').filter((l) => l.length > 0);
   expect(lines).toHaveLength(1);
   expect(lines[0]).toContain('"id":"e1"');
-  expect(second.agentSchemaVersion).toBe('gemini-cli/main');
+  expect(second.agentSchemaVersion).toBe('gemini-cli/0.41.2');
 });
 
-test('subsequent poll: re-reads header to derive agent_schema_version even when watermark > 0', async () => {
+test('subsequent poll: agent_schema_version reflects detected version on each poll', async () => {
   const initial = `${HEADER_SUBAGENT}\n${EVENT_1}\n`;
   const file = await makeFile(initial);
-  await collectGeminiCliFile(file, ctx(buffer));
+  await collectGeminiCliFile(file, ctx(buffer, '0.41.2'));
   const firstBatch = nextPendingBatch(buffer)!;
   deleteBatch(buffer, firstBatch.captureId);
 
@@ -206,26 +199,22 @@ test('subsequent poll: re-reads header to derive agent_schema_version even when 
     ...file,
     sizeBytes: stat.exists ? stat.size : appended.length,
   };
-  await collectGeminiCliFile(file2, ctx(buffer));
+  await collectGeminiCliFile(file2, ctx(buffer, '0.42.0'));
   const secondBatch = nextPendingBatch(buffer)!;
-  expect(secondBatch.agentSchemaVersion).toBe('gemini-cli/subagent');
+  expect(secondBatch.agentSchemaVersion).toBe('gemini-cli/0.42.0');
 });
 
-test('subsequent poll: header missing newline (truncated) on re-read uses default agent_schema_version', async () => {
-  const initial = `${HEADER_MAIN}\n${EVENT_1}\n`;
-  const file = await makeFile(initial);
-  await collectGeminiCliFile(file, ctx(buffer));
-  const firstBatch = nextPendingBatch(buffer)!;
-  deleteBatch(buffer, firstBatch.captureId);
-
-  await writeFile(file.sourcePath, 'unterminated-header-line-no-newline');
-  const stat = await statFile(file.sourcePath);
-  const file2: DiscoveredGeminiCliFile = {
-    ...file,
-    sizeBytes: stat.exists ? stat.size : 30,
-  };
-  const result = await collectGeminiCliFile(file2, ctx(buffer));
-  expect(result.capturedBatches).toBe(0);
+test('uses default detector when context.detectVersion is omitted', async () => {
+  const file = await makeFile(`${HEADER_MAIN}\n${EVENT_1}\n`);
+  const result = await collectGeminiCliFile(file, {
+    buffer,
+    gatewayVersion: '@proxai/gateway 0.1.0',
+    maxDecompressedBytes: BODY_TARGET_DECOMPRESSED_BYTES,
+  });
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBe(1);
+  const batch = nextPendingBatch(buffer)!;
+  expect(batch.agentSchemaVersion).toMatch(/^gemini-cli\//);
 });
 
 test('holds back trailing partial line and only advances to last newline', async () => {

@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+
 import { readJsonlRange } from 'core/io/jsonl';
 import {
   OversizedDecompressedSliceError,
@@ -11,6 +13,7 @@ import type { NewBatch } from 'services/buffer';
 import { BODY_MAX_DECOMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
 import {
+  GEMINI_CLI_AGENT_SCHEMA_PREFIX,
   GEMINI_CLI_BODY_COMPRESSION,
   GEMINI_CLI_BODY_FORMAT,
   GEMINI_CLI_DEFAULT_AGENT_SCHEMA_VERSION,
@@ -23,15 +26,11 @@ import type {
   GeminiCliCollectorContext,
   GeminiCliCollectorResult,
 } from 'sources/gemini-cli/gemini-cli.types.ts';
+import { detectGeminiCliVersion } from 'sources/gemini-cli/version.ts';
 
 const NEWLINE_BYTE = 0x0a;
 const DECODER = new TextDecoder('utf-8', { fatal: false });
 const ENCODER = new TextEncoder();
-
-interface HeaderInfo {
-  agentSchemaVersion: string;
-  endByte: number;
-}
 
 export async function collectGeminiCliFile(
   file: DiscoveredGeminiCliFile,
@@ -57,17 +56,21 @@ export async function collectGeminiCliFile(
       return result;
     }
 
-    const header = await readHeader(file.sourcePath);
+    const detect = context.detectVersion ?? defaultDetectVersion;
+    const detected = detect();
+    const agentSchemaVersion =
+      detected !== null
+        ? `${GEMINI_CLI_AGENT_SCHEMA_PREFIX}${detected}`
+        : GEMINI_CLI_DEFAULT_AGENT_SCHEMA_VERSION;
 
-    let agentSchemaVersion: string;
     let eventStart: number;
 
     if (watermarkStart === 0) {
-      if (header === null) {
+      const headerEnd = await readHeaderEnd(file.sourcePath);
+      if (headerEnd === null) {
         return result;
       }
-      agentSchemaVersion = header.agentSchemaVersion;
-      eventStart = header.endByte;
+      eventStart = headerEnd;
 
       if (file.sizeBytes <= eventStart) {
         setCursor(context.buffer, {
@@ -81,7 +84,6 @@ export async function collectGeminiCliFile(
         return result;
       }
     } else {
-      agentSchemaVersion = header?.agentSchemaVersion ?? GEMINI_CLI_DEFAULT_AGENT_SCHEMA_VERSION;
       eventStart = watermarkStart;
     }
 
@@ -189,23 +191,15 @@ export async function collectGeminiCliFile(
   return result;
 }
 
-async function readHeader(sourcePath: string): Promise<HeaderInfo | null> {
+async function readHeaderEnd(sourcePath: string): Promise<number | null> {
   const file = Bun.file(sourcePath);
   const slice = file.slice(0, GEMINI_CLI_HEADER_MAX_BYTES);
   const buf = new Uint8Array(await slice.arrayBuffer());
   const newlineIndex = buf.indexOf(NEWLINE_BYTE);
   if (newlineIndex === -1) return null;
+  return newlineIndex + 1;
+}
 
-  const headerLine = DECODER.decode(buf.subarray(0, newlineIndex));
-  const endByte = newlineIndex + 1;
-
-  let agentSchemaVersion = GEMINI_CLI_DEFAULT_AGENT_SCHEMA_VERSION;
-  try {
-    const parsed = JSON.parse(headerLine) as { kind?: unknown };
-    if (typeof parsed.kind === 'string' && parsed.kind.length > 0) {
-      agentSchemaVersion = `gemini-cli/${parsed.kind}`;
-    }
-  } catch {}
-
-  return { agentSchemaVersion, endByte };
+function defaultDetectVersion(): string | null {
+  return detectGeminiCliVersion({ homedir: homedir(), platform: process.platform });
 }
