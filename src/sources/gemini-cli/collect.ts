@@ -1,5 +1,3 @@
-import { homedir } from 'node:os';
-
 import { readJsonlRange } from 'core/io/jsonl';
 import {
   OversizedDecompressedSliceError,
@@ -201,9 +199,5 @@ async function readHeaderEnd(sourcePath: string): Promise<number | null> {
 }
 
 function defaultDetectVersion(): Promise<string | null> {
-  return detectGeminiCliVersion({
-    homedir: homedir(),
-    platform: process.platform,
-    env: process.env,
-  });
+  return detectGeminiCliVersion();
 }
