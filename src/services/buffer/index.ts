@@ -4,6 +4,7 @@ export * from 'services/buffer/buffer.types.ts';
 export * from 'services/buffer/cursors.ts';
 export * from 'services/buffer/daemon-state.ts';
 export * from 'services/buffer/db.ts';
+export * from 'services/buffer/metadata-readers.ts';
 export * from 'services/buffer/metadata.ts';
 export * from 'services/buffer/pressure.ts';
 export * from 'services/buffer/prune.ts';

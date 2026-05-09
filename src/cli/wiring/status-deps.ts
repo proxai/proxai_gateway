@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 
-import type { StatusCommandDeps, StatusCommandOptions } from 'cli/commands/status.ts';
+import type { StatusCommandDeps, StatusCommandOptions } from 'cli/commands/status';
 import { consoleOutput } from 'cli/output.ts';
 import type { ServiceManager } from 'cli/service-manager';
 import {

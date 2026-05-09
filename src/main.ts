@@ -12,7 +12,7 @@ import { runResume } from 'cli/commands/resume.ts';
 import { runDaemon } from 'cli/commands/run.ts';
 import { runSetup } from 'cli/commands/setup.ts';
 import { runStart } from 'cli/commands/start.ts';
-import { runStatus } from 'cli/commands/status.ts';
+import { runStatus } from 'cli/commands/status';
 import { runStop } from 'cli/commands/stop.ts';
 import { runTail } from 'cli/commands/tail.ts';
 import { runUninstall } from 'cli/commands/uninstall.ts';

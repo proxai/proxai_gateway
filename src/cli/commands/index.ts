@@ -5,7 +5,7 @@ export * from 'cli/commands/restart.ts';
 export * from 'cli/commands/resume.ts';
 export * from 'cli/commands/run.ts';
 export * from 'cli/commands/start.ts';
-export * from 'cli/commands/status.ts';
+export * from 'cli/commands/status';
 export * from 'cli/commands/stop.ts';
 export * from 'cli/commands/tail.ts';
 export * from 'cli/commands/uninstall.ts';
