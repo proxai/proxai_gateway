@@ -100,7 +100,7 @@ test('renderBufferSection prints per-source pending sub-rows with bytes when any
   const joined = lines.join('\n');
   expect(joined).toContain('claude-code');
   expect(joined).toContain('cursor');
-  expect(joined).not.toContain('codex'); // omitted when zero
+  expect(joined).not.toContain('codex');
   expect(joined).toContain('never');
   expect(joined).toContain('700 B');
   expect(joined).toContain('324 B');
@@ -164,7 +164,7 @@ test('renderUploadSection writes all-time, avg, last cycle, last success when po
   expect(joined).toContain('claude-code');
   expect(joined).toContain('cursor');
   expect(joined).toContain('codex');
-  expect(joined).not.toMatch(/gemini-cli\s+0 batches/); // omitted when zero
+  expect(joined).not.toMatch(/gemini-cli\s+0 batches/);
   expect(joined).toContain('Avg / drain');
   expect(joined).toContain('Last drain');
   expect(joined).toContain('Last success');
