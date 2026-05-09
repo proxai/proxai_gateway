@@ -105,7 +105,7 @@ function sampleCliVersion(db: Database): string {
       .query<
         { cli_version: string | null },
         []
-      >(`SELECT cli_version FROM "${CODEX_THREADS_TABLE}" ORDER BY rowid DESC LIMIT 1`)
+      >(`SELECT cli_version FROM "${CODEX_THREADS_TABLE}" WHERE cli_version != '' ORDER BY rowid DESC LIMIT 1`)
       .get();
     if (row !== null && typeof row.cli_version === 'string' && row.cli_version.length > 0) {
       return row.cli_version;

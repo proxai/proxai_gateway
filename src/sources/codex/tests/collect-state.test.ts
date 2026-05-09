@@ -179,6 +179,29 @@ test('falls back to "unknown" when threads is empty', async () => {
   expect(result.capturedBatches).toBe(0);
 });
 
+test('skips threads rows with empty cli_version and uses the most-recent populated one', async () => {
+  const file = await makeStateDb({
+    threads: [
+      { id: 't1', cli_version: '0.100.0' },
+      { id: 't2', cli_version: '0.126.0' },
+      { id: 't3', cli_version: '' },
+    ],
+  });
+  const { agentSchemaVersion } = await collectCodexState(file, ctx(buffer));
+  expect(agentSchemaVersion).toBe('0.126.0');
+});
+
+test('falls back to "unknown" when every threads row has empty cli_version', async () => {
+  const file = await makeStateDb({
+    threads: [
+      { id: 't1', cli_version: '' },
+      { id: 't2', cli_version: '' },
+    ],
+  });
+  const { agentSchemaVersion } = await collectCodexState(file, ctx(buffer));
+  expect(agentSchemaVersion).toBe('unknown');
+});
+
 test('skips a missing table and continues with the others', async () => {
   const path = join(dir, 'state_5.sqlite');
   const db = new Database(path, { create: true });
