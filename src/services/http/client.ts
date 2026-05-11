@@ -11,6 +11,7 @@ import {
   HEADER_CONTENT_TYPE,
   HEADER_USER_AGENT,
   HEADER_X_API_KEY,
+  UPLOAD_TIMEOUT_MS,
 } from 'services/http/http.constants.ts';
 import type {
   FetchWatermarksResult,
@@ -119,6 +120,7 @@ export class HttpClient {
       url: this.endpoints.ingest,
       body: dto,
       withApiKey: true,
+      timeoutMs: UPLOAD_TIMEOUT_MS,
     });
     return {
       captureId: raw.capture_id,
@@ -140,10 +142,11 @@ export class HttpClient {
       body = JSON.stringify(options.body);
     }
 
+    const timeoutMs = options.timeoutMs ?? this.timeoutMs;
     const init: RequestInit = {
       method: options.method,
       headers,
-      signal: AbortSignal.timeout(this.timeoutMs),
+      signal: AbortSignal.timeout(timeoutMs),
       ...(body !== undefined ? { body } : {}),
     };
 
@@ -155,7 +158,7 @@ export class HttpClient {
       const ctx = makeHttpContext(options.url, options.method, null, null);
       if (e.name === 'TimeoutError' || e.name === 'AbortError') {
         throw withCtx(
-          new RetriableError(`request timed out after ${this.timeoutMs.toString()}ms`, null, err),
+          new RetriableError(`request timed out after ${timeoutMs.toString()}ms`, null, err),
           ctx,
         );
       }

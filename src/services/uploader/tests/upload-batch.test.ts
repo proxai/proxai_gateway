@@ -13,7 +13,7 @@ import {
   insertBatch,
   openInMemoryBufferDb,
 } from 'services/buffer';
-import { HttpClient } from 'services/http';
+import { HttpClient, UPLOAD_TIMEOUT_MS } from 'services/http';
 import { uploadBatch } from 'services/uploader';
 import type { UploaderContext } from 'services/uploader';
 import {
@@ -38,6 +38,29 @@ afterEach(() => {
 function ctxWith(fetchFn: typeof globalThis.fetch): UploaderContext {
   return { db, http: createTestHttpClient(fetchFn), hostId: TEST_HOST_ID };
 }
+
+test('uploadRawRecord passes UPLOAD_TIMEOUT_MS to AbortSignal.timeout', async () => {
+  const batch = newClaudeCodeBatch('payload');
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId)!;
+  const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
+  const captured: number[] = [];
+  (AbortSignal as { timeout: (ms: number) => AbortSignal }).timeout = (ms: number): AbortSignal => {
+    captured.push(ms);
+    return originalTimeout(ms);
+  };
+  try {
+    const ctx = ctxWith(
+      mockFetch(() =>
+        jsonResponse({ capture_id: batch.captureId, accepted: true, idempotent: false }),
+      ),
+    );
+    await uploadBatch(ctx, stored);
+  } finally {
+    (AbortSignal as { timeout: (ms: number) => AbortSignal }).timeout = originalTimeout;
+  }
+  expect(captured).toContain(UPLOAD_TIMEOUT_MS);
+});
 
 test('accepted upload writes receipt, deletes batch row, returns idempotent flag', async () => {
   const batch = newClaudeCodeBatch('payload');
