@@ -63,7 +63,7 @@ export interface DrainResult {
   retriable: number;
   fatal: number;
   recovered: number;
-  rateLimitedRetryAfterMs: number | null;
+  lastRetriableRetryAfterMs: number | null;
   consecutiveRetriableBreak: boolean;
   lastUploadError: string | null;
 }

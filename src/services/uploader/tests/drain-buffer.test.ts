@@ -48,7 +48,7 @@ test('empty buffer returns zero attempts', async () => {
   expect(result.accepted).toBe(0);
   expect(result.retriable).toBe(0);
   expect(result.fatal).toBe(0);
-  expect(result.rateLimitedRetryAfterMs).toBeNull();
+  expect(result.lastRetriableRetryAfterMs).toBeNull();
 });
 
 test('drains all pending batches when server accepts each', async () => {
@@ -203,7 +203,7 @@ test('surfaces rate-limit retryAfterMs from the most recent retriable batch', as
   const result = await drainBuffer(ctx);
   expect(result.attempted).toBe(3);
   expect(result.retriable).toBe(3);
-  expect(result.rateLimitedRetryAfterMs).toBe(12_000);
+  expect(result.lastRetriableRetryAfterMs).toBe(12_000);
   expect(result.consecutiveRetriableBreak).toBe(true);
 });
 

@@ -53,7 +53,7 @@ export async function runDrainCycle(ctx: DrainCycleContext): Promise<DrainCycleR
       retriable: drainResult.retriable,
       fatal: drainResult.fatal,
       recovered: drainResult.recovered,
-      retry_after_ms: drainResult.rateLimitedRetryAfterMs,
+      retry_after_ms: drainResult.lastRetriableRetryAfterMs,
     },
     'buffer drain complete',
   );

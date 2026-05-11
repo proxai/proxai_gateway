@@ -26,7 +26,7 @@ export async function drainBuffer(
     retriable: 0,
     fatal: 0,
     recovered: 0,
-    rateLimitedRetryAfterMs: null,
+    lastRetriableRetryAfterMs: null,
     consecutiveRetriableBreak: false,
     lastUploadError: null,
   };
@@ -78,7 +78,7 @@ export async function drainBuffer(
       }
     }
     result.retriable++;
-    result.rateLimitedRetryAfterMs = outcome.retryAfterMs;
+    result.lastRetriableRetryAfterMs = outcome.retryAfterMs;
     result.lastUploadError = outcome.error;
     consecutiveRetriable++;
     if (consecutiveRetriable >= maxConsecutiveRetriable) {
