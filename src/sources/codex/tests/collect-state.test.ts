@@ -10,6 +10,7 @@ import { rmRecursive, statFile } from 'core/io/fs';
 import { nextGenerationSuffix, sha256Hex, zstdDecompressSync } from 'core/utils';
 import {
   countByStatus,
+  countQuarantined,
   deleteBatch,
   getBatch,
   getCursor,
@@ -707,6 +708,77 @@ test('second poll with no new rows refreshes lastSeenSize/PageCount on the exist
   expect(after!.watermarkEnd).toBe(beforeWatermark);
   expect(after!.lastSeenSizeBytes).not.toBe(before!.lastSeenSizeBytes);
 }, 30_000);
+
+test('quarantines oversized codex state row, advances cursor, and continues to next row', async () => {
+  const path = join(dir, 'oversized_quarantine.sqlite');
+  const db = new Database(path, { create: true });
+  db.run(
+    `CREATE TABLE threads (
+      id TEXT PRIMARY KEY,
+      cli_version TEXT,
+      cwd TEXT,
+      title TEXT,
+      model TEXT
+    )`,
+  );
+  db.run(
+    `CREATE TABLE thread_dynamic_tools (
+      thread_id TEXT,
+      position INTEGER,
+      name TEXT,
+      PRIMARY KEY (thread_id, position)
+    )`,
+  );
+  db.run(
+    `CREATE TABLE thread_spawn_edges (
+      parent_thread_id TEXT,
+      child_thread_id TEXT PRIMARY KEY,
+      status TEXT
+    )`,
+  );
+  const giant = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
+  db.query('INSERT INTO threads (id, cli_version, cwd, title, model) VALUES (?, ?, ?, ?, ?)').run(
+    't-big',
+    '0.1.0',
+    giant,
+    'oversize',
+    'gpt-5',
+  );
+  db.query('INSERT INTO threads (id, cli_version, cwd, title, model) VALUES (?, ?, ?, ?, ?)').run(
+    't-small',
+    '0.1.0',
+    '/tmp',
+    'normal',
+    'gpt-5',
+  );
+  db.close();
+
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('seed missing');
+  const file: DiscoveredCodexStateFile = {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+
+  const { result } = await collectCodexState(file, ctx(buffer));
+
+  expect(countQuarantined(buffer, 'codex')).toBeGreaterThanOrEqual(1);
+
+  const cursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: 'threads',
+  });
+  expect(cursor).not.toBeNull();
+  expect(cursor!.watermarkEnd).toBeGreaterThan(1);
+  expect(cursor!.consecutiveErrors).toBeGreaterThanOrEqual(1);
+
+  expect(result.capturedBatches).toBeGreaterThanOrEqual(1);
+}, 120_000);
 
 test('surfaces OversizedDecompressedSliceError when single row exceeds BODY_MAX_DECOMPRESSED_BYTES', async () => {
   const path = join(dir, 'oversized_state.sqlite');

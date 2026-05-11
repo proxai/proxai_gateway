@@ -1,14 +1,14 @@
 import type { Database } from 'bun:sqlite';
 
 import { tableExists } from 'core/io/sqlite';
+import { generateUuidV7, nowIsoUtc, splitRowsByCompressedSize, zstdCompressSync } from 'core/utils';
 import {
-  generateUuidV7,
-  nowIsoUtc,
-  OversizedDecompressedSliceError,
-  splitRowsByCompressedSize,
-  zstdCompressSync,
-} from 'core/utils';
-import { getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
+  getCursor,
+  getCursorWithFallback,
+  insertBatch,
+  recordQuarantine,
+  setCursor,
+} from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import type { CodexTable } from 'services/contract';
 import { BODY_MAX_DECOMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
@@ -106,6 +106,8 @@ export function collectOneTable(
   const lastRow = rows[rows.length - 1]!;
   const finalWatermarkEnd = lastRow.rowid + 1;
 
+  let quarantinedCount = 0;
+  let acceptedSlices = 0;
   for (let i = 0; i < slices.length; i++) {
     const slice = slices[i]!;
     if (slice.length === 0) continue;
@@ -118,14 +120,68 @@ export function collectOneTable(
     const compressed = zstdCompressSync(redactedJson);
 
     if (redactedBytes > BODY_MAX_DECOMPRESSED_BYTES) {
-      throw new OversizedDecompressedSliceError({
+      try {
+        recordQuarantine(context.buffer, {
+          sourceApp: CODEX_SOURCE_APP,
+          sourcePath: identity.sourcePath,
+          sourcePathHash: identity.sourcePathHash,
+          sourceInode: null,
+          watermarkTable: table,
+          watermarkPosition: lastRowidInSlice,
+          rowPk: lastRowidInSlice.toString(),
+          redactedSizeBytes: redactedBytes,
+          reason: 'oversized_decompressed',
+          quarantinedAtUtc: nowIsoUtc(),
+          gatewayVersion: context.gatewayVersion,
+        });
+      } catch (qerr) {
+        context.logger?.warn(
+          {
+            event: 'quarantine.write_failed',
+            source_app: CODEX_SOURCE_APP,
+            source_path_hash: identity.sourcePathHash,
+            error: qerr instanceof Error ? qerr.message : String(qerr),
+          },
+          'failed to record oversized row quarantine',
+        );
+      }
+      context.logger?.warn(
+        {
+          event: 'oversized_row.quarantined',
+          source_app: CODEX_SOURCE_APP,
+          source_path_hash: identity.sourcePathHash,
+          watermark_table: table,
+          watermark_position: lastRowidInSlice,
+          redacted_size_bytes: redactedBytes,
+          cap: BODY_MAX_DECOMPRESSED_BYTES,
+        },
+        'oversized codex state row quarantined; advancing cursor past it',
+      );
+      result.errors.push({
         sourcePath: identity.sourcePath,
-        sourcePathHash: identity.sourcePathHash,
-        rawBytes: redactedBytes,
-        compressedBytes: compressed.byteLength,
-        sliceIndex: i,
-        cap: BODY_MAX_DECOMPRESSED_BYTES,
+        reason: `decompressed slice exceeded ${BODY_MAX_DECOMPRESSED_BYTES.toString()} bytes (${redactedBytes.toString()}); row quarantined`,
+        table,
       });
+      const priorCursor = getCursor(context.buffer, {
+        sourceApp: CODEX_SOURCE_APP,
+        sourcePathHash: identity.sourcePathHash,
+        sourceInode: null,
+        watermarkTable: table,
+      });
+      const priorErrors = priorCursor?.consecutiveErrors ?? 0;
+      setCursor(context.buffer, {
+        sourceApp: CODEX_SOURCE_APP,
+        sourcePathHash: identity.sourcePathHash,
+        sourcePath: identity.sourcePath,
+        sourceInode: null,
+        watermarkTable: table,
+        watermarkEnd: sliceWatermarkEnd,
+        consecutiveErrors: priorErrors + 1,
+        lastSeenSizeBytes: currentSizeBytes,
+        lastSeenPageCount: currentPageCount,
+      });
+      quarantinedCount += 1;
+      continue;
     }
 
     if (slices.length > 1) {
@@ -164,8 +220,19 @@ export function collectOneTable(
 
     insertBatch(context.buffer, batch);
     result.capturedBytes += compressed.byteLength;
+    acceptedSlices += 1;
   }
 
+  let finalConsecutiveErrors = 0;
+  if (quarantinedCount > 0) {
+    const refreshed = getCursor(context.buffer, {
+      sourceApp: CODEX_SOURCE_APP,
+      sourcePathHash: identity.sourcePathHash,
+      sourceInode: null,
+      watermarkTable: table,
+    });
+    finalConsecutiveErrors = refreshed?.consecutiveErrors ?? quarantinedCount;
+  }
   setCursor(context.buffer, {
     sourceApp: CODEX_SOURCE_APP,
     sourcePathHash: identity.sourcePathHash,
@@ -175,10 +242,10 @@ export function collectOneTable(
     watermarkEnd: finalWatermarkEnd,
     lastSeenSizeBytes: currentSizeBytes,
     lastSeenPageCount: currentPageCount,
-    consecutiveErrors: 0,
+    consecutiveErrors: finalConsecutiveErrors,
   });
 
-  result.capturedBatches += slices.length;
+  result.capturedBatches += acceptedSlices;
 }
 
 function createSliceMeasurer(): (slice: readonly CodexRow[]) => SliceMeasurement {
