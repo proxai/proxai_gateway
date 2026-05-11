@@ -60,6 +60,23 @@ test('rejects invalid log level', () => {
   ).toThrow(/logging\.level/);
 });
 
+test('rejects upload_max_batches_per_sec below 0.1', () => {
+  expect(() =>
+    validateAndCoerce({
+      account: minimalAccount,
+      capture: { upload_max_batches_per_sec: 0.001 },
+    }),
+  ).toThrow(/upload_max_batches_per_sec/);
+});
+
+test('accepts upload_max_batches_per_sec at 0.5', () => {
+  const result = validateAndCoerce({
+    account: minimalAccount,
+    capture: { upload_max_batches_per_sec: 0.5 },
+  });
+  expect(result.capture.uploadMaxBatchesPerSec).toBe(0.5);
+});
+
 test('rejects out-of-range poll interval', () => {
   expect(() =>
     validateAndCoerce({ account: minimalAccount, capture: { poll_interval_sec: 5 } }),

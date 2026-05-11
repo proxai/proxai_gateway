@@ -16,6 +16,7 @@ import {
   DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
   MAX_POLL_INTERVAL_SEC,
   MIN_POLL_INTERVAL_SEC,
+  MIN_UPLOAD_MAX_BATCHES_PER_SEC,
   NEST_INGEST_URL,
   NEST_REGISTER_HOST_ID_URL,
   NEST_VERIFY_KEY_URL,
@@ -133,7 +134,7 @@ function validateCapture(raw: unknown): CaptureConfig {
       r['upload_max_batches_per_sec'],
       DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
       'capture.upload_max_batches_per_sec',
-      Number.MIN_VALUE,
+      MIN_UPLOAD_MAX_BATCHES_PER_SEC,
     ),
     uploadMaxBytesPerMinute: optionalNumber(
       r['upload_max_bytes_per_minute'],
