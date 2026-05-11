@@ -19,7 +19,6 @@ import type { NewBatch } from 'services/buffer';
 import {
   isBufferFull,
   pausePolling,
-  persistAcceptedBySource,
   runCaptureCycle,
   writeAuthFailedSentinel,
   writeBufferFullSentinel,
@@ -278,26 +277,6 @@ test('persists capture errors counter when source has errors', async () => {
   ]);
   await runCaptureCycle(ctx);
   expect(getMetadata(buffer, METADATA_KEYS.captureCyclesWithErrors)).toBe('1');
-});
-
-test('persistAcceptedBySource increments per-source counters', () => {
-  setMetadata(buffer, 'upload_batches_shipped_by_source.claude-code', '5');
-  persistAcceptedBySource(buffer, {
-    'claude-code': { batches: 3, bytes: 100 },
-    cursor: { batches: 1, bytes: 50 },
-  });
-  expect(getMetadata(buffer, 'upload_batches_shipped_by_source.claude-code')).toBe('8');
-  expect(getMetadata(buffer, 'upload_bytes_shipped_by_source.claude-code')).toBe('100');
-  expect(getMetadata(buffer, 'upload_batches_shipped_by_source.cursor')).toBe('1');
-});
-
-test('persistAcceptedBySource skips undefined entries', () => {
-  persistAcceptedBySource(buffer, {
-    'claude-code': { batches: 2, bytes: 30 },
-    cursor: undefined,
-  });
-  expect(getMetadata(buffer, 'upload_batches_shipped_by_source.claude-code')).toBe('2');
-  expect(getMetadata(buffer, 'upload_batches_shipped_by_source.cursor')).toBeNull();
 });
 
 test('logs warn when pressure check throws', async () => {

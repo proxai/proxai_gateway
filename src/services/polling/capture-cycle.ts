@@ -5,8 +5,6 @@ import {
   getMetadata,
   setDaemonState,
   setMetadata,
-  uploadBatchesShippedKey,
-  uploadBytesShippedKey,
 } from 'services/buffer';
 import { METADATA_KEYS } from 'services/buffer';
 import type {
@@ -240,19 +238,4 @@ function finishSkip(
     sourceResults: {},
     pressureResult: null,
   };
-}
-
-export function persistAcceptedBySource(
-  buffer: CaptureCycleContext['buffer'],
-  bySource: Record<string, { batches: number; bytes: number } | undefined>,
-): void {
-  for (const [app, totals] of Object.entries(bySource)) {
-    if (totals === undefined) continue;
-    const batchesKey = uploadBatchesShippedKey(app);
-    const bytesKey = uploadBytesShippedKey(app);
-    const prevBatches = readNumberMetadata(buffer, batchesKey);
-    const prevBytes = readNumberMetadata(buffer, bytesKey);
-    setMetadata(buffer, batchesKey, (prevBatches + totals.batches).toString());
-    setMetadata(buffer, bytesKey, (prevBytes + totals.bytes).toString());
-  }
 }
