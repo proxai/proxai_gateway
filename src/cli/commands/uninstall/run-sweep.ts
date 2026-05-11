@@ -14,23 +14,25 @@ export async function runSweep(
     detections = [];
   }
 
-  for (const det of detections) {
-    if (!det.available) {
-      deps.output.info(`${det.name} not available — skipped`);
-      continue;
-    }
-    if (!det.installed) {
-      deps.output.info(`not installed via ${det.name}`);
-      continue;
-    }
-    try {
-      const res = await sweep.uninstall(det.name);
-      if (res.ok) deps.output.info(res.message);
-      else deps.output.warn(res.message);
-    } catch (err) {
-      deps.output.warn(`${det.name} uninstall threw: ${(err as Error).message ?? String(err)}`);
-    }
-  }
+  await Promise.all(
+    detections.map(async (det) => {
+      if (!det.available) {
+        deps.output.info(`${det.name} not available — skipped`);
+        return;
+      }
+      if (!det.installed) {
+        deps.output.info(`not installed via ${det.name}`);
+        return;
+      }
+      try {
+        const res = await sweep.uninstall(det.name);
+        if (res.ok) deps.output.info(res.message);
+        else deps.output.warn(res.message);
+      } catch (err) {
+        deps.output.warn(`${det.name} uninstall threw: ${(err as Error).message ?? String(err)}`);
+      }
+    }),
+  );
 
   try {
     const brew = await sweep.detectBrew();
