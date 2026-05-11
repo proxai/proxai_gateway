@@ -349,6 +349,30 @@ test('todaysLogPath zero-pads single-digit month and day', () => {
   expect(path).toContain('structured.2026-01-01.1.log');
 });
 
+test('todaysLogPath picks the highest rotation index when multiple exist', async () => {
+  const fixed = new Date(2026, 4, 8, 12, 0, 0);
+  await writeFile(join(dir, 'structured.2026-05-08.1.log'), 'x');
+  await writeFile(join(dir, 'structured.2026-05-08.2.log'), 'y');
+  await writeFile(join(dir, 'structured.2026-05-08.3.log'), 'z');
+  const path = todaysLogPath(dir, fixed);
+  expect(path).toContain('structured.2026-05-08.3.log');
+});
+
+test('todaysLogPath falls back to .1 when log dir does not exist', () => {
+  const fixed = new Date(2026, 4, 8, 12, 0, 0);
+  const path = todaysLogPath('/does-not-exist-anywhere', fixed);
+  expect(path).toContain('structured.2026-05-08.1.log');
+});
+
+test('todaysLogPath ignores files for other dates and other basenames', async () => {
+  const fixed = new Date(2026, 4, 8, 12, 0, 0);
+  await writeFile(join(dir, 'structured.2026-05-08.2.log'), 'today');
+  await writeFile(join(dir, 'structured.2026-05-07.9.log'), 'yesterday');
+  await writeFile(join(dir, 'something-else.2026-05-08.5.log'), 'other');
+  const path = todaysLogPath(dir, fixed);
+  expect(path).toContain('structured.2026-05-08.2.log');
+});
+
 test('parses different --since unit suffixes (s, m, h, d)', async () => {
   const now = Date.now();
   await seedTodaysLog(
