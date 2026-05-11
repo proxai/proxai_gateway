@@ -6,6 +6,8 @@ export const CURSOR_BODY_FORMAT: BodyFormat = 'kv_pairs_json';
 export const CURSOR_BODY_COMPRESSION: BodyCompression = 'zstd';
 
 export const CURSOR_USER_SUBPATH = 'Library/Application Support/Cursor/User';
+export const CURSOR_LINUX_USER_SUBPATH = '.config/Cursor/User';
+export const CURSOR_WINDOWS_USER_SUBPATH = 'Cursor/User';
 export const CURSOR_GLOBAL_DB_RELATIVE = 'globalStorage/state.vscdb';
 export const CURSOR_WORKSPACE_GLOB = 'workspaceStorage/*/state.vscdb';
 

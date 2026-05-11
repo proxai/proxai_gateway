@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { mkdir, mkdtemp, utimes, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { join, sep as pathSep } from 'node:path';
 
-import { discoverCursorFiles } from 'sources/cursor';
+import { discoverCursorFiles, defaultCursorUserRoot } from 'sources/cursor';
 
 let dir: string;
 
@@ -95,6 +95,29 @@ test('skips files older than minimumMtime, keeps newer ones', async () => {
   const found = await discoverCursorFiles(dir, { minimumMtime: cutoff });
   expect(found).toHaveLength(1);
   expect(found[0]!.sourcePath).toBe(newPath);
+});
+
+test('defaultCursorUserRoot returns the macOS Library path on darwin', () => {
+  const root = defaultCursorUserRoot('darwin', { HOME: '/Users/test' });
+  expect(root).toContain(`Library${pathSep}Application Support${pathSep}Cursor${pathSep}User`);
+});
+
+test('defaultCursorUserRoot returns the XDG .config path on linux', () => {
+  const root = defaultCursorUserRoot('linux', { HOME: '/home/test' });
+  expect(root).toContain(`.config${pathSep}Cursor${pathSep}User`);
+});
+
+test('defaultCursorUserRoot returns the APPDATA path on win32', () => {
+  const root = defaultCursorUserRoot('win32', {
+    APPDATA: 'C:\\Users\\test\\AppData\\Roaming',
+  });
+  expect(root).toContain(`Cursor${pathSep}User`);
+  expect(root).toContain('AppData');
+});
+
+test('defaultCursorUserRoot falls back to homedir when env vars missing', () => {
+  const root = defaultCursorUserRoot('darwin', {});
+  expect(root).toContain(homedir());
 });
 
 test('null minimumMtime means no cap (all files included)', async () => {

@@ -5,13 +5,30 @@ import { statFile } from 'core/io/fs';
 import { sha256Hex } from 'core/utils';
 import {
   CURSOR_GLOBAL_DB_RELATIVE,
+  CURSOR_LINUX_USER_SUBPATH,
   CURSOR_USER_SUBPATH,
+  CURSOR_WINDOWS_USER_SUBPATH,
   CURSOR_WORKSPACE_GLOB,
 } from 'sources/cursor/cursor.constants.ts';
 import type { DiscoveredCursorFile } from 'sources/cursor/cursor.types.ts';
 
-export function defaultCursorUserRoot(): string {
-  return join(homedir(), CURSOR_USER_SUBPATH);
+export function defaultCursorUserRoot(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  if (platform === 'win32') {
+    const appData = env['APPDATA']?.trim();
+    if (appData !== undefined && appData.length > 0) {
+      return join(appData, CURSOR_WINDOWS_USER_SUBPATH);
+    }
+    return join(homedir(), 'AppData', 'Roaming', CURSOR_WINDOWS_USER_SUBPATH);
+  }
+  if (platform === 'linux') {
+    const home = env['HOME']?.trim() ?? homedir();
+    return join(home, CURSOR_LINUX_USER_SUBPATH);
+  }
+  const home = env['HOME']?.trim() ?? homedir();
+  return join(home, CURSOR_USER_SUBPATH);
 }
 
 export interface DiscoverCursorOptions {
