@@ -131,5 +131,16 @@ export function createLaunchctlManager(spawn: SpawnFn, unitPath: string): Servic
 export function parseLaunchctlPrint(stdout: string): ServiceRuntimeInfo {
   const pidMatch = /\bpid\s*=\s*(\d+)/i.exec(stdout);
   const pid = pidMatch !== null && pidMatch[1] !== undefined ? Number(pidMatch[1]) : null;
-  return { pid, startedAt: null };
+  const startedAt = parseLaunchdStartedAt(stdout);
+  return { pid, startedAt };
+}
+
+function parseLaunchdStartedAt(stdout: string): Date | null {
+  const spawnTsMatch = /\bspawn\s*ts\s*=\s*(\d+)/i.exec(stdout);
+  const startTimeMatch = /\bstart\s*time\s*=\s*(\d+)/i.exec(stdout);
+  const matched = spawnTsMatch ?? startTimeMatch;
+  if (matched === null || matched[1] === undefined) return null;
+  const epochSeconds = Number(matched[1]);
+  if (!Number.isFinite(epochSeconds) || epochSeconds <= 0) return null;
+  return new Date(epochSeconds * 1000);
 }

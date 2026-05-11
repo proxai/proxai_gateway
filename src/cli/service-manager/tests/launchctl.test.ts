@@ -353,3 +353,43 @@ test('runtimeInfo returns nulls when launchctl print fails', async () => {
 test('parseLaunchctlPrint returns null pid when missing', () => {
   expect(parseLaunchctlPrint('state = idle\n')).toEqual({ pid: null, startedAt: null });
 });
+
+test('parseLaunchctlPrint extracts startedAt from spawn ts epoch seconds', () => {
+  const stdout = [
+    'co.proxai.gateway = {',
+    '\tstate = running',
+    '\tspawn ts = 1715424737',
+    '\tpid = 12345',
+    '}',
+  ].join('\n');
+  const info = parseLaunchctlPrint(stdout);
+  expect(info.pid).toBe(12345);
+  expect(info.startedAt).not.toBeNull();
+  expect(info.startedAt?.toISOString()).toBe(new Date(1715424737 * 1000).toISOString());
+});
+
+test('parseLaunchctlPrint extracts startedAt from start time = epoch seconds', () => {
+  const stdout = ['co.proxai.gateway = {', '\tstart time = 1715424737', '\tpid = 99999', '}'].join(
+    '\n',
+  );
+  const info = parseLaunchctlPrint(stdout);
+  expect(info.pid).toBe(99999);
+  expect(info.startedAt).not.toBeNull();
+  expect(info.startedAt?.toISOString()).toBe(new Date(1715424737 * 1000).toISOString());
+});
+
+test('runtimeInfo includes startedAt parsed from launchctl print', async () => {
+  const { spawn } = mockSpawn(() => ({
+    exitCode: 0,
+    stdout: 'state = running\nspawn ts = 1715424737\npid = 12345\n',
+  }));
+  const sm = getServiceManager({
+    platform: 'darwin',
+    unitPath: '/u.plist',
+    programPath: '/p',
+    spawn,
+  });
+  const info = await sm.runtimeInfo();
+  expect(info.pid).toBe(12345);
+  expect(info.startedAt).not.toBeNull();
+});
