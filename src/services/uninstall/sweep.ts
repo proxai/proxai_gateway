@@ -89,20 +89,18 @@ export function createSweep(runner: CommandRunner): PackageManagerSweep {
   };
 
   return {
-    detectAll: async () => {
-      const results: PmDetection[] = [];
-      for (const d of detectors) {
-        const available = await runner.has(d.name);
-        if (!available) {
-          results.push({ name: d.name, available: false, installed: false });
-          continue;
-        }
-        const { stdout, ok } = await runner.exec(d.name, d.args);
-        const installed = ok || stdout.length > 0 ? d.parse(stdout) : false;
-        results.push({ name: d.name, available: true, installed });
-      }
-      return results;
-    },
+    detectAll: async () =>
+      Promise.all(
+        detectors.map(async (d): Promise<PmDetection> => {
+          const available = await runner.has(d.name);
+          if (!available) {
+            return { name: d.name, available: false, installed: false };
+          }
+          const { stdout, ok } = await runner.exec(d.name, d.args);
+          const installed = ok || stdout.length > 0 ? d.parse(stdout) : false;
+          return { name: d.name, available: true, installed };
+        }),
+      ),
     uninstall: async (name) => {
       const { ok, stdout } = await runner.exec(name, uninstallArgs[name]);
       if (ok) return { ok: true, message: `removed via ${name}` };
