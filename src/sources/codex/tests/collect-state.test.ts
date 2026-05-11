@@ -709,6 +709,62 @@ test('second poll with no new rows refreshes lastSeenSize/PageCount on the exist
   expect(after!.lastSeenSizeBytes).not.toBe(before!.lastSeenSizeBytes);
 }, 30_000);
 
+test('logs quarantine.write_failed when quarantine insert throws', async () => {
+  const path = join(dir, 'oversized_quarantine_fail.sqlite');
+  const db = new Database(path, { create: true });
+  db.run(
+    `CREATE TABLE threads (
+      id TEXT PRIMARY KEY,
+      cli_version TEXT,
+      cwd TEXT,
+      title TEXT,
+      model TEXT
+    )`,
+  );
+  const giant = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
+  db.query('INSERT INTO threads (id, cli_version, cwd, title, model) VALUES (?, ?, ?, ?, ?)').run(
+    't-big',
+    '0.1.0',
+    giant,
+    'oversize',
+    'gpt-5',
+  );
+  db.close();
+
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('seed missing');
+  const file: DiscoveredCodexStateFile = {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+  const warns: { msg: string; bindings: unknown }[] = [];
+  const noopChild = (): typeof fakeLogger => fakeLogger;
+  const fakeLogger = {
+    info: (): void => {},
+    warn: (bindings: unknown, msg: string): void => {
+      warns.push({ msg, bindings });
+    },
+    error: (): void => {},
+    debug: (): void => {},
+    trace: (): void => {},
+    fatal: (): void => {},
+    child: noopChild,
+  };
+  // Drop the quarantine table to make the insert throw.
+  buffer.exec('DROP TABLE quarantined_records');
+
+  const fakeCtx: CodexCollectorContext = {
+    ...ctx(buffer),
+    logger: fakeLogger as unknown as CodexCollectorContext['logger'],
+  };
+  const { result } = await collectCodexState(file, fakeCtx);
+  expect(result.errors.some((e) => /quarantined/.test(e.reason))).toBe(true);
+  expect(warns.some((w) => w.msg.includes('failed to record oversized row'))).toBe(true);
+}, 120_000);
+
 test('quarantines oversized codex state row, advances cursor, and continues to next row', async () => {
   const path = join(dir, 'oversized_quarantine.sqlite');
   const db = new Database(path, { create: true });

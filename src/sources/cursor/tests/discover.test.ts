@@ -120,6 +120,12 @@ test('defaultCursorUserRoot falls back to homedir when env vars missing', () => 
   expect(root).toContain(homedir());
 });
 
+test('defaultCursorUserRoot on win32 falls back to homedir AppData when APPDATA missing', () => {
+  const root = defaultCursorUserRoot('win32', {});
+  expect(root).toContain(homedir());
+  expect(root).toContain(`AppData${pathSep}Roaming`);
+});
+
 test('null minimumMtime means no cap (all files included)', async () => {
   await mkdir(join(dir, 'globalStorage'), { recursive: true });
   const oldPath = join(dir, 'globalStorage', 'state.vscdb');

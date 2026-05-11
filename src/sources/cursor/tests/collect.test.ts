@@ -509,6 +509,32 @@ test('surfaces OversizedDecompressedSliceError when single row exceeds BODY_MAX_
   expect(oversized.length).toBeGreaterThanOrEqual(1);
 }, 60_000);
 
+test('logs quarantine.write_failed when quarantine insert throws on cursor', async () => {
+  const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
+  const file = await makeDb([{ key: 'composerData:huge', value: giantPayload }]);
+  buffer.exec('DROP TABLE quarantined_records');
+  const warns: { msg: string }[] = [];
+  const noopChild = (): typeof fakeLogger => fakeLogger;
+  const fakeLogger = {
+    info: (): void => {},
+    warn: (_b: unknown, msg: string): void => {
+      warns.push({ msg });
+    },
+    error: (): void => {},
+    debug: (): void => {},
+    trace: (): void => {},
+    fatal: (): void => {},
+    child: noopChild,
+  };
+  const fakeCtx: CursorCollectorContext = {
+    ...ctx(buffer),
+    logger: fakeLogger as unknown as CursorCollectorContext['logger'],
+  };
+  const result = await collectCursorFile(file, fakeCtx);
+  expect(result.errors.some((e) => /quarantined/.test(e.reason))).toBe(true);
+  expect(warns.some((w) => w.msg.includes('failed to record oversized row'))).toBe(true);
+}, 60_000);
+
 test('quarantines oversized cursor row, advances cursor past it, and continues', async () => {
   const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
   const file = await makeDb([

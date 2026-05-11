@@ -35,7 +35,7 @@ test('schema initialization creates the buffer_metadata table', () => {
   expect(tableExists(db, BUFFER_TABLES.metadata)).toBe(true);
 });
 
-test('listTables shows the five buffer tables', () => {
+test('listTables shows all buffer tables including quarantined records', () => {
   expect(listTables(db).toSorted()).toEqual(
     [
       BUFFER_TABLES.batches,
@@ -43,6 +43,7 @@ test('listTables shows the five buffer tables', () => {
       BUFFER_TABLES.receipts,
       BUFFER_TABLES.metadata,
       BUFFER_TABLES.daemonState,
+      BUFFER_TABLES.quarantined,
     ].toSorted(),
   );
 });
