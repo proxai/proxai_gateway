@@ -388,17 +388,66 @@ test('serviceUnitPath null: skips unit-file removal', async () => {
 });
 
 test('per-platform smoke: stop + unregister called regardless of platform shim', async () => {
-  for (const _platform of ['darwin', 'linux', 'win32'] as const) {
-    await writeConfig();
-    await writeFile(serviceUnitPath, '<plist/>');
-    const { sm, calls } = fakeManager();
-    const result = await runUninstall(depsFor(sm), { yes: true });
-    expect(result.exitCode).toBe(0);
-    expect(calls.stop).toBe(1);
-    expect(calls.unregister).toBe(1);
-    await rm(configPath, { force: true });
-    await rm(serviceUnitPath, { force: true });
-  }
+  const platforms = ['darwin', 'linux', 'win32'] as const;
+  await Promise.all(
+    platforms.map(async (platform) => {
+      const isolatedConfigDir = join(tmpRoot, platform, '.proxai');
+      const isolatedLogDir = join(tmpRoot, platform, 'logs');
+      await mkdir(isolatedConfigDir, { recursive: true });
+      await mkdir(isolatedLogDir, { recursive: true });
+      const isolatedConfigPath = join(isolatedConfigDir, 'config.toml');
+      const isolatedServiceUnitPath = join(tmpRoot, `unit-${platform}.plist`);
+      const config: GatewayConfig = {
+        account: {
+          apiKey: 'abc-123-secret',
+          userId: TEST_USER_ID,
+          hostId: HOST_ID,
+          installedAt: '2026-04-29T10:42:00.123Z',
+          installSource: 'github_release',
+        },
+        backend: {
+          ingestUrl: NEST_INGEST_URL,
+          verifyKeyUrl: NEST_VERIFY_KEY_URL,
+          watermarksUrl: NEST_WATERMARKS_URL,
+          registerHostIdUrl: NEST_REGISTER_HOST_ID_URL,
+        },
+        capture: {
+          pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
+          bufferPath: join(isolatedConfigDir, 'buffer.db'),
+          receiptRetentionDays: DEFAULT_RECEIPT_RETENTION_DAYS,
+          failedRetentionDays: DEFAULT_FAILED_RETENTION_DAYS,
+          bufferSoftPauseBytes: DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
+          bufferSoftResumeBytes: DEFAULT_BUFFER_SOFT_RESUME_BYTES,
+          initialScanWindowDays: DEFAULT_INITIAL_SCAN_WINDOW_DAYS,
+          uploadMaxBatchesPerSec: DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
+          uploadMaxBytesPerMinute: DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
+          uploadBackoffOn429Multiplier: DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
+        },
+        logging: { level: 'info', logDir: isolatedLogDir },
+        staleBinary: {
+          warnAfterDays: DEFAULT_STALE_WARN_DAYS,
+          pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
+        },
+      };
+      await writeConfigToFile(config, isolatedConfigPath);
+      await writeFile(isolatedServiceUnitPath, '<plist/>');
+      const { sm, calls } = fakeManager();
+      const deps: UninstallCommandDeps = {
+        output: captureOutput(),
+        prompts: scriptedPrompts({}),
+        configPath: isolatedConfigPath,
+        configDir: isolatedConfigDir,
+        logDir: isolatedLogDir,
+        serviceUnitPath: isolatedServiceUnitPath,
+        serviceManager: sm,
+        configExists: () => Bun.file(isolatedConfigPath).exists(),
+      };
+      const result = await runUninstall(deps, { yes: true });
+      expect(result.exitCode).toBe(0);
+      expect(calls.stop).toBe(1);
+      expect(calls.unregister).toBe(1);
+    }),
+  );
 });
 
 test('isRegistered throw treated as not-registered (idempotent path)', async () => {
