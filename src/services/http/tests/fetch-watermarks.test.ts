@@ -84,7 +84,6 @@ describe('fetchWatermarks', () => {
       watermarkKind: 'byte_range',
       watermarkEnd: 12345,
       watermarkTable: null,
-      lastDeliveredAt: '2026-04-29T10:42:00.123Z',
     });
     expect(result.watermarks[1]?.watermarkTable).toBe('threads');
   });

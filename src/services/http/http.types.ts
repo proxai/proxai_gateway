@@ -47,7 +47,6 @@ export interface ServerWatermark {
   watermarkKind: 'byte_range' | 'rowid_range';
   watermarkEnd: number;
   watermarkTable: string | null;
-  lastDeliveredAt: string;
 }
 
 export interface FetchWatermarksResult {

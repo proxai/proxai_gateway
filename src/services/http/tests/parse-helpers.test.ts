@@ -99,7 +99,6 @@ test('parseServerWatermark: parses byte_range with null watermark_table', () => 
     watermarkKind: 'byte_range',
     watermarkEnd: 100,
     watermarkTable: null,
-    lastDeliveredAt: '2026-05-08T00:00:00Z',
   });
 });
 
@@ -119,7 +118,6 @@ test('parseServerWatermark: parses rowid_range with string watermark_table', () 
     watermarkKind: 'rowid_range',
     watermarkEnd: 5,
     watermarkTable: 'threads',
-    lastDeliveredAt: '2026-05-08T00:00:00Z',
   });
 });
 
@@ -139,6 +137,5 @@ test('parseServerWatermark: watermark_table coerced to null when non-string', ()
     watermarkKind: 'rowid_range',
     watermarkEnd: 5,
     watermarkTable: null,
-    lastDeliveredAt: 't',
   });
 });

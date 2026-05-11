@@ -34,15 +34,12 @@ export function parseServerWatermark(item: unknown): ServerWatermark | null {
       : typeof watermarkTableRaw === 'string'
         ? watermarkTableRaw
         : null;
-  const lastDeliveredAt =
-    typeof r['last_delivered_at'] === 'string' ? r['last_delivered_at'] : null;
 
   if (
     sourceApp === null ||
     sourcePathHash === null ||
     watermarkKindRaw === null ||
-    watermarkEnd === null ||
-    lastDeliveredAt === null
+    watermarkEnd === null
   ) {
     return null;
   }
@@ -55,6 +52,5 @@ export function parseServerWatermark(item: unknown): ServerWatermark | null {
     watermarkKind: watermarkKindRaw,
     watermarkEnd,
     watermarkTable,
-    lastDeliveredAt,
   };
 }

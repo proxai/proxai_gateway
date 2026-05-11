@@ -178,7 +178,7 @@ test('invokeSetupInteractive: forwards inferred installSource to runSetup option
       env: {},
     },
     async (_deps, opts) => {
-      capturedInstallSource = opts.installSource;
+      capturedInstallSource = opts?.installSource;
       return { exitCode: 0 };
     },
   );
@@ -197,7 +197,7 @@ test('invokeSetupInteractive: falls back to github_release when no pattern match
       env: {},
     },
     async (_deps, opts) => {
-      captured = opts.installSource;
+      captured = opts?.installSource;
       return { exitCode: 0 };
     },
   );
