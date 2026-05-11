@@ -191,7 +191,7 @@ export function processRows(input: ProcessRowsInput): void {
     consecutiveErrors: finalConsecutiveErrors,
   });
 
-  input.result.capturedBatches = acceptedSlices;
+  input.result.capturedBatches += acceptedSlices;
 }
 
 function createSliceMeasurer(): (slice: readonly CursorDiskKvRow[]) => SliceMeasurement {
