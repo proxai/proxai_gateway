@@ -2,6 +2,7 @@ import type { Database } from 'bun:sqlite';
 
 import {
   countByStatus,
+  countQuarantined,
   countsBySource,
   getDaemonState,
   getLastPruneAt,
@@ -58,6 +59,7 @@ export async function gatherStatusSnapshot(
   const counts = countByStatus(buffer);
   const pendingBytes = totalPendingBytes(buffer);
   const failedBytes = totalFailedBytes(buffer);
+  const quarantinedCount = countQuarantined(buffer);
   const sourceCounts = countsBySource(buffer);
   const lastPruneAt = getLastPruneAt(buffer);
   const daemonState = getDaemonState(buffer);
@@ -168,6 +170,7 @@ export async function gatherStatusSnapshot(
     counts,
     pendingBytes,
     failedBytes,
+    quarantinedCount,
     sourceCounts,
     lastPruneAt,
     daemonState,

@@ -80,6 +80,43 @@ test('renderBufferSection emits Pending/Failed/Receipts/Pressure/Last prune line
   expect(joined).toContain('Last prune');
 });
 
+test('renderBufferSection prints Quarantined line when quarantinedCount > 0', () => {
+  const lines = renderBufferSection({
+    pendingCount: 0,
+    pendingBytes: 0,
+    failedCount: 0,
+    failedBytes: 0,
+    receiptsCount: 0,
+    quarantinedCount: 3,
+    pressurePendingBytes: 0,
+    pressureSoftPauseBytes: 1024,
+    lastPruneAt: null,
+    bySource: null,
+    now: NOW,
+  });
+  const joined = lines.join('\n');
+  expect(joined).toContain('Quarantined');
+  expect(joined).toContain('3');
+});
+
+test('renderBufferSection omits Quarantined line when count is zero', () => {
+  const lines = renderBufferSection({
+    pendingCount: 0,
+    pendingBytes: 0,
+    failedCount: 0,
+    failedBytes: 0,
+    receiptsCount: 0,
+    quarantinedCount: 0,
+    pressurePendingBytes: 0,
+    pressureSoftPauseBytes: 1024,
+    lastPruneAt: null,
+    bySource: null,
+    now: NOW,
+  });
+  const joined = lines.join('\n');
+  expect(joined).not.toContain('Quarantined');
+});
+
 test('renderBufferSection prints per-source pending sub-rows with bytes when any source has pending', () => {
   const lines = renderBufferSection({
     pendingCount: 5,

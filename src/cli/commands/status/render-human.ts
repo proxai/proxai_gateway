@@ -52,6 +52,7 @@ export function renderHumanStatus(deps: StatusCommandDeps, snapshot: StatusSnaps
     failedCount: snapshot.counts.failed,
     failedBytes: snapshot.failedBytes,
     receiptsCount: snapshot.counts.delivered,
+    quarantinedCount: snapshot.quarantinedCount,
     pressurePendingBytes: snapshot.pendingBytes,
     pressureSoftPauseBytes: softPause,
     lastPruneAt: snapshot.lastPruneAt,

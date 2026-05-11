@@ -240,8 +240,11 @@ test('does not overwrite CONSENT_ACCEPTED on --force replace', async () => {
 
 test('does not write CONSENT_ACCEPTED when consentSentinelPath is not provided', async () => {
   const control = newControl();
-  const d = { ...deps(control), consentSentinelPath: undefined };
-  const result = await runSetup(d, { apiKey: VALID_KEY });
+  const base = deps(control);
+  // Remove the optional consentSentinelPath to verify the code path that skips the writer.
+  const { consentSentinelPath: _omit, ...rest } = base;
+  void _omit;
+  const result = await runSetup(rest, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
   expect(await Bun.file(join(dir, 'CONSENT_ACCEPTED')).exists()).toBe(false);
 });

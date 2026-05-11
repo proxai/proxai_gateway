@@ -48,6 +48,7 @@ export interface StatusJsonOutput {
     failed: number;
     failedBytes: number;
     delivered: number;
+    quarantinedCount: number;
     bufferFull: boolean;
     lastPruneAt: string | null;
     sourceCounts: CountsBySource | null;
@@ -99,6 +100,7 @@ export interface StatusSnapshot {
   counts: { pending: number; failed: number; delivered: number };
   pendingBytes: number;
   failedBytes: number;
+  quarantinedCount: number;
   sourceCounts: CountsBySource;
   lastPruneAt: string | null;
   daemonState: DaemonStateSnapshot | null;
