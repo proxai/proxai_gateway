@@ -14,7 +14,11 @@ export type {
 export { runCommand } from 'cli/service-manager/run-command.ts';
 export { createLaunchctlManager, parseLaunchctlPrint } from 'cli/service-manager/launchctl.ts';
 export { createSystemctlManager, parseSystemctlShow } from 'cli/service-manager/systemctl.ts';
-export { createSchtasksManager, parseSchtasksQuery } from 'cli/service-manager/schtasks.ts';
+export {
+  createSchtasksManager,
+  parseSchtasksQuery,
+  parseTasklistPid,
+} from 'cli/service-manager/schtasks.ts';
 
 export function getServiceManager(deps: ServiceManagerDeps): ServiceManager {
   const spawn = deps.spawn ?? defaultSpawn();

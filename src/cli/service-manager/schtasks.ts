@@ -120,9 +120,42 @@ export function createSchtasksManager(spawn: SpawnFn, unitPath: string): Service
         '/V',
       ]);
       if (result.exitCode !== 0) return { pid: null, startedAt: null };
-      return parseSchtasksQuery(result.stdout);
+      const parsed = parseSchtasksQuery(result.stdout);
+      if (!/^Status:\s*Running\s*$/im.test(result.stdout)) {
+        return parsed;
+      }
+      const pid = await fetchTasklistPid(spawn);
+      return { pid, startedAt: parsed.startedAt };
     },
   };
+}
+
+async function fetchTasklistPid(spawn: SpawnFn): Promise<number | null> {
+  const result = await runCommand(spawn, [
+    'tasklist',
+    '/FI',
+    'IMAGENAME eq proxai-gateway.exe',
+    '/FO',
+    'CSV',
+    '/NH',
+  ]);
+  if (result.exitCode !== 0) return null;
+  return parseTasklistPid(result.stdout);
+}
+
+export function parseTasklistPid(stdout: string): number | null {
+  for (const rawLine of stdout.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line.length === 0) continue;
+    if (!line.startsWith('"')) continue;
+    const fields = line.split('","');
+    if (fields.length < 2) continue;
+    const pidField = fields[1]?.replace(/"/g, '').trim();
+    if (pidField === undefined || pidField.length === 0) continue;
+    const pid = Number(pidField);
+    if (Number.isFinite(pid) && pid > 0) return pid;
+  }
+  return null;
 }
 
 export function parseSchtasksQuery(stdout: string): ServiceRuntimeInfo {

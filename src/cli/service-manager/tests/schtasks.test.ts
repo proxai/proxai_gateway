@@ -322,6 +322,85 @@ test('runtimeInfo parses Start Date and Start Time from schtasks', async () => {
   expect(info.startedAt).not.toBeNull();
 });
 
+test('runtimeInfo invokes tasklist for PID when schtasks reports Running', async () => {
+  const { spawn, invocations } = mockSpawn((argv) => {
+    if (argv[0] === 'schtasks') {
+      return {
+        exitCode: 0,
+        stdout:
+          'TaskName: ProxAI Gateway\r\nStatus:    Running\r\nStart Date:    5/8/2026\r\nStart Time:    13:25:42\r\n',
+      };
+    }
+    if (argv[0] === 'tasklist') {
+      return {
+        exitCode: 0,
+        stdout: '"proxai-gateway.exe","12345","Console","1","45,072 K"\r\n',
+      };
+    }
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  const info = await sm.runtimeInfo();
+  expect(info.pid).toBe(12345);
+  expect(info.startedAt).not.toBeNull();
+  const tasklistCall = invocations.find((i) => i.argv[0] === 'tasklist');
+  expect(tasklistCall).toBeDefined();
+  expect(tasklistCall?.argv).toContain('/FI');
+  expect(tasklistCall?.argv.some((a) => a.includes('proxai-gateway.exe'))).toBe(true);
+});
+
+test('runtimeInfo skips tasklist when task is not Running', async () => {
+  const { spawn, invocations } = mockSpawn((argv) => {
+    if (argv[0] === 'schtasks') {
+      return {
+        exitCode: 0,
+        stdout: 'Status:    Ready\r\nStart Date:    5/8/2026\r\nStart Time:    13:25:42\r\n',
+      };
+    }
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  const info = await sm.runtimeInfo();
+  expect(info.pid).toBeNull();
+  expect(invocations.some((i) => i.argv[0] === 'tasklist')).toBe(false);
+});
+
+test('runtimeInfo handles tasklist returning empty (no process found)', async () => {
+  const { spawn } = mockSpawn((argv) => {
+    if (argv[0] === 'schtasks') {
+      return {
+        exitCode: 0,
+        stdout: 'Status:    Running\r\nStart Date:    5/8/2026\r\nStart Time:    13:25:42\r\n',
+      };
+    }
+    if (argv[0] === 'tasklist') {
+      return {
+        exitCode: 0,
+        stdout: 'INFO: No tasks are running which match the specified criteria.\r\n',
+      };
+    }
+    return { exitCode: 1 };
+  });
+  const sm = getServiceManager({
+    platform: 'win32',
+    unitPath: 'C:/x.xml',
+    programPath: 'C:/p.exe',
+    spawn,
+  });
+  const info = await sm.runtimeInfo();
+  expect(info.pid).toBeNull();
+});
+
 test('runtimeInfo returns nulls when schtasks query fails', async () => {
   const { spawn } = mockSpawn(() => ({ exitCode: 1, stdout: '' }));
   const sm = getServiceManager({
