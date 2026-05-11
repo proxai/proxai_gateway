@@ -1,13 +1,19 @@
 import { nowIsoUtc } from 'core/utils';
 import {
   checkPendingPressure,
+  getDaemonState,
   getMetadata,
+  setDaemonState,
   setMetadata,
   uploadBatchesShippedKey,
   uploadBytesShippedKey,
 } from 'services/buffer';
 import { METADATA_KEYS } from 'services/buffer';
-import type { PendingPressureResult } from 'services/buffer';
+import type {
+  DaemonStateSnapshot,
+  PendingPressureResult,
+  SourceCycleResult,
+} from 'services/buffer';
 import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 import { isBufferFull, writeBufferFullSentinel } from 'services/polling/buffer-full-sentinel.ts';
 import { isPaused } from 'services/polling/pause-sentinel.ts';
@@ -90,6 +96,7 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
   );
 
   persistCaptureMetrics(ctx, completedAt, durationMs, sourceResults);
+  persistSourceCaptures(ctx, sourceResults);
 
   return {
     paused: false,
@@ -101,6 +108,49 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
     sourceResults,
     pressureResult,
   };
+}
+
+function toSourceCycleResult(result: SourcePollerResult): SourceCycleResult {
+  return {
+    filesProcessed: result.filesProcessed,
+    capturedBatches: result.capturedBatches,
+    capturedBytes: result.capturedBytes,
+    errorsCount: result.errors.length,
+  };
+}
+
+function persistSourceCaptures(
+  ctx: CaptureCycleContext,
+  sourceResults: Record<string, SourcePollerResult>,
+): void {
+  try {
+    const existing = getDaemonState(ctx.buffer);
+    const captures: Record<string, SourceCycleResult> = {
+      ...existing?.lastSourceCaptures,
+    };
+    for (const [name, result] of Object.entries(sourceResults)) {
+      captures[name] = toSourceCycleResult(result);
+    }
+    const snapshot: DaemonStateSnapshot = {
+      lastCycleStartedAt: existing?.lastCycleStartedAt ?? null,
+      lastCycleCompletedAt: existing?.lastCycleCompletedAt ?? null,
+      lastCycleDurationMs: existing?.lastCycleDurationMs ?? null,
+      lastDrainAttempted: existing?.lastDrainAttempted ?? null,
+      lastDrainAccepted: existing?.lastDrainAccepted ?? null,
+      lastDrainRetriable: existing?.lastDrainRetriable ?? null,
+      lastDrainFatal: existing?.lastDrainFatal ?? null,
+      lastDrainRecovered: existing?.lastDrainRecovered ?? null,
+      lastUploadError: existing?.lastUploadError ?? null,
+      lastConsecutiveRetriableBreak: existing?.lastConsecutiveRetriableBreak ?? null,
+      lastSourceCaptures: captures,
+    };
+    setDaemonState(ctx.buffer, snapshot);
+  } catch (err) {
+    ctx.logger?.warn(
+      { event: 'daemon_state.persist_failed', error: (err as Error).message ?? String(err) },
+      'failed to persist daemon state from capture cycle',
+    );
+  }
 }
 
 async function applyPressureSentinel(

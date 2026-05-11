@@ -13,6 +13,7 @@ import {
   insertBatch,
   METADATA_KEYS,
   openInMemoryBufferDb,
+  setDaemonState,
   setMetadata,
 } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
@@ -135,6 +136,39 @@ test('drains pending batches and writes daemon-state snapshot', async () => {
   const snap = getDaemonState(buffer);
   expect(snap?.lastDrainAttempted).toBe(2);
   expect(snap?.lastDrainAccepted).toBe(2);
+});
+
+test('preserves lastSourceCaptures across drain cycle (read-modify-write)', async () => {
+  setDaemonState(buffer, {
+    lastCycleStartedAt: null,
+    lastCycleCompletedAt: null,
+    lastCycleDurationMs: null,
+    lastDrainAttempted: null,
+    lastDrainAccepted: null,
+    lastDrainRetriable: null,
+    lastDrainFatal: null,
+    lastDrainRecovered: null,
+    lastUploadError: null,
+    lastConsecutiveRetriableBreak: null,
+    lastSourceCaptures: {
+      'claude-code': {
+        filesProcessed: 7,
+        capturedBatches: 5,
+        capturedBytes: 9000,
+        errorsCount: 0,
+      },
+    },
+  });
+  insertBatch(buffer, batchWith('payload-x'));
+  const ctx = makeContext();
+  await runDrainCycle(ctx);
+  const snap = getDaemonState(buffer);
+  expect(snap?.lastSourceCaptures['claude-code']).toEqual({
+    filesProcessed: 7,
+    capturedBatches: 5,
+    capturedBytes: 9000,
+    errorsCount: 0,
+  });
 });
 
 test('clears BUFFER_FULL sentinel when drain drops pending below resume threshold', async () => {

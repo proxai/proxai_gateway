@@ -8,6 +8,7 @@ import { join } from 'node:path';
 
 import { generateUuidV7, zstdCompressSync } from 'core/utils';
 import {
+  getDaemonState,
   getMetadata,
   insertBatch,
   METADATA_KEYS,
@@ -212,6 +213,55 @@ test('persists capture cycle metrics: total, last_at, duration', async () => {
   expect(getMetadata(buffer, METADATA_KEYS.captureLastCycleDurationMs)).not.toBeNull();
   await runCaptureCycle(ctx);
   expect(getMetadata(buffer, METADATA_KEYS.captureCyclesTotal)).toBe('2');
+});
+
+test('persists sourceResults to daemon_state.last_source_captures', async () => {
+  const ctx = makeContext([
+    {
+      name: 's-a',
+      poll: async () => ({
+        filesProcessed: 3,
+        capturedBatches: 2,
+        capturedBytes: 1024,
+        errors: [{ sourcePath: '/x', reason: 'oops' }],
+      }),
+    },
+    {
+      name: 's-b',
+      poll: async () => ({
+        filesProcessed: 1,
+        capturedBatches: 0,
+        capturedBytes: 0,
+        errors: [],
+      }),
+    },
+  ]);
+  await runCaptureCycle(ctx);
+  const snap = getDaemonState(buffer);
+  expect(snap?.lastSourceCaptures['s-a']).toEqual({
+    filesProcessed: 3,
+    capturedBatches: 2,
+    capturedBytes: 1024,
+    errorsCount: 1,
+  });
+  expect(snap?.lastSourceCaptures['s-b']).toEqual({
+    filesProcessed: 1,
+    capturedBatches: 0,
+    capturedBytes: 0,
+    errorsCount: 0,
+  });
+});
+
+test('logs warn when daemon-state persist fails in capture', async () => {
+  type Entry = { level: string; msg: string };
+  const entries: Entry[] = [];
+  const fakeLogger = makeFakeLogger(entries);
+  buffer.exec('DROP TABLE daemon_state');
+  const ctx = makeContext([noopSource('s')], { logger: fakeLogger as unknown as Logger });
+  await runCaptureCycle(ctx);
+  expect(
+    entries.some((e) => e.level === 'warn' && e.msg.includes('failed to persist daemon')),
+  ).toBe(true);
 });
 
 test('persists capture errors counter when source has errors', async () => {

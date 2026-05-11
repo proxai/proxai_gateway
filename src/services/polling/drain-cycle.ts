@@ -1,6 +1,7 @@
 import { nowIsoUtc } from 'core/utils';
 import {
   checkPendingPressure,
+  getDaemonState,
   getMetadata,
   pruneBuffer,
   setDaemonState,
@@ -131,6 +132,7 @@ function persistDaemonState(
   drainResult: DrainResult,
 ): void {
   try {
+    const existing = getDaemonState(ctx.buffer);
     const snapshot: DaemonStateSnapshot = {
       lastCycleStartedAt: startedAt,
       lastCycleCompletedAt: completedAt,
@@ -142,7 +144,7 @@ function persistDaemonState(
       lastDrainRecovered: drainResult.recovered,
       lastUploadError: drainResult.lastUploadError,
       lastConsecutiveRetriableBreak: drainResult.consecutiveRetriableBreak,
-      lastSourceCaptures: {},
+      lastSourceCaptures: existing?.lastSourceCaptures ?? {},
     };
     setDaemonState(ctx.buffer, snapshot);
   } catch (err) {
