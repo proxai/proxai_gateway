@@ -162,13 +162,13 @@ export function collectOneTable(
         reason: `decompressed slice exceeded ${BODY_MAX_DECOMPRESSED_BYTES.toString()} bytes (${redactedBytes.toString()}); row quarantined`,
         table,
       });
-      const priorCursor = getCursor(context.buffer, {
+      const refreshedCursor = getCursor(context.buffer, {
         sourceApp: CODEX_SOURCE_APP,
         sourcePathHash: identity.sourcePathHash,
         sourceInode: null,
         watermarkTable: table,
       });
-      const priorErrors = priorCursor?.consecutiveErrors ?? 0;
+      const priorErrors = refreshedCursor?.consecutiveErrors ?? 0;
       setCursor(context.buffer, {
         sourceApp: CODEX_SOURCE_APP,
         sourcePathHash: identity.sourcePathHash,
