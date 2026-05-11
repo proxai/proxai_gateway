@@ -38,49 +38,45 @@ const RC_BASENAMES = ['.zshrc', '.bashrc', '.bash_profile'] as const;
 export function createPosixShellPathCleaner(deps: PosixShellPathCleanerDeps): ShellPathCleaner {
   const homeDirResolved = deps.homeDir ?? homedir();
   return {
-    clean: async () => {
-      const outcomes: PathCleanupOutcome[] = [];
-      for (const basename of RC_BASENAMES) {
-        const path = join(homeDirResolved, basename);
-        let content: string | null;
-        try {
-          content = await deps.readFile(path);
-        } catch (err) {
-          outcomes.push({
-            path,
-            cleaned: false,
-            reason: `read failed: ${(err as Error).message ?? String(err)}`,
-          });
-          continue;
-        }
-        if (content === null) {
-          outcomes.push({ path, cleaned: false, reason: 'file not present' });
-          continue;
-        }
-        const result = stripPathMarkerBlock(content);
-        if (!result.changed) {
-          outcomes.push({
-            path,
-            cleaned: false,
-            reason: result.unmatchedMarker
-              ? 'marker found but next line did not reference our install dir; left untouched'
-              : 'no installer marker found',
-          });
-          continue;
-        }
-        try {
-          await deps.writeFile(path, result.newContent);
-          outcomes.push({ path, cleaned: true, reason: 'removed installer PATH block' });
-        } catch (err) {
-          outcomes.push({
-            path,
-            cleaned: false,
-            reason: `write failed: ${(err as Error).message ?? String(err)}`,
-          });
-        }
-      }
-      return outcomes;
-    },
+    clean: async () =>
+      Promise.all(
+        RC_BASENAMES.map(async (basename): Promise<PathCleanupOutcome> => {
+          const path = join(homeDirResolved, basename);
+          let content: string | null;
+          try {
+            content = await deps.readFile(path);
+          } catch (err) {
+            return {
+              path,
+              cleaned: false,
+              reason: `read failed: ${(err as Error).message ?? String(err)}`,
+            };
+          }
+          if (content === null) {
+            return { path, cleaned: false, reason: 'file not present' };
+          }
+          const result = stripPathMarkerBlock(content);
+          if (!result.changed) {
+            return {
+              path,
+              cleaned: false,
+              reason: result.unmatchedMarker
+                ? 'marker found but next line did not reference our install dir; left untouched'
+                : 'no installer marker found',
+            };
+          }
+          try {
+            await deps.writeFile(path, result.newContent);
+            return { path, cleaned: true, reason: 'removed installer PATH block' };
+          } catch (err) {
+            return {
+              path,
+              cleaned: false,
+              reason: `write failed: ${(err as Error).message ?? String(err)}`,
+            };
+          }
+        }),
+      ),
   };
 }
 
