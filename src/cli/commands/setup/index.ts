@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 
+import { sentinelHandle } from 'core/io/fs';
 import { nowIsoUtc } from 'core/utils';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
@@ -63,6 +64,10 @@ export async function runSetup(
   await clearAuthFailedSentinel(deps.authFailedSentinelPath);
   await writeServiceUnitIfNeeded(deps);
 
+  if (!isReplace) {
+    await maybeWriteConsentSentinel(deps);
+  }
+
   if (isReplace) {
     deps.output.success(`replaced (host_id: ${verifyResult.hostId})`);
   } else {
@@ -70,6 +75,18 @@ export async function runSetup(
   }
 
   return autoStartDaemon(deps, options);
+}
+
+async function maybeWriteConsentSentinel(deps: SetupCommandDeps): Promise<void> {
+  if (deps.consentSentinelPath === undefined) return;
+  try {
+    const handle = sentinelHandle(deps.consentSentinelPath);
+    if (await handle.exists()) return;
+    const stamp = (deps.now ?? nowIsoUtc)();
+    await handle.write(stamp);
+  } catch {
+    // best-effort consent sentinel write; setup completion is non-fatal here
+  }
 }
 
 async function reportAlreadyConfigured(deps: SetupCommandDeps): Promise<CommandResult> {

@@ -9,6 +9,7 @@ import {
   authFailedSentinelPath,
   bufferDbPath,
   configFilePath,
+  consentSentinelPath,
   logDir,
   sessionStoppedSentinelPath,
 } from 'core/io/fs';
@@ -41,6 +42,7 @@ export function buildSetupDeps(inputs: BuildSetupDepsInputs): SetupCommandDeps {
     logDir: logDir(),
     authFailedSentinelPath: authFailedSentinelPath(),
     sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
+    consentSentinelPath: consentSentinelPath(),
     serviceUnitPath: inputs.serviceUnitPath,
     programPath: inputs.programPath,
     configExists: () => Bun.file(configFilePath()).exists(),

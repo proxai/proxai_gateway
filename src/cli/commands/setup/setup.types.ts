@@ -13,6 +13,7 @@ export interface SetupCommandDeps {
   authFailedSentinelPath: string;
   serviceUnitPath: string | null;
   sessionStoppedSentinelPath?: string;
+  consentSentinelPath?: string;
   programPath: string;
   configExists: () => Promise<boolean>;
   httpClientFactory: (apiKey: string, hostId: string) => HttpClient;

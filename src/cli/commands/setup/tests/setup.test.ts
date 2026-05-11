@@ -166,6 +166,7 @@ function deps(control: MockHttpControl): Parameters<typeof runSetup>[0] {
     bufferDbPath,
     logDir,
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
+    consentSentinelPath: join(dir, 'CONSENT_ACCEPTED'),
     serviceUnitPath: join(dir, 'service.unit'),
     programPath: '/usr/local/bin/proxai-gateway',
     configExists: () => Bun.file(configPath).exists(),
@@ -214,6 +215,36 @@ async function writeExistingConfig(
   };
   await writeConfigToFile(config, configPath);
 }
+
+test('writes CONSENT_ACCEPTED sentinel on first-time setup with a timestamp', async () => {
+  const control = newControl();
+  const sentinelPath = join(dir, 'CONSENT_ACCEPTED');
+  expect(await Bun.file(sentinelPath).exists()).toBe(false);
+  const result = await runSetup(deps(control), { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(await Bun.file(sentinelPath).exists()).toBe(true);
+  const body = await Bun.file(sentinelPath).text();
+  expect(body).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+});
+
+test('does not overwrite CONSENT_ACCEPTED on --force replace', async () => {
+  await writeExistingConfig();
+  const sentinelPath = join(dir, 'CONSENT_ACCEPTED');
+  await Bun.write(sentinelPath, '2025-01-01T00:00:00.000Z');
+  const control = newControl();
+  const result = await runSetup(deps(control), { apiKey: NEW_KEY, force: true });
+  expect(result.exitCode).toBe(0);
+  const body = await Bun.file(sentinelPath).text();
+  expect(body).toBe('2025-01-01T00:00:00.000Z');
+});
+
+test('does not write CONSENT_ACCEPTED when consentSentinelPath is not provided', async () => {
+  const control = newControl();
+  const d = { ...deps(control), consentSentinelPath: undefined };
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(await Bun.file(join(dir, 'CONSENT_ACCEPTED')).exists()).toBe(false);
+});
 
 test('writes a valid config and reports success when key is accepted', async () => {
   const control = newControl();
