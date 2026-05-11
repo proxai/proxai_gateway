@@ -2,9 +2,11 @@ import type { Database } from 'bun:sqlite';
 
 import { statFile } from 'core/io/fs';
 import { openReadOnly, pageCount, snapshotSqlite, tableExists } from 'core/io/sqlite';
+import { getCursor, setCursor } from 'services/buffer';
 import {
   CODEX_ALLOWED_STATE_TABLES,
   CODEX_DEFAULT_AGENT_SCHEMA_VERSION,
+  CODEX_SOURCE_APP,
   CODEX_THREADS_TABLE,
 } from 'sources/codex/codex.constants.ts';
 import type {
@@ -61,6 +63,7 @@ export async function collectCodexState(
             reason: err instanceof Error ? err.message : String(err),
             table,
           });
+          bumpConsecutiveErrors(context.buffer, identity, table);
         }
       }
     } finally {
@@ -71,6 +74,11 @@ export async function collectCodexState(
       sourcePath: file.sourcePath,
       reason: err instanceof Error ? err.message : String(err),
     });
+    bumpConsecutiveErrors(
+      context.buffer,
+      { sourcePath: file.sourcePath, sourcePathHash: file.sourcePathHash },
+      null,
+    );
   } finally {
     if (snapshot !== null) {
       await snapshot.cleanup();
@@ -78,6 +86,40 @@ export async function collectCodexState(
   }
 
   return { agentSchemaVersion, result };
+}
+
+function bumpConsecutiveErrors(
+  db: Database,
+  identity: { sourcePath: string; sourcePathHash: string },
+  table: string | null,
+): void {
+  try {
+    const priorCursor = getCursor(db, {
+      sourceApp: CODEX_SOURCE_APP,
+      sourcePathHash: identity.sourcePathHash,
+      sourceInode: null,
+      watermarkTable: table,
+    });
+    const priorErrors = priorCursor?.consecutiveErrors ?? 0;
+    const priorWatermarkEnd = priorCursor?.watermarkEnd ?? (table === null ? 0 : 1);
+    setCursor(db, {
+      sourceApp: CODEX_SOURCE_APP,
+      sourcePathHash: identity.sourcePathHash,
+      sourcePath: identity.sourcePath,
+      sourceInode: null,
+      watermarkTable: table,
+      watermarkEnd: priorWatermarkEnd,
+      consecutiveErrors: priorErrors + 1,
+      ...(priorCursor?.lastSeenSizeBytes !== null && priorCursor?.lastSeenSizeBytes !== undefined
+        ? { lastSeenSizeBytes: priorCursor.lastSeenSizeBytes }
+        : {}),
+      ...(priorCursor?.lastSeenPageCount !== null && priorCursor?.lastSeenPageCount !== undefined
+        ? { lastSeenPageCount: priorCursor.lastSeenPageCount }
+        : {}),
+    });
+  } catch {
+    // best-effort error-counter bump; persistence failures are non-fatal
+  }
 }
 
 function sampleCliVersion(db: Database): string {

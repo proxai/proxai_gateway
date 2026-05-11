@@ -1,7 +1,7 @@
 import { statFile } from 'core/io/fs';
 import { maxRowid, openReadOnly, pageCount, snapshotSqlite, tableExists } from 'core/io/sqlite';
 import { nextGenerationSuffix, sha256Hex } from 'core/utils';
-import { detectVacuum, getCursorWithFallback, setCursor } from 'services/buffer';
+import { detectVacuum, getCursor, getCursorWithFallback, setCursor } from 'services/buffer';
 import {
   CURSOR_DISK_KV_TABLE,
   CURSOR_KEY_PREFIX_BUBBLE,
@@ -107,6 +107,7 @@ export async function collectCursorFile(
             watermarkEnd: priorCursor.watermarkEnd,
             lastSeenSizeBytes: currentSizeBytes,
             lastSeenPageCount: currentPageCount,
+            consecutiveErrors: 0,
           });
         }
         return result;
@@ -141,6 +142,33 @@ export async function collectCursorFile(
       sourcePath: file.sourcePath,
       reason: err instanceof Error ? err.message : String(err),
     });
+    try {
+      const priorCursor = getCursor(context.buffer, {
+        sourceApp: CURSOR_SOURCE_APP,
+        sourcePathHash: file.sourcePathHash,
+        sourceInode: null,
+        watermarkTable: null,
+      });
+      const priorErrors = priorCursor?.consecutiveErrors ?? 0;
+      const priorWatermarkEnd = priorCursor?.watermarkEnd ?? 1;
+      setCursor(context.buffer, {
+        sourceApp: CURSOR_SOURCE_APP,
+        sourcePathHash: file.sourcePathHash,
+        sourcePath: file.sourcePath,
+        sourceInode: null,
+        watermarkTable: null,
+        watermarkEnd: priorWatermarkEnd,
+        consecutiveErrors: priorErrors + 1,
+        ...(priorCursor?.lastSeenSizeBytes !== null && priorCursor?.lastSeenSizeBytes !== undefined
+          ? { lastSeenSizeBytes: priorCursor.lastSeenSizeBytes }
+          : {}),
+        ...(priorCursor?.lastSeenPageCount !== null && priorCursor?.lastSeenPageCount !== undefined
+          ? { lastSeenPageCount: priorCursor.lastSeenPageCount }
+          : {}),
+      });
+    } catch {
+      // best-effort error-counter bump; persistence failures are non-fatal
+    }
   } finally {
     if (snapshot !== null) {
       await snapshot.cleanup();

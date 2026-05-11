@@ -13,6 +13,7 @@ import {
   getCursor,
   nextPendingBatch,
   openInMemoryBufferDb,
+  setCursor,
   totalPendingBytes,
 } from 'services/buffer';
 import {
@@ -175,6 +176,54 @@ test('records errors and does not advance cursor when the file is unreadable', a
   const result = await collectClaudeCodeFile(fakeFile, ctx(buffer));
   expect(result.errors.length).toBeGreaterThan(0);
   expect(result.capturedBatches).toBe(0);
+});
+
+test('increments consecutive_errors on per-file collector failure', async () => {
+  const fakeFile: DiscoveredClaudeCodeFile = {
+    sourcePath: join(dir, 'does-not-exist-2.jsonl'),
+    sourcePathHash: sha256Hex(join(dir, 'does-not-exist-2.jsonl')),
+    inode: 8888,
+    sizeBytes: 100,
+    lastModifiedMs: Date.now(),
+  };
+  setCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: fakeFile.sourcePathHash,
+    sourcePath: fakeFile.sourcePath,
+    sourceInode: fakeFile.inode,
+    watermarkTable: null,
+    watermarkEnd: 0,
+    consecutiveErrors: 2,
+  });
+  await collectClaudeCodeFile(fakeFile, ctx(buffer));
+  const cursor = getCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: fakeFile.sourcePathHash,
+    sourceInode: fakeFile.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.consecutiveErrors).toBe(3);
+});
+
+test('resets consecutive_errors on success after prior failure', async () => {
+  const file = await makeFile('{"a":1}\n');
+  setCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: file.sourcePathHash,
+    sourcePath: file.sourcePath,
+    sourceInode: file.inode,
+    watermarkTable: null,
+    watermarkEnd: 0,
+    consecutiveErrors: 5,
+  });
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const cursor = getCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.consecutiveErrors).toBe(0);
 });
 
 test('persists the wire-DTO fields needed by the uploader', async () => {

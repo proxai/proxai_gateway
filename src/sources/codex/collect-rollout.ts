@@ -6,7 +6,7 @@ import {
   splitJsonlAtBoundary,
   zstdCompressSync,
 } from 'core/utils';
-import { getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
+import { getCursor, getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import { BODY_MAX_DECOMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
@@ -144,6 +144,7 @@ export async function collectCodexRollout(
       sourceInode: file.inode,
       watermarkTable: null,
       watermarkEnd: range.endByte,
+      consecutiveErrors: 0,
     });
 
     result.capturedBatches = sourceSlices.length;
@@ -153,6 +154,27 @@ export async function collectCodexRollout(
       sourcePath: file.sourcePath,
       reason: err instanceof Error ? err.message : String(err),
     });
+    try {
+      const priorCursor = getCursor(context.buffer, {
+        sourceApp: CODEX_SOURCE_APP,
+        sourcePathHash: file.sourcePathHash,
+        sourceInode: file.inode,
+        watermarkTable: null,
+      });
+      const priorErrors = priorCursor?.consecutiveErrors ?? 0;
+      const priorWatermarkEnd = priorCursor?.watermarkEnd ?? 0;
+      setCursor(context.buffer, {
+        sourceApp: CODEX_SOURCE_APP,
+        sourcePathHash: file.sourcePathHash,
+        sourcePath: file.sourcePath,
+        sourceInode: file.inode,
+        watermarkTable: null,
+        watermarkEnd: priorWatermarkEnd,
+        consecutiveErrors: priorErrors + 1,
+      });
+    } catch {
+      // best-effort error-counter bump; persistence failures are non-fatal
+    }
   }
 
   return result;

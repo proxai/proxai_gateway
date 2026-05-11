@@ -386,6 +386,56 @@ test('records errors and does not crash when the source file is unreadable', asy
   expect(result.capturedBatches).toBe(0);
 });
 
+test('increments consecutive_errors on per-file collector failure', async () => {
+  const fakeFile: DiscoveredCodexStateFile = {
+    sourcePath: join(dir, 'does-not-exist-2.sqlite'),
+    sourcePathHash: sha256Hex(join(dir, 'does-not-exist-2.sqlite')),
+    inode: 7777,
+    sizeBytes: 100,
+    lastModifiedMs: Date.now(),
+  };
+  setCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: fakeFile.sourcePathHash,
+    sourcePath: fakeFile.sourcePath,
+    sourceInode: null,
+    watermarkTable: null,
+    watermarkEnd: 0,
+    consecutiveErrors: 1,
+  });
+  await collectCodexState(fakeFile, ctx(buffer));
+  const cursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: fakeFile.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: null,
+  });
+  expect(cursor?.consecutiveErrors).toBe(2);
+});
+
+test('resets consecutive_errors on success after prior table failure', async () => {
+  const file = await makeStateDb({
+    threads: [{ id: 't1', cli_version: '0.1.0' }],
+  });
+  setCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourcePath: file.sourcePath,
+    sourceInode: null,
+    watermarkTable: 'threads',
+    watermarkEnd: 1,
+    consecutiveErrors: 4,
+  });
+  await collectCodexState(file, ctx(buffer));
+  const cursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: 'threads',
+  });
+  expect(cursor?.consecutiveErrors).toBe(0);
+});
+
 test('returns "unknown" agentSchemaVersion when threads table is absent', async () => {
   const path = join(dir, 'state_no_threads.sqlite');
   const db = new Database(path, { create: true });

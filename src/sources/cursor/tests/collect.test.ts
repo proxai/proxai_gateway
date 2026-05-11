@@ -275,6 +275,57 @@ test('records errors and does not advance cursor when the file is unreadable', a
   expect(result.capturedBatches).toBe(0);
 });
 
+test('increments consecutive_errors on per-file collector failure', async () => {
+  const fakeFile: DiscoveredCursorFile = {
+    sourcePath: join(dir, 'does-not-exist-2.vscdb'),
+    sourcePathHash: sha256Hex(join(dir, 'does-not-exist-2.vscdb')),
+    inode: 8888,
+    sizeBytes: 100,
+    lastModifiedMs: Date.now(),
+  };
+  setCursor(buffer, {
+    sourceApp: 'cursor',
+    sourcePathHash: fakeFile.sourcePathHash,
+    sourcePath: fakeFile.sourcePath,
+    sourceInode: null,
+    watermarkTable: null,
+    watermarkEnd: 1,
+    consecutiveErrors: 4,
+  });
+  await collectCursorFile(fakeFile, ctx(buffer));
+  const cursor = getCursor(buffer, {
+    sourceApp: 'cursor',
+    sourcePathHash: fakeFile.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: null,
+  });
+  expect(cursor?.consecutiveErrors).toBe(5);
+});
+
+test('resets consecutive_errors on success after prior failure', async () => {
+  const file = await makeDb([
+    { key: 'composerData:c1', value: '{"_v":13}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
+  ]);
+  setCursor(buffer, {
+    sourceApp: 'cursor',
+    sourcePathHash: file.sourcePathHash,
+    sourcePath: file.sourcePath,
+    sourceInode: null,
+    watermarkTable: null,
+    watermarkEnd: 1,
+    consecutiveErrors: 4,
+  });
+  await collectCursorFile(file, ctx(buffer));
+  const cursor = getCursor(buffer, {
+    sourceApp: 'cursor',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: null,
+  });
+  expect(cursor?.consecutiveErrors).toBe(0);
+});
+
 test('persists the wire-DTO fields needed by the uploader', async () => {
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },

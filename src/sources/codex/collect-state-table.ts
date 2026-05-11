@@ -75,6 +75,7 @@ export function collectOneTable(
         watermarkEnd: priorCursor.watermarkEnd,
         lastSeenSizeBytes: currentSizeBytes,
         lastSeenPageCount: currentPageCount,
+        consecutiveErrors: 0,
       });
     }
     return;
@@ -174,6 +175,7 @@ export function collectOneTable(
     watermarkEnd: finalWatermarkEnd,
     lastSeenSizeBytes: currentSizeBytes,
     lastSeenPageCount: currentPageCount,
+    consecutiveErrors: 0,
   });
 
   result.capturedBatches += slices.length;

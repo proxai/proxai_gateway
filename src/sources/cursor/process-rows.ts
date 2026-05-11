@@ -129,6 +129,7 @@ export function processRows(input: ProcessRowsInput): void {
     watermarkEnd: input.finalWatermarkEnd,
     lastSeenSizeBytes: input.currentSizeBytes,
     lastSeenPageCount: input.currentPageCount,
+    consecutiveErrors: 0,
   });
 
   input.result.capturedBatches = slices.length;

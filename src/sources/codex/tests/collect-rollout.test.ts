@@ -13,6 +13,7 @@ import {
   getCursor,
   nextPendingBatch,
   openInMemoryBufferDb,
+  setCursor,
   totalPendingBytes,
 } from 'services/buffer';
 import {
@@ -162,6 +163,54 @@ test('records errors and does not advance cursor when the file is unreadable', a
   const result = await collectCodexRollout(fakeFile, ctx(buffer), '0.1.0');
   expect(result.errors.length).toBeGreaterThan(0);
   expect(result.capturedBatches).toBe(0);
+});
+
+test('increments consecutive_errors on per-file collector failure', async () => {
+  const fakeFile: DiscoveredCodexRolloutFile = {
+    sourcePath: join(dir, 'does-not-exist-2.jsonl'),
+    sourcePathHash: sha256Hex(join(dir, 'does-not-exist-2.jsonl')),
+    inode: 7777,
+    sizeBytes: 100,
+    lastModifiedMs: Date.now(),
+  };
+  setCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: fakeFile.sourcePathHash,
+    sourcePath: fakeFile.sourcePath,
+    sourceInode: fakeFile.inode,
+    watermarkTable: null,
+    watermarkEnd: 0,
+    consecutiveErrors: 1,
+  });
+  await collectCodexRollout(fakeFile, ctx(buffer), '0.1.0');
+  const cursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: fakeFile.sourcePathHash,
+    sourceInode: fakeFile.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.consecutiveErrors).toBe(2);
+});
+
+test('resets consecutive_errors on success after prior failure', async () => {
+  const file = await makeFile('{"a":1}\n');
+  setCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourcePath: file.sourcePath,
+    sourceInode: file.inode,
+    watermarkTable: null,
+    watermarkEnd: 0,
+    consecutiveErrors: 7,
+  });
+  await collectCodexRollout(file, ctx(buffer), '0.1.0');
+  const cursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.consecutiveErrors).toBe(0);
 });
 
 test('persists the wire-DTO fields needed by the uploader', async () => {
