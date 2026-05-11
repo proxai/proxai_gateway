@@ -2,7 +2,11 @@ import chalk from 'chalk';
 
 import type { OutputSink } from 'cli/cli.types.ts';
 import { formatBytes, formatLocalTimestamp, formatRelative } from 'core/utils';
-import type { InstallSource } from 'services/config';
+import {
+  DEFAULT_STALE_PAUSE_DAYS,
+  DEFAULT_STALE_WARN_DAYS,
+  type InstallSource,
+} from 'services/config';
 
 import { sectionHeader, statusDot } from 'cli/commands/status/decorators.ts';
 import { renderCaptureCyclesLine, renderCaptureRow } from 'cli/commands/status/render-capture.ts';
@@ -121,8 +125,8 @@ export function renderHumanStatus(deps: StatusCommandDeps, snapshot: StatusSnaps
     },
     binaryAge: {
       installedAt: snapshot.cfg?.account.installedAt ?? null,
-      warnAfterDays: snapshot.cfg?.staleBinary.warnAfterDays ?? 90,
-      pauseAfterDays: snapshot.cfg?.staleBinary.pauseAfterDays ?? 180,
+      warnAfterDays: snapshot.cfg?.staleBinary.warnAfterDays ?? DEFAULT_STALE_WARN_DAYS,
+      pauseAfterDays: snapshot.cfg?.staleBinary.pauseAfterDays ?? DEFAULT_STALE_PAUSE_DAYS,
       now: snapshot.now,
     },
   })) {

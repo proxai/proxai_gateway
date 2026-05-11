@@ -9,6 +9,7 @@ import {
   renderHealthSection,
   renderUploadSection,
 } from 'cli/commands/format-status.ts';
+import { DEFAULT_STALE_PAUSE_DAYS, DEFAULT_STALE_WARN_DAYS } from 'services/config';
 
 const NOW = new Date('2026-05-08T13:32:17Z');
 
@@ -268,8 +269,8 @@ test('renderHealthSection covers running daemon, no sentinels, current=latest, f
     },
     binaryAge: {
       installedAt: new Date(NOW.getTime() - 14 * 86_400_000).toISOString(),
-      warnAfterDays: 90,
-      pauseAfterDays: 180,
+      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
+      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
       now: NOW,
     },
   });
@@ -306,8 +307,8 @@ test('renderHealthSection covers paused-and-update sentinels, missing pid, and s
     },
     binaryAge: {
       installedAt: new Date(NOW.getTime() - 200 * 86_400_000).toISOString(),
-      warnAfterDays: 90,
-      pauseAfterDays: 180,
+      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
+      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
       now: NOW,
     },
   });
@@ -339,8 +340,8 @@ test('renderHealthSection covers warning binary age and queued-update branch', (
     },
     binaryAge: {
       installedAt: new Date(NOW.getTime() - 100 * 86_400_000).toISOString(),
-      warnAfterDays: 90,
-      pauseAfterDays: 180,
+      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
+      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
       now: NOW,
     },
   });
@@ -371,7 +372,12 @@ test('renderHealthSection handles unknown installedAt and invalid timestamps', (
       updateAvailableSentinelPresent: false,
       now: NOW,
     },
-    binaryAge: { installedAt: null, warnAfterDays: 90, pauseAfterDays: 180, now: NOW },
+    binaryAge: {
+      installedAt: null,
+      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
+      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
+      now: NOW,
+    },
   });
   expect(a.join('\n')).toContain('unknown');
 
@@ -392,7 +398,12 @@ test('renderHealthSection handles unknown installedAt and invalid timestamps', (
       updateAvailableSentinelPresent: false,
       now: NOW,
     },
-    binaryAge: { installedAt: 'not-a-date', warnAfterDays: 90, pauseAfterDays: 180, now: NOW },
+    binaryAge: {
+      installedAt: 'not-a-date',
+      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
+      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
+      now: NOW,
+    },
   });
   expect(b.join('\n')).toContain('unknown');
 });
@@ -417,8 +428,8 @@ test('renderHealthSection: future-installed binary clamps to 0 days', () => {
     },
     binaryAge: {
       installedAt: new Date(NOW.getTime() + 86_400_000).toISOString(),
-      warnAfterDays: 90,
-      pauseAfterDays: 180,
+      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
+      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
       now: NOW,
     },
   });
@@ -442,4 +453,35 @@ test('renderCaptureCyclesLine: zero errors shows dim-styled zero', () => {
   const line = renderCaptureCyclesLine(3, 0, '2026-05-08T13:31:00Z', NOW);
   expect(line).toContain('0');
   expect(line).toContain('with errors');
+});
+
+test('renderHealthSection shows configured stale-binary thresholds via constants', () => {
+  const lines = renderHealthSection({
+    daemon: { isRunning: true, pid: 1, startedAt: NOW, now: NOW, installSource: null },
+    sentinels: {
+      paused: false,
+      authFailed: false,
+      bufferFull: false,
+      sessionStopped: false,
+      updateAvailable: false,
+    },
+    autoUpgrade: {
+      lastCheckAt: null,
+      currentVersion: 'v',
+      latestKnownVersion: null,
+      installSource: null,
+      updateAvailableSentinelPresent: false,
+      now: NOW,
+    },
+    binaryAge: {
+      installedAt: new Date(NOW.getTime() - 5 * 86_400_000).toISOString(),
+      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
+      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
+      now: NOW,
+    },
+  });
+  const joined = lines.join('\n');
+  expect(joined).toContain(
+    `warn ≥ ${DEFAULT_STALE_WARN_DAYS.toString()} d, pause ≥ ${DEFAULT_STALE_PAUSE_DAYS.toString()} d`,
+  );
 });

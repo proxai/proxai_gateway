@@ -125,7 +125,7 @@ Status: ● active
   Daemon          running          (pid 78321, uptime 3h 14m)
   Sentinels       none active
   Auto-upgrade    last check 8 May 13:28:50  ·  current 2026.5.9-3  ·  latest 2026.5.9-3 (up to date)
-  Binary age      14 days  (warn ≥ 90 d, pause ≥ 180 d)
+  Binary age      14 days  (warn ≥ 30 d, pause ≥ 60 d)
 ```
 
 What each line means:
