@@ -70,7 +70,7 @@ test('default base bindings exclude pid and hostname', async () => {
   expect(parsed.hostname).toBeUndefined();
 });
 
-test('default level is trace (everything fires)', async () => {
+test('default level is info (debug and trace skipped)', async () => {
   const { lines, dest } = captureStream();
   const logger = await createLogger({ destination: dest });
   logger.trace('t');
@@ -79,7 +79,7 @@ test('default level is trace (everything fires)', async () => {
   logger.warn('w');
   logger.error('e');
   logger.fatal('f');
-  expect(lines).toHaveLength(6);
+  expect(lines).toHaveLength(4);
 });
 
 test('defaultLogFilePath ends with the canonical filename', () => {

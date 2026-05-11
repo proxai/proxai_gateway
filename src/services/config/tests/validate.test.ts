@@ -102,7 +102,7 @@ test('applies defaults for missing optional sections', () => {
   expect(result.capture.failedRetentionDays).toBe(DEFAULT_FAILED_RETENTION_DAYS);
   expect(result.capture.bufferSoftPauseBytes).toBe(DEFAULT_BUFFER_SOFT_PAUSE_BYTES);
   expect(result.capture.bufferSoftResumeBytes).toBe(DEFAULT_BUFFER_SOFT_RESUME_BYTES);
-  expect(result.logging.level).toBe('trace');
+  expect(result.logging.level).toBe('info');
   expect(result.staleBinary.warnAfterDays).toBe(DEFAULT_STALE_WARN_DAYS);
   expect(result.staleBinary.pauseAfterDays).toBe(DEFAULT_STALE_PAUSE_DAYS);
 });

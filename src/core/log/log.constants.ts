@@ -1,6 +1,6 @@
 import type { LogLevel } from 'core/log/log.types.ts';
 
-export const DEFAULT_LOG_LEVEL: LogLevel = 'trace';
+export const DEFAULT_LOG_LEVEL: LogLevel = 'info';
 
 export const STRUCTURED_LOG_FILENAME = 'structured.log';
 export const STRUCTURED_LOG_BASENAME = 'structured';
