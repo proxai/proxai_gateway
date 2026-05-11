@@ -8,6 +8,7 @@ import {
   RECEIPT_COLS,
 } from 'services/buffer/buffer.constants.ts';
 import { setLastPruneAt } from 'services/buffer/metadata.ts';
+import { pruneQuarantinedOlderThan } from 'services/buffer/quarantine.ts';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -49,6 +50,7 @@ export interface PruneInput {
 export interface PruneResult {
   receiptsDeleted: number;
   failedBatchesDeleted: number;
+  quarantinedDeleted: number;
   receiptBytesFreed: number;
   failedBytesFreed: number;
 }
@@ -64,6 +66,7 @@ export function pruneBuffer(input: PruneInput): PruneResult {
   let receiptsDeleted = 0;
   let failedBatchesDeleted = 0;
   let failedBytesFreed = 0;
+  let quarantinedDeleted = 0;
 
   const tx = db.transaction(() => {
     const receiptCountRow = db
@@ -83,6 +86,8 @@ export function pruneBuffer(input: PruneInput): PruneResult {
       db.query(DELETE_OLD_FAILED_SQL).run(failedCutoff);
     }
 
+    quarantinedDeleted = pruneQuarantinedOlderThan(db, failedCutoff);
+
     setLastPruneAt(db, now.toISOString());
   });
   tx();
@@ -91,6 +96,7 @@ export function pruneBuffer(input: PruneInput): PruneResult {
   const result: PruneResult = {
     receiptsDeleted,
     failedBatchesDeleted,
+    quarantinedDeleted,
     receiptBytesFreed,
     failedBytesFreed,
   };
@@ -102,6 +108,7 @@ export function pruneBuffer(input: PruneInput): PruneResult {
       receipt_bytes_freed: receiptBytesFreed,
       failed_batches_deleted: failedBatchesDeleted,
       failed_bytes_freed: failedBytesFreed,
+      quarantined_deleted: quarantinedDeleted,
       receipt_cutoff: receiptCutoff,
       failed_cutoff: failedCutoff,
     },

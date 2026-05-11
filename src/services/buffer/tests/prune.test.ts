@@ -3,6 +3,7 @@ import type { Database } from 'bun:sqlite';
 
 import {
   countByStatus,
+  countQuarantined,
   countReceipts,
   getBatch,
   getLastPruneAt,
@@ -12,6 +13,7 @@ import {
   markBatchFailed,
   openInMemoryBufferDb,
   pruneBuffer,
+  recordQuarantine,
 } from 'services/buffer';
 import { newBatch } from 'services/buffer/tests/fixtures.ts';
 import { generateUuidV7 } from 'core/utils';
@@ -167,6 +169,39 @@ test('respects an injected now() value when computing cutoffs', () => {
     now: new Date('2026-03-15T00:00:00.000Z'),
   });
   expect(result2.receiptsDeleted).toBe(1);
+});
+
+test('prunes quarantined records older than failed retention window', () => {
+  recordQuarantine(db, {
+    sourceApp: 'codex',
+    sourcePath: '/old',
+    sourcePathHash: 'a'.repeat(64),
+    sourceInode: null,
+    watermarkTable: 'threads',
+    watermarkPosition: 1,
+    rowPk: '1',
+    redactedSizeBytes: 10_000_000,
+    reason: 'oversized_decompressed',
+    quarantinedAtUtc: isoDaysAgo(45),
+    gatewayVersion: 'gw-0.1',
+  });
+  recordQuarantine(db, {
+    sourceApp: 'cursor',
+    sourcePath: '/new',
+    sourcePathHash: 'b'.repeat(64),
+    sourceInode: null,
+    watermarkTable: null,
+    watermarkPosition: 2,
+    rowPk: '2',
+    redactedSizeBytes: 10_000_000,
+    reason: 'oversized_decompressed',
+    quarantinedAtUtc: isoDaysAgo(5),
+    gatewayVersion: 'gw-0.1',
+  });
+
+  const result = pruneBuffer({ db, receiptRetentionDays: 30, failedRetentionDays: 30 });
+  expect(result.quarantinedDeleted).toBe(1);
+  expect(countQuarantined(db)).toBe(1);
 });
 
 test('runs in a single transaction (delivered batches with markBatchDelivered + then prune)', () => {
