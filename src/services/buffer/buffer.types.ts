@@ -76,3 +76,17 @@ export interface BufferCounts {
   failed: number;
   delivered: number;
 }
+
+export interface QuarantineRecordInput {
+  sourceApp: SourceApp;
+  sourcePath: string;
+  sourcePathHash: string;
+  sourceInode: number | null;
+  watermarkTable: string | null;
+  watermarkPosition: number;
+  rowPk: string | null;
+  redactedSizeBytes: number;
+  reason: string;
+  quarantinedAtUtc: string;
+  gatewayVersion: string;
+}

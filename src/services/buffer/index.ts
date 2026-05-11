@@ -8,6 +8,7 @@ export * from 'services/buffer/metadata-readers.ts';
 export * from 'services/buffer/metadata.ts';
 export * from 'services/buffer/pressure.ts';
 export * from 'services/buffer/prune.ts';
+export * from 'services/buffer/quarantine.ts';
 export * from 'services/buffer/receipts.ts';
 export * from 'services/buffer/stats.ts';
 export * from 'services/buffer/vacuum-detect.ts';

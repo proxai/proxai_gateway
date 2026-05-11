@@ -11,6 +11,7 @@ export const BUFFER_TABLES = {
   receipts: 'upload_receipts',
   metadata: 'buffer_metadata',
   daemonState: 'daemon_state',
+  quarantined: 'quarantined_records',
 } as const;
 
 export const METADATA_COLS = {
@@ -103,6 +104,23 @@ export const BUFFER_INDEXES = {
   batchesPathHash: 'idx_upload_batches_path_hash',
   receiptsPathHash: 'idx_upload_receipts_path_hash',
   receiptsDeliveredAt: 'idx_upload_receipts_delivered_at',
+  quarantinedSourceApp: 'idx_quarantined_records_source_app',
+  quarantinedAt: 'idx_quarantined_records_quarantined_at',
+} as const;
+
+export const QUARANTINE_COLS = {
+  id: 'id',
+  sourceApp: 'source_app',
+  sourcePath: 'source_path',
+  sourcePathHash: 'source_path_hash',
+  sourceInode: 'source_inode',
+  watermarkTable: 'watermark_table',
+  watermarkPosition: 'watermark_position',
+  rowPk: 'row_pk',
+  redactedSizeBytes: 'redacted_size_bytes',
+  reason: 'reason',
+  quarantinedAtUtc: 'quarantined_at_utc',
+  gatewayVersion: 'gateway_version',
 } as const;
 
 export const BATCH_STATUS = {
@@ -205,4 +223,31 @@ export const METADATA_TABLE_DDL = `
     ${METADATA_COLS.key} TEXT PRIMARY KEY NOT NULL,
     ${METADATA_COLS.value} TEXT NOT NULL
   )
+`;
+
+export const QUARANTINE_TABLE_DDL = `
+  CREATE TABLE IF NOT EXISTS ${BUFFER_TABLES.quarantined} (
+    ${QUARANTINE_COLS.id} INTEGER PRIMARY KEY AUTOINCREMENT,
+    ${QUARANTINE_COLS.sourceApp} TEXT NOT NULL,
+    ${QUARANTINE_COLS.sourcePath} TEXT NOT NULL,
+    ${QUARANTINE_COLS.sourcePathHash} TEXT NOT NULL,
+    ${QUARANTINE_COLS.sourceInode} INTEGER,
+    ${QUARANTINE_COLS.watermarkTable} TEXT,
+    ${QUARANTINE_COLS.watermarkPosition} INTEGER NOT NULL,
+    ${QUARANTINE_COLS.rowPk} TEXT,
+    ${QUARANTINE_COLS.redactedSizeBytes} INTEGER NOT NULL,
+    ${QUARANTINE_COLS.reason} TEXT NOT NULL,
+    ${QUARANTINE_COLS.quarantinedAtUtc} TEXT NOT NULL,
+    ${QUARANTINE_COLS.gatewayVersion} TEXT NOT NULL
+  )
+`;
+
+export const QUARANTINE_SOURCE_APP_INDEX_DDL = `
+  CREATE INDEX IF NOT EXISTS ${BUFFER_INDEXES.quarantinedSourceApp}
+    ON ${BUFFER_TABLES.quarantined} (${QUARANTINE_COLS.sourceApp})
+`;
+
+export const QUARANTINE_AT_INDEX_DDL = `
+  CREATE INDEX IF NOT EXISTS ${BUFFER_INDEXES.quarantinedAt}
+    ON ${BUFFER_TABLES.quarantined} (${QUARANTINE_COLS.quarantinedAtUtc})
 `;
