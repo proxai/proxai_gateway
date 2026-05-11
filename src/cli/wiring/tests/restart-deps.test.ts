@@ -22,8 +22,9 @@ const recreate: ServiceUnitRecreateConfig = {
   platform: 'darwin',
 };
 
+const invokeSetup = (): Promise<CommandResult> => Promise.resolve({ exitCode: 0 });
+
 test('buildRestartDeps: wires service manager, recreate, and invokeSetup', () => {
-  const invokeSetup = (): Promise<CommandResult> => Promise.resolve({ exitCode: 0 });
   const deps = buildRestartDeps({
     serviceManager: sm,
     serviceUnitRecreate: recreate,
@@ -39,7 +40,7 @@ test('buildRestartDeps: configExists() resolves to a boolean', async () => {
   const deps = buildRestartDeps({
     serviceManager: sm,
     serviceUnitRecreate: recreate,
-    invokeSetup: (): Promise<CommandResult> => Promise.resolve({ exitCode: 0 }),
+    invokeSetup,
   });
   await expect(deps.configExists()).resolves.toEqual(expect.any(Boolean));
 });

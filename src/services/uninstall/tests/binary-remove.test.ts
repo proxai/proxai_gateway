@@ -19,6 +19,10 @@ afterEach(async () => {
   await rm(tmpRoot, { recursive: true, force: true });
 });
 
+const throwingDetachedSpawn: DetachedSpawn = () => {
+  throw new Error('CreateProcess failure');
+};
+
 test('posix remover: unlinks the file and rmdirs the install dir if empty', async () => {
   const installDir = join(tmpRoot, 'bin');
   await mkdir(installDir);
@@ -138,10 +142,7 @@ test('windows remover: omits rmdir fragment when installDir not provided', async
 });
 
 test('windows remover: spawn throw is captured and surfaced as ok=false', async () => {
-  const spawn: DetachedSpawn = () => {
-    throw new Error('CreateProcess failure');
-  };
-  const remover = createWindowsBinaryRemover({ spawnImpl: spawn });
+  const remover = createWindowsBinaryRemover({ spawnImpl: throwingDetachedSpawn });
   const result = await remover.remove('C:\\bin\\proxai.exe');
   expect(result.ok).toBe(false);
   expect(result.message).toContain('failed to schedule binary removal');

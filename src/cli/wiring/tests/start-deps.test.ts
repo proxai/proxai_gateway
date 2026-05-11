@@ -22,9 +22,10 @@ const recreate: ServiceUnitRecreateConfig = {
   platform: 'darwin',
 };
 
+const invokeSetup = (): Promise<CommandResult> => Promise.resolve({ exitCode: 0 });
+const runAutoUpgrade = (): Promise<void> => Promise.resolve();
+
 test('buildStartDeps: wires service manager, recreate, invokeSetup, runAutoUpgrade', () => {
-  const invokeSetup = (): Promise<CommandResult> => Promise.resolve({ exitCode: 0 });
-  const runAutoUpgrade = (): Promise<void> => Promise.resolve();
   const deps = buildStartDeps({
     serviceManager: sm,
     serviceUnitRecreate: recreate,
@@ -43,8 +44,8 @@ test('buildStartDeps: configExists() resolves to a boolean', async () => {
   const deps = buildStartDeps({
     serviceManager: sm,
     serviceUnitRecreate: recreate,
-    invokeSetup: (): Promise<CommandResult> => Promise.resolve({ exitCode: 0 }),
-    runAutoUpgrade: (): Promise<void> => Promise.resolve(),
+    invokeSetup,
+    runAutoUpgrade,
   });
   await expect(deps.configExists()).resolves.toEqual(expect.any(Boolean));
 });

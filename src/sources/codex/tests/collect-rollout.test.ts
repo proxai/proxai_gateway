@@ -63,6 +63,8 @@ function ctx(b: Database): CodexCollectorContext {
   };
 }
 
+const nullCliVersionReader = async (): Promise<string | null> => null;
+
 const DECODER = new TextDecoder();
 
 test('inserts a batch covering newly added complete lines', async () => {
@@ -127,8 +129,10 @@ test('per-rollout cli_version from session_meta overrides the caller-provided de
 
 test('falls back to caller-provided default when reader returns null', async () => {
   const file = await makeFile('{"type":"event","data":1}\nentry-2\n');
-  const fakeReader = async (): Promise<string | null> => null;
-  const fakeCtx: CodexCollectorContext = { ...ctx(buffer), rolloutVersionReader: fakeReader };
+  const fakeCtx: CodexCollectorContext = {
+    ...ctx(buffer),
+    rolloutVersionReader: nullCliVersionReader,
+  };
   await collectCodexRollout(file, fakeCtx, 'caller-default');
   const batch = nextPendingBatch(buffer);
   expect(batch?.agentSchemaVersion).toBe('caller-default');

@@ -22,6 +22,10 @@ async function writeFirstLine(content: string): Promise<string> {
   return path;
 }
 
+const failingReader = async (): Promise<string> => {
+  throw new Error('disk error');
+};
+
 test('extracts cli_version from session_meta first line', async () => {
   const path = await writeFirstLine(
     `{"timestamp":"2026-05-08T07:51:29.550Z","type":"session_meta","payload":{"id":"abc","cli_version":"0.129.0-alpha.15"}}\n{"type":"event"}\n`,
@@ -74,10 +78,7 @@ test('handles file with no trailing newline on first line', async () => {
 });
 
 test('returns null when reader throws', async () => {
-  const failing = async (): Promise<string> => {
-    throw new Error('disk error');
-  };
-  expect(await extractRolloutCliVersion('/nonexistent', failing)).toBeNull();
+  expect(await extractRolloutCliVersion('/nonexistent', failingReader)).toBeNull();
 });
 
 test('uses injected reader for the head bytes', async () => {

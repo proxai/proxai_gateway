@@ -20,6 +20,17 @@ afterEach(async () => {
   await rm(homeDir, { recursive: true, force: true });
 });
 
+const noisyStderrSpawn: SpawnPathCleaner = async () => ({
+  ok: false,
+  stderr: 'WARNING: noisy\nfatal: registry locked\n',
+});
+
+const emptyStderrSpawn: SpawnPathCleaner = async () => ({ ok: false, stderr: '' });
+
+const throwingPowershellSpawn: SpawnPathCleaner = async () => {
+  throw new Error('powershell.exe not found');
+};
+
 test('stripPathMarkerBlock: removes marker + next line + leading blank line', () => {
   const before =
     [
@@ -200,11 +211,7 @@ test('windows cleaner: spawns powershell with install dir env var; ok exit repor
 });
 
 test('windows cleaner: powershell non-zero exit surfaces as not-cleaned with last stderr line', async () => {
-  const spawn: SpawnPathCleaner = async () => ({
-    ok: false,
-    stderr: 'WARNING: noisy\nfatal: registry locked\n',
-  });
-  const cleaner = createWindowsShellPathCleaner({ spawnImpl: spawn });
+  const cleaner = createWindowsShellPathCleaner({ spawnImpl: noisyStderrSpawn });
   const outcomes = await cleaner.clean('C:\\bin');
   expect(outcomes[0]!.cleaned).toBe(false);
   expect(outcomes[0]!.reason).toContain('powershell exited non-zero');
@@ -212,18 +219,14 @@ test('windows cleaner: powershell non-zero exit surfaces as not-cleaned with las
 });
 
 test('windows cleaner: powershell empty stderr falls back to "unknown"', async () => {
-  const spawn: SpawnPathCleaner = async () => ({ ok: false, stderr: '' });
-  const cleaner = createWindowsShellPathCleaner({ spawnImpl: spawn });
+  const cleaner = createWindowsShellPathCleaner({ spawnImpl: emptyStderrSpawn });
   const outcomes = await cleaner.clean('C:\\bin');
   expect(outcomes[0]!.cleaned).toBe(false);
   expect(outcomes[0]!.reason).toContain('powershell exited non-zero');
 });
 
 test('windows cleaner: spawn throw is captured', async () => {
-  const spawn: SpawnPathCleaner = async () => {
-    throw new Error('powershell.exe not found');
-  };
-  const cleaner = createWindowsShellPathCleaner({ spawnImpl: spawn });
+  const cleaner = createWindowsShellPathCleaner({ spawnImpl: throwingPowershellSpawn });
   const outcomes = await cleaner.clean('C:\\bin');
   expect(outcomes[0]!.cleaned).toBe(false);
   expect(outcomes[0]!.reason).toContain('powershell spawn failed');
