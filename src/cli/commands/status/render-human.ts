@@ -116,8 +116,7 @@ export function renderHumanStatus(deps: StatusCommandDeps, snapshot: StatusSnaps
     },
     autoUpgrade: {
       lastCheckAt: snapshot.lastVersionCheckAt,
-      currentVersion:
-        snapshot.cfg !== null ? (deps.currentVersion ?? '') : (deps.currentVersion ?? ''),
+      currentVersion: deps.currentVersion ?? '',
       latestKnownVersion: snapshot.latestKnownVersion,
       installSource,
       updateAvailableSentinelPresent: snapshot.updateAvailable !== null,
