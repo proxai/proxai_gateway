@@ -27,17 +27,19 @@
         "src/services/polling/poll-claude-code.ts",
         "src/services/polling/poll-codex.ts",
         "src/services/polling/poll-cursor.ts",
+        "src/services/polling/poll-gemini-cli.ts",
+        "src/services/polling/daemon-loops.ts",
+        "src/services/polling/capture-cycle.ts",
         "src/services/uploader/drain-buffer.ts",
         "src/services/uploader/pacer.ts",
-        "src/cli/commands/tail.ts",
+        "src/cli/commands/tail/index.ts",
         "src/core/io/fs/rm-recursive.ts",
         "src/core/log/prune.ts",
         "src/core/system/machine-uuid.ts",
         "scripts/build.ts",
         "src/services/uploader/tests/drain-buffer.test.ts",
         "src/services/uploader/tests/pacer.test.ts",
-        "src/services/polling/tests/default-sources.test.ts",
-        "src/cli/commands/tests/uninstall.test.ts"
+        "src/services/polling/tests/default-sources.test.ts"
       ],
       "rules": {
         "no-await-in-loop": "off"
