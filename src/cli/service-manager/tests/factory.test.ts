@@ -7,7 +7,6 @@ test('unsupported platform throws clear error', () => {
     getServiceManager({
       platform: 'aix' as NodeJS.Platform,
       unitPath: '/x',
-      programPath: '/p',
     }),
   ).toThrow(/unsupported platform/);
 });

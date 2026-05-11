@@ -15,7 +15,6 @@ test('default spawn factory is wired up when deps.spawn is omitted', async () =>
   const sm = getServiceManager({
     platform: process.platform,
     unitPath: '/tmp/proxai-coverage-nonexistent.unit',
-    programPath: '/usr/local/bin/proxai-gateway',
   });
   const result = await sm.isRegistered();
   expect(typeof result).toBe('boolean');

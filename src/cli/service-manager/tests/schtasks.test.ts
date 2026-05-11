@@ -8,7 +8,6 @@ test('isRegistered true when schtasks /Query exits 0', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   expect(await sm.isRegistered()).toBe(true);
@@ -20,7 +19,6 @@ test('isRegistered false when schtasks /Query exits non-zero', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   expect(await sm.isRegistered()).toBe(false);
@@ -34,7 +32,6 @@ test('isRunning parses Status: Running from /FO LIST output', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   expect(await sm.isRunning()).toBe(true);
@@ -48,7 +45,6 @@ test('isRunning false when status is Ready', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   expect(await sm.isRunning()).toBe(false);
@@ -63,7 +59,6 @@ test('ensureRegistered creates task with /XML when missing', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/Users/test/scheduled-task.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await sm.ensureRegistered();
@@ -92,7 +87,6 @@ test('ensureRegistered no-op when already registered', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await sm.ensureRegistered();
@@ -108,7 +102,6 @@ test('start runs schtasks /Run after ensureRegistered', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await sm.start();
@@ -121,7 +114,6 @@ test('stop tolerates schtasks /End non-zero exit (task not running)', async () =
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await sm.stop();
@@ -140,7 +132,6 @@ test('restart ends then runs', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await sm.restart();
@@ -156,7 +147,6 @@ test('start surfaces stderr when /Run fails', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await expect(sm.start()).rejects.toThrow(/access denied/);
@@ -171,7 +161,6 @@ test('ensureRegistered surfaces stderr when /Create fails', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await expect(sm.ensureRegistered()).rejects.toThrow(/create-failed/);
@@ -186,7 +175,6 @@ test('start creates the task when missing and surfaces failure', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await expect(sm.start()).rejects.toThrow(/create-failed/);
@@ -204,7 +192,6 @@ test('start succeeds when task missing then created', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await sm.start();
@@ -220,7 +207,6 @@ test('restart creates task when missing and surfaces /Create failure', async () 
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await expect(sm.restart()).rejects.toThrow(/create-restart-failed/);
@@ -239,7 +225,6 @@ test('restart creates task when missing then ends and runs', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await sm.restart();
@@ -256,7 +241,6 @@ test('restart surfaces /Run failure', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await expect(sm.restart()).rejects.toThrow(/run-failed/);
@@ -271,7 +255,6 @@ test('errors fall back to stdout when stderr is empty', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await expect(sm.ensureRegistered()).rejects.toThrow(/win-stdout-fallback/);
@@ -286,7 +269,6 @@ test('unregister deletes task with /F when registered', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await sm.unregister();
@@ -299,7 +281,6 @@ test('unregister is no-op when task not registered', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   await sm.unregister();
@@ -314,7 +295,6 @@ test('runtimeInfo parses Start Date and Start Time from schtasks', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   const info = await sm.runtimeInfo();
@@ -342,7 +322,6 @@ test('runtimeInfo invokes tasklist for PID when schtasks reports Running', async
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   const info = await sm.runtimeInfo();
@@ -367,7 +346,6 @@ test('runtimeInfo skips tasklist when task is not Running', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   const info = await sm.runtimeInfo();
@@ -394,7 +372,6 @@ test('runtimeInfo handles tasklist returning empty (no process found)', async ()
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   const info = await sm.runtimeInfo();
@@ -406,7 +383,6 @@ test('runtimeInfo returns nulls when schtasks query fails', async () => {
   const sm = getServiceManager({
     platform: 'win32',
     unitPath: 'C:/x.xml',
-    programPath: 'C:/p.exe',
     spawn,
   });
   const info = await sm.runtimeInfo();

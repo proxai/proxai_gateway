@@ -6,7 +6,6 @@ import { configDir } from 'core/io/fs';
 export interface ScheduledTaskXmlInput {
   programPath: string;
   programArgs?: readonly string[];
-  taskName?: string;
   userId?: string;
 }
 

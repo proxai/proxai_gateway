@@ -30,11 +30,11 @@ export interface PlatformServiceContext {
 
 export function buildPlatformServiceContext(
   platform: NodeJS.Platform,
-  programPath: string,
+  _programPath: string,
 ): PlatformServiceContext | null {
   const unitPath = platformServiceUnitPath(platform);
   if (unitPath === null) return null;
-  const serviceManager = getServiceManager({ platform, unitPath, programPath });
+  const serviceManager = getServiceManager({ platform, unitPath });
   return { platform, unitPath, serviceManager };
 }
 

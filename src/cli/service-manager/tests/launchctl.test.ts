@@ -8,7 +8,6 @@ test('isRegistered true when launchctl print exits 0', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/p.plist',
-    programPath: '/p',
     spawn,
   });
   expect(await sm.isRegistered()).toBe(true);
@@ -22,7 +21,6 @@ test('isRegistered false when launchctl print exits non-zero', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/p.plist',
-    programPath: '/p',
     spawn,
   });
   expect(await sm.isRegistered()).toBe(false);
@@ -33,7 +31,6 @@ test('isRunning true when state = running in stdout', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/p.plist',
-    programPath: '/p',
     spawn,
   });
   expect(await sm.isRunning()).toBe(true);
@@ -44,7 +41,6 @@ test('isRunning false when not running', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/p.plist',
-    programPath: '/p',
     spawn,
   });
   expect(await sm.isRunning()).toBe(false);
@@ -63,7 +59,6 @@ test('ensureRegistered bootstraps when not registered', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await sm.ensureRegistered();
@@ -82,7 +77,6 @@ test('start kicks the registered service', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await sm.start();
@@ -98,7 +92,6 @@ test('stop runs bootout when registered', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await sm.stop();
@@ -110,7 +103,6 @@ test('stop is no-op when not registered', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await sm.stop();
@@ -126,7 +118,6 @@ test('restart uses kickstart -k', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await sm.restart();
@@ -143,7 +134,6 @@ test('ensureRegistered surfaces stderr when bootstrap fails', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await expect(sm.ensureRegistered()).rejects.toThrow(/invalid plist/);
@@ -159,7 +149,6 @@ test('ensureRegistered falls back to stdout when stderr is empty', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await expect(sm.ensureRegistered()).rejects.toThrow(/fallback-stdout-msg/);
@@ -177,7 +166,6 @@ test('start bootstraps when not registered, then kicks', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await sm.start();
@@ -193,7 +181,6 @@ test('start surfaces error when bootstrap fails before kickstart', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await expect(sm.start()).rejects.toThrow(/plist locked/);
@@ -208,7 +195,6 @@ test('start surfaces error when kickstart fails', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await expect(sm.start()).rejects.toThrow(/no such service/);
@@ -223,7 +209,6 @@ test('stop surfaces error when bootout fails', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await expect(sm.stop()).rejects.toThrow(/unable/);
@@ -241,7 +226,6 @@ test('restart bootstraps then kicks with -k when not registered', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await sm.restart();
@@ -257,7 +241,6 @@ test('restart surfaces error when bootstrap fails', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await expect(sm.restart()).rejects.toThrow(/oops/);
@@ -272,7 +255,6 @@ test('restart surfaces error when kickstart -k fails', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await expect(sm.restart()).rejects.toThrow(/kick-failed/);
@@ -287,7 +269,6 @@ test('unregister runs bootout when registered', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await sm.unregister();
@@ -300,7 +281,6 @@ test('unregister is no-op when not registered (idempotent)', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await sm.unregister();
@@ -316,7 +296,6 @@ test('unregister surfaces stderr when bootout fails', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/x.plist',
-    programPath: '/p',
     spawn,
   });
   await expect(sm.unregister()).rejects.toThrow(/bootout-failed/);
@@ -330,7 +309,6 @@ test('runtimeInfo extracts pid from launchctl print output', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/u.plist',
-    programPath: '/p',
     spawn,
   });
   const info = await sm.runtimeInfo();
@@ -342,7 +320,6 @@ test('runtimeInfo returns nulls when launchctl print fails', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/u.plist',
-    programPath: '/p',
     spawn,
   });
   const info = await sm.runtimeInfo();
@@ -386,7 +363,6 @@ test('runtimeInfo includes startedAt parsed from launchctl print', async () => {
   const sm = getServiceManager({
     platform: 'darwin',
     unitPath: '/u.plist',
-    programPath: '/p',
     spawn,
   });
   const info = await sm.runtimeInfo();

@@ -33,6 +33,5 @@ export type SpawnFn = (
 export interface ServiceManagerDeps {
   platform: NodeJS.Platform;
   unitPath: string;
-  programPath: string;
   spawn?: SpawnFn;
 }
