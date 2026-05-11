@@ -18,7 +18,7 @@ import type {
 interface SliceMeasurement {
   redactedJson: string;
   rawBytes: number;
-  compressedBytes: number;
+  compressed: Uint8Array;
 }
 
 export interface ProcessRowsInput {
@@ -38,7 +38,7 @@ export function processRows(input: ProcessRowsInput): void {
   const slices = splitRowsByCompressedSize(input.rows, {
     targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
     maxDecompressedBytes: input.context.maxDecompressedBytes,
-    measureCompressed: (slice) => measureSlice(slice).compressedBytes,
+    measureCompressed: (slice) => measureSlice(slice).compressed.byteLength,
     measureUncompressed: (slice) => measureSlice(slice).rawBytes,
   });
 
@@ -64,9 +64,9 @@ export function processRows(input: ProcessRowsInput): void {
     const lastRowidInSlice = slice[slice.length - 1]!.rowid;
     const sliceWatermarkEnd = lastRowidInSlice + 1;
 
-    const redactedJson = applyRedaction(JSON.stringify({ rows: slice })).redacted;
-    const redactedBytes = Buffer.byteLength(redactedJson, 'utf8');
-    const compressed = zstdCompressSync(redactedJson);
+    const measurement = measureSlice(slice);
+    const redactedBytes = measurement.rawBytes;
+    const compressed = measurement.compressed;
 
     if (redactedBytes > BODY_MAX_DECOMPRESSED_BYTES) {
       try {
@@ -201,8 +201,8 @@ function createSliceMeasurer(): (slice: readonly CursorDiskKvRow[]) => SliceMeas
     if (entry === undefined) {
       const redactedJson = applyRedaction(JSON.stringify({ rows: slice })).redacted;
       const rawBytes = Buffer.byteLength(redactedJson, 'utf8');
-      const compressedBytes = zstdCompressSync(redactedJson).byteLength;
-      entry = { redactedJson, rawBytes, compressedBytes };
+      const compressed = zstdCompressSync(redactedJson);
+      entry = { redactedJson, rawBytes, compressed };
       cache.set(slice, entry);
     }
     return entry;
