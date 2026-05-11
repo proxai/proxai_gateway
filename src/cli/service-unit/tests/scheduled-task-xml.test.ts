@@ -16,7 +16,7 @@ test('contains required Task tags', () => {
   expect(xml).toContain('<LogonTrigger>');
   expect(xml).toContain('<Principal id="Author">');
   expect(xml).toContain('<Command>C:\\Program Files\\proxai\\proxai-gateway.exe</Command>');
-  expect(xml).toContain('<Arguments>run</Arguments>');
+  expect(xml).toContain('<Arguments>&quot;run&quot;</Arguments>');
 });
 
 test('embeds the provided userId in trigger and principal', () => {
@@ -35,12 +35,14 @@ test('falls back to INTERACTIVE when userId not provided', () => {
   expect(xml).toContain('<UserId>INTERACTIVE</UserId>');
 });
 
-test('joins programArgs with space', () => {
+test('quotes each programArg so embedded spaces survive Task Scheduler exec', () => {
   const xml = buildScheduledTaskXml({
     programPath: 'C:\\p.exe',
-    programArgs: ['run', '--config', 'C:\\cfg.toml'],
+    programArgs: ['run', '--config', 'C:\\Program Files\\proxai\\cfg.toml'],
   });
-  expect(xml).toContain('<Arguments>run --config C:\\cfg.toml</Arguments>');
+  expect(xml).toContain(
+    '<Arguments>&quot;run&quot; &quot;--config&quot; &quot;C:\\Program Files\\proxai\\cfg.toml&quot;</Arguments>',
+  );
 });
 
 test('escapes XML-significant characters in path and userId', () => {
