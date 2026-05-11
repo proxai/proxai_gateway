@@ -24,10 +24,8 @@ export async function discoverClaudeCodeFiles(
   const found: DiscoveredClaudeCodeFile[] = [];
   const minMtimeMs = options.minimumMtime?.getTime() ?? null;
 
-  if (!(await Bun.file(baseDir).exists())) {
-    const stat = await statFile(baseDir);
-    if (!stat.exists) return found;
-  }
+  const baseStat = await statFile(baseDir);
+  if (!baseStat.exists) return found;
 
   const glob = new Bun.Glob(CLAUDE_CODE_GLOB_PATTERN);
 
