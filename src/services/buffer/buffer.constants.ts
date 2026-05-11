@@ -24,7 +24,6 @@ export const METADATA_KEYS = {
   lastVersionCheckAt: 'last_version_check_at',
   cyclesTotal: 'cycles_total',
   cyclesWithErrors: 'cycles_with_errors',
-  cyclesTotalDurationMs: 'cycles_total_duration_ms',
   uploadTotalBatchesShipped: 'upload_total_batches_shipped',
   uploadTotalBytesShipped: 'upload_total_bytes_shipped',
   uploadLastSuccessAt: 'upload_last_success_at',
