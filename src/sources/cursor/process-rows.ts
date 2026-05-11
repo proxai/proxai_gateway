@@ -1,11 +1,5 @@
-import {
-  generateUuidV7,
-  nowIsoUtc,
-  OversizedDecompressedSliceError,
-  splitRowsByCompressedSize,
-  zstdCompressSync,
-} from 'core/utils';
-import { insertBatch, setCursor } from 'services/buffer';
+import { generateUuidV7, nowIsoUtc, splitRowsByCompressedSize, zstdCompressSync } from 'core/utils';
+import { getCursor, insertBatch, recordQuarantine, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import { BODY_MAX_DECOMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
@@ -61,6 +55,8 @@ export function processRows(input: ProcessRowsInput): void {
     );
   }
 
+  let quarantinedCount = 0;
+  let acceptedSlices = 0;
   for (let i = 0; i < slices.length; i++) {
     const slice = slices[i]!;
     if (slice.length === 0) continue;
@@ -73,14 +69,66 @@ export function processRows(input: ProcessRowsInput): void {
     const compressed = zstdCompressSync(redactedJson);
 
     if (redactedBytes > BODY_MAX_DECOMPRESSED_BYTES) {
-      throw new OversizedDecompressedSliceError({
+      try {
+        recordQuarantine(input.context.buffer, {
+          sourceApp: CURSOR_SOURCE_APP,
+          sourcePath: input.effectiveSourcePath,
+          sourcePathHash: input.effectiveSourcePathHash,
+          sourceInode: null,
+          watermarkTable: null,
+          watermarkPosition: lastRowidInSlice,
+          rowPk: lastRowidInSlice.toString(),
+          redactedSizeBytes: redactedBytes,
+          reason: 'oversized_decompressed',
+          quarantinedAtUtc: nowIsoUtc(),
+          gatewayVersion: input.context.gatewayVersion,
+        });
+      } catch (qerr) {
+        input.context.logger?.warn(
+          {
+            event: 'quarantine.write_failed',
+            source_app: CURSOR_SOURCE_APP,
+            source_path_hash: input.effectiveSourcePathHash,
+            error: qerr instanceof Error ? qerr.message : String(qerr),
+          },
+          'failed to record oversized row quarantine',
+        );
+      }
+      input.context.logger?.warn(
+        {
+          event: 'oversized_row.quarantined',
+          source_app: CURSOR_SOURCE_APP,
+          source_path_hash: input.effectiveSourcePathHash,
+          watermark_position: lastRowidInSlice,
+          redacted_size_bytes: redactedBytes,
+          cap: BODY_MAX_DECOMPRESSED_BYTES,
+        },
+        'oversized cursor kv row quarantined; advancing cursor past it',
+      );
+      input.result.errors.push({
         sourcePath: input.effectiveSourcePath,
-        sourcePathHash: input.effectiveSourcePathHash,
-        rawBytes: redactedBytes,
-        compressedBytes: compressed.byteLength,
-        sliceIndex: i,
-        cap: BODY_MAX_DECOMPRESSED_BYTES,
+        reason: `decompressed slice exceeded ${BODY_MAX_DECOMPRESSED_BYTES.toString()} bytes (${redactedBytes.toString()}); row quarantined`,
       });
+      const priorCursor = getCursor(input.context.buffer, {
+        sourceApp: CURSOR_SOURCE_APP,
+        sourcePathHash: input.effectiveSourcePathHash,
+        sourceInode: null,
+        watermarkTable: null,
+      });
+      const priorErrors = priorCursor?.consecutiveErrors ?? 0;
+      setCursor(input.context.buffer, {
+        sourceApp: CURSOR_SOURCE_APP,
+        sourcePathHash: input.effectiveSourcePathHash,
+        sourcePath: input.effectiveSourcePath,
+        sourceInode: null,
+        watermarkTable: null,
+        watermarkEnd: sliceWatermarkEnd,
+        consecutiveErrors: priorErrors + 1,
+        lastSeenSizeBytes: input.currentSizeBytes,
+        lastSeenPageCount: input.currentPageCount,
+      });
+      quarantinedCount += 1;
+      continue;
     }
 
     if (slices.length > 1) {
@@ -118,8 +166,19 @@ export function processRows(input: ProcessRowsInput): void {
 
     insertBatch(input.context.buffer, batch);
     input.result.capturedBytes += compressed.byteLength;
+    acceptedSlices += 1;
   }
 
+  let finalConsecutiveErrors = 0;
+  if (quarantinedCount > 0) {
+    const refreshed = getCursor(input.context.buffer, {
+      sourceApp: CURSOR_SOURCE_APP,
+      sourcePathHash: input.effectiveSourcePathHash,
+      sourceInode: null,
+      watermarkTable: null,
+    });
+    finalConsecutiveErrors = refreshed?.consecutiveErrors ?? quarantinedCount;
+  }
   setCursor(input.context.buffer, {
     sourceApp: CURSOR_SOURCE_APP,
     sourcePathHash: input.effectiveSourcePathHash,
@@ -129,10 +188,10 @@ export function processRows(input: ProcessRowsInput): void {
     watermarkEnd: input.finalWatermarkEnd,
     lastSeenSizeBytes: input.currentSizeBytes,
     lastSeenPageCount: input.currentPageCount,
-    consecutiveErrors: 0,
+    consecutiveErrors: finalConsecutiveErrors,
   });
 
-  input.result.capturedBatches = slices.length;
+  input.result.capturedBatches = acceptedSlices;
 }
 
 function createSliceMeasurer(): (slice: readonly CursorDiskKvRow[]) => SliceMeasurement {

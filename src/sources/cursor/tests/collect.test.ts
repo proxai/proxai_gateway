@@ -10,6 +10,7 @@ import { rmRecursive, statFile } from 'core/io/fs';
 import { nextGenerationSuffix, sha256Hex, zstdDecompressSync } from 'core/utils';
 import {
   countByStatus,
+  countQuarantined,
   deleteBatch,
   getCursor,
   nextPendingBatch,
@@ -506,6 +507,29 @@ test('surfaces OversizedDecompressedSliceError when single row exceeds BODY_MAX_
   const result = await collectCursorFile(file, ctx(buffer));
   const oversized = result.errors.filter((e) => /decompressed slice/.test(e.reason));
   expect(oversized.length).toBeGreaterThanOrEqual(1);
+}, 60_000);
+
+test('quarantines oversized cursor row, advances cursor past it, and continues', async () => {
+  const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
+  const file = await makeDb([
+    { key: 'composerData:huge', value: giantPayload },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3,"type":1}' },
+  ]);
+
+  const result = await collectCursorFile(file, ctx(buffer));
+
+  expect(countQuarantined(buffer, 'cursor')).toBeGreaterThanOrEqual(1);
+
+  const cursor = getCursor(buffer, {
+    sourceApp: 'cursor',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: null,
+  });
+  expect(cursor).not.toBeNull();
+  expect(cursor!.watermarkEnd).toBeGreaterThan(1);
+  expect(cursor!.consecutiveErrors).toBeGreaterThanOrEqual(1);
+  expect(result.errors.some((e) => /quarantined/.test(e.reason))).toBe(true);
 }, 60_000);
 
 test('every cursor batch satisfies BOTH compressed AND decompressed caps', async () => {
