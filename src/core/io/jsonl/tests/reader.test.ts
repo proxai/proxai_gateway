@@ -25,7 +25,6 @@ test('reads complete lines and reports advanced end byte', async () => {
   const r = await readJsonlRange(path, 0, content.length);
   expect(decoder.decode(r.bytes)).toBe(content);
   expect(r.endByte).toBe(content.length);
-  expect(r.partialTail.byteLength).toBe(0);
 });
 
 test('holds back trailing partial line', async () => {
@@ -35,7 +34,6 @@ test('holds back trailing partial line', async () => {
   const r = await readJsonlRange(path, 0, content.length);
   expect(decoder.decode(r.bytes)).toBe('{"a":1}\n');
   expect(r.endByte).toBe('{"a":1}\n'.length);
-  expect(decoder.decode(r.partialTail)).toBe('{"b":2');
 });
 
 test('returns empty range when no newline is present', async () => {
@@ -45,7 +43,6 @@ test('returns empty range when no newline is present', async () => {
   const r = await readJsonlRange(path, 0, content.length);
   expect(r.bytes.byteLength).toBe(0);
   expect(r.endByte).toBe(0);
-  expect(decoder.decode(r.partialTail)).toBe(content);
 });
 
 test('reads only the requested window', async () => {
@@ -63,5 +60,4 @@ test('returns empty range when end <= start', async () => {
   const r = await readJsonlRange(path, 5, 5);
   expect(r.bytes.byteLength).toBe(0);
   expect(r.endByte).toBe(5);
-  expect(r.partialTail.byteLength).toBe(0);
 });

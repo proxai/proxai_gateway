@@ -1,7 +1,6 @@
 export interface JsonlRange {
   bytes: Uint8Array;
   endByte: number;
-  partialTail: Uint8Array;
 }
 
 export interface ParsedLine<T> {

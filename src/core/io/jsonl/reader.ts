@@ -7,18 +7,17 @@ export async function readJsonlRange(
   end: number,
 ): Promise<JsonlRange> {
   if (end <= start) {
-    return { bytes: new Uint8Array(0), endByte: start, partialTail: new Uint8Array(0) };
+    return { bytes: new Uint8Array(0), endByte: start };
   }
   const slice = Bun.file(path).slice(start, end);
   const buf = new Uint8Array(await slice.arrayBuffer());
   const lastNewline = buf.lastIndexOf(NEWLINE_BYTE);
   if (lastNewline < 0) {
-    return { bytes: new Uint8Array(0), endByte: start, partialTail: buf };
+    return { bytes: new Uint8Array(0), endByte: start };
   }
   const completeLength = lastNewline + 1;
   return {
     bytes: buf.subarray(0, completeLength),
     endByte: start + completeLength,
-    partialTail: buf.subarray(completeLength),
   };
 }
