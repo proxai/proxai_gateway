@@ -26,6 +26,25 @@ import type {
 const DECODER = new TextDecoder('utf-8', { fatal: false });
 const ENCODER = new TextEncoder();
 
+interface SliceRedaction {
+  redactedBytes: Uint8Array;
+  compressed: Uint8Array;
+}
+
+function createSliceRedactor(): (slice: Uint8Array) => SliceRedaction {
+  const cache = new WeakMap<Uint8Array, SliceRedaction>();
+  return (slice) => {
+    let entry = cache.get(slice);
+    if (entry === undefined) {
+      const redactedBytes = ENCODER.encode(applyRedaction(DECODER.decode(slice)).redacted);
+      const compressed = zstdCompressSync(redactedBytes);
+      entry = { redactedBytes, compressed };
+      cache.set(slice, entry);
+    }
+    return entry;
+  };
+}
+
 export async function collectClaudeCodeFile(
   file: DiscoveredClaudeCodeFile,
   context: ClaudeCodeCollectorContext,
@@ -58,13 +77,11 @@ export async function collectClaudeCodeFile(
     const redactedFullText = applyRedaction(DECODER.decode(range.bytes)).redacted;
     const agentSchemaVersion = extractAgentSchemaVersion(redactedFullText);
 
+    const redactSlice = createSliceRedactor();
     const sourceSlices = splitJsonlAtBoundary(range.bytes, {
       targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
       maxDecompressedBytes: context.maxDecompressedBytes,
-      measureCompressed: (slice) => {
-        const redacted = ENCODER.encode(applyRedaction(DECODER.decode(slice)).redacted);
-        return zstdCompressSync(redacted).byteLength;
-      },
+      measureCompressed: (slice) => redactSlice(slice).compressed.byteLength,
     });
 
     if (sourceSlices.length > 1) {
@@ -85,8 +102,7 @@ export async function collectClaudeCodeFile(
       const slice = sourceSlices[i]!;
       const sliceEndOffset = offset + slice.byteLength;
 
-      const redactedSlice = ENCODER.encode(applyRedaction(DECODER.decode(slice)).redacted);
-      const compressed = zstdCompressSync(redactedSlice);
+      const { redactedBytes: redactedSlice, compressed } = redactSlice(slice);
 
       if (redactedSlice.byteLength > BODY_MAX_DECOMPRESSED_BYTES) {
         throw new OversizedDecompressedSliceError({
