@@ -58,9 +58,7 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     bufferFull: false,
     startedAt: captureResult.startedAt,
     completedAt: drainResult.completedAt,
-    durationMs: drainResult.completedAt
-      ? Date.parse(drainResult.completedAt) - Date.parse(captureResult.startedAt)
-      : captureResult.durationMs + drainResult.durationMs,
+    durationMs: Date.parse(drainResult.completedAt) - Date.parse(captureResult.startedAt),
     sourceResults: captureResult.sourceResults,
     drainResult: drainResult.drainResult,
     pruneResult: drainResult.pruneResult,
