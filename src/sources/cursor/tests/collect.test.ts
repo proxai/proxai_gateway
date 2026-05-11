@@ -514,21 +514,30 @@ test('logs quarantine.write_failed when quarantine insert throws on cursor', asy
   const file = await makeDb([{ key: 'composerData:huge', value: giantPayload }]);
   buffer.exec('DROP TABLE quarantined_records');
   const warns: { msg: string }[] = [];
-  const noopChild = (): typeof fakeLogger => fakeLogger;
-  const fakeLogger = {
-    info: (): void => {},
-    warn: (_b: unknown, msg: string): void => {
+  interface FakeLog {
+    info: (...args: unknown[]) => void;
+    warn: (bindings: unknown, msg: string) => void;
+    error: (...args: unknown[]) => void;
+    debug: (...args: unknown[]) => void;
+    trace: (...args: unknown[]) => void;
+    fatal: (...args: unknown[]) => void;
+    child: () => FakeLog;
+  }
+  const fakeLogger: FakeLog = {
+    info: () => {},
+    warn: (_b, msg) => {
       warns.push({ msg });
     },
-    error: (): void => {},
-    debug: (): void => {},
-    trace: (): void => {},
-    fatal: (): void => {},
-    child: noopChild,
+    error: () => {},
+    debug: () => {},
+    trace: () => {},
+    fatal: () => {},
+    child: () => fakeLogger,
   };
-  const fakeCtx: CursorCollectorContext = {
-    ...ctx(buffer),
-    logger: fakeLogger as unknown as CursorCollectorContext['logger'],
+  const baseCtx = ctx(buffer);
+  const fakeCtx = {
+    ...baseCtx,
+    logger: fakeLogger as unknown as NonNullable<CursorCollectorContext['logger']>,
   };
   const result = await collectCursorFile(file, fakeCtx);
   expect(result.errors.some((e) => /quarantined/.test(e.reason))).toBe(true);
