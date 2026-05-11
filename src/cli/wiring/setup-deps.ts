@@ -16,6 +16,7 @@ import {
 import { readMachineUuid } from 'core/system';
 import { GATEWAY_USER_AGENT } from 'core/utils';
 import {
+  inferInstallSource,
   NEST_INGEST_URL,
   NEST_REGISTER_HOST_ID_URL,
   NEST_VERIFY_KEY_URL,
@@ -112,5 +113,9 @@ export function invokeSetupInteractive(
   inputs: InvokeSetupInteractiveInputs,
   runner: RunSetupFn = runSetup,
 ): () => Promise<CommandResult> {
-  return () => runner(buildSetupDeps(inputs), {} as SetupCommandOptions);
+  return () => {
+    const installSource = inferInstallSource(inputs.programPath, inputs.platform);
+    const options: SetupCommandOptions = { installSource };
+    return runner(buildSetupDeps(inputs), options);
+  };
 }

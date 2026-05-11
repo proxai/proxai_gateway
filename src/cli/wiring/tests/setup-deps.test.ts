@@ -166,3 +166,41 @@ test('invokeSetupInteractive: returns a function that, when invoked, calls the p
   expect(runnerInvoked).toBe(true);
   expect(result.exitCode).toBe(0);
 });
+
+test('invokeSetupInteractive: forwards inferred installSource to runSetup options', async () => {
+  let capturedInstallSource: unknown = null;
+  const fn = invokeSetupInteractive(
+    {
+      platform: 'darwin',
+      programPath: '/Users/x/.bun/install/global/node_modules/@proxai/gateway/dist/main',
+      serviceUnitPath: null,
+      serviceManager: null,
+      env: {},
+    },
+    async (_deps, opts) => {
+      capturedInstallSource = opts.installSource;
+      return { exitCode: 0 };
+    },
+  );
+  await fn();
+  expect(capturedInstallSource).toBe('bun');
+});
+
+test('invokeSetupInteractive: falls back to github_release when no pattern matches programPath', async () => {
+  let captured: unknown = null;
+  const fn = invokeSetupInteractive(
+    {
+      platform: 'linux',
+      programPath: '/usr/local/bin/proxai-gateway',
+      serviceUnitPath: null,
+      serviceManager: null,
+      env: {},
+    },
+    async (_deps, opts) => {
+      captured = opts.installSource;
+      return { exitCode: 0 };
+    },
+  );
+  await fn();
+  expect(captured).toBe('github_release');
+});
