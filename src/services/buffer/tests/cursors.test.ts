@@ -6,6 +6,7 @@ import {
   hasAnyCursor,
   openInMemoryBufferDb,
   setCursor,
+  setCursorFromRegression,
   type CursorKey,
 } from 'services/buffer';
 
@@ -158,6 +159,54 @@ test('hasAnyCursor returns true once a cursor exists for the app', () => {
 
   expect(hasAnyCursor(db, 'cursor')).toBe(false);
   expect(hasAnyCursor(db, 'codex')).toBe(false);
+});
+
+test('setCursorFromRegression preserves vacuum-detection baselines on the prior cursor row', () => {
+  const key = {
+    sourceApp: 'cursor' as const,
+    sourcePathHash: 'a'.repeat(64),
+    sourcePath: '/path',
+    sourceInode: null,
+    watermarkTable: null,
+  };
+  setCursor(db, {
+    ...key,
+    watermarkEnd: 100,
+    lastSeenSizeBytes: 9_999_999,
+    lastSeenPageCount: 4321,
+  });
+  setCursorFromRegression(db, { ...key }, 50);
+  const after = getCursor(db, {
+    sourceApp: 'cursor',
+    sourcePathHash: 'a'.repeat(64),
+    sourceInode: null,
+    watermarkTable: null,
+  });
+  expect(after?.watermarkEnd).toBe(50);
+  expect(after?.lastSeenSizeBytes).toBe(9_999_999);
+  expect(after?.lastSeenPageCount).toBe(4321);
+});
+
+test('setCursorFromRegression leaves baselines null when no prior cursor exists', () => {
+  setCursorFromRegression(
+    db,
+    {
+      sourceApp: 'cursor',
+      sourcePath: '/path-new',
+      sourcePathHash: 'b'.repeat(64),
+      sourceInode: null,
+      watermarkTable: null,
+    },
+    1,
+  );
+  const after = getCursor(db, {
+    sourceApp: 'cursor',
+    sourcePathHash: 'b'.repeat(64),
+    sourceInode: null,
+    watermarkTable: null,
+  });
+  expect(after?.lastSeenSizeBytes).toBeNull();
+  expect(after?.lastSeenPageCount).toBeNull();
 });
 
 test('hasAnyCursor scopes to source app, not to a specific path', () => {

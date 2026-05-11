@@ -129,12 +129,21 @@ export function setCursorFromRegression(
   },
   watermarkEnd: number,
 ): void {
+  const sourceApp = batch.sourceApp as SourceApp;
+  const prior = getCursor(db, {
+    sourceApp,
+    sourcePathHash: batch.sourcePathHash,
+    sourceInode: batch.sourceInode,
+    watermarkTable: batch.watermarkTable,
+  });
   setCursor(db, {
-    sourceApp: batch.sourceApp as 'claude-code' | 'cursor' | 'codex' | 'gemini-cli',
+    sourceApp,
     sourcePathHash: batch.sourcePathHash,
     sourcePath: batch.sourcePath,
     sourceInode: batch.sourceInode,
     watermarkTable: batch.watermarkTable,
     watermarkEnd,
+    lastSeenSizeBytes: prior?.lastSeenSizeBytes ?? null,
+    lastSeenPageCount: prior?.lastSeenPageCount ?? null,
   });
 }
