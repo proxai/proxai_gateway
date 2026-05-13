@@ -114,3 +114,119 @@ test('omitting options means no cap (defaults preserved)', async () => {
   const found = await discoverClaudeCodeFiles(dir);
   expect(found).toHaveLength(1);
 });
+
+test('discovers sub-agent jsonl at <project>/<session>/subagents/agent-<hex>.jsonl', async () => {
+  const projectDir = join(dir, 'project-a');
+  const subagentsDir = join(projectDir, 'abc-session', 'subagents');
+  await mkdir(subagentsDir, { recursive: true });
+  const parentPath = join(projectDir, 'abc-session.jsonl');
+  const subagentPath = join(subagentsDir, 'agent-ab1234.jsonl');
+  await writeFile(parentPath, '{"a":1}\n');
+  await writeFile(subagentPath, '{"agentId":"ab1234"}\n');
+
+  const found = await discoverClaudeCodeFiles(dir);
+  const paths = found.map((f) => f.sourcePath).toSorted();
+  expect(paths).toEqual([parentPath, subagentPath].toSorted());
+});
+
+test('discovers multiple sub-agents under a single session directory', async () => {
+  const subagentsDir = join(dir, 'project-a', 'abc-session', 'subagents');
+  await mkdir(subagentsDir, { recursive: true });
+  await writeFile(join(subagentsDir, 'agent-aaaaaaaa.jsonl'), '{"agentId":"aaaaaaaa"}\n');
+  await writeFile(join(subagentsDir, 'agent-bbbbbbbb.jsonl'), '{"agentId":"bbbbbbbb"}\n');
+  await writeFile(join(subagentsDir, 'agent-cccccccc.jsonl'), '{"agentId":"cccccccc"}\n');
+
+  const found = await discoverClaudeCodeFiles(dir);
+  expect(found).toHaveLength(3);
+});
+
+test('rejects deeper-nested jsonl files outside the two pinned-depth shapes', async () => {
+  // Defensive: a hypothetical future Claude Code layout that buried JSONL even
+  // deeper must not be silently picked up — the pinned-depth design is meant
+  // to surface as zero new matches, not as a slurp of unexpected files.
+  await mkdir(join(dir, 'project-a', 'x', 'y', 'z'), { recursive: true });
+  await writeFile(join(dir, 'project-a', 'x', 'y', 'z', 'foo.jsonl'), '{"x":1}\n');
+
+  // And a sibling jsonl directly under subagents/subdir/ — one level deeper
+  // than the supported sub-agent shape.
+  const tooDeep = join(dir, 'project-b', 'sess', 'subagents', 'extra');
+  await mkdir(tooDeep, { recursive: true });
+  await writeFile(join(tooDeep, 'foo.jsonl'), '{"x":1}\n');
+
+  const found = await discoverClaudeCodeFiles(dir);
+  expect(found).toEqual([]);
+});
+
+test('skips files at sub-agent path level (<project>/<session>/foo.jsonl) — not the supported shape', async () => {
+  // <project>/<session>/foo.jsonl is depth-3 but not under subagents/ — it
+  // must not be picked up. Only <project>/<session>/subagents/*.jsonl counts.
+  await mkdir(join(dir, 'project-a', 'session-dir'), { recursive: true });
+  await writeFile(join(dir, 'project-a', 'session-dir', 'stray.jsonl'), '{"x":1}\n');
+
+  const found = await discoverClaudeCodeFiles(dir);
+  expect(found).toEqual([]);
+});
+
+test('combines parent and sub-agent files in a single result list', async () => {
+  const projectDir = join(dir, 'project-a');
+  await mkdir(projectDir, { recursive: true });
+  await writeFile(join(projectDir, 'session-1.jsonl'), '{"a":1}\n');
+  await writeFile(join(projectDir, 'session-2.jsonl'), '{"b":2}\n');
+
+  const sub1 = join(projectDir, 'session-1', 'subagents');
+  const sub2 = join(projectDir, 'session-2', 'subagents');
+  await mkdir(sub1, { recursive: true });
+  await mkdir(sub2, { recursive: true });
+  await writeFile(join(sub1, 'agent-1111.jsonl'), '{"agentId":"1111"}\n');
+  await writeFile(join(sub2, 'agent-2222.jsonl'), '{"agentId":"2222"}\n');
+  await writeFile(join(sub2, 'agent-3333.jsonl'), '{"agentId":"3333"}\n');
+
+  const found = await discoverClaudeCodeFiles(dir);
+  expect(found).toHaveLength(5);
+
+  const uniquePaths = new Set(found.map((f) => f.sourcePath));
+  expect(uniquePaths.size).toBe(5);
+});
+
+test('applies minimumMtime to sub-agent files as well as parents', async () => {
+  const projectDir = join(dir, 'project-a');
+  await mkdir(projectDir, { recursive: true });
+  const oldParent = join(projectDir, 'old-session.jsonl');
+  const newParent = join(projectDir, 'new-session.jsonl');
+  await writeFile(oldParent, '{"a":1}\n');
+  await writeFile(newParent, '{"b":2}\n');
+
+  const subagentsDir = join(projectDir, 'sess', 'subagents');
+  await mkdir(subagentsDir, { recursive: true });
+  const oldSubagent = join(subagentsDir, 'agent-old.jsonl');
+  const newSubagent = join(subagentsDir, 'agent-new.jsonl');
+  await writeFile(oldSubagent, '{"agentId":"old"}\n');
+  await writeFile(newSubagent, '{"agentId":"new"}\n');
+
+  const ancient = new Date('2024-01-01T00:00:00Z');
+  const recent = new Date();
+  await utimes(oldParent, ancient, ancient);
+  await utimes(oldSubagent, ancient, ancient);
+  await utimes(newParent, recent, recent);
+  await utimes(newSubagent, recent, recent);
+
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const found = await discoverClaudeCodeFiles(dir, { minimumMtime: cutoff });
+  const paths = found.map((f) => f.sourcePath).toSorted();
+  expect(paths).toEqual([newParent, newSubagent].toSorted());
+});
+
+test('dedupes when the same file path is yielded by both globs (defensive)', async () => {
+  // The two pinned globs cannot match the same file today, but the discover
+  // code dedupes by absolute path defensively. To exercise the dedupe branch
+  // without depending on a hypothetical glob overlap, seed a parent file and
+  // a sub-agent file and assert that every returned source_path is unique.
+  const projectDir = join(dir, 'project-a');
+  await mkdir(join(projectDir, 'sess', 'subagents'), { recursive: true });
+  await writeFile(join(projectDir, 'session-1.jsonl'), '{"a":1}\n');
+  await writeFile(join(projectDir, 'sess', 'subagents', 'agent-ff.jsonl'), '{"agentId":"ff"}\n');
+
+  const found = await discoverClaudeCodeFiles(dir);
+  const paths = found.map((f) => f.sourcePath);
+  expect(new Set(paths).size).toBe(paths.length);
+});

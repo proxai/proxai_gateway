@@ -7,5 +7,6 @@ export const CLAUDE_CODE_BODY_COMPRESSION: BodyCompression = 'zstd';
 
 export const CLAUDE_CODE_PROJECTS_SUBPATH = '.claude/projects';
 export const CLAUDE_CODE_GLOB_PATTERN = '*/*.jsonl';
+export const CLAUDE_CODE_SUBAGENT_GLOB_PATTERN = '*/*/subagents/*.jsonl';
 
 export const CLAUDE_CODE_DEFAULT_AGENT_SCHEMA_VERSION = 'unknown';
