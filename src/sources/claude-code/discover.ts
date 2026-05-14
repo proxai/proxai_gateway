@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { statFile } from 'core/io/fs';
 import { sha256Hex } from 'core/utils';
+import { SUB_AGENT_CAPTURE_BY_SOURCE } from 'services/config/sub-agent-flags';
 import {
   CLAUDE_CODE_GLOB_PATTERN,
   CLAUDE_CODE_PROJECTS_SUBPATH,
@@ -16,6 +17,7 @@ export function defaultClaudeCodeProjectsRoot(): string {
 
 export interface DiscoverClaudeCodeOptions {
   minimumMtime?: Date | null;
+  captureSubAgents?: boolean;
 }
 
 export async function discoverClaudeCodeFiles(
@@ -24,19 +26,16 @@ export async function discoverClaudeCodeFiles(
 ): Promise<DiscoveredClaudeCodeFile[]> {
   const found: DiscoveredClaudeCodeFile[] = [];
   const minMtimeMs = options.minimumMtime?.getTime() ?? null;
+  const captureSubAgents = options.captureSubAgents ?? SUB_AGENT_CAPTURE_BY_SOURCE['claude-code'];
 
   const baseStat = await statFile(baseDir);
   if (!baseStat.exists) return found;
 
-  // Claude Code transcripts live at two pinned depths under the projects root:
-  //   <project>/<sessionId>.jsonl                          ← parent session
-  //   <project>/<sessionId>/subagents/agent-<hex>.jsonl    ← sub-agent session
-  // Pinned-depth globs (rather than a recursive `**`) match the known on-disk
-  // shape exactly; a future Claude Code layout change surfaces as zero new
-  // matches rather than silently slurping unexpected files.
   const seen = new Set<string>();
   await scanGlobInto(found, seen, baseDir, CLAUDE_CODE_GLOB_PATTERN, minMtimeMs);
-  await scanGlobInto(found, seen, baseDir, CLAUDE_CODE_SUBAGENT_GLOB_PATTERN, minMtimeMs);
+  if (captureSubAgents) {
+    await scanGlobInto(found, seen, baseDir, CLAUDE_CODE_SUBAGENT_GLOB_PATTERN, minMtimeMs);
+  }
   return found;
 }
 

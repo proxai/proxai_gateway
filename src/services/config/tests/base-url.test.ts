@@ -10,29 +10,29 @@ test('uses localhost:3001 when NODE_ENV=development', () => {
   expect(resolveNestBaseUrl({ NODE_ENV: 'development' })).toBe('http://localhost:3001');
 });
 
-test('PROXAI_NEST_URL override beats both defaults', () => {
-  expect(resolveNestBaseUrl({ PROXAI_NEST_URL: 'http://staging.example.com' })).toBe(
+test('PROXAI_GATEWAY_NEST_ENDPOINT override beats both defaults', () => {
+  expect(resolveNestBaseUrl({ PROXAI_GATEWAY_NEST_ENDPOINT: 'http://staging.example.com' })).toBe(
     'http://staging.example.com',
   );
   expect(
     resolveNestBaseUrl({
       NODE_ENV: 'development',
-      PROXAI_NEST_URL: 'http://staging.example.com',
+      PROXAI_GATEWAY_NEST_ENDPOINT: 'http://staging.example.com',
     }),
   ).toBe('http://staging.example.com');
 });
 
 test('strips trailing slash and surrounding whitespace from override', () => {
-  expect(resolveNestBaseUrl({ PROXAI_NEST_URL: '  http://x.example.com/  ' })).toBe(
+  expect(resolveNestBaseUrl({ PROXAI_GATEWAY_NEST_ENDPOINT: '  http://x.example.com/  ' })).toBe(
     'http://x.example.com',
   );
 });
 
 test('empty or whitespace-only override falls back to production', () => {
-  expect(resolveNestBaseUrl({ PROXAI_NEST_URL: '' })).toBe(
+  expect(resolveNestBaseUrl({ PROXAI_GATEWAY_NEST_ENDPOINT: '' })).toBe(
     'https://proxainest-production.up.railway.app',
   );
-  expect(resolveNestBaseUrl({ PROXAI_NEST_URL: '   ' })).toBe(
+  expect(resolveNestBaseUrl({ PROXAI_GATEWAY_NEST_ENDPOINT: '   ' })).toBe(
     'https://proxainest-production.up.railway.app',
   );
 });

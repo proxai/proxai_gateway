@@ -25,7 +25,7 @@ export interface DevCommandDeps {
 
 export async function runDev(deps: DevCommandDeps): Promise<CommandResult> {
   const env = deps.env ?? process.env;
-  env['PROXAI_NEST_URL'] = DEV_NEST_URL;
+  env['PROXAI_GATEWAY_NEST_ENDPOINT'] = DEV_NEST_URL;
 
   const cfg = await deps.loadConfig();
   cfg.backend.ingestUrl = `${DEV_NEST_URL}/v1/raw_records`;

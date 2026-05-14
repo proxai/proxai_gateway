@@ -4,7 +4,7 @@ const PROD_URL = 'https://proxainest-production.up.railway.app';
 const DEV_URL = 'http://localhost:3001';
 
 export function resolveNestBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
-  const override = env['PROXAI_NEST_URL']?.trim();
+  const override = env['PROXAI_GATEWAY_NEST_ENDPOINT']?.trim();
   if (override !== undefined && override.length > 0) {
     return override.replace(/\/$/, '');
   }

@@ -54,22 +54,22 @@ function fakeLogger(): Logger {
   return log as unknown as Logger;
 }
 
-const PRIOR_ENV = process.env['PROXAI_NEST_URL'];
+const PRIOR_ENV = process.env['PROXAI_GATEWAY_NEST_ENDPOINT'];
 
 beforeEach(() => {
-  delete process.env['PROXAI_NEST_URL'];
+  delete process.env['PROXAI_GATEWAY_NEST_ENDPOINT'];
 });
 
 afterEach(() => {
   if (PRIOR_ENV !== undefined) {
-    process.env['PROXAI_NEST_URL'] = PRIOR_ENV;
+    process.env['PROXAI_GATEWAY_NEST_ENDPOINT'] = PRIOR_ENV;
   } else {
-    delete process.env['PROXAI_NEST_URL'];
+    delete process.env['PROXAI_GATEWAY_NEST_ENDPOINT'];
   }
 });
 
-test('runDev forces PROXAI_NEST_URL to localhost:3001 even when previously set to a prod url', async () => {
-  process.env['PROXAI_NEST_URL'] = 'https://production.example.com';
+test('runDev forces PROXAI_GATEWAY_NEST_ENDPOINT to localhost:3001 even when previously set to a prod url', async () => {
+  process.env['PROXAI_GATEWAY_NEST_ENDPOINT'] = 'https://production.example.com';
   let captured: RunCommandDeps | null = null;
   const cfg = makeConfig();
   const out = captureOutput();
@@ -91,7 +91,7 @@ test('runDev forces PROXAI_NEST_URL to localhost:3001 even when previously set t
     createLogger: async (_options: LoggerFactoryOptions) => fakeLogger(),
   });
   expect(result.exitCode).toBe(0);
-  expect(process.env['PROXAI_NEST_URL']).toBe(DEV_NEST_URL);
+  expect(process.env['PROXAI_GATEWAY_NEST_ENDPOINT']).toBe(DEV_NEST_URL);
   expect(captured).not.toBeNull();
   const c = captured as unknown as RunCommandDeps;
   expect(c.devMode).toBe(true);
@@ -126,7 +126,7 @@ test('runDev forces nest url even when env var was unset', async () => {
     },
     createLogger: async () => fakeLogger(),
   });
-  expect(process.env['PROXAI_NEST_URL']).toBe(DEV_NEST_URL);
+  expect(process.env['PROXAI_GATEWAY_NEST_ENDPOINT']).toBe(DEV_NEST_URL);
   expect(captured).not.toBeNull();
 });
 
@@ -212,5 +212,5 @@ test('runDev applies env override to provided env object instead of process.env 
     createLogger: async () => fakeLogger(),
     env,
   });
-  expect(env['PROXAI_NEST_URL']).toBe(DEV_NEST_URL);
+  expect(env['PROXAI_GATEWAY_NEST_ENDPOINT']).toBe(DEV_NEST_URL);
 });

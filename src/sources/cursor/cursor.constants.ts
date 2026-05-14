@@ -15,5 +15,7 @@ export const CURSOR_DISK_KV_TABLE = 'cursorDiskKV';
 
 export const CURSOR_KEY_PREFIX_COMPOSER = 'composerData:';
 export const CURSOR_KEY_PREFIX_BUBBLE = 'bubbleId:';
+export const CURSOR_KEY_PREFIX_AGENT_KV_BLOB = 'agentKv:blob:';
+export const CURSOR_KEY_PREFIX_COMPOSER_CONTENT = 'composer.content.';
 
 export const CURSOR_DEFAULT_AGENT_SCHEMA_VERSION = 'unknown';

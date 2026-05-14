@@ -24,7 +24,7 @@ import {
   BODY_TARGET_COMPRESSED_BYTES,
   BODY_TARGET_DECOMPRESSED_BYTES,
 } from 'services/contract';
-import { collectCursorFile } from 'sources/cursor';
+import { buildCursorSelectRowsSql, collectCursorFile, selectCursorSql } from 'sources/cursor';
 import type { CursorCollectorContext, DiscoveredCursorFile } from 'sources/cursor';
 
 let dir: string;
@@ -589,3 +589,32 @@ test('every cursor batch satisfies BOTH compressed AND decompressed caps', async
     deleteBatch(buffer, batch.captureId);
   }
 }, 60_000);
+
+test('buildCursorSelectRowsSql with captureSubAgents=false includes only composer + bubble prefixes', () => {
+  const sql = buildCursorSelectRowsSql(false);
+  expect(sql).toContain("key LIKE 'composerData:%'");
+  expect(sql).toContain("key LIKE 'bubbleId:%'");
+  expect(sql).not.toContain('agentKv:blob:');
+  expect(sql).not.toContain('composer.content.');
+});
+
+test('buildCursorSelectRowsSql with captureSubAgents=true includes all four prefixes', () => {
+  const sql = buildCursorSelectRowsSql(true);
+  expect(sql).toContain("key LIKE 'composerData:%'");
+  expect(sql).toContain("key LIKE 'bubbleId:%'");
+  expect(sql).toContain("key LIKE 'agentKv:blob:%'");
+  expect(sql).toContain("key LIKE 'composer.content.%'");
+});
+
+test('selectCursorSql(false) returns the base SQL string', () => {
+  expect(selectCursorSql(false)).toBe(buildCursorSelectRowsSql(false));
+});
+
+test('selectCursorSql(true) returns the with-sub-agents SQL string', () => {
+  expect(selectCursorSql(true)).toBe(buildCursorSelectRowsSql(true));
+});
+
+test('selectCursorSql(false) and selectCursorSql(true) differ in the OR clauses', () => {
+  expect(selectCursorSql(true)).toContain("key LIKE 'agentKv:blob:%'");
+  expect(selectCursorSql(false)).not.toContain("key LIKE 'agentKv:blob:%'");
+});

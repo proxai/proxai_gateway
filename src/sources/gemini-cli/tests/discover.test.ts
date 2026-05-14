@@ -6,6 +6,10 @@ import { join } from 'node:path';
 
 import { discoverGeminiCliFiles } from 'sources/gemini-cli';
 
+function sortedPaths(xs: Awaited<ReturnType<typeof discoverGeminiCliFiles>>): string[] {
+  return xs.map((f) => f.sourcePath).toSorted();
+}
+
 let dir: string;
 
 beforeEach(async () => {
@@ -123,4 +127,37 @@ test('omitting options means no cap (defaults preserved)', async () => {
 
   const found = await discoverGeminiCliFiles(dir);
   expect(found).toHaveLength(1);
+});
+
+test('discovery result is identical regardless of PROXAI_GATEWAY_CAPTURE_SUB_AGENTS env (no-op flag)', async () => {
+  await mkdir(join(dir, 'project-a', 'chats'), { recursive: true });
+  await writeFile(join(dir, 'project-a', 'chats', 'session-2026-01-01-aaa.jsonl'), '{"a":1}\n');
+
+  const originalGlobal = process.env.PROXAI_GATEWAY_CAPTURE_SUB_AGENTS;
+  const originalSource = process.env.PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_GEMINI_CLI;
+  try {
+    delete process.env.PROXAI_GATEWAY_CAPTURE_SUB_AGENTS;
+    delete process.env.PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_GEMINI_CLI;
+    const offRun = await discoverGeminiCliFiles(dir);
+
+    process.env.PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_GEMINI_CLI = '1';
+    const onRun = await discoverGeminiCliFiles(dir);
+
+    process.env.PROXAI_GATEWAY_CAPTURE_SUB_AGENTS = '1';
+    const onGlobalRun = await discoverGeminiCliFiles(dir);
+
+    expect(sortedPaths(offRun)).toEqual(sortedPaths(onRun));
+    expect(sortedPaths(offRun)).toEqual(sortedPaths(onGlobalRun));
+  } finally {
+    if (originalGlobal === undefined) {
+      delete process.env.PROXAI_GATEWAY_CAPTURE_SUB_AGENTS;
+    } else {
+      process.env.PROXAI_GATEWAY_CAPTURE_SUB_AGENTS = originalGlobal;
+    }
+    if (originalSource === undefined) {
+      delete process.env.PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_GEMINI_CLI;
+    } else {
+      process.env.PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_GEMINI_CLI = originalSource;
+    }
+  }
 });

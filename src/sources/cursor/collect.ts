@@ -2,10 +2,13 @@ import { statFile } from 'core/io/fs';
 import { maxRowid, openReadOnly, pageCount, snapshotSqlite, tableExists } from 'core/io/sqlite';
 import { nextGenerationSuffix, sha256Hex } from 'core/utils';
 import { detectVacuum, getCursor, getCursorWithFallback, setCursor } from 'services/buffer';
+import { SUB_AGENT_CAPTURE_BY_SOURCE } from 'services/config/sub-agent-flags';
 import {
   CURSOR_DISK_KV_TABLE,
+  CURSOR_KEY_PREFIX_AGENT_KV_BLOB,
   CURSOR_KEY_PREFIX_BUBBLE,
   CURSOR_KEY_PREFIX_COMPOSER,
+  CURSOR_KEY_PREFIX_COMPOSER_CONTENT,
   CURSOR_SOURCE_APP,
 } from 'sources/cursor/cursor.constants.ts';
 import type {
@@ -17,13 +20,31 @@ import type {
 import { extractAgentSchemaVersion } from 'sources/cursor/extract-version.ts';
 import { processRows } from 'sources/cursor/process-rows.ts';
 
-const SELECT_ROWS_SQL = `
+export function buildCursorSelectRowsSql(captureSubAgents: boolean): string {
+  const prefixes = captureSubAgents
+    ? [
+        CURSOR_KEY_PREFIX_COMPOSER,
+        CURSOR_KEY_PREFIX_BUBBLE,
+        CURSOR_KEY_PREFIX_AGENT_KV_BLOB,
+        CURSOR_KEY_PREFIX_COMPOSER_CONTENT,
+      ]
+    : [CURSOR_KEY_PREFIX_COMPOSER, CURSOR_KEY_PREFIX_BUBBLE];
+  const clauses = prefixes.map((p) => `key LIKE '${p}%'`).join(' OR ');
+  return `
   SELECT rowid, key, value
   FROM ${CURSOR_DISK_KV_TABLE}
   WHERE rowid > ?
-    AND (key LIKE '${CURSOR_KEY_PREFIX_COMPOSER}%' OR key LIKE '${CURSOR_KEY_PREFIX_BUBBLE}%')
+    AND (${clauses})
   ORDER BY rowid ASC
 `;
+}
+
+const SELECT_ROWS_SQL_BASE = buildCursorSelectRowsSql(false);
+const SELECT_ROWS_SQL_WITH_SUB_AGENTS = buildCursorSelectRowsSql(true);
+
+export function selectCursorSql(captureSubAgents: boolean): string {
+  return captureSubAgents ? SELECT_ROWS_SQL_WITH_SUB_AGENTS : SELECT_ROWS_SQL_BASE;
+}
 
 interface KvRow {
   rowid: number;
@@ -34,6 +55,7 @@ interface KvRow {
 export async function collectCursorFile(
   file: DiscoveredCursorFile,
   context: CursorCollectorContext,
+  captureSubAgents: boolean = SUB_AGENT_CAPTURE_BY_SOURCE.cursor,
 ): Promise<CursorCollectorResult> {
   const result: CursorCollectorResult = {
     capturedBatches: 0,
@@ -94,7 +116,7 @@ export async function collectCursorFile(
       }
 
       const lastMaxRowid = (priorCursor?.watermarkEnd ?? 1) - 1;
-      const rows = db.query<KvRow, [number]>(SELECT_ROWS_SQL).all(lastMaxRowid);
+      const rows = db.query<KvRow, [number]>(selectCursorSql(captureSubAgents)).all(lastMaxRowid);
 
       if (rows.length === 0) {
         if (priorCursor !== null) {
