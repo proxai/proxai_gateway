@@ -37,4 +37,4 @@ jobs:
       - name: Format check
         run: bun run format:check
       - name: Tests with coverage
-        run: bun run test:coverage
+        run: bun run test:cov
