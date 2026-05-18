@@ -88,7 +88,23 @@ test('uses injected reader for the head bytes', async () => {
     return `{"type":"session_meta","payload":{"cli_version":"9.9.9"}}\n`;
   };
   expect(await extractRolloutCliVersion('/fake/path', fakeReader)).toBe('9.9.9');
-  expect(calls).toEqual([{ path: '/fake/path', length: 4096 }]);
+  expect(calls).toEqual([{ path: '/fake/path', length: 1_048_576 }]);
+});
+
+test('extracts cli_version from a ~22 KB session_meta first line', async () => {
+  const padding = 'x'.repeat(22 * 1024);
+  const path = await writeFirstLine(
+    `{"type":"session_meta","payload":{"cli_version":"0.128.0-alpha.1","prompt":"${padding}"}}\n{"type":"event"}\n`,
+  );
+  expect(await extractRolloutCliVersion(path)).toBe('0.128.0-alpha.1');
+});
+
+test('returns null when first line exceeds the 1 MB head budget', async () => {
+  const padding = 'x'.repeat(1_100_000); // 1.1 MB > HEAD_BYTES
+  const path = await writeFirstLine(
+    `{"type":"session_meta","payload":{"cli_version":"1.0.0","blob":"${padding}"}}\n`,
+  );
+  expect(await extractRolloutCliVersion(path)).toBeNull();
 });
 
 test('returns null when payload is null', async () => {
