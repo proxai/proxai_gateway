@@ -1,5 +1,6 @@
 const VERSION_REGEX = /^[\w.+:/-]{1,64}$/;
-const HEAD_BYTES = 4096;
+
+const HEAD_BYTES = 1_048_576;
 
 export type RolloutVersionReader = (filePath: string) => Promise<string | null>;
 
