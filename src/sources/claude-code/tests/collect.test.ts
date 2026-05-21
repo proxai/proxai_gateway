@@ -22,7 +22,7 @@ import {
   BODY_TARGET_COMPRESSED_BYTES,
   BODY_TARGET_DECOMPRESSED_BYTES,
 } from 'services/contract';
-import { collectClaudeCodeFile } from 'sources/claude-code';
+import { collectClaudeCodeFile, isDialogueRecord } from 'sources/claude-code';
 import type { ClaudeCodeCollectorContext, DiscoveredClaudeCodeFile } from 'sources/claude-code';
 
 let dir: string;
@@ -409,4 +409,86 @@ test('resets watermark when source_inode changes (file rotated/replaced)', async
     '{"type":"user","message":{"role":"user","content":"a"}}\n'.length,
   );
   expect(cursorNew?.watermarkEnd).toBe(newContent.length);
+});
+
+test('isDialogueRecord extreme inputs and edge cases', () => {
+  expect(isDialogueRecord(null)).toBe(false);
+  expect(isDialogueRecord(undefined)).toBe(false);
+  expect(isDialogueRecord({})).toBe(false);
+  expect(isDialogueRecord(123)).toBe(false);
+  expect(isDialogueRecord('string')).toBe(false);
+  expect(isDialogueRecord({ type: 'other' })).toBe(false);
+
+  expect(isDialogueRecord({ type: 'user' })).toBe(true);
+  expect(isDialogueRecord({ type: 'user', message: null })).toBe(true);
+  expect(isDialogueRecord({ type: 'user', message: {} })).toBe(true);
+  expect(isDialogueRecord({ type: 'user', message: { content: null } })).toBe(true);
+  expect(isDialogueRecord({ type: 'user', message: { content: 'hello' } })).toBe(true);
+  expect(isDialogueRecord({ type: 'user', message: { content: 123 } })).toBe(true);
+
+  expect(isDialogueRecord({ type: 'user', message: { content: { type: 'tool_result' } } })).toBe(
+    false,
+  );
+  expect(isDialogueRecord({ type: 'user', message: { content: [{ type: 'tool_result' }] } })).toBe(
+    false,
+  );
+  expect(
+    isDialogueRecord({
+      type: 'user',
+      message: { content: [null, undefined, { type: 'tool_result' }] },
+    }),
+  ).toBe(false);
+  expect(isDialogueRecord({ type: 'user', message: { content: [null, { type: 'text' }] } })).toBe(
+    true,
+  );
+
+  expect(isDialogueRecord({ type: 'user', content: { type: 'tool_result' } })).toBe(false);
+  expect(isDialogueRecord({ type: 'user', content: [{ type: 'tool_result' }] })).toBe(false);
+  expect(
+    isDialogueRecord({ type: 'user', content: [null, undefined, { type: 'tool_result' }] }),
+  ).toBe(false);
+  expect(isDialogueRecord({ type: 'user', content: [null, { type: 'text' }] })).toBe(true);
+
+  expect(isDialogueRecord({ type: 'assistant' })).toBe(true);
+  expect(isDialogueRecord({ type: 'assistant', message: null })).toBe(true);
+  expect(isDialogueRecord({ type: 'assistant', message: {} })).toBe(true);
+  expect(isDialogueRecord({ type: 'assistant', message: { content: null } })).toBe(true);
+  expect(isDialogueRecord({ type: 'assistant', message: { content: 'hello' } })).toBe(true);
+  expect(isDialogueRecord({ type: 'assistant', message: { content: 123 } })).toBe(true);
+
+  expect(isDialogueRecord({ type: 'assistant', message: { content: { type: 'tool_use' } } })).toBe(
+    false,
+  );
+  expect(
+    isDialogueRecord({ type: 'assistant', message: { content: [{ type: 'tool_use' }] } }),
+  ).toBe(false);
+  expect(
+    isDialogueRecord({
+      type: 'assistant',
+      message: { content: [null, undefined, { type: 'tool_use' }] },
+    }),
+  ).toBe(false);
+  expect(
+    isDialogueRecord({ type: 'assistant', message: { content: [null, { type: 'text' }] } }),
+  ).toBe(true);
+
+  expect(isDialogueRecord({ type: 'assistant', content: { type: 'tool_use' } })).toBe(false);
+  expect(isDialogueRecord({ type: 'assistant', content: [{ type: 'tool_use' }] })).toBe(false);
+  expect(
+    isDialogueRecord({ type: 'assistant', content: [null, undefined, { type: 'tool_use' }] }),
+  ).toBe(false);
+  expect(isDialogueRecord({ type: 'assistant', content: [null, { type: 'text' }] })).toBe(true);
+
+  expect(
+    isDialogueRecord({ type: 'user', message: { content: [[{ type: 'tool_result' }]] } }),
+  ).toBe(true);
+  expect(
+    isDialogueRecord({ type: 'user', message: { content: Array(10000).fill({ type: 'text' }) } }),
+  ).toBe(true);
+  expect(
+    isDialogueRecord({
+      type: 'user',
+      message: { content: [...Array(10000).fill({ type: 'text' }), { type: 'tool_result' }] },
+    }),
+  ).toBe(false);
 });

@@ -16,7 +16,11 @@ import {
   defaultCodexHome,
 } from 'sources/codex';
 import { discoverCursorFiles, defaultCursorUserRoot } from 'sources/cursor';
-import { discoverGeminiCliFiles, defaultGeminiCliTmpRoot } from 'sources/gemini-cli';
+import {
+  discoverGeminiCliFiles,
+  defaultGeminiCliTmpRoot,
+  isGeminiCliDialogueRecord,
+} from 'sources/gemini-cli';
 
 declare const self: any;
 
@@ -73,7 +77,7 @@ async function countLinesAndOldestDate(
 
 async function analyzeJsonlLogFile(
   filePath: string,
-  isClaudeCode: boolean,
+  sourceApp: 'claude-code' | 'gemini-cli',
 ): Promise<{
   totalLines: number;
   oldestDate: string | null;
@@ -103,14 +107,10 @@ async function analyzeJsonlLogFile(
           }
         }
         let match = false;
-        if (isClaudeCode) {
+        if (sourceApp === 'claude-code') {
           match = isDialogueRecord(parsed);
-        } else {
-          if (parsed && typeof parsed === 'object') {
-            if (parsed.type === 'user' || parsed.type === 'assistant') {
-              match = true;
-            }
-          }
+        } else if (sourceApp === 'gemini-cli') {
+          match = isGeminiCliDialogueRecord(parsed);
         }
         if (match) {
           telemetryRecordCount++;
@@ -172,7 +172,7 @@ export async function handleInspect(
         oldestDate,
         telemetryRecordCount: telCount,
         telemetryRawBytes: telBytes,
-      } = await analyzeJsonlLogFile(f.sourcePath, true);
+      } = await analyzeJsonlLogFile(f.sourcePath, 'claude-code');
       recordCount += totalLines;
       updateOldest(oldestDate, f.lastModifiedMs);
 
@@ -235,7 +235,7 @@ export async function handleInspect(
         oldestDate,
         telemetryRecordCount: telCount,
         telemetryRawBytes: telBytes,
-      } = await analyzeJsonlLogFile(f.sourcePath, false);
+      } = await analyzeJsonlLogFile(f.sourcePath, 'gemini-cli');
       const adjustedCount = totalLines > 1 ? totalLines - 1 : totalLines;
       recordCount += adjustedCount;
       updateOldest(oldestDate, f.lastModifiedMs);

@@ -21,7 +21,7 @@ import {
   BODY_TARGET_COMPRESSED_BYTES,
   BODY_TARGET_DECOMPRESSED_BYTES,
 } from 'services/contract';
-import { collectGeminiCliFile } from 'sources/gemini-cli';
+import { collectGeminiCliFile, isGeminiCliDialogueRecord } from 'sources/gemini-cli';
 import type { DiscoveredGeminiCliFile, GeminiCliCollectorContext } from 'sources/gemini-cli';
 
 let dir: string;
@@ -70,7 +70,7 @@ const EVENT_2 =
 const EVENT_3 =
   '{"id":"e3","timestamp":"2026-01-01T00:00:02Z","type":"tool_call","content":[{"text":"call"}]}';
 
-test('first poll: header on line 1, three events on lines 2-4 produce one batch with three event rows', async () => {
+test('first poll: header on line 1, three events on lines 2-4 produce one batch containing only dialogue rows', async () => {
   const file = await makeFile(`${HEADER_MAIN}\n${EVENT_1}\n${EVENT_2}\n${EVENT_3}\n`);
   const result = await collectGeminiCliFile(file, ctx(buffer));
   expect(result.errors).toEqual([]);
@@ -79,9 +79,9 @@ test('first poll: header on line 1, three events on lines 2-4 produce one batch 
   const batch = nextPendingBatch(buffer)!;
   const decoded = DECODER.decode(zstdDecompressSync(batch.body));
   const lines = decoded.split('\n').filter((l) => l.length > 0);
-  expect(lines).toHaveLength(3);
+  expect(lines).toHaveLength(2);
   expect(lines[0]).toContain('"id":"e1"');
-  expect(lines[2]).toContain('"id":"e3"');
+  expect(lines[1]).toContain('"id":"e2"');
   expect(totalPendingBytes(buffer)).toBeGreaterThan(0);
 });
 
@@ -272,7 +272,7 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
   const linesArr: string[] = [HEADER_MAIN];
   for (let i = 0; i < targetTotalLines; i++) {
     const noise = randomBytes(1500).toString('base64');
-    linesArr.push(JSON.stringify({ id: `e${i.toString()}`, noise }));
+    linesArr.push(JSON.stringify({ id: `e${i.toString()}`, type: 'user', noise }));
   }
   const content = `${linesArr.join('\n')}\n`;
   const file = await makeFile(content, 'big.jsonl');
@@ -308,7 +308,7 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
 
 test('surfaces OversizedDecompressedSliceError when single line exceeds BODY_MAX_DECOMPRESSED_BYTES', async () => {
   const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
-  const oneLine = JSON.stringify({ id: 'g', giant: giantPayload });
+  const oneLine = JSON.stringify({ id: 'g', type: 'user', giant: giantPayload });
   const file = await makeFile(`${HEADER_MAIN}\n${oneLine}\n`, 'oversized.jsonl');
 
   const result = await collectGeminiCliFile(file, ctx(buffer));
@@ -345,13 +345,14 @@ test('subsequent poll where appended bytes lack a newline is a no-op (partial tr
 test('every batch satisfies BOTH compressed AND decompressed caps', async () => {
   const lines: string[] = [HEADER_MAIN];
   for (let i = 0; i < 100; i++) {
-    lines.push(JSON.stringify({ id: `e${i.toString()}`, payload: 'x'.repeat(40) }));
+    lines.push(JSON.stringify({ id: `e${i.toString()}`, type: 'user', payload: 'x'.repeat(40) }));
   }
   const content = `${lines.join('\n')}\n`;
   const file = await makeFile(content, 'invariant.jsonl');
 
   const result = await collectGeminiCliFile(file, ctx(buffer));
   expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBeGreaterThan(0);
 
   for (let i = 0; i < 100; i++) {
     const batch = nextPendingBatch(buffer);
@@ -361,4 +362,32 @@ test('every batch satisfies BOTH compressed AND decompressed caps', async () => 
     expect(decoded.byteLength).toBeLessThanOrEqual(BODY_MAX_DECOMPRESSED_BYTES);
     deleteBatch(buffer, batch.captureId);
   }
+});
+
+test('isGeminiCliDialogueRecord validation', () => {
+  expect(isGeminiCliDialogueRecord(null)).toBe(false);
+  expect(isGeminiCliDialogueRecord(undefined)).toBe(false);
+  expect(isGeminiCliDialogueRecord(42)).toBe(false);
+  expect(isGeminiCliDialogueRecord('string')).toBe(false);
+  expect(isGeminiCliDialogueRecord({})).toBe(false);
+  expect(isGeminiCliDialogueRecord({ type: 'user' })).toBe(true);
+  expect(isGeminiCliDialogueRecord({ type: 'assistant' })).toBe(true);
+  expect(isGeminiCliDialogueRecord({ type: 'tool_call' })).toBe(false);
+  expect(isGeminiCliDialogueRecord({ type: 'tool_response' })).toBe(false);
+  expect(isGeminiCliDialogueRecord({ type: 'system' })).toBe(false);
+});
+
+test('first poll: file with only non-dialogue events advances cursor past them but emits zero batches', async () => {
+  const content = `${HEADER_MAIN}\n${EVENT_3}\n`;
+  const file = await makeFile(content);
+  const result = await collectGeminiCliFile(file, ctx(buffer));
+  expect(result.capturedBatches).toBe(0);
+  expect(countByStatus(buffer).pending).toBe(0);
+  const cursor = getCursor(buffer, {
+    sourceApp: 'gemini-cli',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.watermarkEnd).toBe(content.length);
 });

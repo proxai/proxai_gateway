@@ -49,6 +49,13 @@ function createSliceRedactor(): (slice: Uint8Array) => SliceRedaction {
   };
 }
 
+export function isGeminiCliDialogueRecord(parsed: any): boolean {
+  if (!parsed || typeof parsed !== 'object') {
+    return false;
+  }
+  return parsed.type === 'user' || parsed.type === 'assistant';
+}
+
 export async function collectGeminiCliFile(
   file: DiscoveredGeminiCliFile,
   context: GeminiCliCollectorContext,
@@ -109,8 +116,51 @@ export async function collectGeminiCliFile(
       return result;
     }
 
+    const rawText = DECODER.decode(range.bytes);
+    const lines = rawText.split('\n');
+
+    interface KeptLine {
+      text: string;
+      physicalEndOffset: number;
+    }
+    const kept: KeptLine[] = [];
+
+    let currentOffset = 0;
+    for (const line of lines) {
+      const lineByteLength = ENCODER.encode(line).byteLength;
+      const lineEndOffset = currentOffset + lineByteLength + 1;
+
+      if (line.trim().length > 0) {
+        try {
+          const parsed = JSON.parse(line);
+          if (isGeminiCliDialogueRecord(parsed)) {
+            kept.push({
+              text: line,
+              physicalEndOffset: lineEndOffset,
+            });
+          }
+        } catch {}
+      }
+      currentOffset = lineEndOffset;
+    }
+
+    const filteredText = kept.map((k) => k.text).join('\n') + '\n';
+    if (kept.length === 0) {
+      setCursor(context.buffer, {
+        sourceApp: GEMINI_CLI_SOURCE_APP,
+        sourcePathHash: file.sourcePathHash,
+        sourcePath: file.sourcePath,
+        sourceInode: file.inode,
+        watermarkTable: null,
+        watermarkEnd: range.endByte,
+      });
+      return result;
+    }
+
+    const filteredBytes = ENCODER.encode(filteredText);
+
     const redactSlice = createSliceRedactor();
-    const sourceSlices = splitJsonlAtBoundary(range.bytes, {
+    const sourceSlices = splitJsonlAtBoundary(filteredBytes, {
       targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
       maxDecompressedBytes: context.maxDecompressedBytes,
       measureCompressed: (slice) => redactSlice(slice).compressed.byteLength,
@@ -123,16 +173,29 @@ export async function collectGeminiCliFile(
           source_app: GEMINI_CLI_SOURCE_APP,
           source_path_hash: file.sourcePathHash,
           total_slices: sourceSlices.length,
-          uncompressed_bytes: range.bytes.byteLength,
+          uncompressed_bytes: filteredBytes.byteLength,
         },
         'oversized capture slice split into multiple batches',
       );
     }
 
-    let offset = 0;
+    let keptLineIndex = 0;
     for (let i = 0; i < sourceSlices.length; i++) {
       const slice = sourceSlices[i]!;
-      const sliceEndOffset = offset + slice.byteLength;
+
+      let sliceNewlines = 0;
+      for (let j = 0; j < slice.byteLength; j++) {
+        if (slice[j] === 10) {
+          sliceNewlines++;
+        }
+      }
+
+      const startOffset = keptLineIndex > 0 ? kept[keptLineIndex - 1]!.physicalEndOffset : 0;
+      let endOffset = kept[keptLineIndex + sliceNewlines - 1]!.physicalEndOffset;
+
+      if (i === sourceSlices.length - 1) {
+        endOffset = range.endByte - eventStart;
+      }
 
       const { redactedBytes: redactedSlice, compressed } = redactSlice(slice);
 
@@ -169,8 +232,8 @@ export async function collectGeminiCliFile(
         sourcePathHash: file.sourcePathHash,
         sourceInode: file.inode,
         watermarkKind: 'byte_range',
-        watermarkStart: eventStart + offset,
-        watermarkEnd: eventStart + sliceEndOffset,
+        watermarkStart: eventStart + startOffset,
+        watermarkEnd: eventStart + endOffset,
         watermarkTable: null,
         agentSchemaVersion,
         gatewayVersion: context.gatewayVersion,
@@ -181,7 +244,8 @@ export async function collectGeminiCliFile(
       };
 
       insertBatch(context.buffer, batch);
-      offset = sliceEndOffset;
+      keptLineIndex += sliceNewlines;
+      result.capturedBytes += compressed.byteLength;
     }
 
     setCursor(context.buffer, {
@@ -194,7 +258,6 @@ export async function collectGeminiCliFile(
     });
 
     result.capturedBatches = sourceSlices.length;
-    result.capturedBytes = range.bytes.byteLength;
   } catch (err) {
     result.errors.push({
       sourcePath: file.sourcePath,
