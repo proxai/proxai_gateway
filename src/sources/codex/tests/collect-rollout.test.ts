@@ -79,7 +79,8 @@ test('inserts a batch covering newly added complete lines', async () => {
 });
 
 test('advances cursor to the safe end byte', async () => {
-  const content = '{"a":1}\n{"b":2}\n';
+  const content =
+    '{"type":"session_meta","payload":{"a":1}}\n{"type":"session_meta","payload":{"b":2}}\n';
   const file = await makeFile(content);
   await collectCodexRollout(file, ctx(buffer), '0.1.0');
   const cursor = getCursor(buffer, {
@@ -92,7 +93,7 @@ test('advances cursor to the safe end byte', async () => {
 });
 
 test('does nothing on a second poll with no new bytes', async () => {
-  const file = await makeFile('{"a":1}\n');
+  const file = await makeFile('{"type":"session_meta","payload":{"a":1}}\n');
   await collectCodexRollout(file, ctx(buffer), '0.1.0');
   const second = await collectCodexRollout(file, ctx(buffer), '0.1.0');
   expect(second.capturedBatches).toBe(0);
@@ -100,7 +101,7 @@ test('does nothing on a second poll with no new bytes', async () => {
 });
 
 test('holds back trailing partial line and only advances to last newline', async () => {
-  const file = await makeFile('{"a":1}\n{"b":');
+  const file = await makeFile('{"type":"session_meta","payload":{"a":1}}\n{"b":');
   await collectCodexRollout(file, ctx(buffer), '0.1.0');
   const cursor = getCursor(buffer, {
     sourceApp: 'codex',
@@ -108,7 +109,7 @@ test('holds back trailing partial line and only advances to last newline', async
     sourceInode: file.inode,
     watermarkTable: null,
   });
-  expect(cursor?.watermarkEnd).toBe('{"a":1}\n'.length);
+  expect(cursor?.watermarkEnd).toBe('{"type":"session_meta","payload":{"a":1}}\n'.length);
 });
 
 test('does not insert a batch when no complete line is present', async () => {
@@ -120,7 +121,7 @@ test('does not insert a batch when no complete line is present', async () => {
 
 test('per-rollout cli_version from session_meta overrides the caller-provided default', async () => {
   const file = await makeFile(
-    '{"type":"session_meta","payload":{"cli_version":"0.200.0-rc.1"}}\nentry-2\n',
+    '{"type":"session_meta","payload":{"cli_version":"0.200.0-rc.1"}}\n{"type":"session_meta","payload":{"entry":2}}\n',
   );
   await collectCodexRollout(file, ctx(buffer), 'caller-default');
   const batch = nextPendingBatch(buffer);
@@ -128,7 +129,9 @@ test('per-rollout cli_version from session_meta overrides the caller-provided de
 });
 
 test('falls back to caller-provided default when reader returns null', async () => {
-  const file = await makeFile('{"type":"event","data":1}\nentry-2\n');
+  const file = await makeFile(
+    '{"type":"session_meta","payload":{"data":1}}\n{"type":"session_meta","payload":{"entry":2}}\n',
+  );
   const fakeCtx: CodexCollectorContext = {
     ...ctx(buffer),
     rolloutVersionReader: nullCliVersionReader,
@@ -139,7 +142,7 @@ test('falls back to caller-provided default when reader returns null', async () 
 });
 
 test('uses the provided agent_schema_version verbatim', async () => {
-  const file = await makeFile('{"a":1}\n');
+  const file = await makeFile('{"type":"session_meta","payload":{"a":1}}\n');
   await collectCodexRollout(file, ctx(buffer), '0.126.0-alpha.8');
   const batch = nextPendingBatch(buffer)!;
   expect(batch.agentSchemaVersion).toBe('0.126.0-alpha.8');
@@ -147,7 +150,7 @@ test('uses the provided agent_schema_version verbatim', async () => {
 
 test('redacts secrets from the body before storing', async () => {
   const file = await makeFile(
-    '{"type":"event_msg","payload":{"text":"export OPENAI_KEY=sk-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQrSt"}}\n',
+    '{"type":"event_msg","payload":{"type":"user_message","text":"export OPENAI_KEY=sk-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQrSt"}}\n',
   );
   await collectCodexRollout(file, ctx(buffer), '0.1.0');
   const batch = nextPendingBatch(buffer)!;
@@ -197,7 +200,7 @@ test('increments consecutive_errors on per-file collector failure', async () => 
 });
 
 test('resets consecutive_errors on success after prior failure', async () => {
-  const file = await makeFile('{"a":1}\n');
+  const file = await makeFile('{"type":"session_meta","payload":{"a":1}}\n');
   setCursor(buffer, {
     sourceApp: 'codex',
     sourcePathHash: file.sourcePathHash,
@@ -218,7 +221,7 @@ test('resets consecutive_errors on success after prior failure', async () => {
 });
 
 test('persists the wire-DTO fields needed by the uploader', async () => {
-  const file = await makeFile('{"a":1}\n');
+  const file = await makeFile('{"type":"session_meta","payload":{"a":1}}\n');
   await collectCodexRollout(file, ctx(buffer), '0.126.0-alpha.8');
   const batch = nextPendingBatch(buffer)!;
   expect(batch.sourceApp).toBe('codex');
@@ -237,7 +240,7 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
   const linesArr: string[] = [];
   for (let i = 0; i < targetTotalLines; i++) {
     const noise = randomBytes(1500).toString('base64');
-    linesArr.push(JSON.stringify({ i, noise }));
+    linesArr.push(JSON.stringify({ type: 'session_meta', payload: { i, noise } }));
   }
   const content = `${linesArr.join('\n')}\n`;
   const file = await makeFile(content, 'big.jsonl');
@@ -274,7 +277,7 @@ test('watermark continuity holds under redaction-induced byte-count changes', as
   const lines: string[] = [];
   for (let i = 0; i < 50; i++) {
     const longSecret = `sk-ant-${'A'.repeat(64)}`;
-    lines.push(JSON.stringify({ i, key: longSecret }));
+    lines.push(JSON.stringify({ type: 'session_meta', payload: { i, key: longSecret } }));
   }
   const content = `${lines.join('\n')}\n`;
   const file = await makeFile(content, 'redaction.jsonl');
@@ -312,7 +315,7 @@ test('watermark continuity holds under redaction-induced byte-count changes', as
 
 test('surfaces OversizedDecompressedSliceError when single line exceeds BODY_MAX_DECOMPRESSED_BYTES', async () => {
   const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
-  const oneLine = `${JSON.stringify({ giant: giantPayload })}\n`;
+  const oneLine = `${JSON.stringify({ type: 'session_meta', payload: { giant: giantPayload } })}\n`;
   const file = await makeFile(oneLine, 'oversized.jsonl');
 
   const result = await collectCodexRollout(file, ctx(buffer), '0.1.0');
@@ -323,7 +326,7 @@ test('surfaces OversizedDecompressedSliceError when single line exceeds BODY_MAX
 test('every batch satisfies BOTH compressed AND decompressed caps', async () => {
   const lines: string[] = [];
   for (let i = 0; i < 100; i++) {
-    lines.push(JSON.stringify({ i, payload: 'x'.repeat(40) }));
+    lines.push(JSON.stringify({ type: 'session_meta', payload: { i, payload: 'x'.repeat(40) } }));
   }
   const content = `${lines.join('\n')}\n`;
   const file = await makeFile(content, 'invariant.jsonl');
@@ -342,11 +345,11 @@ test('every batch satisfies BOTH compressed AND decompressed caps', async () => 
 });
 
 test('resets watermark when source_inode changes (file rotated/replaced)', async () => {
-  const file = { ...(await makeFile('{"a":1}\n')), inode: 1001 };
+  const file = { ...(await makeFile('{"type":"session_meta","payload":{"a":1}}\n')), inode: 1001 };
   const first = await collectCodexRollout(file, ctx(buffer), '0.1.0');
   expect(first.capturedBatches).toBe(1);
 
-  const newContent = '{"b":2}\n';
+  const newContent = '{"type":"session_meta","payload":{"b":2}}\n';
   await writeFile(file.sourcePath, newContent);
   const rotated = { ...file, inode: 1002, sizeBytes: newContent.length };
 
@@ -366,6 +369,48 @@ test('resets watermark when source_inode changes (file rotated/replaced)', async
     sourceInode: rotated.inode,
     watermarkTable: null,
   });
-  expect(cursorOld?.watermarkEnd).toBe('{"a":1}\n'.length);
+  expect(cursorOld?.watermarkEnd).toBe('{"type":"session_meta","payload":{"a":1}}\n'.length);
   expect(cursorNew?.watermarkEnd).toBe(newContent.length);
+});
+
+test('dialogue telemetry filtering, pruning, and discards', async () => {
+  const content =
+    [
+      JSON.stringify({
+        type: 'session_meta',
+        payload: {
+          cli_version: '0.1.0',
+          instructions: 'secret instructions',
+          tools: [{ name: 'git' }],
+        },
+      }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', text: 'hello' } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'tool_call', name: 'git' } }),
+      JSON.stringify({ type: 'response_item', role: 'assistant', payload: { text: 'hi' } }),
+      JSON.stringify({ type: 'response_item', role: 'developer', payload: { type: 'reasoning' } }),
+    ].join('\n') + '\n';
+
+  const file = await makeFile(content);
+  const result = await collectCodexRollout(file, ctx(buffer), '0.1.0');
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBe(1);
+
+  const batch = nextPendingBatch(buffer)!;
+  const decompressed = DECODER.decode(zstdDecompressSync(batch.body));
+  const lines = decompressed.trim().split('\n');
+  expect(lines.length).toBe(3);
+
+  const p1 = JSON.parse(lines[0]!);
+  expect(p1.type).toBe('session_meta');
+  expect(p1.payload.cli_version).toBe('0.1.0');
+  expect(p1.payload.instructions).toBe('<trimmed>');
+  expect(p1.payload.tools).toEqual([]);
+
+  const p2 = JSON.parse(lines[1]!);
+  expect(p2.type).toBe('event_msg');
+  expect(p2.payload.type).toBe('user_message');
+
+  const p3 = JSON.parse(lines[2]!);
+  expect(p3.type).toBe('response_item');
+  expect(p3.role).toBe('assistant');
 });

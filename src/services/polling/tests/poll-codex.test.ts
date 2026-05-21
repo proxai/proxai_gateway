@@ -83,7 +83,10 @@ test('processes state then rollouts and threads cli_version through', async () =
     [{ id: 't1', cli_version: 'codex-9.9.9' }],
     [{ thread_id: 't1', position: 0, name: 'Read' }],
   );
-  await seedRollout('sessions/2026/05/05/rollout-001.jsonl', '{"type":"user","text":"hello"}\n');
+  await seedRollout(
+    'sessions/2026/05/05/rollout-001.jsonl',
+    '{"type":"session_meta","payload":{}}\n',
+  );
   const poller = makeCodexSourcePoller({ baseDir: dir });
   const result = await poller({
     buffer,
@@ -109,7 +112,10 @@ test('processes state then rollouts and threads cli_version through', async () =
 });
 
 test('rollouts use default version when no state file exists', async () => {
-  await seedRollout('sessions/2026/05/05/rollout-001.jsonl', '{"type":"user","text":"x"}\n');
+  await seedRollout(
+    'sessions/2026/05/05/rollout-001.jsonl',
+    '{"type":"session_meta","payload":{}}\n',
+  );
   const poller = makeCodexSourcePoller({ baseDir: dir });
   const result = await poller({
     buffer,
@@ -159,7 +165,10 @@ test('copies per-table state errors into pollCodex result.errors', async () => {
 });
 
 test('copies per-rollout collect errors into pollCodex result.errors', async () => {
-  await seedRollout('sessions/2026/05/05/rollout-001.jsonl', '{"type":"user","text":"x"}\n');
+  await seedRollout(
+    'sessions/2026/05/05/rollout-001.jsonl',
+    '{"type":"session_meta","payload":{}}\n',
+  );
   const closedBuffer = openInMemoryBufferDb();
   closedBuffer.close();
   const poller = makeCodexSourcePoller({ baseDir: dir });
@@ -172,7 +181,10 @@ test('copies per-rollout collect errors into pollCodex result.errors', async () 
 });
 
 test('captures per-rollout collect errors in result.errors', async () => {
-  await seedRollout('sessions/2026/05/05/rollout-001.jsonl', '{"type":"user","text":"x"}\n');
+  await seedRollout(
+    'sessions/2026/05/05/rollout-001.jsonl',
+    '{"type":"session_meta","payload":{}}\n',
+  );
   const rolloutPath = join(dir, 'sessions/2026/05/05/rollout-001.jsonl');
   await rm(rolloutPath, { force: true });
   await mkdir(rolloutPath, { recursive: true });
@@ -197,8 +209,14 @@ test('state-only run still inserts batches from threads table', async () => {
 });
 
 test('minimumMtimeOverride applies a floor on a fresh buffer', async () => {
-  const oldPath = await seedRollout('sessions/2020/01/01/rollout-old.jsonl', 'x\n');
-  const newPath = await seedRollout('sessions/2026/05/05/rollout-new.jsonl', 'y\n');
+  const oldPath = await seedRollout(
+    'sessions/2020/01/01/rollout-old.jsonl',
+    '{"type":"session_meta","payload":{}}\n',
+  );
+  const newPath = await seedRollout(
+    'sessions/2026/05/05/rollout-new.jsonl',
+    '{"type":"session_meta","payload":{}}\n',
+  );
   const { utimes } = await import('node:fs/promises');
   const oldDate = new Date(Date.now() - 1000 * 60 * 60 * 24 * 365);
   await utimes(oldPath, oldDate, oldDate);

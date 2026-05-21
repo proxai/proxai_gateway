@@ -65,3 +65,30 @@ test('handleInspect: gemini-cli telemetry record filtering', async () => {
   expect(result.telemetryRawBytes).toBeGreaterThan(0);
   expect(result.telemetryRawBytes).toBeLessThan(result.totalBytes);
 });
+
+test('handleInspect: codex telemetry record filtering', async () => {
+  const rolloutDir = join(dir, 'sessions', '2026', '05', '21');
+  await mkdir(rolloutDir, { recursive: true });
+  const logPath = join(rolloutDir, 'rollout-session.jsonl');
+  const lines = [
+    JSON.stringify({
+      type: 'session_meta',
+      payload: { cli_version: '0.1.0', instructions: 'secret' },
+    }),
+    JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', text: 'hello' } }),
+    JSON.stringify({ type: 'event_msg', payload: { type: 'tool_call', name: 'git' } }),
+    JSON.stringify({ type: 'response_item', role: 'assistant', payload: { text: 'hi' } }),
+  ];
+  await writeFile(logPath, lines.join('\n') + '\n');
+  const result = await handleInspect('codex', {
+    baseDir: dir,
+    captureSubAgents: true,
+    priorCursors: [],
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
+  expect(result.filesProcessed).toBe(1);
+  expect(result.recordCount).toBe(4);
+  expect(result.telemetryRecordCount).toBe(3);
+  expect(result.telemetryRawBytes).toBeGreaterThan(0);
+});

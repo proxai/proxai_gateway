@@ -14,6 +14,8 @@ import {
   discoverCodexRolloutFiles,
   discoverCodexStateSqlite,
   defaultCodexHome,
+  isCodexDialogueRecord,
+  trimCodexRecord,
 } from 'sources/codex';
 import { discoverCursorFiles, defaultCursorUserRoot } from 'sources/cursor';
 import {
@@ -24,60 +26,9 @@ import {
 
 declare const self: any;
 
-async function countLinesAndOldestDate(
-  filePath: string,
-  start?: number,
-  end?: number,
-): Promise<{ count: number; oldestDate: string | null }> {
-  let count = 0;
-  let oldestDate: string | null = null;
-  try {
-    const file = Bun.file(filePath);
-    const sliced = start !== undefined && end !== undefined ? file.slice(start, end) : file;
-    const stream = sliced.stream();
-    const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    let partial = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = (partial + chunk).split('\n');
-      partial = lines.pop() ?? '';
-      for (const line of lines) {
-        if (line.trim().length > 0) {
-          count++;
-          if (oldestDate === null) {
-            try {
-              const parsed = JSON.parse(line);
-              const ts = parsed.timestamp ?? parsed.created_at ?? parsed.time;
-              if (ts && !isNaN(Date.parse(ts))) {
-                oldestDate = new Date(ts).toISOString();
-              }
-            } catch {}
-          }
-        }
-      }
-    }
-    if (partial.trim().length > 0) {
-      count++;
-      if (oldestDate === null) {
-        try {
-          const parsed = JSON.parse(partial);
-          const ts = parsed.timestamp ?? parsed.created_at ?? parsed.time;
-          if (ts && !isNaN(Date.parse(ts))) {
-            oldestDate = new Date(ts).toISOString();
-          }
-        } catch {}
-      }
-    }
-  } catch {}
-  return { count, oldestDate };
-}
-
 async function analyzeJsonlLogFile(
   filePath: string,
-  sourceApp: 'claude-code' | 'gemini-cli',
+  sourceApp: 'claude-code' | 'gemini-cli' | 'codex',
 ): Promise<{
   totalLines: number;
   oldestDate: string | null;
@@ -107,14 +58,21 @@ async function analyzeJsonlLogFile(
           }
         }
         let match = false;
+        let lineBytes = Buffer.byteLength(line, 'utf8') + 1;
         if (sourceApp === 'claude-code') {
           match = isDialogueRecord(parsed);
         } else if (sourceApp === 'gemini-cli') {
           match = isGeminiCliDialogueRecord(parsed);
+        } else if (sourceApp === 'codex') {
+          match = isCodexDialogueRecord(parsed);
+          if (match) {
+            const trimmed = trimCodexRecord(parsed);
+            lineBytes = Buffer.byteLength(JSON.stringify(trimmed), 'utf8') + 1;
+          }
         }
         if (match) {
           telemetryRecordCount++;
-          telemetryRawBytes += Buffer.byteLength(line, 'utf8') + 1;
+          telemetryRawBytes += lineBytes;
         }
       } catch {}
     };
@@ -306,13 +264,18 @@ export async function handleInspect(
       for (const f of rolloutFiles) {
         filesProcessed++;
         totalBytes += f.sizeBytes;
-        const { count, oldestDate } = await countLinesAndOldestDate(f.sourcePath);
-        recordCount += count;
+        const {
+          totalLines,
+          oldestDate,
+          telemetryRecordCount: telCount,
+          telemetryRawBytes: telBytes,
+        } = await analyzeJsonlLogFile(f.sourcePath, 'codex');
+        recordCount += totalLines;
         updateOldest(oldestDate, f.lastModifiedMs);
 
-        telemetryRawBytes += f.sizeBytes;
-        telemetryCompressedBytes += Math.round(f.sizeBytes / 6.0);
-        telemetryRecordCount += count;
+        telemetryRawBytes += telBytes;
+        telemetryCompressedBytes += Math.round(telBytes / 6.0);
+        telemetryRecordCount += telCount;
       }
     } catch {}
   }
