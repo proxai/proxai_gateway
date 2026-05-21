@@ -42,7 +42,7 @@
     "dev": "bun run src/main.ts",
     "test": "bun test --parallel",
     "test:watch": "bun test --watch",
-    "test:cov": "bun test --coverage",
+    "test:cov": "bun test --coverage --parallel",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "prettier --write .",
