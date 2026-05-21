@@ -34,6 +34,175 @@ interface SourceResult {
   telemetryCompressedBytes: number;
   telemetryRecordCount: number;
   oldestDate: string | null;
+  newestDate: string | null;
+}
+
+let spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+let frameIndex = 0;
+let currentText = '';
+let intervalId: any = null;
+
+function startSpinner(initialText: string): void {
+  currentText = initialText;
+  if (process?.stdout?.isTTY) {
+    process.stdout.write('\x1B[?25l');
+    intervalId = setInterval(() => {
+      const frame = spinnerFrames[frameIndex];
+      frameIndex = (frameIndex + 1) % spinnerFrames.length;
+      process.stdout.write(`\r${chalk.cyan(frame)} ${currentText}`);
+    }, 80);
+  }
+}
+
+function updateSpinner(newText: string): void {
+  currentText = newText;
+  if (process?.stdout?.isTTY) {
+    process.stdout.write('\r\x1B[K');
+    const frame = spinnerFrames[frameIndex];
+    process.stdout.write(`${chalk.cyan(frame)} ${currentText}`);
+  }
+}
+
+function stopSpinner(): void {
+  if (intervalId) {
+    clearInterval(intervalId);
+    intervalId = null;
+  }
+  if (process?.stdout?.isTTY) {
+    process.stdout.write('\r\x1B[K');
+    process.stdout.write('\x1B[?25h');
+  }
+}
+
+async function scanSingleSource(
+  sourceName: string,
+  deps: InspectCommandDeps,
+  options: InspectCommandOptions,
+): Promise<SourceResult> {
+  let baseDir: string | undefined;
+  if (options.baseDirs) {
+    if (sourceName === 'claude-code') baseDir = options.baseDirs.claudeCode;
+    else if (sourceName === 'cursor') baseDir = options.baseDirs.cursor;
+    else if (sourceName === 'gemini-cli') baseDir = options.baseDirs.geminiCli;
+    else if (sourceName === 'codex') baseDir = options.baseDirs.codex;
+  }
+
+  const isCompiled = import.meta.url.includes('$bunfs') || import.meta.url.includes('bun:wrap');
+  if (isCompiled) {
+    try {
+      const optionsObj: WorkerInput['options'] = {
+        gatewayVersion: deps.gatewayVersion,
+        maxDecompressedBytes: 10 * 1024 * 1024,
+        captureSubAgents: true,
+      };
+      if (baseDir !== undefined) {
+        optionsObj.baseDir = baseDir;
+      }
+      const res = await handleInspect(sourceName, optionsObj);
+      return {
+        sourceName,
+        filesProcessed: res.filesProcessed,
+        recordCount: res.recordCount,
+        totalBytes: res.totalBytes,
+        telemetryRawBytes: res.telemetryRawBytes,
+        telemetryCompressedBytes: res.telemetryCompressedBytes,
+        telemetryRecordCount: res.telemetryRecordCount,
+        oldestDate: res.oldestDate,
+        newestDate: res.newestDate,
+      };
+    } catch {
+      return {
+        sourceName,
+        filesProcessed: 0,
+        recordCount: 0,
+        totalBytes: 0,
+        telemetryRawBytes: 0,
+        telemetryCompressedBytes: 0,
+        telemetryRecordCount: 0,
+        oldestDate: null,
+        newestDate: null,
+      };
+    }
+  }
+
+  return new Promise<SourceResult>((resolve) => {
+    try {
+      const workerUrl = new URL('../../services/polling/poll-worker.ts', import.meta.url).href;
+      const worker = new Worker(workerUrl, { type: 'module' });
+
+      worker.onmessage = (event: MessageEvent<WorkerOutput>) => {
+        const res = event.data;
+        worker.terminate();
+        if (res.success && res.inspectResult) {
+          resolve({
+            sourceName,
+            filesProcessed: res.inspectResult.filesProcessed,
+            recordCount: res.inspectResult.recordCount,
+            totalBytes: res.inspectResult.totalBytes,
+            telemetryRawBytes: res.inspectResult.telemetryRawBytes,
+            telemetryCompressedBytes: res.inspectResult.telemetryCompressedBytes,
+            telemetryRecordCount: res.inspectResult.telemetryRecordCount,
+            oldestDate: res.inspectResult.oldestDate,
+            newestDate: res.inspectResult.newestDate,
+          });
+        } else {
+          resolve({
+            sourceName,
+            filesProcessed: 0,
+            recordCount: 0,
+            totalBytes: 0,
+            telemetryRawBytes: 0,
+            telemetryCompressedBytes: 0,
+            telemetryRecordCount: 0,
+            oldestDate: null,
+            newestDate: null,
+          });
+        }
+      };
+
+      worker.onerror = () => {
+        worker.terminate();
+        resolve({
+          sourceName,
+          filesProcessed: 0,
+          recordCount: 0,
+          totalBytes: 0,
+          telemetryRawBytes: 0,
+          telemetryCompressedBytes: 0,
+          telemetryRecordCount: 0,
+          oldestDate: null,
+          newestDate: null,
+        });
+      };
+
+      const optionsObj: WorkerInput['options'] = {
+        gatewayVersion: deps.gatewayVersion,
+        maxDecompressedBytes: 10 * 1024 * 1024,
+        captureSubAgents: true,
+      };
+      if (baseDir !== undefined) {
+        optionsObj.baseDir = baseDir;
+      }
+
+      worker.postMessage({
+        task: 'inspect',
+        sourceName,
+        options: optionsObj,
+      } as WorkerInput);
+    } catch {
+      resolve({
+        sourceName,
+        filesProcessed: 0,
+        recordCount: 0,
+        totalBytes: 0,
+        telemetryRawBytes: 0,
+        telemetryCompressedBytes: 0,
+        telemetryRecordCount: 0,
+        oldestDate: null,
+        newestDate: null,
+      });
+    }
+  });
 }
 
 function formatDiskRow(
@@ -81,138 +250,21 @@ export async function runInspect(
   const { output } = deps;
 
   output.info(chalk.bold('🔍 ProxAI Telemetry Dry-Run Inspection'));
-  output.info(
-    chalk.dim(
-      'Scanning local telemetry sources... (This is a dry-run and will not write to buffer)',
-    ),
-  );
   output.info('');
+
   const sources = ['claude-code', 'cursor', 'codex', 'gemini-cli'];
   const startMs = performance.now();
 
   try {
-    const scanPromises = sources.map(async (sourceName): Promise<SourceResult> => {
-      let baseDir: string | undefined;
-      if (options.baseDirs) {
-        if (sourceName === 'claude-code') baseDir = options.baseDirs.claudeCode;
-        else if (sourceName === 'cursor') baseDir = options.baseDirs.cursor;
-        else if (sourceName === 'gemini-cli') baseDir = options.baseDirs.geminiCli;
-        else if (sourceName === 'codex') baseDir = options.baseDirs.codex;
-      }
+    startSpinner('Initializing inspection...');
+    const results: SourceResult[] = [];
+    for (const sourceName of sources) {
+      updateSpinner(`Scanning ${chalk.yellow(formatSourceLabel(sourceName))}...`);
+      const res = await scanSingleSource(sourceName, deps, options);
+      results.push(res);
+    }
+    stopSpinner();
 
-      const isCompiled = import.meta.url.includes('$bunfs') || import.meta.url.includes('bun:wrap');
-      if (isCompiled) {
-        try {
-          const optionsObj: WorkerInput['options'] = {
-            gatewayVersion: deps.gatewayVersion,
-            maxDecompressedBytes: 10 * 1024 * 1024,
-            captureSubAgents: true,
-          };
-          if (baseDir !== undefined) {
-            optionsObj.baseDir = baseDir;
-          }
-          const res = await handleInspect(sourceName, optionsObj);
-          return {
-            sourceName,
-            filesProcessed: res.filesProcessed,
-            recordCount: res.recordCount,
-            totalBytes: res.totalBytes,
-            telemetryRawBytes: res.telemetryRawBytes,
-            telemetryCompressedBytes: res.telemetryCompressedBytes,
-            telemetryRecordCount: res.telemetryRecordCount,
-            oldestDate: res.oldestDate,
-          };
-        } catch {
-          return {
-            sourceName,
-            filesProcessed: 0,
-            recordCount: 0,
-            totalBytes: 0,
-            telemetryRawBytes: 0,
-            telemetryCompressedBytes: 0,
-            telemetryRecordCount: 0,
-            oldestDate: null,
-          };
-        }
-      }
-
-      return new Promise<SourceResult>((resolve) => {
-        try {
-          const workerUrl = new URL('../../services/polling/poll-worker.ts', import.meta.url).href;
-          const worker = new Worker(workerUrl, { type: 'module' });
-
-          worker.onmessage = (event: MessageEvent<WorkerOutput>) => {
-            const res = event.data;
-            worker.terminate();
-            if (res.success && res.inspectResult) {
-              resolve({
-                sourceName,
-                filesProcessed: res.inspectResult.filesProcessed,
-                recordCount: res.inspectResult.recordCount,
-                totalBytes: res.inspectResult.totalBytes,
-                telemetryRawBytes: res.inspectResult.telemetryRawBytes,
-                telemetryCompressedBytes: res.inspectResult.telemetryCompressedBytes,
-                telemetryRecordCount: res.inspectResult.telemetryRecordCount,
-                oldestDate: res.inspectResult.oldestDate,
-              });
-            } else {
-              resolve({
-                sourceName,
-                filesProcessed: 0,
-                recordCount: 0,
-                totalBytes: 0,
-                telemetryRawBytes: 0,
-                telemetryCompressedBytes: 0,
-                telemetryRecordCount: 0,
-                oldestDate: null,
-              });
-            }
-          };
-
-          worker.onerror = () => {
-            worker.terminate();
-            resolve({
-              sourceName,
-              filesProcessed: 0,
-              recordCount: 0,
-              totalBytes: 0,
-              telemetryRawBytes: 0,
-              telemetryCompressedBytes: 0,
-              telemetryRecordCount: 0,
-              oldestDate: null,
-            });
-          };
-
-          const optionsObj: WorkerInput['options'] = {
-            gatewayVersion: deps.gatewayVersion,
-            maxDecompressedBytes: 10 * 1024 * 1024,
-            captureSubAgents: true,
-          };
-          if (baseDir !== undefined) {
-            optionsObj.baseDir = baseDir;
-          }
-
-          worker.postMessage({
-            task: 'inspect',
-            sourceName,
-            options: optionsObj,
-          } as WorkerInput);
-        } catch {
-          resolve({
-            sourceName,
-            filesProcessed: 0,
-            recordCount: 0,
-            totalBytes: 0,
-            telemetryRawBytes: 0,
-            telemetryCompressedBytes: 0,
-            telemetryRecordCount: 0,
-            oldestDate: null,
-          });
-        }
-      });
-    });
-
-    const results = await Promise.all(scanPromises);
     const durationMs = performance.now() - startMs;
 
     let totalFiles = 0;
@@ -223,6 +275,8 @@ export async function runInspect(
     let totalCompressedBytes = 0;
     let overallOldestMs = Infinity;
     let overallOldestSource = '';
+    let overallNewestMs = -Infinity;
+    let overallNewestSource = '';
 
     for (const r of results) {
       totalFiles += r.filesProcessed;
@@ -238,10 +292,19 @@ export async function runInspect(
           overallOldestSource = r.sourceName;
         }
       }
+      if (r.newestDate) {
+        const ms = Date.parse(r.newestDate);
+        if (Number.isFinite(ms) && ms > overallNewestMs) {
+          overallNewestMs = ms;
+          overallNewestSource = r.sourceName;
+        }
+      }
     }
 
     const oldestDateIso =
       overallOldestMs === Infinity ? null : new Date(overallOldestMs).toISOString();
+    const newestDateIso =
+      overallNewestMs === -Infinity ? null : new Date(overallNewestMs).toISOString();
 
     output.info(chalk.bold('┌' + '─'.repeat(78) + '┐'));
     const titleDisk = ' 💾 TELEMETRY SOURCES ON DISK (HISTORICAL RAW DATA)';
@@ -413,53 +476,6 @@ export async function runInspect(
 
     output.info(chalk.bold('💡 Highlights'));
 
-    const claudeRes = results.find((r) => r.sourceName === 'claude-code');
-    if (claudeRes && claudeRes.recordCount > 0) {
-      const totalRecs = claudeRes.recordCount;
-      const teleRecs = claudeRes.telemetryRecordCount;
-      const ratioSaved = (((totalRecs - teleRecs) / totalRecs) * 100).toFixed(1);
-      output.info(
-        `  • Claude Code Dialogue Filtering: Scanned ${chalk.yellow(totalRecs.toLocaleString())} raw records, kept ${chalk.green(teleRecs.toLocaleString())} high-level dialogue records (saved ${chalk.bold.green(ratioSaved + '%')} intermediate reasoning/tool noise).`,
-      );
-    }
-
-    const cursorRes = results.find((r) => r.sourceName === 'cursor');
-    if (cursorRes && cursorRes.totalBytes > 0) {
-      const dbSize = cursorRes.totalBytes;
-      const teleSize = cursorRes.telemetryRawBytes;
-      const ratioSaved = (((dbSize - teleSize) / dbSize) * 100).toFixed(1);
-      output.info(
-        `  • Cursor Database Optimization: SQLite database size is ${chalk.yellow(formatBytes(dbSize))} on disk, but telemetry payload is only ${chalk.green(formatBytes(teleSize))} (saved ${chalk.bold.green(ratioSaved + '%')} metadata noise).`,
-      );
-    }
-
-    const geminiRes = results.find((r) => r.sourceName === 'gemini-cli');
-    if (geminiRes && geminiRes.recordCount > 0) {
-      const totalRecs = geminiRes.recordCount;
-      const teleRecs = geminiRes.telemetryRecordCount;
-      const ratioSaved = (((totalRecs - teleRecs) / totalRecs) * 100).toFixed(1);
-      output.info(
-        `  • Gemini CLI Dialogue Filtering: Scanned ${chalk.yellow(totalRecs.toLocaleString())} raw records, kept ${chalk.green(teleRecs.toLocaleString())} high-level dialogue records (saved ${chalk.bold.green(ratioSaved + '%')} process noise).`,
-      );
-    }
-
-    const codexRes = results.find((r) => r.sourceName === 'codex');
-    if (codexRes && codexRes.recordCount > 0) {
-      const totalRecs = codexRes.recordCount;
-      const teleRecs = codexRes.telemetryRecordCount;
-      const ratioSaved = (((totalRecs - teleRecs) / totalRecs) * 100).toFixed(1);
-      output.info(
-        `  • Codex Rollout Trimming: Scanned ${chalk.yellow(totalRecs.toLocaleString())} raw records, kept ${chalk.green(teleRecs.toLocaleString())} dialogue/session records (saved ${chalk.bold.green(ratioSaved + '%')} prompt/tool definition noise).`,
-      );
-    }
-
-    if (totalRawBytes > 0) {
-      const savings = (((totalBytes - totalCompressedBytes) / totalBytes) * 100).toFixed(1);
-      output.info(
-        `  • Bandwidth Reduction: Selective capture and zstd compression shrinks active upload payload to ${chalk.green(formatBytes(totalCompressedBytes))} vs. ${chalk.yellow(formatBytes(totalBytes))} raw disk footprint (saved ${chalk.bold.green(savings + '%')}).`,
-      );
-    }
-
     if (oldestDateIso) {
       output.info(
         `  • Oldest telemetry record: ${chalk.green(formatTimeWithRelative(oldestDateIso))} (Source: ${chalk.cyan(formatSourceLabel(overallOldestSource))})`,
@@ -467,6 +483,13 @@ export async function runInspect(
     } else {
       output.info(`  • No telemetry records found.`);
     }
+
+    if (newestDateIso) {
+      output.info(
+        `  • Newest telemetry record: ${chalk.green(formatTimeWithRelative(newestDateIso))} (Source: ${chalk.cyan(formatSourceLabel(overallNewestSource))})`,
+      );
+    }
+
     output.info(`  • Scan duration: ${chalk.yellow(durationMs.toFixed(2) + ' ms')}`);
     output.info('');
 
@@ -478,36 +501,6 @@ export async function runInspect(
         : '/tmp/proxai-gateway/reports';
     const reportFileName = `inspect_${timestampTz}.md`;
     const reportPath = join(reportDir, reportFileName);
-
-    const claudeRecsTotal = claudeRes?.recordCount ?? 0;
-    const claudeRecsTele = claudeRes?.telemetryRecordCount ?? 0;
-    const claudeSavings =
-      claudeRecsTotal > 0
-        ? (((claudeRecsTotal - claudeRecsTele) / claudeRecsTotal) * 100).toFixed(1)
-        : '0.0';
-
-    const cursorBytesTotal = cursorRes?.totalBytes ?? 0;
-    const cursorBytesTele = cursorRes?.telemetryRawBytes ?? 0;
-    const cursorSavings =
-      cursorBytesTotal > 0
-        ? (((cursorBytesTotal - cursorBytesTele) / cursorBytesTotal) * 100).toFixed(1)
-        : '0.0';
-
-    const geminiResFound = results.find((r) => r.sourceName === 'gemini-cli');
-    const geminiRecsTotal = geminiResFound?.recordCount ?? 0;
-    const geminiRecsTele = geminiResFound?.telemetryRecordCount ?? 0;
-    const geminiSavings =
-      geminiRecsTotal > 0
-        ? (((geminiRecsTotal - geminiRecsTele) / geminiRecsTotal) * 100).toFixed(1)
-        : '0.0';
-
-    const codexResFound = results.find((r) => r.sourceName === 'codex');
-    const codexRecsTotal = codexResFound?.recordCount ?? 0;
-    const codexRecsTele = codexResFound?.telemetryRecordCount ?? 0;
-    const codexSavings =
-      codexRecsTotal > 0
-        ? (((codexRecsTotal - codexRecsTele) / codexRecsTotal) * 100).toFixed(1)
-        : '0.0';
 
     const markdownContent = `# ProxAI Telemetry Inspection Report
 
@@ -554,12 +547,9 @@ ${results
 
 ## 💡 Key Highlights
 
-* **Claude Code Dialogue Filtering:** Scanned ${claudeRecsTotal.toLocaleString()} raw records, kept ${claudeRecsTele.toLocaleString()} high-level dialogue records (saved ${claudeSavings}% intermediate reasoning and tool noise).
-* **Cursor Database Optimization:** SQLite database size is ${formatBytes(cursorBytesTotal)} on disk, but telemetry payload is only ${formatBytes(cursorBytesTele)} (saved ${cursorSavings}% metadata noise).
-* **Gemini CLI Dialogue Filtering:** Scanned ${geminiRecsTotal.toLocaleString()} raw records, kept ${geminiRecsTele.toLocaleString()} high-level dialogue records (saved ${geminiSavings}% process noise).
-* **Codex Rollout Trimming:** Scanned ${codexRecsTotal.toLocaleString()} raw records, kept ${codexRecsTele.toLocaleString()} dialogue/session records (saved ${codexSavings}% prompt/tool definition noise).
-* **Bandwidth Optimization:** Zstd compression and selective extraction yields a total compressed upload size of **${formatBytes(totalCompressedBytes)}** vs. a **${formatBytes(totalBytes)}** raw disk footprint (saved ${totalBytes > 0 ? (((totalBytes - totalCompressedBytes) / totalBytes) * 100).toFixed(1) : '0.0'}%).
 * **Oldest Telemetry Record:** ${oldestDateIso ? `${formatTimeWithRelative(oldestDateIso)} (from ${formatSourceLabel(overallOldestSource)})` : 'None found'}
+* **Newest Telemetry Record:** ${newestDateIso ? `${formatTimeWithRelative(newestDateIso)} (from ${formatSourceLabel(overallNewestSource)})` : 'None found'}
+* **Scan Duration:** ${durationMs.toFixed(2)} ms
 * **Dry-Run Mode:** No data was committed or modified during this inspection.
 `;
 
@@ -580,6 +570,7 @@ ${results
 
     return { exitCode: EXIT_CODE.ok };
   } catch (err) {
+    stopSpinner();
     const durationMs = performance.now() - startMs;
     output.error(`Unexpected inspect error: ${err instanceof Error ? err.message : String(err)}`);
     output.info(chalk.dim('─'.repeat(80)));

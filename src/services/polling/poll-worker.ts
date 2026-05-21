@@ -32,11 +32,13 @@ async function analyzeJsonlLogFile(
 ): Promise<{
   totalLines: number;
   oldestDate: string | null;
+  newestDate: string | null;
   telemetryRecordCount: number;
   telemetryRawBytes: number;
 }> {
   let totalLines = 0;
   let oldestDate: string | null = null;
+  let newestDate: string | null = null;
   let telemetryRecordCount = 0;
   let telemetryRawBytes = 0;
   try {
@@ -55,6 +57,9 @@ async function analyzeJsonlLogFile(
           const dateStr = new Date(ts).toISOString();
           if (oldestDate === null || Date.parse(dateStr) < Date.parse(oldestDate)) {
             oldestDate = dateStr;
+          }
+          if (newestDate === null || Date.parse(dateStr) > Date.parse(newestDate)) {
+            newestDate = dateStr;
           }
         }
         let match = false;
@@ -90,7 +95,7 @@ async function analyzeJsonlLogFile(
       processLine(partial);
     }
   } catch {}
-  return { totalLines, oldestDate, telemetryRecordCount, telemetryRawBytes };
+  return { totalLines, oldestDate, newestDate, telemetryRecordCount, telemetryRawBytes };
 }
 
 export async function handleInspect(
@@ -104,15 +109,18 @@ export async function handleInspect(
   let telemetryRawBytes = 0;
   let telemetryCompressedBytes = 0;
   let oldestDateMs = Infinity;
+  let newestDateMs = -Infinity;
 
-  const updateOldest = (dateStr: string | null, fallbackMs: number) => {
+  const updateChronological = (dateStr: string | null, fallbackMs: number) => {
     if (dateStr !== null) {
       const ms = Date.parse(dateStr);
-      if (Number.isFinite(ms) && ms < oldestDateMs) {
-        oldestDateMs = ms;
+      if (Number.isFinite(ms)) {
+        if (ms < oldestDateMs) oldestDateMs = ms;
+        if (ms > newestDateMs) newestDateMs = ms;
       }
-    } else if (fallbackMs < oldestDateMs) {
-      oldestDateMs = fallbackMs;
+    } else {
+      if (fallbackMs < oldestDateMs) oldestDateMs = fallbackMs;
+      if (fallbackMs > newestDateMs) newestDateMs = fallbackMs;
     }
   };
 
@@ -128,11 +136,13 @@ export async function handleInspect(
       const {
         totalLines,
         oldestDate,
+        newestDate,
         telemetryRecordCount: telCount,
         telemetryRawBytes: telBytes,
       } = await analyzeJsonlLogFile(f.sourcePath, 'claude-code');
       recordCount += totalLines;
-      updateOldest(oldestDate, f.lastModifiedMs);
+      updateChronological(oldestDate, f.lastModifiedMs);
+      updateChronological(newestDate, f.lastModifiedMs);
 
       telemetryRawBytes += telBytes;
       telemetryCompressedBytes += Math.round(telBytes / 6.0);
@@ -144,7 +154,7 @@ export async function handleInspect(
     for (const f of files) {
       filesProcessed++;
       totalBytes += f.sizeBytes;
-      updateOldest(null, f.lastModifiedMs);
+      updateChronological(null, f.lastModifiedMs);
 
       try {
         const db = new Database(f.sourcePath, { readonly: true });
@@ -205,12 +215,14 @@ export async function handleInspect(
       const {
         totalLines,
         oldestDate,
+        newestDate,
         telemetryRecordCount: telCount,
         telemetryRawBytes: telBytes,
       } = await analyzeJsonlLogFile(f.sourcePath, 'gemini-cli');
       const adjustedCount = totalLines > 1 ? totalLines - 1 : totalLines;
       recordCount += adjustedCount;
-      updateOldest(oldestDate, f.lastModifiedMs);
+      updateChronological(oldestDate, f.lastModifiedMs);
+      updateChronological(newestDate, f.lastModifiedMs);
 
       telemetryRawBytes += telBytes;
       telemetryCompressedBytes += Math.round(telBytes / 6.0);
@@ -224,7 +236,7 @@ export async function handleInspect(
       if (stateFile !== null) {
         filesProcessed++;
         totalBytes += stateFile.sizeBytes;
-        updateOldest(null, stateFile.lastModifiedMs);
+        updateChronological(null, stateFile.lastModifiedMs);
 
         const db = new Database(stateFile.sourcePath, { readonly: true });
         try {
@@ -281,11 +293,13 @@ export async function handleInspect(
         const {
           totalLines,
           oldestDate,
+          newestDate,
           telemetryRecordCount: telCount,
           telemetryRawBytes: telBytes,
         } = await analyzeJsonlLogFile(f.sourcePath, 'codex');
         recordCount += totalLines;
-        updateOldest(oldestDate, f.lastModifiedMs);
+        updateChronological(oldestDate, f.lastModifiedMs);
+        updateChronological(newestDate, f.lastModifiedMs);
 
         telemetryRawBytes += telBytes;
         telemetryCompressedBytes += Math.round(telBytes / 6.0);
@@ -302,6 +316,7 @@ export async function handleInspect(
     telemetryRawBytes,
     telemetryCompressedBytes,
     oldestDate: oldestDateMs === Infinity ? null : new Date(oldestDateMs).toISOString(),
+    newestDate: newestDateMs === -Infinity ? null : new Date(newestDateMs).toISOString(),
   };
 }
 

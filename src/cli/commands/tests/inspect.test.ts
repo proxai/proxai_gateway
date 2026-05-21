@@ -86,6 +86,7 @@ test('runInspect handles worker success with oldest record', async () => {
                 telemetryCompressedBytes: 167,
                 telemetryRecordCount: 42,
                 oldestDate: '2026-05-20T20:00:00.000Z',
+                newestDate: '2026-05-20T22:00:00.000Z',
               },
             },
           });
@@ -104,6 +105,7 @@ test('runInspect handles worker success with oldest record', async () => {
     expect(out.lines.some((l) => l.msg.includes('42'))).toBe(true);
     expect(out.lines.some((l) => l.msg.includes('1.31 KB'))).toBe(true);
     expect(out.lines.some((l) => l.msg.includes('Oldest telemetry record'))).toBe(true);
+    expect(out.lines.some((l) => l.msg.includes('Newest telemetry record'))).toBe(true);
   } finally {
     globalThis.Worker = originalWorker;
   }
@@ -225,6 +227,7 @@ test('runInspect handles unexpected inspect error gracefully', async () => {
                 telemetryCompressedBytes: 167,
                 telemetryRecordCount: 42,
                 oldestDate: '2026-05-20T20:00:00.000Z',
+                newestDate: '2026-05-20T22:00:00.000Z',
               },
             },
           });
