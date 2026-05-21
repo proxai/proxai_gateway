@@ -59,7 +59,7 @@ test('runInspect executes successfully with empty directories', async () => {
   expect(result.exitCode).toBe(0);
 
   expect(out.lines.some((l) => l.msg.includes('ProxAI Telemetry Dry-Run Inspection'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('Telemetry Scan Summary'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('TELEMETRY SOURCES ON DISK'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('Highlights'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('Beautiful dry-run markdown report saved to'))).toBe(
     true,
@@ -82,6 +82,9 @@ test('runInspect handles worker success with oldest record', async () => {
                 filesProcessed: 5,
                 recordCount: 42,
                 totalBytes: 1337,
+                telemetryRawBytes: 1000,
+                telemetryCompressedBytes: 167,
+                telemetryRecordCount: 42,
                 oldestDate: '2026-05-20T20:00:00.000Z',
               },
             },
@@ -218,6 +221,9 @@ test('runInspect handles unexpected inspect error gracefully', async () => {
                 filesProcessed: 5,
                 recordCount: 42,
                 totalBytes: 1337,
+                telemetryRawBytes: 1000,
+                telemetryCompressedBytes: 167,
+                telemetryRecordCount: 42,
                 oldestDate: '2026-05-20T20:00:00.000Z',
               },
             },

@@ -1,4 +1,3 @@
-/* eslint-disable unicorn/prefer-add-event-listener, unicorn/require-post-message-target-origin */
 import { nowIsoUtc } from 'core/utils';
 import {
   checkPendingPressure,
@@ -20,6 +19,8 @@ import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.typ
 import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 import { isBufferFull, writeBufferFullSentinel } from 'services/polling/buffer-full-sentinel.ts';
 import { isPaused } from 'services/polling/pause-sentinel.ts';
+import { handleCapture } from 'services/polling/poll-worker.ts';
+
 import type {
   CaptureCycleContext,
   CaptureCycleResult,
@@ -261,124 +262,240 @@ async function pollSourceInWorker(
   source: RegisteredSource,
   ctx: CaptureCycleContext,
 ): Promise<SourcePollerResult> {
-  return new Promise((resolve) => {
-    try {
-      const cursorRows = ctx.buffer
-        .query<any, [string]>('SELECT * FROM source_cursors WHERE source_app = ?')
-        .all(source.name);
+  try {
+    const cursorRows = ctx.buffer
+      .query<any, [string]>('SELECT * FROM source_cursors WHERE source_app = ?')
+      .all(source.name);
 
-      const priorCursors = cursorRows.map((c) => ({
-        sourcePathHash: c.source_path_hash,
-        sourcePath: c.source_path,
-        sourceInode: c.source_inode,
-        watermarkTable: c.watermark_table,
-        watermarkEnd: c.watermark_end,
-        lastSeenSizeBytes: c.last_seen_size_bytes,
-        lastSeenPageCount: c.last_seen_page_count,
-        consecutiveErrors: c.consecutive_errors,
-      }));
+    const priorCursors = cursorRows.map((c) => ({
+      sourcePathHash: c.source_path_hash,
+      sourcePath: c.source_path,
+      sourceInode: c.source_inode,
+      watermarkTable: c.watermark_table,
+      watermarkEnd: c.watermark_end,
+      lastSeenSizeBytes: c.last_seen_size_bytes,
+      lastSeenPageCount: c.last_seen_page_count,
+      consecutiveErrors: c.consecutive_errors,
+    }));
 
-      const workerUrl = new URL('./poll-worker.ts', import.meta.url).href;
-      const worker = new Worker(workerUrl, { type: 'module' });
+    const isCompiled = import.meta.url.includes('$bunfs') || import.meta.url.includes('bun:wrap');
+    if (isCompiled) {
+      const optionsObj: WorkerInput['options'] = {
+        gatewayVersion: ctx.gatewayVersion,
+        maxDecompressedBytes: ctx.capturePolicy.maxDecompressedBytes,
+        captureSubAgents: true,
+        priorCursors,
+      };
+      if (source.baseDir !== undefined) {
+        optionsObj.baseDir = source.baseDir;
+      }
+      const capture = await handleCapture(source.name, optionsObj);
+      if (!capture) {
+        return {
+          filesProcessed: 0,
+          capturedBatches: 0,
+          capturedBytes: 0,
+          errors: [],
+        };
+      }
 
-      worker.onmessage = (event: MessageEvent<WorkerOutput>) => {
-        const output = event.data;
-        worker.terminate();
+      try {
+        ctx.buffer.transaction(() => {
+          for (const b of capture.batches) {
+            insertBatch(ctx.buffer, {
+              ...b,
+              sourceApp: b.sourceApp as any,
+              sourceKind: b.sourceKind as any,
+              watermarkKind: b.watermarkKind as any,
+              bodyFormat: b.bodyFormat as any,
+              bodyCompression: b.bodyCompression as any,
+            });
+          }
 
-        if (!output.success) {
-          resolve({
-            filesProcessed: 0,
-            capturedBatches: 0,
-            capturedBytes: 0,
-            errors: [
-              {
-                sourcePath: source.baseDir ?? source.name,
-                reason: output.error ?? 'Worker failed',
-              },
-            ],
-          });
-          return;
-        }
+          for (const q of capture.quarantine) {
+            recordQuarantine(ctx.buffer, {
+              sourceApp: q.sourceApp as any,
+              sourcePath: q.sourcePath,
+              sourcePathHash: q.sourcePathHash,
+              sourceInode: q.sourceInode,
+              watermarkTable: q.watermarkTable,
+              watermarkPosition: q.watermarkPosition,
+              rowPk: q.rowPk,
+              redactedSizeBytes: q.redactedSizeBytes,
+              reason: q.reason,
+              quarantinedAtUtc: q.quarantinedAtUtc,
+              gatewayVersion: q.gatewayVersion,
+            });
+          }
 
-        const capture = output.captureResult;
-        if (!capture) {
-          resolve({
-            filesProcessed: 0,
-            capturedBatches: 0,
-            capturedBytes: 0,
-            errors: [],
-          });
-          return;
-        }
+          for (const c of capture.cursors) {
+            setCursor(ctx.buffer, {
+              sourceApp: source.name as any,
+              sourcePathHash: c.sourcePathHash,
+              sourcePath: c.sourcePath,
+              sourceInode: c.sourceInode,
+              watermarkTable: c.watermarkTable,
+              watermarkEnd: c.watermarkEnd,
+              lastSeenSizeBytes: c.lastSeenSizeBytes,
+              lastSeenPageCount: c.lastSeenPageCount,
+              consecutiveErrors: c.consecutiveErrors,
+            });
+          }
+        })();
+      } catch (dbErr) {
+        return {
+          filesProcessed: capture.filesProcessed,
+          capturedBatches: 0,
+          capturedBytes: 0,
+          errors: [
+            {
+              sourcePath: source.baseDir ?? source.name,
+              reason: dbErr instanceof Error ? dbErr.message : String(dbErr),
+            },
+          ],
+        };
+      }
 
-        try {
-          ctx.buffer.transaction(() => {
-            for (const b of capture.batches) {
-              insertBatch(ctx.buffer, {
-                ...b,
-                sourceApp: b.sourceApp as any,
-                sourceKind: b.sourceKind as any,
-                watermarkKind: b.watermarkKind as any,
-                bodyFormat: b.bodyFormat as any,
-                bodyCompression: b.bodyCompression as any,
-              });
-            }
+      return {
+        filesProcessed: capture.filesProcessed,
+        capturedBatches: capture.batches.length,
+        capturedBytes: capture.capturedBytes,
+        errors: [],
+      };
+    }
 
-            for (const q of capture.quarantine) {
-              recordQuarantine(ctx.buffer, {
-                sourceApp: q.sourceApp as any,
-                sourcePath: q.sourcePath,
-                sourcePathHash: q.sourcePathHash,
-                sourceInode: q.sourceInode,
-                watermarkTable: q.watermarkTable,
-                watermarkPosition: q.watermarkPosition,
-                rowPk: q.rowPk,
-                redactedSizeBytes: q.redactedSizeBytes,
-                reason: q.reason,
-                quarantinedAtUtc: q.quarantinedAtUtc,
-                gatewayVersion: q.gatewayVersion,
-              });
-            }
+    return new Promise<SourcePollerResult>((resolve) => {
+      try {
+        const workerUrl = new URL('./poll-worker.ts', import.meta.url).href;
+        const worker = new Worker(workerUrl, { type: 'module' });
 
-            for (const c of capture.cursors) {
-              setCursor(ctx.buffer, {
-                sourceApp: source.name as any,
-                sourcePathHash: c.sourcePathHash,
-                sourcePath: c.sourcePath,
-                sourceInode: c.sourceInode,
-                watermarkTable: c.watermarkTable,
-                watermarkEnd: c.watermarkEnd,
-                lastSeenSizeBytes: c.lastSeenSizeBytes,
-                lastSeenPageCount: c.lastSeenPageCount,
-                consecutiveErrors: c.consecutiveErrors,
-              });
-            }
-          })();
-        } catch (dbErr) {
+        worker.onmessage = (event: MessageEvent<WorkerOutput>) => {
+          const output = event.data;
+          worker.terminate();
+
+          if (!output.success) {
+            resolve({
+              filesProcessed: 0,
+              capturedBatches: 0,
+              capturedBytes: 0,
+              errors: [
+                {
+                  sourcePath: source.baseDir ?? source.name,
+                  reason: output.error ?? 'Worker failed',
+                },
+              ],
+            });
+            return;
+          }
+
+          const capture = output.captureResult;
+          if (!capture) {
+            resolve({
+              filesProcessed: 0,
+              capturedBatches: 0,
+              capturedBytes: 0,
+              errors: [],
+            });
+            return;
+          }
+
+          try {
+            ctx.buffer.transaction(() => {
+              for (const b of capture.batches) {
+                insertBatch(ctx.buffer, {
+                  ...b,
+                  sourceApp: b.sourceApp as any,
+                  sourceKind: b.sourceKind as any,
+                  watermarkKind: b.watermarkKind as any,
+                  bodyFormat: b.bodyFormat as any,
+                  bodyCompression: b.bodyCompression as any,
+                });
+              }
+
+              for (const q of capture.quarantine) {
+                recordQuarantine(ctx.buffer, {
+                  sourceApp: q.sourceApp as any,
+                  sourcePath: q.sourcePath,
+                  sourcePathHash: q.sourcePathHash,
+                  sourceInode: q.sourceInode,
+                  watermarkTable: q.watermarkTable,
+                  watermarkPosition: q.watermarkPosition,
+                  rowPk: q.rowPk,
+                  redactedSizeBytes: q.redactedSizeBytes,
+                  reason: q.reason,
+                  quarantinedAtUtc: q.quarantinedAtUtc,
+                  gatewayVersion: q.gatewayVersion,
+                });
+              }
+
+              for (const c of capture.cursors) {
+                setCursor(ctx.buffer, {
+                  sourceApp: source.name as any,
+                  sourcePathHash: c.sourcePathHash,
+                  sourcePath: c.sourcePath,
+                  sourceInode: c.sourceInode,
+                  watermarkTable: c.watermarkTable,
+                  watermarkEnd: c.watermarkEnd,
+                  lastSeenSizeBytes: c.lastSeenSizeBytes,
+                  lastSeenPageCount: c.lastSeenPageCount,
+                  consecutiveErrors: c.consecutiveErrors,
+                });
+              }
+            })();
+          } catch (dbErr) {
+            resolve({
+              filesProcessed: capture.filesProcessed,
+              capturedBatches: 0,
+              capturedBytes: 0,
+              errors: [
+                {
+                  sourcePath: source.baseDir ?? source.name,
+                  reason: dbErr instanceof Error ? dbErr.message : String(dbErr),
+                },
+              ],
+            });
+            return;
+          }
+
           resolve({
             filesProcessed: capture.filesProcessed,
+            capturedBatches: capture.batches.length,
+            capturedBytes: capture.capturedBytes,
+            errors: [],
+          });
+        };
+
+        worker.onerror = (err) => {
+          worker.terminate();
+          resolve({
+            filesProcessed: 0,
             capturedBatches: 0,
             capturedBytes: 0,
             errors: [
               {
                 sourcePath: source.baseDir ?? source.name,
-                reason: dbErr instanceof Error ? dbErr.message : String(dbErr),
+                reason: err.message || 'Worker syntax/runtime error',
               },
             ],
           });
-          return;
+        };
+
+        const optionsObj: WorkerInput['options'] = {
+          gatewayVersion: ctx.gatewayVersion,
+          maxDecompressedBytes: ctx.capturePolicy.maxDecompressedBytes,
+          captureSubAgents: true,
+          priorCursors,
+        };
+        if (source.baseDir !== undefined) {
+          optionsObj.baseDir = source.baseDir;
         }
 
-        resolve({
-          filesProcessed: capture.filesProcessed,
-          capturedBatches: capture.batches.length,
-          capturedBytes: capture.capturedBytes,
-          errors: [],
-        });
-      };
-
-      worker.onerror = (err) => {
-        worker.terminate();
+        worker.postMessage({
+          task: 'capture',
+          sourceName: source.name,
+          options: optionsObj,
+        } as WorkerInput);
+      } catch (e) {
         resolve({
           filesProcessed: 0,
           capturedBatches: 0,
@@ -386,35 +503,23 @@ async function pollSourceInWorker(
           errors: [
             {
               sourcePath: source.baseDir ?? source.name,
-              reason: err.message || 'Worker syntax/runtime error',
+              reason: e instanceof Error ? e.message : String(e),
             },
           ],
         });
-      };
-
-      worker.postMessage({
-        task: 'capture',
-        sourceName: source.name,
-        options: {
-          baseDir: source.baseDir,
-          gatewayVersion: ctx.gatewayVersion,
-          maxDecompressedBytes: ctx.capturePolicy.maxDecompressedBytes,
-          captureSubAgents: true,
-          priorCursors,
+      }
+    });
+  } catch (e) {
+    return {
+      filesProcessed: 0,
+      capturedBatches: 0,
+      capturedBytes: 0,
+      errors: [
+        {
+          sourcePath: source.baseDir ?? source.name,
+          reason: e instanceof Error ? e.message : String(e),
         },
-      } as WorkerInput);
-    } catch (e) {
-      resolve({
-        filesProcessed: 0,
-        capturedBatches: 0,
-        capturedBytes: 0,
-        errors: [
-          {
-            sourcePath: source.baseDir ?? source.name,
-            reason: e instanceof Error ? e.message : String(e),
-          },
-        ],
-      });
-    }
-  });
+      ],
+    };
+  }
 }

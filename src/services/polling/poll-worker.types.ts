@@ -27,6 +27,9 @@ export interface WorkerOutput {
     filesProcessed: number;
     recordCount: number;
     totalBytes: number;
+    telemetryRawBytes: number;
+    telemetryCompressedBytes: number;
+    telemetryRecordCount: number;
     oldestDate: string | null;
   };
   captureResult?: {

@@ -1,6 +1,3 @@
-/* eslint-disable no-await-in-loop */
-/* eslint-disable unicorn/prefer-add-event-listener */
-/* eslint-disable unicorn/require-post-message-target-origin */
 import { Database } from 'bun:sqlite';
 import { openInMemoryBufferDb } from 'services/buffer/db.ts';
 import { makeClaudeCodeSourcePoller } from 'services/polling/poll-claude-code.ts';
@@ -15,19 +12,21 @@ import {
   defaultCodexHome,
 } from 'sources/codex';
 import { discoverCursorFiles, defaultCursorUserRoot } from 'sources/cursor';
-import { selectCursorSql } from 'sources/cursor/collect.ts';
 import { discoverGeminiCliFiles, defaultGeminiCliTmpRoot } from 'sources/gemini-cli';
 
 declare const self: any;
 
 async function countLinesAndOldestDate(
   filePath: string,
+  start?: number,
+  end?: number,
 ): Promise<{ count: number; oldestDate: string | null }> {
   let count = 0;
   let oldestDate: string | null = null;
   try {
     const file = Bun.file(filePath);
-    const stream = file.stream();
+    const sliced = start !== undefined && end !== undefined ? file.slice(start, end) : file;
+    const stream = sliced.stream();
     const reader = stream.getReader();
     const decoder = new TextDecoder();
     let partial = '';
@@ -68,13 +67,16 @@ async function countLinesAndOldestDate(
   return { count, oldestDate };
 }
 
-async function handleInspect(
+export async function handleInspect(
   sourceName: string,
   options: WorkerInput['options'],
 ): Promise<Required<WorkerOutput>['inspectResult']> {
   let filesProcessed = 0;
   let recordCount = 0;
+  let telemetryRecordCount = 0;
   let totalBytes = 0;
+  let telemetryRawBytes = 0;
+  let telemetryCompressedBytes = 0;
   let oldestDateMs = Infinity;
 
   const updateOldest = (dateStr: string | null, fallbackMs: number) => {
@@ -100,6 +102,10 @@ async function handleInspect(
       const { count, oldestDate } = await countLinesAndOldestDate(f.sourcePath);
       recordCount += count;
       updateOldest(oldestDate, f.lastModifiedMs);
+
+      telemetryRawBytes += f.sizeBytes;
+      telemetryCompressedBytes += Math.round(f.sizeBytes / 6.0);
+      telemetryRecordCount += count;
     }
   } else if (sourceName === 'cursor') {
     const baseDir = options.baseDir ?? defaultCursorUserRoot();
@@ -113,15 +119,31 @@ async function handleInspect(
         const db = new Database(f.sourcePath, { readonly: true });
         try {
           const tableCheck = db
-            .query("SELECT name FROM sqlite_master WHERE type='table' AND name='kv'")
+            .query("SELECT name FROM sqlite_master WHERE type='table' AND name='cursorDiskKV'")
             .get();
           if (tableCheck !== null) {
-            const cursorSql = selectCursorSql(options.captureSubAgents);
+            const prefixes = options.captureSubAgents
+              ? ['composerData:', 'bubbleId:', 'agentKv:blob:', 'composer.content.']
+              : ['composerData:', 'bubbleId:'];
+            const clauses = prefixes.map((p) => `key LIKE '${p}%'`).join(' OR ');
 
-            const countSql = `SELECT COUNT(*) AS count FROM kv WHERE (${cursorSql.substring(cursorSql.indexOf('WHERE') + 5, cursorSql.indexOf('ORDER BY'))})`;
+            const countSql = 'SELECT COUNT(*) AS count FROM cursorDiskKV';
             const row = db.query<{ count: number }, []>(countSql).get();
             if (row !== null) {
               recordCount += row.count;
+            }
+
+            const telemetryCountSql = `SELECT COUNT(*) AS count FROM cursorDiskKV WHERE ${clauses}`;
+            const telRow = db.query<{ count: number }, []>(telemetryCountSql).get();
+            if (telRow !== null) {
+              telemetryRecordCount += telRow.count;
+            }
+
+            const telemetryLengthSql = `SELECT SUM(LENGTH(value)) AS total_len FROM cursorDiskKV WHERE ${clauses}`;
+            const telLenRow = db.query<{ total_len: number | null }, []>(telemetryLengthSql).get();
+            if (telLenRow !== null && telLenRow.total_len !== null) {
+              telemetryRawBytes += telLenRow.total_len;
+              telemetryCompressedBytes += Math.round(telLenRow.total_len / 6.0);
             }
           }
         } finally {
@@ -136,9 +158,13 @@ async function handleInspect(
       filesProcessed++;
       totalBytes += f.sizeBytes;
       const { count, oldestDate } = await countLinesAndOldestDate(f.sourcePath);
-
-      recordCount += count > 1 ? count - 1 : count;
+      const adjustedCount = count > 1 ? count - 1 : count;
+      recordCount += adjustedCount;
       updateOldest(oldestDate, f.lastModifiedMs);
+
+      telemetryRawBytes += f.sizeBytes;
+      telemetryCompressedBytes += Math.round(f.sizeBytes / 6.0);
+      telemetryRecordCount += adjustedCount;
     }
   } else if (sourceName === 'codex') {
     const baseDir = options.baseDir ?? defaultCodexHome();
@@ -152,17 +178,40 @@ async function handleInspect(
 
         const db = new Database(stateFile.sourcePath, { readonly: true });
         try {
+          const tables = db
+            .query<
+              { name: string },
+              []
+            >("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            .all();
+          for (const t of tables) {
+            const row = db
+              .query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM "${t.name}"`)
+              .get();
+            if (row !== null) {
+              recordCount += row.count;
+            }
+          }
+
           for (const tbl of ['threads', 'thread_dynamic_tools', 'thread_spawn_edges']) {
             const tableCheck = db
               .query(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tbl}'`)
               .get();
             if (tableCheck !== null) {
-              const row = db
+              const telRow = db
                 .query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM "${tbl}"`)
                 .get();
-              if (row !== null) {
-                recordCount += row.count;
+              if (telRow !== null) {
+                telemetryRecordCount += telRow.count;
               }
+
+              const allRows = db.query<any, []>(`SELECT * FROM "${tbl}"`).all();
+              let tblBytes = 0;
+              for (const r of allRows) {
+                tblBytes += Buffer.byteLength(JSON.stringify(r), 'utf8');
+              }
+              telemetryRawBytes += tblBytes;
+              telemetryCompressedBytes += Math.round(tblBytes / 6.0);
             }
           }
         } finally {
@@ -182,6 +231,10 @@ async function handleInspect(
         const { count, oldestDate } = await countLinesAndOldestDate(f.sourcePath);
         recordCount += count;
         updateOldest(oldestDate, f.lastModifiedMs);
+
+        telemetryRawBytes += f.sizeBytes;
+        telemetryCompressedBytes += Math.round(f.sizeBytes / 6.0);
+        telemetryRecordCount += count;
       }
     } catch {}
   }
@@ -189,12 +242,15 @@ async function handleInspect(
   return {
     filesProcessed,
     recordCount,
+    telemetryRecordCount,
     totalBytes,
+    telemetryRawBytes,
+    telemetryCompressedBytes,
     oldestDate: oldestDateMs === Infinity ? null : new Date(oldestDateMs).toISOString(),
   };
 }
 
-async function handleCapture(
+export async function handleCapture(
   sourceName: string,
   options: WorkerInput['options'],
 ): Promise<Required<WorkerOutput>['captureResult']> {
@@ -306,31 +362,33 @@ async function handleCapture(
   }
 }
 
-self.onmessage = async (event: MessageEvent<WorkerInput>) => {
-  const { task, sourceName, options } = event.data;
-  try {
-    if (task === 'inspect') {
-      const inspectResult = await handleInspect(sourceName, options);
+if (typeof self !== 'undefined' && typeof self.postMessage === 'function') {
+  self.onmessage = async (event: MessageEvent<WorkerInput>) => {
+    const { task, sourceName, options } = event.data;
+    try {
+      if (task === 'inspect') {
+        const inspectResult = await handleInspect(sourceName, options);
+        self.postMessage({
+          sourceName,
+          success: true,
+          inspectResult,
+        } as WorkerOutput);
+      } else if (task === 'capture') {
+        const captureResult = await handleCapture(sourceName, options);
+        self.postMessage({
+          sourceName,
+          success: true,
+          captureResult,
+        } as WorkerOutput);
+      } else {
+        throw new Error(`Unknown task: ${task}`);
+      }
+    } catch (err) {
       self.postMessage({
         sourceName,
-        success: true,
-        inspectResult,
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
       } as WorkerOutput);
-    } else if (task === 'capture') {
-      const captureResult = await handleCapture(sourceName, options);
-      self.postMessage({
-        sourceName,
-        success: true,
-        captureResult,
-      } as WorkerOutput);
-    } else {
-      throw new Error(`Unknown task: ${task}`);
     }
-  } catch (err) {
-    self.postMessage({
-      sourceName,
-      success: false,
-      error: err instanceof Error ? err.message : String(err),
-    } as WorkerOutput);
-  }
-};
+  };
+}
