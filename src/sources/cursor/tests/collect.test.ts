@@ -105,7 +105,7 @@ test('inserts a batch covering filtered composer and bubble rows', async () => {
 test('body is wrapped as { rows: [...] } per nest kv_pairs_json contract', async () => {
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },
-    { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3,"text":"hi"}' },
   ]);
   await collectCursorFile(file, ctx(buffer));
   const batch = nextPendingBatch(buffer)!;
@@ -124,7 +124,7 @@ test('skip-listed keys are filtered out of the body', async () => {
     { key: 'composerData:c1', value: '{"_v":13}' },
     { key: 'agentKv:blob:abc', value: '{"junk":true}' },
     { key: 'checkpointId:42', value: '{}' },
-    { key: 'bubbleId:c1:b1', value: '{"_v":3,"type":1}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3,"type":1,"text":"hello"}' },
   ]);
   await collectCursorFile(file, ctx(buffer));
   const batch = nextPendingBatch(buffer)!;
@@ -156,8 +156,8 @@ test('does nothing when the cursorDiskKV table is missing', async () => {
 test('persists the rowid range watermark with end = last_rowid + 1', async () => {
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },
-    { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
-    { key: 'bubbleId:c1:b2', value: '{"_v":3}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3,"text":"hi"}' },
+    { key: 'bubbleId:c1:b2', value: '{"_v":3,"text":"there"}' },
   ]);
   await collectCursorFile(file, ctx(buffer));
   const batch = nextPendingBatch(buffer)!;
@@ -176,7 +176,7 @@ test('persists the rowid range watermark with end = last_rowid + 1', async () =>
 test('does nothing on a second poll with no new rows', async () => {
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },
-    { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3,"text":"hi"}' },
   ]);
   await collectCursorFile(file, ctx(buffer));
   const second = await collectCursorFile(file, ctx(buffer));
@@ -192,7 +192,10 @@ test('only ships rows past the saved watermark on subsequent polls', async () =>
     'composerData:c1',
     '{"_v":13}',
   );
-  db.query('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)').run('bubbleId:c1:b1', '{"_v":3}');
+  db.query('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)').run(
+    'bubbleId:c1:b1',
+    '{"_v":3,"text":"hi"}',
+  );
   db.close();
   let stat = await statFile(path);
   if (!stat.exists) throw new Error('missing');
@@ -208,7 +211,7 @@ test('only ships rows past the saved watermark on subsequent polls', async () =>
   const db2 = new Database(path);
   db2
     .query('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)')
-    .run('bubbleId:c1:b2', '{"_v":3}');
+    .run('bubbleId:c1:b2', '{"_v":3,"text":"hello"}');
   db2.close();
   stat = await statFile(path);
   if (!stat.exists) throw new Error('missing');
@@ -230,7 +233,7 @@ test('only ships rows past the saved watermark on subsequent polls', async () =>
 test('extracts agent_schema_version from composer and bubble _v fields', async () => {
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13,"name":"x"}' },
-    { key: 'bubbleId:c1:b1', value: '{"_v":3,"type":1}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3,"type":1,"text":"hi"}' },
   ]);
   await collectCursorFile(file, ctx(buffer));
   const batch = nextPendingBatch(buffer)!;
@@ -306,7 +309,7 @@ test('increments consecutive_errors on per-file collector failure', async () => 
 test('resets consecutive_errors on success after prior failure', async () => {
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },
-    { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3,"text":"hi"}' },
   ]);
   setCursor(buffer, {
     sourceApp: 'cursor',
@@ -330,7 +333,7 @@ test('resets consecutive_errors on success after prior failure', async () => {
 test('persists the wire-DTO fields needed by the uploader', async () => {
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },
-    { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3,"text":"hi"}' },
   ]);
   await collectCursorFile(file, ctx(buffer));
   const batch = nextPendingBatch(buffer)!;
@@ -348,7 +351,7 @@ test('persists the wire-DTO fields needed by the uploader', async () => {
 test('a fresh poll persists last_seen_size_bytes and last_seen_page_count on the cursor', async () => {
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },
-    { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3,"text":"hi"}' },
   ]);
   await collectCursorFile(file, ctx(buffer));
   const cursor = getCursor(buffer, {
@@ -365,7 +368,7 @@ test('a fresh poll persists last_seen_size_bytes and last_seen_page_count on the
 test('rowid regression triggers re-keying under #gen=1 with a fresh watermark', async () => {
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },
-    { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3,"text":"hi"}' },
   ]);
   setCursor(buffer, {
     sourceApp: 'cursor',
@@ -410,7 +413,7 @@ test('rowid regression triggers re-keying under #gen=1 with a fresh watermark', 
 test('size_decreased signal also triggers re-keying via #gen suffix', async () => {
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },
-    { key: 'bubbleId:c1:b1', value: '{"_v":3}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3,"text":"hi"}' },
   ]);
 
   setCursor(buffer, {
@@ -438,7 +441,7 @@ test('splits an oversized snapshot into multiple batches with contiguous rowid c
     const noise = randomBytes(2200).toString('base64');
     rows.push({
       key: i % 2 === 0 ? `composerData:c${i.toString()}` : `bubbleId:c${i.toString()}:b1`,
-      value: JSON.stringify({ _v: 1, noise }),
+      value: JSON.stringify({ _v: 1, text: 'some-text', noise }),
     });
   }
   const file = await makeDb(rows, 'big.vscdb');
@@ -548,7 +551,7 @@ test('quarantines oversized cursor row, advances cursor past it, and continues',
   const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
   const file = await makeDb([
     { key: 'composerData:huge', value: giantPayload },
-    { key: 'bubbleId:c1:b1', value: '{"_v":3,"type":1}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3,"type":1,"text":"hi"}' },
   ]);
 
   const result = await collectCursorFile(file, ctx(buffer));
@@ -573,7 +576,7 @@ test('every cursor batch satisfies BOTH compressed AND decompressed caps', async
     rows.push({ key: `composerData:c${i.toString()}`, value: JSON.stringify({ _v: 13, k: i }) });
     rows.push({
       key: `bubbleId:c${i.toString()}:b1`,
-      value: JSON.stringify({ _v: 3, txt: 'x'.repeat(60) }),
+      value: JSON.stringify({ _v: 3, text: 'x'.repeat(60) }),
     });
   }
   const file = await makeDb(rows, 'invariant.vscdb');
@@ -598,12 +601,12 @@ test('buildCursorSelectRowsSql with captureSubAgents=false includes only compose
   expect(sql).not.toContain('composer.content.');
 });
 
-test('buildCursorSelectRowsSql with captureSubAgents=true includes all four prefixes', () => {
+test('buildCursorSelectRowsSql with captureSubAgents=true matches false and only includes composer + bubble prefixes', () => {
   const sql = buildCursorSelectRowsSql(true);
   expect(sql).toContain("key LIKE 'composerData:%'");
   expect(sql).toContain("key LIKE 'bubbleId:%'");
-  expect(sql).toContain("key LIKE 'agentKv:blob:%'");
-  expect(sql).toContain("key LIKE 'composer.content.%'");
+  expect(sql).not.toContain('agentKv:blob:');
+  expect(sql).not.toContain('composer.content.');
 });
 
 test('selectCursorSql(false) returns the base SQL string', () => {
@@ -614,7 +617,8 @@ test('selectCursorSql(true) returns the with-sub-agents SQL string', () => {
   expect(selectCursorSql(true)).toBe(buildCursorSelectRowsSql(true));
 });
 
-test('selectCursorSql(false) and selectCursorSql(true) differ in the OR clauses', () => {
-  expect(selectCursorSql(true)).toContain("key LIKE 'agentKv:blob:%'");
-  expect(selectCursorSql(false)).not.toContain("key LIKE 'agentKv:blob:%'");
+test('selectCursorSql(false) and selectCursorSql(true) are identical and only query composer + bubble', () => {
+  expect(selectCursorSql(true)).toBe(selectCursorSql(false));
+  expect(selectCursorSql(true)).toContain("key LIKE 'composerData:%'");
+  expect(selectCursorSql(true)).not.toContain("key LIKE 'agentKv:blob:%'");
 });

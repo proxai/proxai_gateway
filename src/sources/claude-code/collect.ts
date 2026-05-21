@@ -49,57 +49,85 @@ export function isDialogueRecord(parsed: any): boolean {
   if (!parsed || typeof parsed !== 'object') {
     return false;
   }
-  if (parsed.type === 'user') {
-    let hasToolResult = false;
+  if (parsed.type === 'user' || parsed.type === 'assistant') {
     const mContent = parsed.message?.content;
     const pContent = parsed.content;
-    if (mContent && typeof mContent === 'object') {
-      if (Array.isArray(mContent)) {
-        hasToolResult = mContent.some(
-          (item: any) => item && typeof item === 'object' && item.type === 'tool_result',
+    const actualContent = mContent !== undefined && mContent !== null ? mContent : pContent;
+    if (actualContent !== undefined && actualContent !== null) {
+      let hasText = false;
+      if (Array.isArray(actualContent)) {
+        hasText = actualContent.some(
+          (item: any) =>
+            item &&
+            typeof item === 'object' &&
+            item.type === 'text' &&
+            typeof item.text === 'string' &&
+            item.text.trim().length > 0,
         );
-      } else if ((mContent as any).type === 'tool_result') {
-        hasToolResult = true;
+      } else if (typeof actualContent === 'object') {
+        hasText =
+          (actualContent as any).type === 'text' &&
+          typeof (actualContent as any).text === 'string' &&
+          (actualContent as any).text.trim().length > 0;
+      } else if (typeof actualContent === 'string') {
+        hasText = actualContent.trim().length > 0;
+      } else {
+        hasText = String(actualContent).trim().length > 0;
+      }
+      if (!hasText) {
+        return false;
       }
     }
-    if (pContent && typeof pContent === 'object') {
-      if (Array.isArray(pContent)) {
-        hasToolResult =
-          hasToolResult ||
-          pContent.some(
+
+    if (parsed.type === 'user') {
+      let hasToolResult = false;
+      if (mContent && typeof mContent === 'object') {
+        if (Array.isArray(mContent)) {
+          hasToolResult = mContent.some(
             (item: any) => item && typeof item === 'object' && item.type === 'tool_result',
           );
-      } else if ((pContent as any).type === 'tool_result') {
-        hasToolResult = true;
+        } else if ((mContent as any).type === 'tool_result') {
+          hasToolResult = true;
+        }
       }
-    }
-    return !hasToolResult;
-  }
-  if (parsed.type === 'assistant') {
-    let hasToolUse = false;
-    const mContent = parsed.message?.content;
-    const pContent = parsed.content;
-    if (mContent && typeof mContent === 'object') {
-      if (Array.isArray(mContent)) {
-        hasToolUse = mContent.some(
-          (item: any) => item && typeof item === 'object' && item.type === 'tool_use',
-        );
-      } else if ((mContent as any).type === 'tool_use') {
-        hasToolUse = true;
+      if (pContent && typeof pContent === 'object') {
+        if (Array.isArray(pContent)) {
+          hasToolResult =
+            hasToolResult ||
+            pContent.some(
+              (item: any) => item && typeof item === 'object' && item.type === 'tool_result',
+            );
+        } else if ((pContent as any).type === 'tool_result') {
+          hasToolResult = true;
+        }
       }
+      return !hasToolResult;
     }
-    if (pContent && typeof pContent === 'object') {
-      if (Array.isArray(pContent)) {
-        hasToolUse =
-          hasToolUse ||
-          pContent.some(
+
+    if (parsed.type === 'assistant') {
+      let hasToolUse = false;
+      if (mContent && typeof mContent === 'object') {
+        if (Array.isArray(mContent)) {
+          hasToolUse = mContent.some(
             (item: any) => item && typeof item === 'object' && item.type === 'tool_use',
           );
-      } else if ((pContent as any).type === 'tool_use') {
-        hasToolUse = true;
+        } else if ((mContent as any).type === 'tool_use') {
+          hasToolUse = true;
+        }
       }
+      if (pContent && typeof pContent === 'object') {
+        if (Array.isArray(pContent)) {
+          hasToolUse =
+            hasToolUse ||
+            pContent.some(
+              (item: any) => item && typeof item === 'object' && item.type === 'tool_use',
+            );
+        } else if ((pContent as any).type === 'tool_use') {
+          hasToolUse = true;
+        }
+      }
+      return !hasToolUse;
     }
-    return !hasToolUse;
   }
   return false;
 }

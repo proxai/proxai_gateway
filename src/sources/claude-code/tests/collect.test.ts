@@ -438,16 +438,21 @@ test('isDialogueRecord extreme inputs and edge cases', () => {
       message: { content: [null, undefined, { type: 'tool_result' }] },
     }),
   ).toBe(false);
-  expect(isDialogueRecord({ type: 'user', message: { content: [null, { type: 'text' }] } })).toBe(
-    true,
-  );
+  expect(
+    isDialogueRecord({
+      type: 'user',
+      message: { content: [null, { type: 'text', text: 'hello' }] },
+    }),
+  ).toBe(true);
 
   expect(isDialogueRecord({ type: 'user', content: { type: 'tool_result' } })).toBe(false);
   expect(isDialogueRecord({ type: 'user', content: [{ type: 'tool_result' }] })).toBe(false);
   expect(
     isDialogueRecord({ type: 'user', content: [null, undefined, { type: 'tool_result' }] }),
   ).toBe(false);
-  expect(isDialogueRecord({ type: 'user', content: [null, { type: 'text' }] })).toBe(true);
+  expect(isDialogueRecord({ type: 'user', content: [null, { type: 'text', text: 'hello' }] })).toBe(
+    true,
+  );
 
   expect(isDialogueRecord({ type: 'assistant' })).toBe(true);
   expect(isDialogueRecord({ type: 'assistant', message: null })).toBe(true);
@@ -469,7 +474,10 @@ test('isDialogueRecord extreme inputs and edge cases', () => {
     }),
   ).toBe(false);
   expect(
-    isDialogueRecord({ type: 'assistant', message: { content: [null, { type: 'text' }] } }),
+    isDialogueRecord({
+      type: 'assistant',
+      message: { content: [null, { type: 'text', text: 'hello' }] },
+    }),
   ).toBe(true);
 
   expect(isDialogueRecord({ type: 'assistant', content: { type: 'tool_use' } })).toBe(false);
@@ -477,18 +485,25 @@ test('isDialogueRecord extreme inputs and edge cases', () => {
   expect(
     isDialogueRecord({ type: 'assistant', content: [null, undefined, { type: 'tool_use' }] }),
   ).toBe(false);
-  expect(isDialogueRecord({ type: 'assistant', content: [null, { type: 'text' }] })).toBe(true);
+  expect(
+    isDialogueRecord({ type: 'assistant', content: [null, { type: 'text', text: 'hello' }] }),
+  ).toBe(true);
 
   expect(
     isDialogueRecord({ type: 'user', message: { content: [[{ type: 'tool_result' }]] } }),
-  ).toBe(true);
+  ).toBe(false);
   expect(
-    isDialogueRecord({ type: 'user', message: { content: Array(10000).fill({ type: 'text' }) } }),
+    isDialogueRecord({
+      type: 'user',
+      message: { content: Array(10000).fill({ type: 'text', text: 'hello' }) },
+    }),
   ).toBe(true);
   expect(
     isDialogueRecord({
       type: 'user',
-      message: { content: [...Array(10000).fill({ type: 'text' }), { type: 'tool_result' }] },
+      message: {
+        content: [...Array(10000).fill({ type: 'text', text: 'hello' }), { type: 'tool_result' }],
+      },
     }),
   ).toBe(false);
 });

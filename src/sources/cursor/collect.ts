@@ -5,10 +5,8 @@ import { detectVacuum, getCursor, getCursorWithFallback, setCursor } from 'servi
 import { SUB_AGENT_CAPTURE_BY_SOURCE } from 'services/config/sub-agent-flags';
 import {
   CURSOR_DISK_KV_TABLE,
-  CURSOR_KEY_PREFIX_AGENT_KV_BLOB,
   CURSOR_KEY_PREFIX_BUBBLE,
   CURSOR_KEY_PREFIX_COMPOSER,
-  CURSOR_KEY_PREFIX_COMPOSER_CONTENT,
   CURSOR_SOURCE_APP,
 } from 'sources/cursor/cursor.constants.ts';
 import type {
@@ -20,15 +18,8 @@ import type {
 import { extractAgentSchemaVersion } from 'sources/cursor/extract-version.ts';
 import { processRows } from 'sources/cursor/process-rows.ts';
 
-export function buildCursorSelectRowsSql(captureSubAgents: boolean): string {
-  const prefixes = captureSubAgents
-    ? [
-        CURSOR_KEY_PREFIX_COMPOSER,
-        CURSOR_KEY_PREFIX_BUBBLE,
-        CURSOR_KEY_PREFIX_AGENT_KV_BLOB,
-        CURSOR_KEY_PREFIX_COMPOSER_CONTENT,
-      ]
-    : [CURSOR_KEY_PREFIX_COMPOSER, CURSOR_KEY_PREFIX_BUBBLE];
+export function buildCursorSelectRowsSql(_captureSubAgents: boolean): string {
+  const prefixes = [CURSOR_KEY_PREFIX_COMPOSER, CURSOR_KEY_PREFIX_BUBBLE];
   const clauses = prefixes.map((p) => `key LIKE '${p}%'`).join(' OR ');
   return `
   SELECT rowid, key, value

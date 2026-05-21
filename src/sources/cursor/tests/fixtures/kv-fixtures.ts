@@ -77,11 +77,11 @@ export const MIXED_VERSIONS_FIXTURE: FixtureScenario = {
     },
     {
       key: 'bubbleId:00000000-0000-0000-0000-0000000000aa:b-1',
-      value: JSON.stringify({ _v: 3, type: 1 }),
+      value: JSON.stringify({ _v: 3, type: 1, text: 'hello' }),
     },
     {
       key: 'bubbleId:00000000-0000-0000-0000-0000000000bb:b-2',
-      value: JSON.stringify({ _v: 5, type: 2 }),
+      value: JSON.stringify({ _v: 5, type: 2, text: 'world' }),
     },
   ],
   expectedAgentSchemaVersion: '10:3',
@@ -125,11 +125,11 @@ export const NULL_AND_MISSING_V_FIXTURE: FixtureScenario = {
     },
     {
       key: 'bubbleId:00000000-0000-0000-0000-0000000000e0:b-z',
-      value: JSON.stringify({ checkpointId: 'placeholder' }),
+      value: JSON.stringify({ checkpointId: 'placeholder', text: 'hello' }),
     },
     {
       key: 'bubbleId:00000000-0000-0000-0000-0000000000e1:b-y',
-      value: JSON.stringify({ _v: 3, type: 1 }),
+      value: JSON.stringify({ _v: 3, type: 1, text: 'world' }),
     },
   ],
   expectedAgentSchemaVersion: '14:3',
@@ -167,7 +167,7 @@ export const MIXED_KEY_PREFIXES_FIXTURE: FixtureScenario = {
     { key: 'checkpointId:42', value: JSON.stringify({}) },
     {
       key: 'bubbleId:00000000-0000-0000-0000-000000000111:b-1',
-      value: JSON.stringify({ _v: 7, type: 2 }),
+      value: JSON.stringify({ _v: 7, type: 2, text: 'hello' }),
     },
   ],
   expectedAgentSchemaVersion: '13:7',

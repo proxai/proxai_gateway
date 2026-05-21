@@ -153,28 +153,42 @@ export async function handleInspect(
             .query("SELECT name FROM sqlite_master WHERE type='table' AND name='cursorDiskKV'")
             .get();
           if (tableCheck !== null) {
-            const prefixes = options.captureSubAgents
-              ? ['composerData:', 'bubbleId:', 'agentKv:blob:', 'composer.content.']
-              : ['composerData:', 'bubbleId:'];
-            const clauses = prefixes.map((p) => `key LIKE '${p}%'`).join(' OR ');
-
             const countSql = 'SELECT COUNT(*) AS count FROM cursorDiskKV';
             const row = db.query<{ count: number }, []>(countSql).get();
             if (row !== null) {
               recordCount += row.count;
             }
 
-            const telemetryCountSql = `SELECT COUNT(*) AS count FROM cursorDiskKV WHERE ${clauses}`;
-            const telRow = db.query<{ count: number }, []>(telemetryCountSql).get();
-            if (telRow !== null) {
-              telemetryRecordCount += telRow.count;
-            }
+            const prefixes = ['composerData:', 'bubbleId:'];
+            const clauses = prefixes.map((p) => `key LIKE '${p}%'`).join(' OR ');
+            const rowsSql = `SELECT key, value FROM cursorDiskKV WHERE ${clauses}`;
+            const dbRows = db.query<{ key: string; value: string | null }, []>(rowsSql).all();
 
-            const telemetryLengthSql = `SELECT SUM(LENGTH(value)) AS total_len FROM cursorDiskKV WHERE ${clauses}`;
-            const telLenRow = db.query<{ total_len: number | null }, []>(telemetryLengthSql).get();
-            if (telLenRow !== null && telLenRow.total_len !== null) {
-              telemetryRawBytes += telLenRow.total_len;
-              telemetryCompressedBytes += Math.round(telLenRow.total_len / 6.0);
+            for (const r of dbRows) {
+              let keep = true;
+              if (r.key.startsWith('bubbleId:')) {
+                if (r.value === null) {
+                  keep = false;
+                } else {
+                  try {
+                    const parsed = JSON.parse(r.value);
+                    if (parsed && typeof parsed === 'object') {
+                      const text = typeof parsed.text === 'string' ? parsed.text.trim() : '';
+                      keep = text.length > 0;
+                    } else {
+                      keep = false;
+                    }
+                  } catch {
+                    keep = false;
+                  }
+                }
+              }
+              if (keep) {
+                telemetryRecordCount++;
+                const len = r.value !== null ? Buffer.byteLength(r.value, 'utf8') : 0;
+                telemetryRawBytes += len;
+                telemetryCompressedBytes += Math.round(len / 6.0);
+              }
             }
           }
         } finally {

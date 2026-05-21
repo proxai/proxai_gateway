@@ -34,8 +34,24 @@ export interface ProcessRowsInput {
 }
 
 export function processRows(input: ProcessRowsInput): void {
+  const filteredRows = input.rows.filter((row) => {
+    if (row.key.startsWith('bubbleId:')) {
+      try {
+        const parsed = JSON.parse(row.value);
+        if (parsed && typeof parsed === 'object') {
+          const text = typeof parsed.text === 'string' ? parsed.text.trim() : '';
+          return text.length > 0;
+        }
+      } catch {
+        return false;
+      }
+      return false;
+    }
+    return true;
+  });
+
   const measureSlice = createSliceMeasurer();
-  const slices = splitRowsByCompressedSize(input.rows, {
+  const slices = splitRowsByCompressedSize(filteredRows, {
     targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
     maxDecompressedBytes: input.context.maxDecompressedBytes,
     measureCompressed: (slice) => measureSlice(slice).compressed.byteLength,

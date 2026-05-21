@@ -70,10 +70,10 @@ test('processes globalStorage + workspaceStorage dbs', async () => {
   ]);
   await seedDb('workspaceStorage/aaa111/state.vscdb', [
     { key: 'composerData:xyz', value: JSON.stringify({ _v: 13 }) },
-    { key: 'bubbleId:uvw', value: JSON.stringify({ _v: 7 }) },
+    { key: 'bubbleId:uvw', value: JSON.stringify({ _v: 7, text: 'hi' }) },
   ]);
   await seedDb('workspaceStorage/bbb222/state.vscdb', [
-    { key: 'bubbleId:lll', value: JSON.stringify({ _v: 7 }) },
+    { key: 'bubbleId:lll', value: JSON.stringify({ _v: 7, text: 'hello' }) },
   ]);
   const poller = makeCursorSourcePoller({ baseDir: dir });
   const result = await poller({
