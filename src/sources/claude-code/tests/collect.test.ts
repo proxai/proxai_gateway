@@ -444,6 +444,12 @@ test('isDialogueRecord extreme inputs and edge cases', () => {
       message: { content: [null, { type: 'text', text: 'hello' }] },
     }),
   ).toBe(true);
+  expect(
+    isDialogueRecord({
+      type: 'user',
+      message: { content: [{ type: 'image' }, { type: 'text', text: 'hello' }] },
+    }),
+  ).toBe(true);
 
   expect(isDialogueRecord({ type: 'user', content: { type: 'tool_result' } })).toBe(false);
   expect(isDialogueRecord({ type: 'user', content: [{ type: 'tool_result' }] })).toBe(false);

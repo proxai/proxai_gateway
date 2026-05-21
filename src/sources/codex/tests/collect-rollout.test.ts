@@ -67,6 +67,20 @@ const nullCliVersionReader = async (): Promise<string | null> => null;
 
 const DECODER = new TextDecoder();
 
+function codexRecordKind(line: string): string {
+  const parsed: unknown = JSON.parse(line);
+  if (parsed === null || typeof parsed !== 'object') {
+    return '';
+  }
+  const rec = parsed as { type?: unknown; payload?: { type?: unknown; role?: unknown } };
+  if (rec.type === 'event_msg' || rec.type === 'response_item') {
+    const payload = rec.payload ?? {};
+    const role = typeof payload.role === 'string' ? `:${payload.role}` : '';
+    return `${String(rec.type)}:${String(payload.type)}${role}`;
+  }
+  return String(rec.type);
+}
+
 test('inserts a batch covering newly added complete lines', async () => {
   const file = await makeFile(
     '{"timestamp":"2026-04-29T10:00:00Z","type":"session_meta","payload":{}}\n',
@@ -150,7 +164,19 @@ test('uses the provided agent_schema_version verbatim', async () => {
 
 test('redacts secrets from the body before storing', async () => {
   const file = await makeFile(
-    '{"type":"event_msg","payload":{"type":"user_message","text":"export OPENAI_KEY=sk-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQrSt"}}\n',
+    JSON.stringify({
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: 'export OPENAI_KEY=sk-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQrSt',
+          },
+        ],
+      },
+    }) + '\n',
   );
   await collectCodexRollout(file, ctx(buffer), '0.1.0');
   const batch = nextPendingBatch(buffer)!;
@@ -380,14 +406,45 @@ test('dialogue telemetry filtering, pruning, and discards', async () => {
         type: 'session_meta',
         payload: {
           cli_version: '0.1.0',
-          instructions: 'secret instructions',
-          tools: [{ name: 'git' }],
+          base_instructions: { text: 'secret instructions' },
+          dynamic_tools: [{ name: 'git' }],
         },
       }),
-      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', text: 'hello' } }),
-      JSON.stringify({ type: 'event_msg', payload: { type: 'tool_call', name: 'git' } }),
-      JSON.stringify({ type: 'response_item', role: 'assistant', payload: { text: 'hi' } }),
-      JSON.stringify({ type: 'response_item', role: 'developer', payload: { type: 'reasoning' } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'task_started' } }),
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'hello' }],
+        },
+      }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'token_count', info: { total: 9 } } }),
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'hi' }],
+        },
+      }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'task_complete' } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'agent_message', message: 'hi' } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'hello' } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'mcp_tool_call_end' } }),
+      JSON.stringify({ type: 'event_msg' }),
+      JSON.stringify({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'developer',
+          content: [{ type: 'input_text', text: 'sys' }],
+        },
+      }),
+      JSON.stringify({ type: 'response_item', payload: { type: 'reasoning' } }),
+      JSON.stringify({ type: 'response_item', payload: { type: 'function_call', name: 'shell' } }),
+      JSON.stringify({ type: 'turn_context', payload: { cwd: '/repo' } }),
+      '42',
     ].join('\n') + '\n';
 
   const file = await makeFile(content);
@@ -397,20 +454,17 @@ test('dialogue telemetry filtering, pruning, and discards', async () => {
 
   const batch = nextPendingBatch(buffer)!;
   const decompressed = DECODER.decode(zstdDecompressSync(batch.body));
-  const lines = decompressed.trim().split('\n');
-  expect(lines.length).toBe(3);
+  const keptKinds = decompressed.trim().split('\n').map(codexRecordKind);
+  expect(keptKinds).toEqual([
+    'session_meta',
+    'event_msg:task_started',
+    'response_item:message:user',
+    'event_msg:token_count',
+    'response_item:message:assistant',
+    'event_msg:task_complete',
+  ]);
 
-  const p1 = JSON.parse(lines[0]!);
-  expect(p1.type).toBe('session_meta');
-  expect(p1.payload.cli_version).toBe('0.1.0');
-  expect(p1.payload.instructions).toBe('<trimmed>');
-  expect(p1.payload.tools).toEqual([]);
-
-  const p2 = JSON.parse(lines[1]!);
-  expect(p2.type).toBe('event_msg');
-  expect(p2.payload.type).toBe('user_message');
-
-  const p3 = JSON.parse(lines[2]!);
-  expect(p3.type).toBe('response_item');
-  expect(p3.role).toBe('assistant');
+  expect(decompressed).toContain('"base_instructions":"<trimmed>"');
+  expect(decompressed).not.toContain('secret instructions');
+  expect(decompressed).toContain('"dynamic_tools":[]');
 });

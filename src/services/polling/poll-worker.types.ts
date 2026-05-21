@@ -30,8 +30,10 @@ export interface WorkerOutput {
     telemetryRawBytes: number;
     telemetryCompressedBytes: number;
     telemetryRecordCount: number;
+    promptCount: number;
     oldestDate: string | null;
     newestDate: string | null;
+    errors: string[];
   };
   captureResult?: {
     filesProcessed: number;

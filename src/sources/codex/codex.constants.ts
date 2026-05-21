@@ -26,8 +26,14 @@ export const CODEX_THREAD_SPAWN_EDGES_TABLE: CodexTable = 'thread_spawn_edges';
 
 export const CODEX_ALLOWED_STATE_TABLES: readonly CodexTable[] = [
   CODEX_THREADS_TABLE,
-  CODEX_THREAD_DYNAMIC_TOOLS_TABLE,
   CODEX_THREAD_SPAWN_EDGES_TABLE,
 ];
 
 export const CODEX_DEFAULT_AGENT_SCHEMA_VERSION = 'unknown';
+
+export const CODEX_TURN_CONTROL_EVENT_MSG_TYPES: readonly string[] = [
+  'task_started',
+  'task_complete',
+  'turn_aborted',
+  'token_count',
+];

@@ -441,7 +441,7 @@ test('splits an oversized snapshot into multiple batches with contiguous rowid c
     const noise = randomBytes(2200).toString('base64');
     rows.push({
       key: i % 2 === 0 ? `composerData:c${i.toString()}` : `bubbleId:c${i.toString()}:b1`,
-      value: JSON.stringify({ _v: 1, text: 'some-text', noise }),
+      value: JSON.stringify({ _v: 1, text: noise }),
     });
   }
   const file = await makeDb(rows, 'big.vscdb');
@@ -593,19 +593,19 @@ test('every cursor batch satisfies BOTH compressed AND decompressed caps', async
   }
 }, 60_000);
 
-test('buildCursorSelectRowsSql with captureSubAgents=false includes only composer + bubble prefixes', () => {
+test('buildCursorSelectRowsSql with captureSubAgents=false includes composer, bubble, and agentKv prefixes', () => {
   const sql = buildCursorSelectRowsSql(false);
   expect(sql).toContain("key LIKE 'composerData:%'");
   expect(sql).toContain("key LIKE 'bubbleId:%'");
-  expect(sql).not.toContain('agentKv:blob:');
+  expect(sql).toContain("key LIKE 'agentKv:blob:%'");
   expect(sql).not.toContain('composer.content.');
 });
 
-test('buildCursorSelectRowsSql with captureSubAgents=true matches false and only includes composer + bubble prefixes', () => {
+test('buildCursorSelectRowsSql with captureSubAgents=true matches false and includes composer, bubble, and agentKv prefixes', () => {
   const sql = buildCursorSelectRowsSql(true);
   expect(sql).toContain("key LIKE 'composerData:%'");
   expect(sql).toContain("key LIKE 'bubbleId:%'");
-  expect(sql).not.toContain('agentKv:blob:');
+  expect(sql).toContain("key LIKE 'agentKv:blob:%'");
   expect(sql).not.toContain('composer.content.');
 });
 
@@ -617,8 +617,8 @@ test('selectCursorSql(true) returns the with-sub-agents SQL string', () => {
   expect(selectCursorSql(true)).toBe(buildCursorSelectRowsSql(true));
 });
 
-test('selectCursorSql(false) and selectCursorSql(true) are identical and only query composer + bubble', () => {
+test('selectCursorSql(false) and selectCursorSql(true) are identical and query composer, bubble, and agentKv', () => {
   expect(selectCursorSql(true)).toBe(selectCursorSql(false));
   expect(selectCursorSql(true)).toContain("key LIKE 'composerData:%'");
-  expect(selectCursorSql(true)).not.toContain("key LIKE 'agentKv:blob:%'");
+  expect(selectCursorSql(true)).toContain("key LIKE 'agentKv:blob:%'");
 });

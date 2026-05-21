@@ -33,6 +33,136 @@ export interface ProcessRowsInput {
   result: CursorCollectorResult;
 }
 
+export function isAgentKvConversationBlob(value: string): boolean {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return false;
+  }
+  if (parsed === null || typeof parsed !== 'object') {
+    return false;
+  }
+  const role = (parsed as { role?: unknown }).role;
+  return role === 'user' || role === 'assistant';
+}
+
+const CURSOR_BUBBLE_KEEP_KEYS = [
+  '_v',
+  'type',
+  'bubbleId',
+  'text',
+  'richText',
+  'createdAt',
+  'capabilityType',
+  'toolFormerData',
+  'thinking',
+  'context',
+];
+const CURSOR_ENV_WRAPPER_PREFIXES = [
+  '<user_info>',
+  '<open_and_recently_viewed_files>',
+  '<open_files>',
+  '<recently_viewed_files>',
+  '<agent_transcripts>',
+];
+const CURSOR_ARG_VALUE_MAX_BYTES = 512;
+
+function trimCursorBubbleValue(source: Record<string, unknown>): string {
+  const trimmed: Record<string, unknown> = {};
+  for (const key of CURSOR_BUBBLE_KEEP_KEYS) {
+    if (key in source) {
+      trimmed[key] = source[key];
+    }
+  }
+  return JSON.stringify(trimmed);
+}
+
+function isCursorEnvWrapperText(text: string): boolean {
+  const trimmed = text.trimStart();
+  return CURSOR_ENV_WRAPPER_PREFIXES.some((prefix) => trimmed.startsWith(prefix));
+}
+
+function trimCursorArgs(args: unknown): unknown {
+  if (args === null || typeof args !== 'object' || Array.isArray(args)) {
+    return args;
+  }
+  const trimmed: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (
+      typeof value === 'string' &&
+      Buffer.byteLength(value, 'utf8') > CURSOR_ARG_VALUE_MAX_BYTES
+    ) {
+      trimmed[key] = '<trimmed>';
+    } else {
+      trimmed[key] = value;
+    }
+  }
+  return trimmed;
+}
+
+function trimCursorUserContent(content: unknown): unknown {
+  if (!Array.isArray(content)) {
+    return content;
+  }
+  return content.filter((item) => {
+    if (item === null || typeof item !== 'object') {
+      return true;
+    }
+    const text = (item as { text?: unknown }).text;
+    return typeof text !== 'string' || !isCursorEnvWrapperText(text);
+  });
+}
+
+function trimCursorAssistantContent(content: unknown): unknown {
+  if (!Array.isArray(content)) {
+    return content;
+  }
+  const trimmed: unknown[] = [];
+  for (const part of content) {
+    if (part === null || typeof part !== 'object') {
+      trimmed.push(part);
+      continue;
+    }
+    const partType = (part as { type?: unknown }).type;
+    if (partType === 'reasoning' || partType === 'redacted-reasoning') {
+      continue;
+    }
+    if (partType === 'tool-call') {
+      const toolPart = part as Record<string, unknown>;
+      trimmed.push({ ...toolPart, args: trimCursorArgs(toolPart.args) });
+      continue;
+    }
+    trimmed.push(part);
+  }
+  return trimmed;
+}
+
+export function trimCursorRowValue(key: string, value: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return value;
+  }
+  if (parsed === null || typeof parsed !== 'object') {
+    return value;
+  }
+  const source = parsed as Record<string, unknown>;
+  if (key.startsWith('bubbleId:')) {
+    return trimCursorBubbleValue(source);
+  }
+  if (key.startsWith('agentKv:blob:')) {
+    if (source.role === 'user') {
+      return JSON.stringify({ ...source, content: trimCursorUserContent(source.content) });
+    }
+    if (source.role === 'assistant') {
+      return JSON.stringify({ ...source, content: trimCursorAssistantContent(source.content) });
+    }
+  }
+  return value;
+}
+
 export function processRows(input: ProcessRowsInput): void {
   const filteredRows = input.rows.filter((row) => {
     if (row.key.startsWith('bubbleId:')) {
@@ -47,11 +177,20 @@ export function processRows(input: ProcessRowsInput): void {
       }
       return false;
     }
+    if (row.key.startsWith('agentKv:blob:')) {
+      return isAgentKvConversationBlob(row.value);
+    }
     return true;
   });
 
+  const trimmedRows: CursorDiskKvRow[] = filteredRows.map((row) => ({
+    rowid: row.rowid,
+    key: row.key,
+    value: trimCursorRowValue(row.key, row.value),
+  }));
+
   const measureSlice = createSliceMeasurer();
-  const slices = splitRowsByCompressedSize(filteredRows, {
+  const slices = splitRowsByCompressedSize(trimmedRows, {
     targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
     maxDecompressedBytes: input.context.maxDecompressedBytes,
     measureCompressed: (slice) => measureSlice(slice).compressed.byteLength,

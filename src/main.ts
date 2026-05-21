@@ -17,7 +17,7 @@ import { runStop } from 'cli/commands/stop.ts';
 import { runTail } from 'cli/commands/tail';
 import { runUninstall } from 'cli/commands/uninstall';
 import { runUpgrade } from 'cli/commands/upgrade.ts';
-import { runInspect } from 'cli/commands/inspect.ts';
+import { runInspect } from 'cli/commands/inspect';
 import { autoUpgradeFromConfig } from 'cli/wiring/auto-upgrade.ts';
 
 import { consoleOutput } from 'cli/output.ts';

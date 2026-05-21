@@ -53,7 +53,101 @@ export function isGeminiCliDialogueRecord(parsed: any): boolean {
   if (!parsed || typeof parsed !== 'object') {
     return false;
   }
-  return parsed.type === 'user' || parsed.type === 'gemini';
+  if (parsed.type === 'gemini') {
+    return true;
+  }
+  if (parsed.type === 'user') {
+    const content = parsed.content;
+    if (!Array.isArray(content)) {
+      return true;
+    }
+    return content.some(
+      (item: unknown) =>
+        item !== null &&
+        typeof item === 'object' &&
+        typeof (item as { text?: unknown }).text === 'string',
+    );
+  }
+  return false;
+}
+
+const GEMINI_TOOL_CALL_KEEP_KEYS = [
+  'id',
+  'name',
+  'displayName',
+  'description',
+  'status',
+  'timestamp',
+  'agentId',
+];
+const GEMINI_ARG_VALUE_MAX_BYTES = 512;
+
+function trimGeminiToolCallArgs(args: unknown): unknown {
+  if (args === null || typeof args !== 'object' || Array.isArray(args)) {
+    return args;
+  }
+  const trimmed: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (
+      typeof value === 'string' &&
+      Buffer.byteLength(value, 'utf8') > GEMINI_ARG_VALUE_MAX_BYTES
+    ) {
+      trimmed[key] = '<trimmed>';
+    } else {
+      trimmed[key] = value;
+    }
+  }
+  return trimmed;
+}
+
+function trimGeminiToolCall(call: unknown): unknown {
+  if (call === null || typeof call !== 'object') {
+    return call;
+  }
+  const source = call as Record<string, unknown>;
+  const trimmed: Record<string, unknown> = {};
+  for (const key of GEMINI_TOOL_CALL_KEEP_KEYS) {
+    if (key in source) {
+      trimmed[key] = source[key];
+    }
+  }
+  if ('args' in source) {
+    trimmed.args = trimGeminiToolCallArgs(source.args);
+  }
+  return trimmed;
+}
+
+function trimGeminiThought(thought: unknown): unknown {
+  if (thought === null || typeof thought !== 'object') {
+    return thought;
+  }
+  const source = thought as Record<string, unknown>;
+  const trimmed: Record<string, unknown> = {};
+  if ('subject' in source) {
+    trimmed.subject = source.subject;
+  }
+  if ('timestamp' in source) {
+    trimmed.timestamp = source.timestamp;
+  }
+  return trimmed;
+}
+
+export function trimGeminiCliRecord(parsed: unknown): unknown {
+  if (parsed === null || typeof parsed !== 'object') {
+    return parsed;
+  }
+  const record = parsed as Record<string, unknown>;
+  if (record.type !== 'gemini') {
+    return parsed;
+  }
+  const trimmed: Record<string, unknown> = { ...record };
+  if (Array.isArray(record.toolCalls)) {
+    trimmed.toolCalls = record.toolCalls.map(trimGeminiToolCall);
+  }
+  if (Array.isArray(record.thoughts)) {
+    trimmed.thoughts = record.thoughts.map(trimGeminiThought);
+  }
+  return trimmed;
 }
 
 export async function collectGeminiCliFile(
@@ -135,7 +229,7 @@ export async function collectGeminiCliFile(
           const parsed = JSON.parse(line);
           if (isGeminiCliDialogueRecord(parsed)) {
             kept.push({
-              text: line,
+              text: JSON.stringify(trimGeminiCliRecord(parsed)),
               physicalEndOffset: lineEndOffset,
             });
           }

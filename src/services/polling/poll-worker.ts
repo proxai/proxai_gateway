@@ -1,4 +1,5 @@
-import { Database } from 'bun:sqlite';
+import { openReadOnly, snapshotSqlite } from 'core/io/sqlite';
+import { zstdCompressSync } from 'core/utils';
 import { openInMemoryBufferDb } from 'services/buffer/db.ts';
 import { makeClaudeCodeSourcePoller } from 'services/polling/poll-claude-code.ts';
 import { makeCodexSourcePoller } from 'services/polling/poll-codex.ts';
@@ -17,14 +18,86 @@ import {
   isCodexDialogueRecord,
   trimCodexRecord,
 } from 'sources/codex';
-import { discoverCursorFiles, defaultCursorUserRoot } from 'sources/cursor';
+import {
+  discoverCursorFiles,
+  defaultCursorUserRoot,
+  isAgentKvConversationBlob,
+  trimCursorRowValue,
+} from 'sources/cursor';
 import {
   discoverGeminiCliFiles,
   defaultGeminiCliTmpRoot,
   isGeminiCliDialogueRecord,
+  trimGeminiCliRecord,
 } from 'sources/gemini-cli';
 
 declare const self: any;
+
+function createCompressedSizer(): { add: (text: string) => void; finish: () => number } {
+  const flushThresholdBytes = 4 * 1024 * 1024;
+  let pending = '';
+  let compressedTotal = 0;
+  const flush = (): void => {
+    if (pending.length === 0) return;
+    compressedTotal += zstdCompressSync(pending).byteLength;
+    pending = '';
+  };
+  return {
+    add: (text: string): void => {
+      pending += text;
+      if (pending.length >= flushThresholdBytes) flush();
+    },
+    finish: (): number => {
+      flush();
+      return compressedTotal;
+    },
+  };
+}
+
+function isPromptRecord(
+  parsed: unknown,
+  sourceApp: 'claude-code' | 'gemini-cli' | 'codex',
+): boolean {
+  if (parsed === null || typeof parsed !== 'object') {
+    return false;
+  }
+  const rec = parsed as Record<string, unknown>;
+  if (sourceApp === 'codex') {
+    if (rec.type !== 'response_item') {
+      return false;
+    }
+    const payload = rec.payload;
+    return (
+      payload !== null &&
+      typeof payload === 'object' &&
+      (payload as { role?: unknown }).role === 'user'
+    );
+  }
+  return rec.type === 'user';
+}
+
+function isCursorPromptRow(key: string, value: string | null): boolean {
+  if (value === null) {
+    return false;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return false;
+  }
+  if (parsed === null || typeof parsed !== 'object') {
+    return false;
+  }
+  const rec = parsed as Record<string, unknown>;
+  if (key.startsWith('bubbleId:')) {
+    return rec.type === 1;
+  }
+  if (key.startsWith('agentKv:blob:')) {
+    return rec.role === 'user';
+  }
+  return false;
+}
 
 async function analyzeJsonlLogFile(
   filePath: string,
@@ -35,12 +108,18 @@ async function analyzeJsonlLogFile(
   newestDate: string | null;
   telemetryRecordCount: number;
   telemetryRawBytes: number;
+  telemetryCompressedBytes: number;
+  promptCount: number;
+  error: string | null;
 }> {
   let totalLines = 0;
   let oldestDate: string | null = null;
   let newestDate: string | null = null;
   let telemetryRecordCount = 0;
   let telemetryRawBytes = 0;
+  let promptCount = 0;
+  let error: string | null = null;
+  const sizer = createCompressedSizer();
   try {
     const file = Bun.file(filePath);
     const stream = file.stream();
@@ -50,36 +129,52 @@ async function analyzeJsonlLogFile(
     const processLine = (line: string) => {
       if (line.trim().length === 0) return;
       totalLines++;
+      let parsed: unknown;
       try {
-        const parsed = JSON.parse(line);
-        const ts = parsed.timestamp ?? parsed.created_at ?? parsed.time;
-        if (ts && !isNaN(Date.parse(ts))) {
-          const dateStr = new Date(ts).toISOString();
-          if (oldestDate === null || Date.parse(dateStr) < Date.parse(oldestDate)) {
-            oldestDate = dateStr;
-          }
-          if (newestDate === null || Date.parse(dateStr) > Date.parse(newestDate)) {
-            newestDate = dateStr;
-          }
+        parsed = JSON.parse(line);
+      } catch {
+        return;
+      }
+      let ts: unknown;
+      if (parsed !== null && typeof parsed === 'object') {
+        const rec = parsed as Record<string, unknown>;
+        ts = rec.timestamp ?? rec.created_at ?? rec.time;
+      }
+      if (typeof ts === 'string' && !isNaN(Date.parse(ts))) {
+        const dateStr = new Date(ts).toISOString();
+        if (oldestDate === null || Date.parse(dateStr) < Date.parse(oldestDate)) {
+          oldestDate = dateStr;
         }
-        let match = false;
-        let lineBytes = Buffer.byteLength(line, 'utf8') + 1;
-        if (sourceApp === 'claude-code') {
-          match = isDialogueRecord(parsed);
-        } else if (sourceApp === 'gemini-cli') {
-          match = isGeminiCliDialogueRecord(parsed);
-        } else if (sourceApp === 'codex') {
-          match = isCodexDialogueRecord(parsed);
-          if (match) {
-            const trimmed = trimCodexRecord(parsed);
-            lineBytes = Buffer.byteLength(JSON.stringify(trimmed), 'utf8') + 1;
-          }
+        if (newestDate === null || Date.parse(dateStr) > Date.parse(newestDate)) {
+          newestDate = dateStr;
         }
+      }
+      let match = false;
+      let capturedText = line;
+      let lineBytes = Buffer.byteLength(line, 'utf8') + 1;
+      if (sourceApp === 'claude-code') {
+        match = isDialogueRecord(parsed);
+      } else if (sourceApp === 'gemini-cli') {
+        match = isGeminiCliDialogueRecord(parsed);
         if (match) {
-          telemetryRecordCount++;
-          telemetryRawBytes += lineBytes;
+          capturedText = JSON.stringify(trimGeminiCliRecord(parsed));
+          lineBytes = Buffer.byteLength(capturedText, 'utf8') + 1;
         }
-      } catch {}
+      } else if (sourceApp === 'codex') {
+        match = isCodexDialogueRecord(parsed);
+        if (match) {
+          capturedText = JSON.stringify(trimCodexRecord(parsed));
+          lineBytes = Buffer.byteLength(capturedText, 'utf8') + 1;
+        }
+      }
+      if (match) {
+        telemetryRecordCount++;
+        telemetryRawBytes += lineBytes;
+        sizer.add(capturedText + '\n');
+        if (isPromptRecord(parsed, sourceApp)) {
+          promptCount++;
+        }
+      }
     };
     while (true) {
       const { done, value } = await reader.read();
@@ -94,8 +189,19 @@ async function analyzeJsonlLogFile(
     if (partial.length > 0) {
       processLine(partial);
     }
-  } catch {}
-  return { totalLines, oldestDate, newestDate, telemetryRecordCount, telemetryRawBytes };
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+  }
+  return {
+    totalLines,
+    oldestDate,
+    newestDate,
+    telemetryRecordCount,
+    telemetryRawBytes,
+    telemetryCompressedBytes: sizer.finish(),
+    promptCount,
+    error,
+  };
 }
 
 export async function handleInspect(
@@ -108,8 +214,10 @@ export async function handleInspect(
   let totalBytes = 0;
   let telemetryRawBytes = 0;
   let telemetryCompressedBytes = 0;
+  let promptCount = 0;
   let oldestDateMs = Infinity;
   let newestDateMs = -Infinity;
+  const errors: string[] = [];
 
   const updateChronological = (dateStr: string | null, fallbackMs: number) => {
     if (dateStr !== null) {
@@ -139,14 +247,21 @@ export async function handleInspect(
         newestDate,
         telemetryRecordCount: telCount,
         telemetryRawBytes: telBytes,
+        telemetryCompressedBytes: telComp,
+        promptCount: telPrompts,
+        error,
       } = await analyzeJsonlLogFile(f.sourcePath, 'claude-code');
       recordCount += totalLines;
       updateChronological(oldestDate, f.lastModifiedMs);
       updateChronological(newestDate, f.lastModifiedMs);
 
       telemetryRawBytes += telBytes;
-      telemetryCompressedBytes += Math.round(telBytes / 6.0);
+      telemetryCompressedBytes += telComp;
       telemetryRecordCount += telCount;
+      promptCount += telPrompts;
+      if (error !== null) {
+        errors.push(`${f.sourcePath}: ${error}`);
+      }
     }
   } else if (sourceName === 'cursor') {
     const baseDir = options.baseDir ?? defaultCursorUserRoot();
@@ -156,8 +271,10 @@ export async function handleInspect(
       totalBytes += f.sizeBytes;
       updateChronological(null, f.lastModifiedMs);
 
+      let snapshot: { path: string; cleanup: () => Promise<void> } | null = null;
       try {
-        const db = new Database(f.sourcePath, { readonly: true });
+        snapshot = await snapshotSqlite(f.sourcePath);
+        const db = openReadOnly(snapshot.path);
         try {
           const tableCheck = db
             .query("SELECT name FROM sqlite_master WHERE type='table' AND name='cursorDiskKV'")
@@ -169,11 +286,12 @@ export async function handleInspect(
               recordCount += row.count;
             }
 
-            const prefixes = ['composerData:', 'bubbleId:'];
+            const prefixes = ['composerData:', 'bubbleId:', 'agentKv:blob:'];
             const clauses = prefixes.map((p) => `key LIKE '${p}%'`).join(' OR ');
-            const rowsSql = `SELECT key, value FROM cursorDiskKV WHERE ${clauses}`;
+            const rowsSql = `SELECT key, CAST(value AS TEXT) AS value FROM cursorDiskKV WHERE ${clauses}`;
             const dbRows = db.query<{ key: string; value: string | null }, []>(rowsSql).all();
 
+            const sizer = createCompressedSizer();
             for (const r of dbRows) {
               let keep = true;
               if (r.key.startsWith('bubbleId:')) {
@@ -181,10 +299,10 @@ export async function handleInspect(
                   keep = false;
                 } else {
                   try {
-                    const parsed = JSON.parse(r.value);
-                    if (parsed && typeof parsed === 'object') {
-                      const text = typeof parsed.text === 'string' ? parsed.text.trim() : '';
-                      keep = text.length > 0;
+                    const parsed: unknown = JSON.parse(r.value);
+                    if (parsed !== null && typeof parsed === 'object' && 'text' in parsed) {
+                      const rawText = (parsed as { text?: unknown }).text;
+                      keep = typeof rawText === 'string' && rawText.trim().length > 0;
                     } else {
                       keep = false;
                     }
@@ -192,19 +310,31 @@ export async function handleInspect(
                     keep = false;
                   }
                 }
+              } else if (r.key.startsWith('agentKv:blob:')) {
+                keep = r.value !== null && isAgentKvConversationBlob(r.value);
               }
               if (keep) {
                 telemetryRecordCount++;
-                const len = r.value !== null ? Buffer.byteLength(r.value, 'utf8') : 0;
-                telemetryRawBytes += len;
-                telemetryCompressedBytes += Math.round(len / 6.0);
+                const trimmed = trimCursorRowValue(r.key, r.value ?? '');
+                telemetryRawBytes += Buffer.byteLength(trimmed, 'utf8');
+                sizer.add(trimmed + '\n');
+                if (isCursorPromptRow(r.key, r.value)) {
+                  promptCount++;
+                }
               }
             }
+            telemetryCompressedBytes += sizer.finish();
           }
         } finally {
           db.close();
         }
-      } catch {}
+      } catch (err) {
+        errors.push(`${f.sourcePath}: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        if (snapshot !== null) {
+          await snapshot.cleanup();
+        }
+      }
     }
   } else if (sourceName === 'gemini-cli') {
     const baseDir = options.baseDir ?? defaultGeminiCliTmpRoot();
@@ -218,19 +348,26 @@ export async function handleInspect(
         newestDate,
         telemetryRecordCount: telCount,
         telemetryRawBytes: telBytes,
+        telemetryCompressedBytes: telComp,
+        promptCount: telPrompts,
+        error,
       } = await analyzeJsonlLogFile(f.sourcePath, 'gemini-cli');
-      const adjustedCount = totalLines > 1 ? totalLines - 1 : totalLines;
-      recordCount += adjustedCount;
+      recordCount += totalLines;
       updateChronological(oldestDate, f.lastModifiedMs);
       updateChronological(newestDate, f.lastModifiedMs);
 
       telemetryRawBytes += telBytes;
-      telemetryCompressedBytes += Math.round(telBytes / 6.0);
+      telemetryCompressedBytes += telComp;
       telemetryRecordCount += telCount;
+      promptCount += telPrompts;
+      if (error !== null) {
+        errors.push(`${f.sourcePath}: ${error}`);
+      }
     }
   } else if (sourceName === 'codex') {
     const baseDir = options.baseDir ?? defaultCodexHome();
 
+    let stateSnapshot: { path: string; cleanup: () => Promise<void> } | null = null;
     try {
       const stateFile = await discoverCodexStateSqlite(baseDir, { minimumMtime: null });
       if (stateFile !== null) {
@@ -238,7 +375,8 @@ export async function handleInspect(
         totalBytes += stateFile.sizeBytes;
         updateChronological(null, stateFile.lastModifiedMs);
 
-        const db = new Database(stateFile.sourcePath, { readonly: true });
+        stateSnapshot = await snapshotSqlite(stateFile.sourcePath);
+        const db = openReadOnly(stateSnapshot.path);
         try {
           const tables = db
             .query<
@@ -255,7 +393,8 @@ export async function handleInspect(
             }
           }
 
-          for (const tbl of ['threads', 'thread_dynamic_tools', 'thread_spawn_edges']) {
+          const sizer = createCompressedSizer();
+          for (const tbl of ['threads', 'thread_spawn_edges']) {
             const tableCheck = db
               .query(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tbl}'`)
               .get();
@@ -267,20 +406,26 @@ export async function handleInspect(
                 telemetryRecordCount += telRow.count;
               }
 
-              const allRows = db.query<any, []>(`SELECT * FROM "${tbl}"`).all();
-              let tblBytes = 0;
+              const allRows = db.query<Record<string, unknown>, []>(`SELECT * FROM "${tbl}"`).all();
               for (const r of allRows) {
-                tblBytes += Buffer.byteLength(JSON.stringify(r), 'utf8');
+                const rowJson = JSON.stringify(r);
+                telemetryRawBytes += Buffer.byteLength(rowJson, 'utf8');
+                sizer.add(rowJson + '\n');
               }
-              telemetryRawBytes += tblBytes;
-              telemetryCompressedBytes += Math.round(tblBytes / 6.0);
             }
           }
+          telemetryCompressedBytes += sizer.finish();
         } finally {
           db.close();
         }
       }
-    } catch {}
+    } catch (err) {
+      errors.push(`codex state: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      if (stateSnapshot !== null) {
+        await stateSnapshot.cleanup();
+      }
+    }
 
     try {
       const rolloutFiles = await discoverCodexRolloutFiles(baseDir, {
@@ -296,27 +441,38 @@ export async function handleInspect(
           newestDate,
           telemetryRecordCount: telCount,
           telemetryRawBytes: telBytes,
+          telemetryCompressedBytes: telComp,
+          promptCount: telPrompts,
+          error,
         } = await analyzeJsonlLogFile(f.sourcePath, 'codex');
         recordCount += totalLines;
         updateChronological(oldestDate, f.lastModifiedMs);
         updateChronological(newestDate, f.lastModifiedMs);
 
         telemetryRawBytes += telBytes;
-        telemetryCompressedBytes += Math.round(telBytes / 6.0);
+        telemetryCompressedBytes += telComp;
         telemetryRecordCount += telCount;
+        promptCount += telPrompts;
+        if (error !== null) {
+          errors.push(`${f.sourcePath}: ${error}`);
+        }
       }
-    } catch {}
+    } catch (err) {
+      errors.push(`codex rollout: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   return {
     filesProcessed,
     recordCount,
     telemetryRecordCount,
+    promptCount,
     totalBytes,
     telemetryRawBytes,
     telemetryCompressedBytes,
     oldestDate: oldestDateMs === Infinity ? null : new Date(oldestDateMs).toISOString(),
     newestDate: newestDateMs === -Infinity ? null : new Date(newestDateMs).toISOString(),
+    errors,
   };
 }
 

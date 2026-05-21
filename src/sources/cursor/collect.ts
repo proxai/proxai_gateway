@@ -5,6 +5,7 @@ import { detectVacuum, getCursor, getCursorWithFallback, setCursor } from 'servi
 import { SUB_AGENT_CAPTURE_BY_SOURCE } from 'services/config/sub-agent-flags';
 import {
   CURSOR_DISK_KV_TABLE,
+  CURSOR_KEY_PREFIX_AGENT_KV_BLOB,
   CURSOR_KEY_PREFIX_BUBBLE,
   CURSOR_KEY_PREFIX_COMPOSER,
   CURSOR_SOURCE_APP,
@@ -19,10 +20,14 @@ import { extractAgentSchemaVersion } from 'sources/cursor/extract-version.ts';
 import { processRows } from 'sources/cursor/process-rows.ts';
 
 export function buildCursorSelectRowsSql(_captureSubAgents: boolean): string {
-  const prefixes = [CURSOR_KEY_PREFIX_COMPOSER, CURSOR_KEY_PREFIX_BUBBLE];
+  const prefixes = [
+    CURSOR_KEY_PREFIX_COMPOSER,
+    CURSOR_KEY_PREFIX_BUBBLE,
+    CURSOR_KEY_PREFIX_AGENT_KV_BLOB,
+  ];
   const clauses = prefixes.map((p) => `key LIKE '${p}%'`).join(' OR ');
   return `
-  SELECT rowid, key, value
+  SELECT rowid, key, CAST(value AS TEXT) AS value
   FROM ${CURSOR_DISK_KV_TABLE}
   WHERE rowid > ?
     AND (${clauses})

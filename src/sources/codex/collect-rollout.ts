@@ -15,6 +15,7 @@ import {
   CODEX_ROLLOUT_BODY_FORMAT,
   CODEX_ROLLOUT_SOURCE_KIND,
   CODEX_SOURCE_APP,
+  CODEX_TURN_CONTROL_EVENT_MSG_TYPES,
 } from 'sources/codex/codex.constants.ts';
 import type {
   CodexCollectorContext,
@@ -45,19 +46,30 @@ function createSliceRedactor(): (slice: Uint8Array) => SliceRedaction {
   };
 }
 
-export function isCodexDialogueRecord(parsed: any): boolean {
-  if (!parsed || typeof parsed !== 'object') {
+export function isCodexDialogueRecord(parsed: unknown): boolean {
+  if (parsed === null || typeof parsed !== 'object') {
     return false;
   }
-  if (parsed.type === 'session_meta') {
+  const rec = parsed as Record<string, unknown>;
+  if (rec.type === 'session_meta') {
     return true;
   }
-  if (parsed.type === 'event_msg') {
-    const pType = parsed.payload?.type;
-    return pType === 'user_message' || pType === 'agent_message';
+  const payload = rec.payload;
+  if (payload === null || typeof payload !== 'object') {
+    return false;
   }
-  if (parsed.type === 'response_item') {
-    return parsed.role === 'user' || parsed.role === 'assistant';
+  const payloadType = (payload as { type?: unknown }).type;
+  if (rec.type === 'event_msg') {
+    return (
+      typeof payloadType === 'string' && CODEX_TURN_CONTROL_EVENT_MSG_TYPES.includes(payloadType)
+    );
+  }
+  if (rec.type === 'response_item') {
+    if (payloadType !== 'message') {
+      return false;
+    }
+    const role = (payload as { role?: unknown }).role;
+    return role === 'user' || role === 'assistant';
   }
   return false;
 }
@@ -68,26 +80,11 @@ export function trimCodexRecord(parsed: any): any {
   }
   if (parsed.type === 'session_meta' && parsed.payload && typeof parsed.payload === 'object') {
     const trimmedPayload = { ...parsed.payload };
-    if ('instructions' in trimmedPayload) {
-      trimmedPayload.instructions = '<trimmed>';
-    }
-    if ('system_prompt' in trimmedPayload) {
-      trimmedPayload.system_prompt = '<trimmed>';
-    }
-    if ('developer_instructions' in trimmedPayload) {
-      trimmedPayload.developer_instructions = '<trimmed>';
-    }
-    if ('tools' in trimmedPayload) {
-      trimmedPayload.tools = [];
+    if ('base_instructions' in trimmedPayload) {
+      trimmedPayload.base_instructions = '<trimmed>';
     }
     if ('dynamic_tools' in trimmedPayload) {
       trimmedPayload.dynamic_tools = [];
-    }
-    if ('tool_definitions' in trimmedPayload) {
-      trimmedPayload.tool_definitions = [];
-    }
-    if ('tool_specs' in trimmedPayload) {
-      trimmedPayload.tool_specs = [];
     }
     return {
       ...parsed,

@@ -45,11 +45,59 @@ function createSliceRedactor(): (slice: Uint8Array) => SliceRedaction {
   };
 }
 
+const CLAUDE_SYNTHETIC_TEXT_PREFIXES = [
+  '<bash-input>',
+  '<bash-stdout>',
+  '<bash-stderr>',
+  '<local-command-stdout>',
+  '<local-command-stderr>',
+  '<command-name>',
+  '<command-message>',
+  '<command-args>',
+  '<system-reminder>',
+  '<local-command-caveat>',
+];
+
+function claudeTextItemValue(item: unknown): string | null {
+  if (item === null || typeof item !== 'object') {
+    return null;
+  }
+  const obj = item as { type?: unknown; text?: unknown };
+  if (obj.type !== 'text' || typeof obj.text !== 'string') {
+    return null;
+  }
+  return obj.text;
+}
+
+function claudeFirstText(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      const text = claudeTextItemValue(item);
+      if (text !== null) {
+        return text;
+      }
+    }
+    return '';
+  }
+  return claudeTextItemValue(content) ?? '';
+}
+
+function isClaudeSyntheticText(text: string): boolean {
+  const trimmed = text.trimStart();
+  return CLAUDE_SYNTHETIC_TEXT_PREFIXES.some((prefix) => trimmed.startsWith(prefix));
+}
+
 export function isDialogueRecord(parsed: any): boolean {
   if (!parsed || typeof parsed !== 'object') {
     return false;
   }
   if (parsed.type === 'user' || parsed.type === 'assistant') {
+    if (parsed.isMeta === true) {
+      return false;
+    }
     const mContent = parsed.message?.content;
     const pContent = parsed.content;
     const mText = parsed.message?.text;
@@ -91,6 +139,9 @@ export function isDialogueRecord(parsed: any): boolean {
     }
 
     if (parsed.type === 'user') {
+      if (isClaudeSyntheticText(claudeFirstText(actualContent))) {
+        return false;
+      }
       let hasToolResult = false;
       if (mContent && typeof mContent === 'object') {
         if (Array.isArray(mContent)) {
@@ -116,6 +167,9 @@ export function isDialogueRecord(parsed: any): boolean {
     }
 
     if (parsed.type === 'assistant') {
+      if (parsed.message?.model === '<synthetic>' || parsed.isApiErrorMessage === true) {
+        return false;
+      }
       let hasToolUse = false;
       if (mContent && typeof mContent === 'object') {
         if (Array.isArray(mContent)) {

@@ -149,7 +149,7 @@ function ctx(b: SqliteDatabase): CodexCollectorContext {
 
 const DECODER = new TextDecoder();
 
-test('captures all three allowed tables when each has rows', async () => {
+test('captures threads and spawn_edges but skips thread_dynamic_tools', async () => {
   const file = await makeStateDb({
     threads: [{ id: 't1', cli_version: '0.126.0' }],
     dynamicTools: [{ thread_id: 't1', position: 0, name: 'web_search' }],
@@ -157,9 +157,9 @@ test('captures all three allowed tables when each has rows', async () => {
   });
   const { result, agentSchemaVersion } = await collectCodexState(file, ctx(buffer));
   expect(agentSchemaVersion).toBe('0.126.0');
-  expect(result.capturedBatches).toBe(3);
+  expect(result.capturedBatches).toBe(2);
   expect(result.errors).toEqual([]);
-  expect(countByStatus(buffer).pending).toBe(3);
+  expect(countByStatus(buffer).pending).toBe(2);
 });
 
 test('samples cli_version from the most-recent threads row', async () => {
@@ -252,7 +252,7 @@ test('persists per-table watermarks separately', async () => {
     sourceInode: null,
     watermarkTable: 'thread_dynamic_tools',
   });
-  expect(dtCursor?.watermarkEnd).toBe(3);
+  expect(dtCursor).toBeNull();
   const seCursor = getCursor(buffer, {
     sourceApp: 'codex',
     sourcePathHash: file.sourcePathHash,
@@ -482,7 +482,7 @@ test('a fresh poll persists last_seen_size_bytes and last_seen_page_count on eac
     spawnEdges: [{ parent_thread_id: 't1', child_thread_id: 't2', status: 'ok' }],
   });
   await collectCodexState(file, ctx(buffer));
-  for (const table of ['threads', 'thread_dynamic_tools', 'thread_spawn_edges']) {
+  for (const table of ['threads', 'thread_spawn_edges']) {
     const c = getCursor(buffer, {
       sourceApp: 'codex',
       sourcePathHash: file.sourcePathHash,
@@ -513,7 +513,7 @@ test('rowid regression on a single codex table re-keys the whole file under #gen
   });
 
   const { result } = await collectCodexState(file, ctx(buffer));
-  expect(result.capturedBatches).toBe(3);
+  expect(result.capturedBatches).toBe(2);
 
   const expectedNewPath = nextGenerationSuffix(file.sourcePath);
   const expectedNewHash = sha256Hex(expectedNewPath);
@@ -529,7 +529,7 @@ test('rowid regression on a single codex table re-keys the whole file under #gen
   }
   expect(seenTables.has('threads')).toBe(true);
 
-  for (const table of ['threads', 'thread_dynamic_tools', 'thread_spawn_edges']) {
+  for (const table of ['threads', 'thread_spawn_edges']) {
     const c = getCursor(buffer, {
       sourceApp: 'codex',
       sourcePathHash: expectedNewHash,

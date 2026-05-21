@@ -60,7 +60,7 @@ test('handleInspect: gemini-cli telemetry record filtering', async () => {
     maxDecompressedBytes: 9 * 1024 * 1024,
   });
   expect(result.filesProcessed).toBe(1);
-  expect(result.recordCount).toBe(3);
+  expect(result.recordCount).toBe(4);
   expect(result.telemetryRecordCount).toBe(2);
   expect(result.telemetryRawBytes).toBeGreaterThan(0);
   expect(result.telemetryRawBytes).toBeLessThan(result.totalBytes);
@@ -73,11 +73,22 @@ test('handleInspect: codex telemetry record filtering', async () => {
   const lines = [
     JSON.stringify({
       type: 'session_meta',
-      payload: { cli_version: '0.1.0', instructions: 'secret' },
+      payload: { cli_version: '0.1.0', base_instructions: { text: 'secret' } },
     }),
-    JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', text: 'hello' } }),
-    JSON.stringify({ type: 'event_msg', payload: { type: 'tool_call', name: 'git' } }),
-    JSON.stringify({ type: 'response_item', role: 'assistant', payload: { text: 'hi' } }),
+    JSON.stringify({ type: 'event_msg', payload: { type: 'task_started' } }),
+    JSON.stringify({
+      type: 'response_item',
+      payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
+    }),
+    JSON.stringify({
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'hi' }],
+      },
+    }),
+    JSON.stringify({ type: 'event_msg', payload: { type: 'agent_message', message: 'hi' } }),
   ];
   await writeFile(logPath, lines.join('\n') + '\n');
   const result = await handleInspect('codex', {
@@ -88,7 +99,7 @@ test('handleInspect: codex telemetry record filtering', async () => {
     maxDecompressedBytes: 9 * 1024 * 1024,
   });
   expect(result.filesProcessed).toBe(1);
-  expect(result.recordCount).toBe(4);
-  expect(result.telemetryRecordCount).toBe(3);
+  expect(result.recordCount).toBe(5);
+  expect(result.telemetryRecordCount).toBe(4);
   expect(result.telemetryRawBytes).toBeGreaterThan(0);
 });
