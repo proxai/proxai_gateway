@@ -5,6 +5,7 @@ import { formatBytes, formatLocalTimestamp, formatRelative } from 'core/utils';
 import {
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
+  DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
   type InstallSource,
 } from 'services/config';
 
@@ -14,6 +15,13 @@ import { renderBufferSection } from 'cli/commands/status/render-buffer.ts';
 import { renderUploadSection } from 'cli/commands/status/render-upload.ts';
 import { renderHealthSection } from 'cli/commands/status/render-health.ts';
 import type { StatusCommandDeps, StatusSnapshot } from 'cli/commands/status/status.types.ts';
+import {
+  BYTES_COL,
+  COUNT_COL,
+  SUB_LABEL_WIDTH,
+  formatSourceLabel,
+  keyCol,
+} from 'cli/commands/status/layout.ts';
 
 const SOURCE_ORDER: ('claude-code' | 'cursor' | 'codex' | 'gemini-cli')[] = [
   'claude-code',
@@ -45,20 +53,10 @@ export function renderHumanStatus(deps: StatusCommandDeps, snapshot: StatusSnaps
   }
 
   out.info('');
-  const softPause = snapshot.cfg?.capture.bufferSoftPauseBytes ?? 700 * 1024 * 1024;
-  for (const line of renderBufferSection({
-    pendingCount: snapshot.counts.pending,
-    pendingBytes: snapshot.pendingBytes,
-    failedCount: snapshot.counts.failed,
-    failedBytes: snapshot.failedBytes,
-    receiptsCount: snapshot.counts.delivered,
-    quarantinedCount: snapshot.quarantinedCount,
-    pressurePendingBytes: snapshot.pendingBytes,
-    pressureSoftPauseBytes: softPause,
-    lastPruneAt: snapshot.lastPruneAt,
-    bySource: snapshot.sourceCounts,
-    now: snapshot.now,
-  })) {
+  const softPause = snapshot.cfg?.capture.bufferSoftPauseBytes ?? DEFAULT_BUFFER_SOFT_PAUSE_BYTES;
+  // prettier-ignore
+  const bufferInput = { pendingCount: snapshot.counts.pending, pendingBytes: snapshot.pendingBytes, failedCount: snapshot.counts.failed, failedBytes: snapshot.failedBytes, receiptsCount: snapshot.counts.delivered, quarantinedCount: snapshot.quarantinedCount, pressurePendingBytes: snapshot.pendingBytes, pressureSoftPauseBytes: softPause, lastPruneAt: snapshot.lastPruneAt, bySource: snapshot.sourceCounts, now: snapshot.now };
+  for (const line of renderBufferSection(bufferInput)) {
     out.info(line);
   }
 
@@ -131,6 +129,31 @@ export function renderHumanStatus(deps: StatusCommandDeps, snapshot: StatusSnaps
     },
   })) {
     out.info(line);
+  }
+
+  if (snapshot.history !== null) {
+    out.info('');
+    out.info(sectionHeader('History (All-Time)'));
+    const capturedBytes = formatBytes(snapshot.history.totalBytesCaptured).padStart(BYTES_COL);
+    const sentBytes = formatBytes(snapshot.history.totalBytesSent).padStart(BYTES_COL);
+    out.info(
+      `  ${keyCol('Captured')}${capturedBytes}    (${snapshot.history.totalRecordsCaptured.toString().padStart(COUNT_COL)} ${chalk.dim('records')})`,
+    );
+    out.info(
+      `  ${keyCol('Sent')}${sentBytes}    (${snapshot.history.totalRecordsSent.toString().padStart(COUNT_COL)} ${chalk.dim('records')})`,
+    );
+    out.info(`  ${keyCol('Sources')}`);
+    for (const app of SOURCE_ORDER) {
+      const sourceLabel = formatSourceLabel(app);
+      const count = snapshot.history.conversationsCaptured[app] ?? 0;
+      const countStr = count.toString().padStart(COUNT_COL);
+      let suffix = 'chats';
+      if (app === 'cursor') suffix = 'workspaces';
+      if (app === 'codex') suffix = 'threads / rollouts';
+      out.info(
+        `    ${chalk.dim('·')} ${sourceLabel.padEnd(SUB_LABEL_WIDTH)}${countStr} ${chalk.dim(suffix)}`,
+      );
+    }
   }
 
   if (snapshot.updateAvailable !== null) {

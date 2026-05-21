@@ -57,6 +57,7 @@ export function buildEmptyStatusJson(): StatusJsonOutput {
       autoUpgrade: { lastCheckAt: null, latestKnownVersion: null },
       binaryAge: { installedAt: null, days: null },
     },
+    history: null,
   };
 }
 
@@ -133,5 +134,6 @@ export function buildStatusJson(snapshot: StatusSnapshot): StatusJsonOutput {
         days: installedAt === null ? null : daysSince(installedAt, snapshot.now),
       },
     },
+    history: snapshot.history,
   };
 }

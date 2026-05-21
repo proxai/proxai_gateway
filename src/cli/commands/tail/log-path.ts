@@ -24,8 +24,6 @@ export function todaysLogPath(logDir: string, now: Date = new Date()): string {
       const idx = Number(mid);
       if (Number.isFinite(idx) && idx > bestIndex) bestIndex = idx;
     }
-  } catch {
-    // log directory may not exist yet; fall through to `.1`.
-  }
+  } catch {}
   return join(logDir, `${prefix}${bestIndex.toString()}${STRUCTURED_LOG_EXTENSION}`);
 }

@@ -1,6 +1,4 @@
 import { collectCursorFile, defaultCursorUserRoot, discoverCursorFiles } from 'sources/cursor';
-import { hasAnyCursor } from 'services/buffer';
-import { SOURCE_NAME_CURSOR } from 'services/polling/polling.constants.ts';
 import type {
   SourcePoller,
   SourcePollerContext,
@@ -9,20 +7,14 @@ import type {
 
 export interface CursorSourcePollerOptions {
   baseDir?: string;
-  initialScanWindowDays?: number;
 }
 
 export function makeCursorSourcePoller(options: CursorSourcePollerOptions = {}): SourcePoller {
   const baseDir = options.baseDir ?? defaultCursorUserRoot();
-  const initialScanWindowDays = options.initialScanWindowDays;
-  return (ctx) => pollCursor(ctx, baseDir, initialScanWindowDays);
+  return (ctx) => pollCursor(ctx, baseDir);
 }
 
-async function pollCursor(
-  ctx: SourcePollerContext,
-  baseDir: string,
-  initialScanWindowDays: number | undefined,
-): Promise<SourcePollerResult> {
+async function pollCursor(ctx: SourcePollerContext, baseDir: string): Promise<SourcePollerResult> {
   const result: SourcePollerResult = {
     filesProcessed: 0,
     capturedBatches: 0,
@@ -30,7 +22,7 @@ async function pollCursor(
     errors: [],
   };
 
-  const minimumMtime = resolveMinimumMtime(ctx, initialScanWindowDays);
+  const minimumMtime = resolveMinimumMtime(ctx);
 
   let files;
   try {
@@ -56,12 +48,7 @@ async function pollCursor(
   return result;
 }
 
-function resolveMinimumMtime(
-  ctx: SourcePollerContext,
-  initialScanWindowDays: number | undefined,
-): Date | null {
+function resolveMinimumMtime(ctx: SourcePollerContext): Date | null {
   if (ctx.minimumMtimeOverride !== undefined) return ctx.minimumMtimeOverride;
-  if (initialScanWindowDays === undefined || initialScanWindowDays <= 0) return null;
-  if (hasAnyCursor(ctx.buffer, SOURCE_NAME_CURSOR)) return null;
-  return new Date(Date.now() - initialScanWindowDays * 24 * 60 * 60 * 1000);
+  return null;
 }

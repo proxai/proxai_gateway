@@ -130,7 +130,7 @@ test('aggregates per-file collect errors into result.errors', async () => {
   expect(result.errors.length).toBeGreaterThan(0);
 });
 
-test('initialScanWindowDays applies a now-N-day floor on a fresh buffer', async () => {
+test('minimumMtimeOverride applies a floor on a fresh buffer', async () => {
   const oldPath = await seedDb('workspaceStorage/old/state.vscdb', [
     { key: 'composerData:abc', value: JSON.stringify({ _v: 13 }) },
   ]);
@@ -140,11 +140,12 @@ test('initialScanWindowDays applies a now-N-day floor on a fresh buffer', async 
   const { utimes } = await import('node:fs/promises');
   const oldDate = new Date(Date.now() - 1000 * 60 * 60 * 24 * 365);
   await utimes(oldPath, oldDate, oldDate);
-  const poller = makeCursorSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
+  const poller = makeCursorSourcePoller({ baseDir: dir });
   const result = await poller({
     buffer,
     gatewayVersion: 'gw-0.1',
     maxDecompressedBytes: 9 * 1024 * 1024,
+    minimumMtimeOverride: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
   });
 
   expect(result.filesProcessed).toBe(1);

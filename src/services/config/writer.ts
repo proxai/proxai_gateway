@@ -32,7 +32,6 @@ export function serializeConfig(config: GatewayConfig): string {
       failed_retention_days: config.capture.failedRetentionDays,
       buffer_soft_pause_bytes: config.capture.bufferSoftPauseBytes,
       buffer_soft_resume_bytes: config.capture.bufferSoftResumeBytes,
-      initial_scan_window_days: config.capture.initialScanWindowDays,
       upload_max_batches_per_sec: config.capture.uploadMaxBatchesPerSec,
       upload_max_bytes_per_minute: config.capture.uploadMaxBytesPerMinute,
       upload_backoff_on_429_multiplier: config.capture.uploadBackoffOn429Multiplier,

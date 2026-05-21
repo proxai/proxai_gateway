@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { countByStatus, openInMemoryBufferDb, setCursor } from 'services/buffer';
+import { countByStatus, openInMemoryBufferDb } from 'services/buffer';
 import { makeGeminiCliSourcePoller } from 'services/polling/poll-gemini-cli.ts';
 
 let dir: string;
@@ -129,7 +129,7 @@ test('aggregates per-file collect errors into result.errors', async () => {
   expect(result.errors.length).toBeGreaterThan(0);
 });
 
-test('initial-scan window: skips files older than cap when no cursors exist', async () => {
+test('minimumMtimeOverride: skips files older than cutoff', async () => {
   const evt =
     '{"id":"e1","timestamp":"2026-01-01T00:00:00Z","type":"user","content":[{"text":"x"}]}';
   const oldPath = await seedSession('proj', 'old.jsonl', `${HEADER}\n${evt}\n`);
@@ -137,53 +137,8 @@ test('initial-scan window: skips files older than cap when no cursors exist', as
   const oldEpoch = new Date('2024-01-01T00:00:00Z');
   await utimes(oldPath, oldEpoch, oldEpoch);
 
-  const poller = makeGeminiCliSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
-  const result = await poller({
-    buffer,
-    gatewayVersion: 'gw-0.1',
-    maxDecompressedBytes: 9 * 1024 * 1024,
-  });
-  expect(result.filesProcessed).toBe(1);
-  expect(result.capturedBatches).toBe(1);
-});
-
-test('initial-scan window: cap skipped once cursors exist for gemini-cli', async () => {
-  const evt =
-    '{"id":"e1","timestamp":"2026-01-01T00:00:00Z","type":"user","content":[{"text":"x"}]}';
-  const oldPath = await seedSession('proj', 'old.jsonl', `${HEADER}\n${evt}\n`);
-  await seedSession('proj', 'fresh.jsonl', `${HEADER}\n${evt}\n`);
-  const oldEpoch = new Date('2024-01-01T00:00:00Z');
-  await utimes(oldPath, oldEpoch, oldEpoch);
-
-  setCursor(buffer, {
-    sourceApp: 'gemini-cli',
-    sourcePathHash: 'b'.repeat(64),
-    sourcePath: '/unrelated.jsonl',
-    sourceInode: 999,
-    watermarkTable: null,
-    watermarkEnd: 1,
-  });
-
-  const poller = makeGeminiCliSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
-  const result = await poller({
-    buffer,
-    gatewayVersion: 'gw-0.1',
-    maxDecompressedBytes: 9 * 1024 * 1024,
-  });
-  expect(result.filesProcessed).toBe(2);
-  expect(result.capturedBatches).toBe(2);
-});
-
-test('initial-scan window: minimumMtimeOverride forces an explicit cap', async () => {
-  const evt =
-    '{"id":"e1","timestamp":"2026-01-01T00:00:00Z","type":"user","content":[{"text":"x"}]}';
-  const oldPath = await seedSession('proj', 'old.jsonl', `${HEADER}\n${evt}\n`);
-  await seedSession('proj', 'fresh.jsonl', `${HEADER}\n${evt}\n`);
-  const oldEpoch = new Date('2024-01-01T00:00:00Z');
-  await utimes(oldPath, oldEpoch, oldEpoch);
-
+  const poller = makeGeminiCliSourcePoller({ baseDir: dir });
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const poller = makeGeminiCliSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
   const result = await poller({
     buffer,
     gatewayVersion: 'gw-0.1',
@@ -194,10 +149,11 @@ test('initial-scan window: minimumMtimeOverride forces an explicit cap', async (
   expect(result.capturedBatches).toBe(1);
 });
 
-test('omitting initialScanWindowDays disables the cap entirely', async () => {
+test('default minimumMtime (null): processes all historical files unconditionally', async () => {
   const evt =
     '{"id":"e1","timestamp":"2026-01-01T00:00:00Z","type":"user","content":[{"text":"x"}]}';
   const oldPath = await seedSession('proj', 'old.jsonl', `${HEADER}\n${evt}\n`);
+  await seedSession('proj', 'fresh.jsonl', `${HEADER}\n${evt}\n`);
   const oldEpoch = new Date('2024-01-01T00:00:00Z');
   await utimes(oldPath, oldEpoch, oldEpoch);
 
@@ -207,7 +163,8 @@ test('omitting initialScanWindowDays disables the cap entirely', async () => {
     gatewayVersion: 'gw-0.1',
     maxDecompressedBytes: 9 * 1024 * 1024,
   });
-  expect(result.filesProcessed).toBe(1);
+  expect(result.filesProcessed).toBe(2);
+  expect(result.capturedBatches).toBe(2);
 });
 
 test('non-Error throw from discover is captured as String(err)', async () => {

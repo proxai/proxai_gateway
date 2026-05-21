@@ -4,6 +4,7 @@ import { devModeSentinelPath } from 'core/io/fs';
 
 import {
   countByStatus,
+  countCapturedConversations,
   countQuarantined,
   countsBySource,
   getDaemonState,
@@ -65,6 +66,7 @@ export async function gatherStatusSnapshot(
   const sourceCounts = countsBySource(buffer);
   const lastPruneAt = getLastPruneAt(buffer);
   const daemonState = getDaemonState(buffer);
+  const conversationsCaptured = countCapturedConversations(buffer);
 
   const captureCyclesTotal = readNumberWithFallback(
     buffer,
@@ -195,5 +197,12 @@ export async function gatherStatusSnapshot(
     runtime,
     cfg,
     now,
+    history: {
+      totalBytesCaptured: totalBytesShipped + pendingBytes + failedBytes,
+      totalBytesSent: totalBytesShipped,
+      totalRecordsCaptured: totalBatchesShipped + counts.pending + counts.failed,
+      totalRecordsSent: totalBatchesShipped,
+      conversationsCaptured,
+    },
   };
 }

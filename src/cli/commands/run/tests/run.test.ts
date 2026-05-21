@@ -46,7 +46,6 @@ function makeConfig(): GatewayConfig {
       failedRetentionDays: 30,
       bufferSoftPauseBytes: 700 * 1024 * 1024,
       bufferSoftResumeBytes: 600 * 1024 * 1024,
-      initialScanWindowDays: 30,
       uploadMaxBatchesPerSec: 5,
       uploadMaxBytesPerMinute: 50 * 1024 * 1024,
       uploadBackoffOn429Multiplier: 2,

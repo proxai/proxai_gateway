@@ -36,7 +36,6 @@ export function buildCaptureContext(input: {
       softResumeBytes: deps.config.capture.bufferSoftResumeBytes,
     },
     capturePolicy: {
-      initialScanWindowDays: deps.config.capture.initialScanWindowDays,
       maxDecompressedBytes: resolveMaxDecompressed(deps.config.capture),
     },
     logger,

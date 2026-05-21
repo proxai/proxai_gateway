@@ -147,3 +147,47 @@ export function setCursorFromRegression(
     lastSeenPageCount: prior?.lastSeenPageCount ?? null,
   });
 }
+
+export function countCapturedConversations(db: Database): Record<SourceApp, number> {
+  const claudeCodeRow = db
+    .query<
+      { count: number },
+      [string]
+    >(`SELECT COUNT(DISTINCT ${CURSOR_COLS.sourcePath}) AS count FROM ${BUFFER_TABLES.cursors} WHERE ${CURSOR_COLS.sourceApp} = ?`)
+    .get('claude-code');
+
+  const cursorRow = db
+    .query<
+      { count: number },
+      [string]
+    >(`SELECT COUNT(DISTINCT ${CURSOR_COLS.sourcePath}) AS count FROM ${BUFFER_TABLES.cursors} WHERE ${CURSOR_COLS.sourceApp} = ?`)
+    .get('cursor');
+
+  const geminiCliRow = db
+    .query<
+      { count: number },
+      [string]
+    >(`SELECT COUNT(DISTINCT ${CURSOR_COLS.sourcePath}) AS count FROM ${BUFFER_TABLES.cursors} WHERE ${CURSOR_COLS.sourceApp} = ?`)
+    .get('gemini-cli');
+
+  const codexThreadsRow = db
+    .query<
+      { total: number },
+      [string, string]
+    >(`SELECT COALESCE(SUM(${CURSOR_COLS.watermarkEnd} - 1), 0) AS total FROM ${BUFFER_TABLES.cursors} WHERE ${CURSOR_COLS.sourceApp} = ? AND ${CURSOR_COLS.watermarkTable} = ?`)
+    .get('codex', 'threads');
+
+  const codexRolloutsRow = db
+    .query<
+      { count: number },
+      [string, string]
+    >(`SELECT COUNT(DISTINCT ${CURSOR_COLS.sourcePath}) AS count FROM ${BUFFER_TABLES.cursors} WHERE ${CURSOR_COLS.sourceApp} = ? AND ${CURSOR_COLS.watermarkTable} = ?`)
+    .get('codex', NO_TABLE_SENTINEL);
+
+  return {
+    'claude-code': claudeCodeRow?.count ?? 0,
+    cursor: cursorRow?.count ?? 0,
+    'gemini-cli': geminiCliRow?.count ?? 0,
+    codex: (codexThreadsRow?.total ?? 0) + (codexRolloutsRow?.count ?? 0),
+  };
+}

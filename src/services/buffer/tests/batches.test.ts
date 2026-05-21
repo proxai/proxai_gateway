@@ -11,6 +11,7 @@ import {
   markBatchDelivered,
   markBatchFailed,
   nextPendingBatch,
+  nextPendingBatchAfter,
   openInMemoryBufferDb,
   recordRetriableFailure,
 } from 'services/buffer';
@@ -180,4 +181,26 @@ test('dropOldestPending skips delivered (already-removed) and failed batches', (
 
 test('dropOldestPending returns null when nothing pending', () => {
   expect(dropOldestPending(db)).toBeNull();
+});
+
+test('nextPendingBatchAfter returns next pending batch chronologically or by ID tie-breaker', async () => {
+  const a = newBatch();
+  const b = newBatch();
+  insertBatch(db, a);
+  insertBatch(db, b);
+
+  const storedA = getBatch(db, a.captureId)!;
+  const storedB = getBatch(db, b.captureId)!;
+
+  const next = nextPendingBatchAfter(db, {
+    createdAt: storedA.createdAt,
+    captureId: storedA.captureId,
+  });
+  expect(next?.captureId).toBe(b.captureId);
+
+  const nextNull = nextPendingBatchAfter(db, {
+    createdAt: storedB.createdAt,
+    captureId: storedB.captureId,
+  });
+  expect(nextNull).toBeNull();
 });

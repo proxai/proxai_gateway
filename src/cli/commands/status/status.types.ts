@@ -4,6 +4,7 @@ import type { OutputSink } from 'cli/cli.types.ts';
 import type { ServiceManager } from 'cli/service-manager';
 import type { CountsBySource, DaemonStateSnapshot, SourceCycleResult } from 'services/buffer';
 import type { GatewayConfig } from 'services/config';
+import type { SourceApp } from 'services/contract';
 
 import type { StatusHealth } from 'cli/commands/status/decorators.ts';
 import type { UploadBySource } from 'cli/commands/status/render-upload.ts';
@@ -83,6 +84,13 @@ export interface StatusJsonOutput {
     autoUpgrade: { lastCheckAt: string | null; latestKnownVersion: string | null };
     binaryAge: { installedAt: string | null; days: number | null };
   };
+  history: {
+    totalBytesCaptured: number;
+    totalBytesSent: number;
+    totalRecordsCaptured: number;
+    totalRecordsSent: number;
+    conversationsCaptured: Record<SourceApp, number>;
+  } | null;
 }
 
 export interface StatusSnapshot {
@@ -123,4 +131,11 @@ export interface StatusSnapshot {
   runtime: { isRunning: boolean; pid: number | null; startedAt: Date | null };
   cfg: GatewayConfig | null;
   now: Date;
+  history: {
+    totalBytesCaptured: number;
+    totalBytesSent: number;
+    totalRecordsCaptured: number;
+    totalRecordsSent: number;
+    conversationsCaptured: Record<SourceApp, number>;
+  } | null;
 }

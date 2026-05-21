@@ -61,7 +61,7 @@ function makeContext(sources: RegisteredSource[]): PollCycleContext {
       softPauseBytes: 700 * 1024 * 1024,
       softResumeBytes: 600 * 1024 * 1024,
     },
-    capturePolicy: { initialScanWindowDays: 30, maxDecompressedBytes: 9 * 1024 * 1024 },
+    capturePolicy: { maxDecompressedBytes: 9 * 1024 * 1024 },
   };
 }
 
@@ -168,4 +168,23 @@ test('compat: aggregates per-source results', async () => {
   ]);
   const result = await runPollCycle(ctx);
   expect(result.sourceResults['s']?.errors).toEqual([{ sourcePath: '/x', reason: 'boom' }]);
+});
+
+test('compat: covers optional cycle params', async () => {
+  const ctx = makeContext([noopSource('s')]);
+  ctx.logger = {
+    info: () => {},
+    debug: () => {},
+    warn: () => {},
+    error: () => {},
+    child: function () {
+      return this;
+    },
+  } as any;
+  ctx.minimumMtimeOverride = new Date('2026-05-08T00:00:00Z');
+  ctx.pacer = {
+    limit: async (fn: any) => fn(),
+  } as any;
+  const result = await runPollCycle(ctx);
+  expect(result.paused).toBe(false);
 });

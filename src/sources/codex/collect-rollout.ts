@@ -188,9 +188,7 @@ export async function collectCodexRollout(
         watermarkEnd: priorWatermarkEnd,
         consecutiveErrors: priorErrors + 1,
       });
-    } catch {
-      // best-effort error-counter bump; persistence failures are non-fatal
-    }
+    } catch {}
   }
 
   return result;

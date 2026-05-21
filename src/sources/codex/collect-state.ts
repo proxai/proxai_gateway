@@ -117,9 +117,7 @@ function bumpConsecutiveErrors(
         ? { lastSeenPageCount: priorCursor.lastSeenPageCount }
         : {}),
     });
-  } catch {
-    // best-effort error-counter bump; persistence failures are non-fatal
-  }
+  } catch {}
 }
 
 function sampleCliVersion(db: Database): string {

@@ -34,7 +34,17 @@ test('hidden dev command still resolves under its short alias d', async () => {
 
 test('alias map asserts the full set of long-command keys', () => {
   expect(Object.keys(COMMAND_ALIASES).toSorted()).toEqual(
-    ['dev', 'restart', 'setup', 'start', 'status', 'stop', 'tail', 'uninstall'].toSorted(),
+    [
+      'dev',
+      'inspect',
+      'restart',
+      'setup',
+      'start',
+      'status',
+      'stop',
+      'tail',
+      'uninstall',
+    ].toSorted(),
   );
 });
 

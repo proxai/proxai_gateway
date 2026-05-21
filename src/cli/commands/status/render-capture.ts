@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 
 import { formatRelative } from 'core/utils';
+import { formatSourceLabel } from 'cli/commands/status/layout.ts';
 
 export interface CaptureSourceSummary {
   name: string;
@@ -33,11 +34,14 @@ export function renderCaptureCyclesLine(
 }
 
 export function renderCaptureRow(s: CaptureSourceSummary): string {
-  const padded = s.name.padEnd(SOURCE_LABEL_PAD);
+  const humanLabel = formatSourceLabel(s.name);
+  const padded = humanLabel.padEnd(SOURCE_LABEL_PAD);
   const captured = s.capturedBatches.toString().padStart(4);
   const files = s.filesProcessed.toString().padStart(4);
   const errors = s.errorsCount;
   const errorsStr =
-    errors === 0 ? `${errors.toString()} errors` : chalk.yellow(`${errors.toString()} errors`);
-  return `  ${padded}${captured} captured   /  ${files} files scanned   /  ${errorsStr}`;
+    errors === 0
+      ? `${errors.toString().padStart(3)} errors`
+      : chalk.yellow(`${errors.toString().padStart(3)} errors`);
+  return `  ${padded}  ${chalk.dim('│')}  ${captured} captured  ${chalk.dim('│')}  ${files} files scanned  ${chalk.dim('│')}  ${errorsStr}`;
 }

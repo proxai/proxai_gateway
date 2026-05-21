@@ -7,4 +7,5 @@ export const COMMAND_ALIASES: Readonly<Record<string, string>> = {
   tail: 't',
   uninstall: 'rm',
   dev: 'd',
+  inspect: 'ins',
 };

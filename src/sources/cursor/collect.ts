@@ -188,9 +188,7 @@ export async function collectCursorFile(
           ? { lastSeenPageCount: priorCursor.lastSeenPageCount }
           : {}),
       });
-    } catch {
-      // best-effort error-counter bump; persistence failures are non-fatal
-    }
+    } catch {}
   } finally {
     if (snapshot !== null) {
       await snapshot.cleanup();

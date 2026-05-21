@@ -3,8 +3,6 @@ import {
   defaultGeminiCliTmpRoot,
   discoverGeminiCliFiles,
 } from 'sources/gemini-cli';
-import { hasAnyCursor } from 'services/buffer';
-import { SOURCE_NAME_GEMINI_CLI } from 'services/polling/polling.constants.ts';
 import type {
   SourcePoller,
   SourcePollerContext,
@@ -13,21 +11,18 @@ import type {
 
 export interface GeminiCliSourcePollerOptions {
   baseDir?: string;
-  initialScanWindowDays?: number;
 }
 
 export function makeGeminiCliSourcePoller(
   options: GeminiCliSourcePollerOptions = {},
 ): SourcePoller {
   const baseDir = options.baseDir ?? defaultGeminiCliTmpRoot();
-  const initialScanWindowDays = options.initialScanWindowDays;
-  return (ctx) => pollGeminiCli(ctx, baseDir, initialScanWindowDays);
+  return (ctx) => pollGeminiCli(ctx, baseDir);
 }
 
 async function pollGeminiCli(
   ctx: SourcePollerContext,
   baseDir: string,
-  initialScanWindowDays: number | undefined,
 ): Promise<SourcePollerResult> {
   const result: SourcePollerResult = {
     filesProcessed: 0,
@@ -36,7 +31,7 @@ async function pollGeminiCli(
     errors: [],
   };
 
-  const minimumMtime = resolveMinimumMtime(ctx, initialScanWindowDays);
+  const minimumMtime = resolveMinimumMtime(ctx);
 
   let files;
   try {
@@ -62,12 +57,7 @@ async function pollGeminiCli(
   return result;
 }
 
-function resolveMinimumMtime(
-  ctx: SourcePollerContext,
-  initialScanWindowDays: number | undefined,
-): Date | null {
+function resolveMinimumMtime(ctx: SourcePollerContext): Date | null {
   if (ctx.minimumMtimeOverride !== undefined) return ctx.minimumMtimeOverride;
-  if (initialScanWindowDays === undefined || initialScanWindowDays <= 0) return null;
-  if (hasAnyCursor(ctx.buffer, SOURCE_NAME_GEMINI_CLI)) return null;
-  return new Date(Date.now() - initialScanWindowDays * 24 * 60 * 60 * 1000);
+  return null;
 }

@@ -5,7 +5,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runStatus, formatBytes } from 'cli/commands/status';
+import { runStatus, formatBytes } from 'cli/commands/status/index.ts';
 import {
   formatLocalTimestamp,
   formatRelative,
@@ -27,7 +27,12 @@ import {
 import type { NewBatch } from 'services/buffer';
 import { pausePolling } from 'services/polling';
 
-const ANSI_PATTERN = /\[[0-9;]*m/g;
+const ESC = String.fromCharCode(27);
+const ESC2 = String.fromCharCode(155);
+const ANSI_PATTERN = new RegExp(
+  '[' + ESC + ESC2 + '][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]',
+  'g',
+);
 function stripAnsi(s: string): string {
   return s.replace(ANSI_PATTERN, '');
 }
@@ -146,12 +151,12 @@ test('renders per-source row with capture stats from daemon_state', async () => 
   const out = captureOutput();
   const result = await runStatus(makeDeps({ output: out }));
   expect(result.exitCode).toBe(0);
-  expect(out.lines.some((l) => l.msg.includes('claude-code'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('Claude Code'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('68 captured'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('63 files scanned'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('cursor'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('Cursor'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('2 errors'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('codex'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('Codex'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('Last error'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('server returned 500'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('1 retriable'))).toBe(true);
@@ -635,7 +640,6 @@ test('runStatus JSON mode reports binary age days when installedAt is set via lo
             failedRetentionDays: 30,
             bufferSoftPauseBytes: 700_000_000,
             bufferSoftResumeBytes: 600_000_000,
-            initialScanWindowDays: 30,
             uploadMaxBatchesPerSec: 1,
             uploadMaxBytesPerMinute: 1,
             uploadBackoffOn429Multiplier: 1,
@@ -681,7 +685,6 @@ test('runStatus JSON mode handles invalid installedAt timestamp gracefully (days
             failedRetentionDays: 30,
             bufferSoftPauseBytes: 700_000_000,
             bufferSoftResumeBytes: 600_000_000,
-            initialScanWindowDays: 30,
             uploadMaxBatchesPerSec: 1,
             uploadMaxBytesPerMinute: 1,
             uploadBackoffOn429Multiplier: 1,
@@ -754,4 +757,117 @@ test('runStatus reports dev mode when sentinel file is present', async () => {
   );
   expect(result.exitCode).toBe(0);
   expect(out.lines.some((l) => l.msg.includes('(dev mode)'))).toBe(true);
+});
+
+test('runStatus: serviceManager running with startedAt in past and future (uptime check)', async () => {
+  const out = captureOutput();
+  const now = new Date('2026-05-08T12:00:00Z');
+
+  const smPast = {
+    isRegistered: async () => true,
+    isRunning: async () => true,
+    ensureRegistered: async () => {},
+    start: async () => {},
+    stop: async () => {},
+    restart: async () => {},
+    unregister: async () => {},
+    runtimeInfo: async () => ({ pid: 1234, startedAt: new Date('2026-05-08T11:00:00Z') }),
+  };
+
+  await runStatus(makeDeps({ output: out, serviceManager: smPast, now: () => now }));
+  expect(out.lines.some((l) => l.msg.includes('uptime'))).toBe(true);
+
+  const out2 = captureOutput();
+  const smFuture = {
+    isRegistered: async () => true,
+    isRunning: async () => true,
+    ensureRegistered: async () => {},
+    start: async () => {},
+    stop: async () => {},
+    restart: async () => {},
+    unregister: async () => {},
+    runtimeInfo: async () => ({ pid: 5678, startedAt: new Date('2026-05-08T13:00:00Z') }),
+  };
+
+  await runStatus(makeDeps({ output: out2, serviceManager: smFuture, now: () => now }));
+  expect(out2.lines.some((l) => l.msg.includes('running') && !l.msg.includes('uptime'))).toBe(true);
+});
+
+test('runStatus: auto upgrade has update queued for next cycle when latestKnownVersion !== currentVersion and no sentinel present', async () => {
+  setMetadata(buffer, METADATA_KEYS.latestKnownVersion, '2026.5.10');
+  const out = captureOutput();
+  await runStatus(makeDeps({ output: out, currentVersion: '2026.5.7' }));
+  expect(out.lines.some((l) => l.msg.includes('update queued for next cycle'))).toBe(true);
+});
+
+test('runStatus: empty sentinel payloads or missing properties fallbacks', async () => {
+  await writeFile(join(dir, 'AUTH_FAILED'), JSON.stringify({ reason: '', detected_at: '' }));
+
+  await writeFile(join(dir, 'SESSION_STOPPED'), JSON.stringify({ boot_id: 'b1', set_at: '' }));
+
+  await writeFile(
+    join(dir, 'BUFFER_FULL'),
+    JSON.stringify({ pending_bytes: null, threshold: 1, set_at: '' }),
+  );
+
+  const out = captureOutput();
+  await runStatus(makeDeps({ output: out }));
+
+  expect(out.lines.some((l) => stripAnsi(l.msg).includes('AUTH_FAILED: unknown'))).toBe(true);
+  expect(
+    out.lines.some((l) => {
+      const s = stripAnsi(l.msg);
+      return s.includes('SESSION_STOPPED') && !s.includes('since') && !s.includes('ago');
+    }),
+  ).toBe(true);
+  expect(
+    out.lines.some((l) => {
+      const s = stripAnsi(l.msg);
+      return s.includes('BUFFER_FULL') && s.includes('pending 0 B');
+    }),
+  ).toBe(true);
+});
+
+test('runStatus: binary installed in the future yields 0 days (negative age handling)', async () => {
+  const out = captureOutput();
+  const now = new Date('2026-05-08T12:00:00Z');
+  const installedAt = new Date('2026-05-09T12:00:00Z').toISOString();
+
+  await runStatus(
+    makeDeps({
+      output: out,
+      loadConfig: async () =>
+        ({
+          account: {
+            apiKey: 'k',
+            userId: 'u',
+            hostId: 'h',
+            installedAt,
+            installSource: 'npm',
+          },
+          backend: {
+            ingestUrl: '',
+            verifyKeyUrl: '',
+            watermarksUrl: '',
+            registerHostIdUrl: '',
+          },
+          capture: {
+            pollIntervalSec: 60,
+            bufferPath: '',
+            receiptRetentionDays: 30,
+            failedRetentionDays: 30,
+            bufferSoftPauseBytes: 700_000_000,
+            bufferSoftResumeBytes: 600_000_000,
+            uploadMaxBatchesPerSec: 1,
+            uploadMaxBytesPerMinute: 1,
+            uploadBackoffOn429Multiplier: 1,
+          },
+          logging: { level: 'info', logDir: '' },
+          staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
+        }) as never,
+      now: () => now,
+    }),
+  );
+
+  expect(out.lines.some((l) => l.msg.includes('0 days'))).toBe(true);
 });

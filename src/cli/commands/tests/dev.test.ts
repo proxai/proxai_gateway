@@ -41,7 +41,7 @@ test('runDev action="off" disables dev mode', async () => {
   await runDev({ output: out, sentinelPath: mockSentinelPath }, 'on');
   expect(existsSync(mockSentinelPath)).toBe(true);
 
-  out.lines.length = 0; // clear lines
+  out.lines.length = 0;
   const result = await runDev(
     {
       output: out,
@@ -59,7 +59,6 @@ test('runDev action="off" disables dev mode', async () => {
 test('runDev toggles dev mode (action undefined)', async () => {
   const out = captureOutput();
 
-  // 1. Toggles from false to true
   let result = await runDev({
     output: out,
     sentinelPath: mockSentinelPath,
@@ -69,8 +68,7 @@ test('runDev toggles dev mode (action undefined)', async () => {
   let successMsgs = out.lines.filter((l) => l.level === 'success').map((l) => l.msg);
   expect(successMsgs.join(' ')).toContain('Dev mode enabled');
 
-  // 2. Toggles from true to false
-  out.lines.length = 0; // clear lines
+  out.lines.length = 0;
   result = await runDev({
     output: out,
     sentinelPath: mockSentinelPath,

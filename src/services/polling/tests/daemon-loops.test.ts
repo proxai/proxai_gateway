@@ -67,7 +67,7 @@ function makeContexts(): {
       softPauseBytes: 700 * 1024 * 1024,
       softResumeBytes: 600 * 1024 * 1024,
     },
-    capturePolicy: { initialScanWindowDays: 30, maxDecompressedBytes: 9 * 1024 * 1024 },
+    capturePolicy: { maxDecompressedBytes: 9 * 1024 * 1024 },
   };
   const drainCtx: DrainCycleContext = {
     buffer,

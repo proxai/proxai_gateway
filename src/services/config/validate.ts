@@ -6,7 +6,6 @@ import {
   DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
   DEFAULT_BUFFER_SOFT_RESUME_BYTES,
   DEFAULT_FAILED_RETENTION_DAYS,
-  DEFAULT_INITIAL_SCAN_WINDOW_DAYS,
   DEFAULT_POLL_INTERVAL_SEC,
   DEFAULT_RECEIPT_RETENTION_DAYS,
   DEFAULT_STALE_PAUSE_DAYS,
@@ -101,6 +100,7 @@ function validateCapture(raw: unknown): CaptureConfig {
       'capture.buffer_soft_resume_bytes must be less than capture.buffer_soft_pause_bytes',
     );
   }
+
   const capture: CaptureConfig = {
     pollIntervalSec: optionalNumber(
       r['poll_interval_sec'],
@@ -124,12 +124,6 @@ function validateCapture(raw: unknown): CaptureConfig {
     ),
     bufferSoftPauseBytes,
     bufferSoftResumeBytes,
-    initialScanWindowDays: optionalNumber(
-      r['initial_scan_window_days'],
-      DEFAULT_INITIAL_SCAN_WINDOW_DAYS,
-      'capture.initial_scan_window_days',
-      0,
-    ),
     uploadMaxBatchesPerSec: optionalNumber(
       r['upload_max_batches_per_sec'],
       DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,

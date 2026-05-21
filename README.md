@@ -73,13 +73,13 @@ Every long-form command also has a short alias.
 | `stop` | `x` | Halt the daemon for this session. Auto-restarts on next reboot. |
 | `restart` | `r` | Stop and start. |
 | `status` | `i` | Print health, buffer state, upload metrics, and sentinel flags. |
+| `inspect` | `ins` | Dry-run scan all local telemetry sources concurrently and generate a detailed report without writing to the buffer. |
 | `dev` | `d` | Configure or toggle gateway development mode (on, off, or toggle). |
 | `tail` | `t` | Stream structured logs from the active log file. |
 | `pause` | — | Pause polling indefinitely. Persists across reboots until `resume`. |
 | `resume` | — | Clear an active pause. |
 | `redaction list` | — | List secret-redaction rules by category. |
 | `redaction test <file>` | — | Run the redaction pipeline on a file and show what would be redacted. |
-| `backfill` | — | Capture extended history beyond the default 30-day window. |
 | `upgrade` | — | Manually fetch the latest release from GitHub and replace the binary. |
 | `uninstall` | `rm` | Decommission the service. Use `--reset` to also wipe local data. |
 
@@ -106,6 +106,39 @@ installed via npm
 ```
 
 Recognized install sources are `bun`, `pnpm`, `yarn`, `npm`, `brew`, and `github_release`. If the config does not yet exist (before `setup`), the source falls back to `unknown`.
+
+### Inspect Output & Dry-Run Report
+
+`proxai-gateway inspect` (alias `ins`) scans all local developer telemetry sources concurrently in separate background threads, returning a beautifully formatted summary table in the terminal and generating a permanent, comprehensive Markdown report saved to the system's temporary directory (`tmp/proxai-gateway/reports/inspect_${timestamp}.md`).
+
+Because `inspect` is a strict **dry-run** operations:
+* It opens all local sqlite source databases in read-only mode (`readonly: true`).
+* It streams long log files line-by-line via high-performance streams without loading them completely into RAM.
+* It does **not** commit, modify, or buffer any telemetry data on-disk.
+
+Example CLI output:
+```
+🔍 ProxAI Telemetry Dry-Run Inspection
+Scanning local telemetry sources... (This is a dry-run and will not write to buffer)
+
+📊 Telemetry Scan Summary
+────────────────────────────────────────────────────────────────────────────────
+Source               │   Scanned Files │   Total Records │    Data Size │ Oldest Record
+────────────────────────────────────────────────────────────────────────────────
+Claude Code          │               4 │             240 │     23.23 KB │ 3 days ago (2026-05-18 10:20:15)
+Cursor               │               1 │            1405 │      1.42 MB │ 10 days ago (2026-05-11 12:45:00)
+Codex                │               2 │             892 │    450.80 KB │ 5 hours ago (2026-05-20 19:15:30)
+Gemini CLI           │               1 │              45 │      4.55 KB │ 12 minutes ago (2026-05-20 23:56:45)
+────────────────────────────────────────────────────────────────────────────────
+TOTAL                │               8 │            2582 │      1.89 MB │ 10 days ago (2026-05-11 12:45:00)
+────────────────────────────────────────────────────────────────────────────────
+
+💡 Highlights
+  • Oldest telemetry record: 10 days ago (Source: Cursor)
+  • Scan duration: 18ms
+
+Beautiful dry-run markdown report saved to: /tmp/proxai-gateway/reports/inspect_2026-05-21T07-28-00.md
+```
 
 ### Status output
 
@@ -157,6 +190,73 @@ What each line means:
 - **Health.Binary age** — days since this binary was installed, plus the configured warn / pause thresholds for stale binaries.
 
 Add `--json` to emit a machine-readable payload of the same data.
+
+---
+
+## 🏗️ Worker-Based Polling & Telemetry Architecture
+
+To deliver robust, non-blocking telemetry collection without disk locks or performance lag, the ProxAI Gateway adopts a **Multithreaded Worker-Based Polling Architecture**. 
+
+### ⚙️ How it Works
+
+The system utilizes a decoupled coordinator pattern where the main thread manages high-level orchestration, state persistence, and remote uploads, while background CPU workers safely carry out heavy disk I/O, secret redaction, and database queries.
+
+```
+       +───────────────────────────────────────────────+
+       │              Main Thread                      │
+       │  (Daemon Coordinator / Uploader / scheduler)  │
+       +───────┬───────────────────────────────▲───────+
+               │                               │
+       [Spawns concurrently via]      [Returns capture data via]
+       [Bun Native Worker API  ]      [Worker postMessage()    ]
+               │                               │
+        ┌──────▼─────────────────┐      ┌──────┴─────────────────┐
+        │  poll-worker (Source 1)│      │  poll-worker (Source 2)│
+        │      (e.g., Cursor)    │      │    (e.g., Claude Code) │
+        └──────┬─────────────────┘      └──────┬─────────────────┘
+               │                               │
+     [Writes to its isolated]        [Writes to its isolated]
+     [Private RAM Database  ]        [Private RAM Database  ]
+               │                               │
+        ┌──────▼────────────────┐       ┌──────▼────────────────┐
+        │ Isolated in-memory DB │       │ Isolated in-memory DB │
+        │   sqlite (:memory:)   │       │   sqlite (:memory:)   │
+        └───────────────────────┘       └───────────────────────┘
+```
+
+### 🔒 Complete Thread Isolation & ACID Writes
+
+To completely eliminate `SQLITE_BUSY` lock contention and race conditions when multiple sources are polled concurrently, the gateway implements strict thread isolation:
+
+1. **Prior Cursor Loading**: Before spawning worker threads, the main thread reads the watermark positions (`source_cursors` table) from the persistent disk SQLite database (`buffer.db`) and builds a structured input.
+2. **Private In-Memory Databases**: Inside each active worker thread, the gateway creates a completely isolated **in-memory SQLite database** using `bun:sqlite` (`new Database(':memory:')`). The worker loads the cursors into this private database.
+3. **Local Capture and Redaction**: The worker performs scanning, secret redaction, and batches the parsed records entirely inside its local, RAM-only database.
+4. **Main Thread Transaction Synchronization**: Once a worker finishes, it posts its local batches, quarantine records, and cursors back to the Main Thread via standard Web Message Channels. 
+5. **ACID Safe-Commit**: The Main Thread is the **sole writer** to the persistent SQLite database on disk (`buffer.db`). It serializes updates by executing all worker results inside a single atomic transaction block:
+
+```
+[Main Thread] === (Start Transaction) ===> [Write Cursors] ===> [Write Batches] === (Commit) ===> [Persistent buffer.db]
+```
+
+This hybrid pattern guarantees that the local SQLite database never hits a lock conflict, maintaining extreme processing throughput.
+
+---
+
+## ❓ FAQ (Frequently Asked Questions)
+
+### Q: Why does the gateway use multithreaded workers instead of standard asynchronous Node loops?
+**A:** Traditional async loops inside Node/Bun run on a single CPU thread. If a log file is massive, or an SQLite source database is locked by the editor, parsing and querying blocks the main loop, causing lag in the status reporting and uploader cycles. Spawning separate Workers allocates real OS threads, dividing CPU work (secret redaction, Gzip compression, parsing) across multiple CPU cores.
+
+### Q: Is there any risk of concurrent write locks on the persistent SQLite buffer database?
+**A:** No. Background worker threads **never** open or write to the persistent `buffer.db` database on disk. They only read and write inside their private in-memory (`:memory:`) RAM databases. The Main Thread is the single designated writer, ensuring all inserts are done sequentially inside single thread-safe transactions.
+
+### Q: Does the `inspect` command write data to the local database buffer?
+**A:** No. The `inspect` command is a pure **dry-run** reporter. Workers spawned by `inspect` open all local SQLite files in read-only mode (`readonly: true`) and stream logs without saving any batches, cursors, or metadata to `buffer.db`.
+
+### Q: How does the uploader pacing control database size?
+**A:** The `pacer.ts` helper regulates the transmission rate based on bandwidth policies and server states. If the persistent database pending size exceeds `softPauseBytes` (e.g. 200MB), a `buffer-full` sentinel halts the capture loop. Workers will not be spawned until uploader successful drains the queue below the `softResumeBytes` threshold (e.g. 100MB), ensuring safety.
+
+---
 
 ## Where things live
 

@@ -2,7 +2,6 @@ import type { Logger } from 'core/log';
 import type { InstallSource } from 'services/config';
 import { checkLatestVersion } from 'services/polling/version-check.ts';
 import { downloadAsset, expectedAssetName, replaceBinary } from 'services/upgrade/release-fetch.ts';
-
 export interface AutoUpgradeDeps {
   binaryPath: string;
   currentVersion: string;
@@ -15,24 +14,19 @@ export interface AutoUpgradeDeps {
   arch?: string;
   onLatestVersionKnown?: (latestVersion: string) => void;
 }
-
 export async function runAutoUpgrade(deps: AutoUpgradeDeps): Promise<void> {
   if (deps.devMode === true) return;
   if (deps.installSource === 'brew') return;
-
   const log = deps.logger;
   const platform = deps.platform ?? process.platform;
   const arch = deps.arch ?? process.arch;
-
   const checkOpts: Parameters<typeof checkLatestVersion>[0] = {
     currentVersion: deps.currentVersion,
     platform,
     arch,
   };
   if (deps.fetch !== undefined) checkOpts.fetch = deps.fetch;
-
   const outcome = await checkLatestVersion(checkOpts);
-
   if (outcome.kind === 'error') {
     log?.fatal(
       { event: 'auto_upgrade.check_failed', reason: outcome.reason },
@@ -43,7 +37,6 @@ export async function runAutoUpgrade(deps: AutoUpgradeDeps): Promise<void> {
   if (outcome.kind === 'no_release') return;
   deps.onLatestVersionKnown?.(outcome.result.latestVersion);
   if (!outcome.result.hasUpdate) return;
-
   const assetUrl = outcome.result.assetUrl;
   if (assetUrl === undefined) {
     log?.fatal(
@@ -52,7 +45,6 @@ export async function runAutoUpgrade(deps: AutoUpgradeDeps): Promise<void> {
     );
     return;
   }
-
   let bytes: Uint8Array;
   try {
     const dlOpts: Parameters<typeof downloadAsset>[1] = {
@@ -67,7 +59,6 @@ export async function runAutoUpgrade(deps: AutoUpgradeDeps): Promise<void> {
     );
     return;
   }
-
   if (bytes.byteLength <= 0) {
     log?.fatal(
       { event: 'auto_upgrade.download_failed', error: 'empty body' },
@@ -75,7 +66,6 @@ export async function runAutoUpgrade(deps: AutoUpgradeDeps): Promise<void> {
     );
     return;
   }
-
   try {
     await replaceBinary(deps.binaryPath, bytes, platform);
   } catch (err) {
@@ -85,7 +75,6 @@ export async function runAutoUpgrade(deps: AutoUpgradeDeps): Promise<void> {
     );
     return;
   }
-
   log?.info(
     {
       event: 'auto_upgrade.success',

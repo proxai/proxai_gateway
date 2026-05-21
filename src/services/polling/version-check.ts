@@ -5,36 +5,29 @@ export interface VersionCheckDeps {
   platform?: NodeJS.Platform;
   arch?: string;
 }
-
 export interface VersionCheckResult {
   latestVersion: string;
   hasUpdate: boolean;
   checkedAt: string;
   assetUrl?: string;
 }
-
 export type VersionCheckOutcome =
   | { kind: 'ok'; result: VersionCheckResult }
   | { kind: 'no_release'; reason: string }
   | { kind: 'error'; reason: string };
-
-const RELEASE_API_URL = 'https://api.github.com/repos/proxai/proxai_gateway/releases/latest';
-const REQUEST_TIMEOUT_MS = 5000;
-
 interface ReleaseAsset {
   readonly name: string;
   readonly browser_download_url: string;
 }
-
 interface ReleaseInfo {
   readonly tag_name: string;
   readonly assets: readonly ReleaseAsset[];
 }
-
+const RELEASE_API_URL = 'https://api.github.com/repos/proxai/proxai_gateway/releases/latest';
+const REQUEST_TIMEOUT_MS = 5000;
 export async function checkLatestVersion(deps: VersionCheckDeps): Promise<VersionCheckOutcome> {
   const fetchFn = deps.fetch ?? globalThis.fetch;
   const now = deps.now ?? (() => new Date());
-
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
   let body: ReleaseInfo;
@@ -62,24 +55,19 @@ export async function checkLatestVersion(deps: VersionCheckDeps): Promise<Versio
   } finally {
     clearTimeout(timer);
   }
-
   if (typeof body.tag_name !== 'string' || !Array.isArray(body.assets)) {
     return { kind: 'error', reason: 'release payload missing tag_name or assets array' };
   }
-
   const latestVersion = stripV(body.tag_name);
   if (latestVersion.length === 0) {
     return { kind: 'error', reason: 'release tag_name is empty after stripping v prefix' };
   }
-
   const hasUpdate = compareVersionStrings(latestVersion, deps.currentVersion) > 0;
-
   const arch = deps.arch ?? process.arch;
   const platform = deps.platform ?? process.platform;
   const ext = platform === 'win32' ? '.exe' : '';
   const expectedAssetName = `proxai-gateway-${platform}-${arch}${ext}`;
   const asset = body.assets.find((a) => a.name === expectedAssetName);
-
   const result: VersionCheckResult = {
     latestVersion,
     hasUpdate,
@@ -90,11 +78,9 @@ export async function checkLatestVersion(deps: VersionCheckDeps): Promise<Versio
   }
   return { kind: 'ok', result };
 }
-
 function stripV(tag: string): string {
   return tag.startsWith('v') ? tag.slice(1) : tag;
 }
-
 function compareVersionStrings(a: string, b: string): number {
   const pa = parseVersion(a);
   const pb = parseVersion(b);
@@ -106,7 +92,6 @@ function compareVersionStrings(a: string, b: string): number {
   }
   return 0;
 }
-
 function parseVersion(v: string): number[] {
   const stripped = v.split('-')[0] ?? v;
   return stripped.split('.').map((part) => {

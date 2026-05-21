@@ -761,7 +761,7 @@ test('logs quarantine.write_failed when quarantine insert throws', async () => {
     fatal: () => {},
     child: () => fakeLogger,
   };
-  // Drop the quarantine table to make the insert throw.
+
   buffer.exec('DROP TABLE quarantined_records');
 
   const baseCtx = ctx(buffer);

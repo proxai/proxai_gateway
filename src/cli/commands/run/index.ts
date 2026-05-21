@@ -121,11 +121,7 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
       maxBytesPerMinute: deps.config.capture.uploadMaxBytesPerMinute,
       backoffMultiplier: deps.config.capture.uploadBackoffOn429Multiplier,
     });
-    const sources =
-      deps.sources ??
-      buildDefaultSources({
-        initialScanWindowDays: deps.config.capture.initialScanWindowDays,
-      });
+    const sources = deps.sources ?? buildDefaultSources({});
     const captureCtx = buildCaptureContext({ buffer, deps, sources, logger });
     const drainCtx = buildDrainContext({ buffer, deps, http, pacer, logger });
     const heartbeatCtx = buildHeartbeatContext({ buffer, deps, logger });

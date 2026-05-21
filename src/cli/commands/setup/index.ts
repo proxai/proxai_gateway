@@ -84,9 +84,7 @@ async function maybeWriteConsentSentinel(deps: SetupCommandDeps): Promise<void> 
     if (await handle.exists()) return;
     const stamp = (deps.now ?? nowIsoUtc)();
     await handle.write(stamp);
-  } catch {
-    // best-effort consent sentinel write; setup completion is non-fatal here
-  }
+  } catch {}
 }
 
 async function reportAlreadyConfigured(deps: SetupCommandDeps): Promise<CommandResult> {

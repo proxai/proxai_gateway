@@ -33,6 +33,7 @@ export type SourcePoller = (ctx: SourcePollerContext) => Promise<SourcePollerRes
 export interface RegisteredSource {
   name: string;
   poll: SourcePoller;
+  baseDir?: string;
 }
 
 export interface StaleBinaryThresholds {
@@ -48,7 +49,6 @@ export interface BufferRetentionPolicy {
 }
 
 export interface CapturePolicy {
-  initialScanWindowDays: number;
   maxDecompressedBytes: number;
 }
 

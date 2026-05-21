@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
-import { runBackfill } from 'cli/commands/backfill.ts';
+
 import { runDev } from 'cli/commands/dev.ts';
 import { runPause } from 'cli/commands/pause.ts';
 import { runRedactionList, runRedactionTest } from 'cli/commands/redaction.ts';
@@ -17,8 +17,10 @@ import { runStop } from 'cli/commands/stop.ts';
 import { runTail } from 'cli/commands/tail';
 import { runUninstall } from 'cli/commands/uninstall';
 import { runUpgrade } from 'cli/commands/upgrade.ts';
+import { runInspect } from 'cli/commands/inspect.ts';
 import { autoUpgradeFromConfig } from 'cli/wiring/auto-upgrade.ts';
-import { buildBackfillDeps, buildBackfillOptions } from 'cli/wiring/backfill-deps.ts';
+
+import { consoleOutput } from 'cli/output.ts';
 import { buildDevDeps } from 'cli/wiring/dev-deps.ts';
 import { buildPauseDeps, buildPauseOptions } from 'cli/wiring/pause-deps.ts';
 import {
@@ -220,29 +222,6 @@ program
   });
 
 program
-  .command('backfill')
-  .description(
-    'Capture extended history beyond the default 30-day window. Runs a one-shot capture cycle and exits; the daemon must be stopped while this runs.',
-  )
-  .requiredOption(
-    '--since <duration>',
-    'lookback window. Format: Nd (days), Nmo (months), or Ny (years). Examples: 90d, 6mo, 1y.',
-  )
-  .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
-  .action(async (opts: { since: string; config?: string }) => {
-    const config = await loadConfigFromFile(opts.config);
-    const ctx = buildPlatformServiceContext(process.platform, process.execPath);
-    const result = await runBackfill(
-      buildBackfillDeps({
-        config,
-        serviceManager: ctx?.serviceManager ?? null,
-      }),
-      buildBackfillOptions(opts),
-    );
-    process.exit(result.exitCode);
-  });
-
-program
   .command('status')
   .alias('i')
   .description(
@@ -265,6 +244,21 @@ program
     } finally {
       sCtx.cleanup();
     }
+  });
+
+program
+  .command('inspect')
+  .alias('ins')
+  .description(
+    'Dry-run telemetry scanner that compiles records, file counts, and decompressed data sizes without updating buffers.',
+  )
+  .action(async () => {
+    const result = await runInspect({
+      output: consoleOutput(),
+      configExists: () => Bun.file(configFilePath()).exists(),
+      gatewayVersion: PACKAGE_VERSION,
+    });
+    process.exit(result.exitCode);
   });
 
 program

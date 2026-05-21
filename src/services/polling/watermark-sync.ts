@@ -21,13 +21,11 @@ export async function syncServerWatermarks(
 ): Promise<SyncWatermarksResult> {
   const { buffer, http, logger } = deps;
   const response = await http.fetchWatermarks();
-
   const result: SyncWatermarksResult = {
     fetched: response.watermarks.length,
     applied: 0,
     skipped: 0,
   };
-
   for (const w of response.watermarks) {
     if (!isApplicable(w)) {
       result.skipped++;
@@ -52,7 +50,6 @@ export async function syncServerWatermarks(
     });
     result.applied++;
   }
-
   return result;
 }
 

@@ -7,6 +7,7 @@ import {
   openInMemoryBufferDb,
   setCursor,
   setCursorFromRegression,
+  countCapturedConversations,
   type CursorKey,
 } from 'services/buffer';
 
@@ -220,4 +221,77 @@ test('hasAnyCursor scopes to source app, not to a specific path', () => {
   });
   expect(hasAnyCursor(db, 'cursor')).toBe(true);
   expect(hasAnyCursor(db, 'claude-code')).toBe(false);
+});
+
+test('countCapturedConversations returns accurate counts per source app', () => {
+  setCursor(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'a'.repeat(64),
+    sourcePath: '/path/1',
+    sourceInode: 1,
+    watermarkTable: null,
+    watermarkEnd: 10,
+  });
+
+  setCursor(db, {
+    sourceApp: 'cursor',
+    sourcePathHash: 'b'.repeat(64),
+    sourcePath: '/path/2',
+    sourceInode: 2,
+    watermarkTable: null,
+    watermarkEnd: 20,
+  });
+
+  setCursor(db, {
+    sourceApp: 'gemini-cli',
+    sourcePathHash: 'c'.repeat(64),
+    sourcePath: '/path/3',
+    sourceInode: 3,
+    watermarkTable: null,
+    watermarkEnd: 30,
+  });
+
+  setCursor(db, {
+    sourceApp: 'codex',
+    sourcePathHash: 'd'.repeat(64),
+    sourcePath: '/path/4',
+    sourceInode: null,
+    watermarkTable: 'threads',
+    watermarkEnd: 4,
+  });
+
+  setCursor(db, {
+    sourceApp: 'codex',
+    sourcePathHash: 'e'.repeat(64),
+    sourcePath: '/path/5',
+    sourceInode: null,
+    watermarkTable: null,
+    watermarkEnd: 5,
+  });
+
+  const counts = countCapturedConversations(db);
+  expect(counts['claude-code']).toBe(1);
+  expect(counts.cursor).toBe(1);
+  expect(counts['gemini-cli']).toBe(1);
+  expect(counts.codex).toBe(4);
+});
+
+test('setCursorFromRegression with non-null sourceInode and watermarkTable', () => {
+  const key = {
+    sourceApp: 'codex',
+    sourcePath: '/path/6',
+    sourcePathHash: 'f'.repeat(64),
+    sourceInode: 42,
+    watermarkTable: 'threads',
+  };
+  setCursorFromRegression(db, key, 12);
+  const after = getCursor(db, {
+    sourceApp: 'codex',
+    sourcePathHash: 'f'.repeat(64),
+    sourceInode: 42,
+    watermarkTable: 'threads',
+  });
+  expect(after?.watermarkEnd).toBe(12);
+  expect(after?.lastSeenSizeBytes).toBeNull();
+  expect(after?.lastSeenPageCount).toBeNull();
 });

@@ -6,8 +6,6 @@ import {
   discoverCodexStateSqlite,
 } from 'sources/codex';
 import { CODEX_DEFAULT_AGENT_SCHEMA_VERSION } from 'sources/codex/codex.constants.ts';
-import { hasAnyCursor } from 'services/buffer';
-import { SOURCE_NAME_CODEX } from 'services/polling/polling.constants.ts';
 import type {
   SourcePoller,
   SourcePollerContext,
@@ -17,20 +15,14 @@ import type {
 
 export interface CodexSourcePollerOptions {
   baseDir?: string;
-  initialScanWindowDays?: number;
 }
 
 export function makeCodexSourcePoller(options: CodexSourcePollerOptions = {}): SourcePoller {
   const baseDir = options.baseDir ?? defaultCodexHome();
-  const initialScanWindowDays = options.initialScanWindowDays;
-  return (ctx) => pollCodex(ctx, baseDir, initialScanWindowDays);
+  return (ctx) => pollCodex(ctx, baseDir);
 }
 
-async function pollCodex(
-  ctx: SourcePollerContext,
-  baseDir: string,
-  initialScanWindowDays: number | undefined,
-): Promise<SourcePollerResult> {
+async function pollCodex(ctx: SourcePollerContext, baseDir: string): Promise<SourcePollerResult> {
   const result: SourcePollerResult = {
     filesProcessed: 0,
     capturedBatches: 0,
@@ -39,7 +31,7 @@ async function pollCodex(
   };
 
   let agentSchemaVersion = CODEX_DEFAULT_AGENT_SCHEMA_VERSION;
-  const minimumMtime = resolveMinimumMtime(ctx, initialScanWindowDays);
+  const minimumMtime = resolveMinimumMtime(ctx);
 
   try {
     const stateFile = await discoverCodexStateSqlite(baseDir, { minimumMtime });
@@ -86,12 +78,7 @@ async function pollCodex(
   return result;
 }
 
-function resolveMinimumMtime(
-  ctx: SourcePollerContext,
-  initialScanWindowDays: number | undefined,
-): Date | null {
+function resolveMinimumMtime(ctx: SourcePollerContext): Date | null {
   if (ctx.minimumMtimeOverride !== undefined) return ctx.minimumMtimeOverride;
-  if (initialScanWindowDays === undefined || initialScanWindowDays <= 0) return null;
-  if (hasAnyCursor(ctx.buffer, SOURCE_NAME_CODEX)) return null;
-  return new Date(Date.now() - initialScanWindowDays * 24 * 60 * 60 * 1000);
+  return null;
 }

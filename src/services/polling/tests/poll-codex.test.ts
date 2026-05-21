@@ -196,18 +196,19 @@ test('state-only run still inserts batches from threads table', async () => {
   expect(result.capturedBatches).toBeGreaterThanOrEqual(1);
 });
 
-test('initialScanWindowDays applies a now-N-day floor on a fresh buffer', async () => {
+test('minimumMtimeOverride applies a floor on a fresh buffer', async () => {
   const oldPath = await seedRollout('sessions/2020/01/01/rollout-old.jsonl', 'x\n');
   const newPath = await seedRollout('sessions/2026/05/05/rollout-new.jsonl', 'y\n');
   const { utimes } = await import('node:fs/promises');
   const oldDate = new Date(Date.now() - 1000 * 60 * 60 * 24 * 365);
   await utimes(oldPath, oldDate, oldDate);
   await utimes(newPath, new Date(), new Date());
-  const poller = makeCodexSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
+  const poller = makeCodexSourcePoller({ baseDir: dir });
   const result = await poller({
     buffer,
     gatewayVersion: 'gw-0.1',
     maxDecompressedBytes: 9 * 1024 * 1024,
+    minimumMtimeOverride: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
   });
 
   expect(result.capturedBatches).toBeGreaterThanOrEqual(1);

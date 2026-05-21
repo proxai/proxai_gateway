@@ -1,3 +1,4 @@
+/* eslint-disable unicorn/prefer-add-event-listener, unicorn/require-post-message-target-origin */
 import { nowIsoUtc } from 'core/utils';
 import {
   checkPendingPressure,
@@ -5,6 +6,9 @@ import {
   getMetadata,
   setDaemonState,
   setMetadata,
+  insertBatch,
+  recordQuarantine,
+  setCursor,
 } from 'services/buffer';
 import { METADATA_KEYS } from 'services/buffer';
 import type {
@@ -12,6 +16,7 @@ import type {
   PendingPressureResult,
   SourceCycleResult,
 } from 'services/buffer';
+import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.types.ts';
 import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 import { isBufferFull, writeBufferFullSentinel } from 'services/polling/buffer-full-sentinel.ts';
 import { isPaused } from 'services/polling/pause-sentinel.ts';
@@ -20,6 +25,7 @@ import type {
   CaptureCycleResult,
   SourcePollerContext,
   SourcePollerResult,
+  RegisteredSource,
 } from 'services/polling/polling.types.ts';
 
 export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<CaptureCycleResult> {
@@ -52,19 +58,28 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
   }
 
   const sourceResults: Record<string, SourcePollerResult> = {};
-  for (const source of ctx.sources) {
+  const promises = ctx.sources.map(async (source) => {
     const sourceLog = log?.child({ source_app: source.name });
     sourceLog?.debug({ event: 'source.poll.start' }, 'source poll started');
-    const sourceCtx: SourcePollerContext = {
-      buffer: ctx.buffer,
-      gatewayVersion: ctx.gatewayVersion,
-      maxDecompressedBytes: ctx.capturePolicy.maxDecompressedBytes,
-    };
-    if (sourceLog !== undefined) sourceCtx.logger = sourceLog;
-    if (ctx.minimumMtimeOverride !== undefined) {
-      sourceCtx.minimumMtimeOverride = ctx.minimumMtimeOverride;
+
+    const isDefaultSource = ['claude-code', 'cursor', 'gemini-cli', 'codex'].includes(source.name);
+
+    let result: SourcePollerResult;
+    if (isDefaultSource) {
+      result = await pollSourceInWorker(source, ctx);
+    } else {
+      const sourceCtx: SourcePollerContext = {
+        buffer: ctx.buffer,
+        gatewayVersion: ctx.gatewayVersion,
+        maxDecompressedBytes: ctx.capturePolicy.maxDecompressedBytes,
+      };
+      if (sourceLog !== undefined) sourceCtx.logger = sourceLog;
+      if (ctx.minimumMtimeOverride !== undefined) {
+        sourceCtx.minimumMtimeOverride = ctx.minimumMtimeOverride;
+      }
+      result = await source.poll(sourceCtx);
     }
-    const result = await source.poll(sourceCtx);
+
     sourceResults[source.name] = result;
     sourceLog?.info(
       {
@@ -82,7 +97,9 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
         'source poll captured an error',
       );
     }
-  }
+  });
+
+  await Promise.all(promises);
 
   const pressureResult = await applyPressureSentinel(ctx, log);
 
@@ -238,4 +255,166 @@ function finishSkip(
     sourceResults: {},
     pressureResult: null,
   };
+}
+
+async function pollSourceInWorker(
+  source: RegisteredSource,
+  ctx: CaptureCycleContext,
+): Promise<SourcePollerResult> {
+  return new Promise((resolve) => {
+    try {
+      const cursorRows = ctx.buffer
+        .query<any, [string]>('SELECT * FROM source_cursors WHERE source_app = ?')
+        .all(source.name);
+
+      const priorCursors = cursorRows.map((c) => ({
+        sourcePathHash: c.source_path_hash,
+        sourcePath: c.source_path,
+        sourceInode: c.source_inode,
+        watermarkTable: c.watermark_table,
+        watermarkEnd: c.watermark_end,
+        lastSeenSizeBytes: c.last_seen_size_bytes,
+        lastSeenPageCount: c.last_seen_page_count,
+        consecutiveErrors: c.consecutive_errors,
+      }));
+
+      const workerUrl = new URL('./poll-worker.ts', import.meta.url).href;
+      const worker = new Worker(workerUrl, { type: 'module' });
+
+      worker.onmessage = (event: MessageEvent<WorkerOutput>) => {
+        const output = event.data;
+        worker.terminate();
+
+        if (!output.success) {
+          resolve({
+            filesProcessed: 0,
+            capturedBatches: 0,
+            capturedBytes: 0,
+            errors: [
+              {
+                sourcePath: source.baseDir ?? source.name,
+                reason: output.error ?? 'Worker failed',
+              },
+            ],
+          });
+          return;
+        }
+
+        const capture = output.captureResult;
+        if (!capture) {
+          resolve({
+            filesProcessed: 0,
+            capturedBatches: 0,
+            capturedBytes: 0,
+            errors: [],
+          });
+          return;
+        }
+
+        try {
+          ctx.buffer.transaction(() => {
+            for (const b of capture.batches) {
+              insertBatch(ctx.buffer, {
+                ...b,
+                sourceApp: b.sourceApp as any,
+                sourceKind: b.sourceKind as any,
+                watermarkKind: b.watermarkKind as any,
+                bodyFormat: b.bodyFormat as any,
+                bodyCompression: b.bodyCompression as any,
+              });
+            }
+
+            for (const q of capture.quarantine) {
+              recordQuarantine(ctx.buffer, {
+                sourceApp: q.sourceApp as any,
+                sourcePath: q.sourcePath,
+                sourcePathHash: q.sourcePathHash,
+                sourceInode: q.sourceInode,
+                watermarkTable: q.watermarkTable,
+                watermarkPosition: q.watermarkPosition,
+                rowPk: q.rowPk,
+                redactedSizeBytes: q.redactedSizeBytes,
+                reason: q.reason,
+                quarantinedAtUtc: q.quarantinedAtUtc,
+                gatewayVersion: q.gatewayVersion,
+              });
+            }
+
+            for (const c of capture.cursors) {
+              setCursor(ctx.buffer, {
+                sourceApp: source.name as any,
+                sourcePathHash: c.sourcePathHash,
+                sourcePath: c.sourcePath,
+                sourceInode: c.sourceInode,
+                watermarkTable: c.watermarkTable,
+                watermarkEnd: c.watermarkEnd,
+                lastSeenSizeBytes: c.lastSeenSizeBytes,
+                lastSeenPageCount: c.lastSeenPageCount,
+                consecutiveErrors: c.consecutiveErrors,
+              });
+            }
+          })();
+        } catch (dbErr) {
+          resolve({
+            filesProcessed: capture.filesProcessed,
+            capturedBatches: 0,
+            capturedBytes: 0,
+            errors: [
+              {
+                sourcePath: source.baseDir ?? source.name,
+                reason: dbErr instanceof Error ? dbErr.message : String(dbErr),
+              },
+            ],
+          });
+          return;
+        }
+
+        resolve({
+          filesProcessed: capture.filesProcessed,
+          capturedBatches: capture.batches.length,
+          capturedBytes: capture.capturedBytes,
+          errors: [],
+        });
+      };
+
+      worker.onerror = (err) => {
+        worker.terminate();
+        resolve({
+          filesProcessed: 0,
+          capturedBatches: 0,
+          capturedBytes: 0,
+          errors: [
+            {
+              sourcePath: source.baseDir ?? source.name,
+              reason: err.message || 'Worker syntax/runtime error',
+            },
+          ],
+        });
+      };
+
+      worker.postMessage({
+        task: 'capture',
+        sourceName: source.name,
+        options: {
+          baseDir: source.baseDir,
+          gatewayVersion: ctx.gatewayVersion,
+          maxDecompressedBytes: ctx.capturePolicy.maxDecompressedBytes,
+          captureSubAgents: true,
+          priorCursors,
+        },
+      } as WorkerInput);
+    } catch (e) {
+      resolve({
+        filesProcessed: 0,
+        capturedBatches: 0,
+        capturedBytes: 0,
+        errors: [
+          {
+            sourcePath: source.baseDir ?? source.name,
+            reason: e instanceof Error ? e.message : String(e),
+          },
+        ],
+      });
+    }
+  });
 }

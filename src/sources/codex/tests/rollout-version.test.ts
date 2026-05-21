@@ -100,7 +100,7 @@ test('extracts cli_version from a ~22 KB session_meta first line', async () => {
 });
 
 test('returns null when first line exceeds the 1 MB head budget', async () => {
-  const padding = 'x'.repeat(1_100_000); // 1.1 MB > HEAD_BYTES
+  const padding = 'x'.repeat(1_100_000);
   const path = await writeFirstLine(
     `{"type":"session_meta","payload":{"cli_version":"1.0.0","blob":"${padding}"}}\n`,
   );

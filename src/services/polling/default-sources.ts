@@ -15,37 +15,35 @@ export interface DefaultSourcesOptions {
   cursorBaseDir?: string;
   codexBaseDir?: string;
   geminiCliBaseDir?: string;
-  initialScanWindowDays?: number;
 }
 
 export function buildDefaultSources(options: DefaultSourcesOptions = {}): RegisteredSource[] {
-  const window = options.initialScanWindowDays;
   return [
     {
       name: SOURCE_NAME_CLAUDE_CODE,
-      poll: makeClaudeCodeSourcePoller(buildPollerOptions(options.claudeCodeBaseDir, window)),
+      poll: makeClaudeCodeSourcePoller(buildPollerOptions(options.claudeCodeBaseDir)),
+      ...(options.claudeCodeBaseDir !== undefined ? { baseDir: options.claudeCodeBaseDir } : {}),
     },
     {
       name: SOURCE_NAME_CURSOR,
-      poll: makeCursorSourcePoller(buildPollerOptions(options.cursorBaseDir, window)),
+      poll: makeCursorSourcePoller(buildPollerOptions(options.cursorBaseDir)),
+      ...(options.cursorBaseDir !== undefined ? { baseDir: options.cursorBaseDir } : {}),
     },
     {
       name: SOURCE_NAME_CODEX,
-      poll: makeCodexSourcePoller(buildPollerOptions(options.codexBaseDir, window)),
+      poll: makeCodexSourcePoller(buildPollerOptions(options.codexBaseDir)),
+      ...(options.codexBaseDir !== undefined ? { baseDir: options.codexBaseDir } : {}),
     },
     {
       name: SOURCE_NAME_GEMINI_CLI,
-      poll: makeGeminiCliSourcePoller(buildPollerOptions(options.geminiCliBaseDir, window)),
+      poll: makeGeminiCliSourcePoller(buildPollerOptions(options.geminiCliBaseDir)),
+      ...(options.geminiCliBaseDir !== undefined ? { baseDir: options.geminiCliBaseDir } : {}),
     },
   ];
 }
 
-function buildPollerOptions(
-  baseDir: string | undefined,
-  initialScanWindowDays: number | undefined,
-): { baseDir?: string; initialScanWindowDays?: number } {
-  const out: { baseDir?: string; initialScanWindowDays?: number } = {};
+function buildPollerOptions(baseDir: string | undefined): { baseDir?: string } {
+  const out: { baseDir?: string } = {};
   if (baseDir !== undefined) out.baseDir = baseDir;
-  if (initialScanWindowDays !== undefined) out.initialScanWindowDays = initialScanWindowDays;
   return out;
 }

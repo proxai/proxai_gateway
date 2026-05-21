@@ -39,7 +39,7 @@ test('renderCaptureRow formats source, counts, and zero-error column', () => {
     filesProcessed: 7,
     errorsCount: 0,
   });
-  expect(line).toContain('cursor');
+  expect(line).toContain('Cursor');
   expect(line).toContain('3 captured');
   expect(line).toContain('7 files scanned');
   expect(line).toContain('0 errors');
@@ -136,9 +136,9 @@ test('renderBufferSection prints per-source pending sub-rows with bytes when any
     now: NOW,
   });
   const joined = lines.join('\n');
-  expect(joined).toContain('claude-code');
-  expect(joined).toContain('cursor');
-  expect(joined).not.toContain('codex');
+  expect(joined).toContain('Claude Code');
+  expect(joined).toContain('Cursor');
+  expect(joined).not.toContain('Codex');
   expect(joined).toContain('never');
   expect(joined).toContain('700 B');
   expect(joined).toContain('324 B');
@@ -169,8 +169,8 @@ test('renderBufferSection prints per-source failed sub-rows when failed count > 
     now: NOW,
   });
   const joined = lines.join('\n');
-  expect(joined).toContain('claude-code');
-  expect(joined).toContain('cursor');
+  expect(joined).toContain('Claude Code');
+  expect(joined).toContain('Cursor');
 });
 
 test('renderUploadSection writes all-time, avg, last cycle, last success when populated', () => {
@@ -199,10 +199,10 @@ test('renderUploadSection writes all-time, avg, last cycle, last success when po
   expect(joined).toContain('All-time');
   expect(joined).toContain('86');
   expect(joined).toContain('batches shipped');
-  expect(joined).toContain('claude-code');
-  expect(joined).toContain('cursor');
-  expect(joined).toContain('codex');
-  expect(joined).not.toMatch(/gemini-cli\s+0 batches/);
+  expect(joined).toContain('Claude Code');
+  expect(joined).toContain('Cursor');
+  expect(joined).toContain('Codex');
+  expect(joined).not.toMatch(/Gemini CLI\s+0 batches/);
   expect(joined).toContain('Avg / drain');
   expect(joined).toContain('Last drain');
   expect(joined).toContain('Last success');
@@ -258,8 +258,8 @@ test('renderUploadSection colors retriable and fatal when nonzero, omits zero pe
   const joined = lines.join('\n');
   expect(joined).toContain('2 retriable');
   expect(joined).toContain('2 fatal');
-  expect(joined).toContain('claude-code');
-  expect(joined).not.toMatch(/cursor\s+0 batches/);
+  expect(joined).toContain('Claude Code');
+  expect(joined).not.toMatch(/Cursor\s+0 batches/);
 });
 
 test('renderUploadSection: all-time data without bysource shows summary line only', () => {
@@ -521,4 +521,9 @@ test('renderHealthSection shows configured stale-binary thresholds via constants
   expect(joined).toContain(
     `warn ≥ ${DEFAULT_STALE_WARN_DAYS.toString()} d, pause ≥ ${DEFAULT_STALE_PAUSE_DAYS.toString()} d`,
   );
+});
+
+test('formatSourceLabel default case fallback for custom name', () => {
+  const { formatSourceLabel } = require('../layout.ts');
+  expect(formatSourceLabel('my-custom-source')).toBe('My Custom Source');
 });

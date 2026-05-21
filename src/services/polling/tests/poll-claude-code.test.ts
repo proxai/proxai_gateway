@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { countByStatus, openInMemoryBufferDb, setCursor } from 'services/buffer';
+import { countByStatus, openInMemoryBufferDb } from 'services/buffer';
 import { makeClaudeCodeSourcePoller } from 'services/polling/poll-claude-code.ts';
 
 let dir: string;
@@ -127,39 +127,32 @@ test('aggregates per-file collect errors into result.errors', async () => {
   expect(result.errors.length).toBeGreaterThan(0);
 });
 
-test('initial-scan window: skips files older than cap when no cursors exist', async () => {
+test('minimumMtimeOverride: skips files older than cutoff', async () => {
   const oldPath = await seedSession('proj', 'old.jsonl', '{"type":"user","text":"old"}\n');
   await seedSession('proj', 'fresh.jsonl', '{"type":"user","text":"fresh"}\n');
   const oldEpoch = new Date('2024-01-01T00:00:00Z');
   await utimes(oldPath, oldEpoch, oldEpoch);
 
-  const poller = makeClaudeCodeSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
+  const poller = makeClaudeCodeSourcePoller({ baseDir: dir });
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const result = await poller({
     buffer,
     gatewayVersion: 'gw-0.1',
     maxDecompressedBytes: 9 * 1024 * 1024,
+    minimumMtimeOverride: cutoff,
   });
 
   expect(result.filesProcessed).toBe(1);
   expect(result.capturedBatches).toBe(1);
 });
 
-test('initial-scan window: cap skipped once cursors exist for the app', async () => {
+test('default minimumMtime (null): processes all historical files unconditionally', async () => {
   const oldPath = await seedSession('proj', 'old.jsonl', '{"type":"user","text":"old"}\n');
   await seedSession('proj', 'fresh.jsonl', '{"type":"user","text":"fresh"}\n');
   const oldEpoch = new Date('2024-01-01T00:00:00Z');
   await utimes(oldPath, oldEpoch, oldEpoch);
 
-  setCursor(buffer, {
-    sourceApp: 'claude-code',
-    sourcePathHash: 'b'.repeat(64),
-    sourcePath: '/unrelated.jsonl',
-    sourceInode: 999,
-    watermarkTable: null,
-    watermarkEnd: 1,
-  });
-
-  const poller = makeClaudeCodeSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
+  const poller = makeClaudeCodeSourcePoller({ baseDir: dir });
   const result = await poller({
     buffer,
     gatewayVersion: 'gw-0.1',
@@ -168,47 +161,4 @@ test('initial-scan window: cap skipped once cursors exist for the app', async ()
 
   expect(result.filesProcessed).toBe(2);
   expect(result.capturedBatches).toBe(2);
-});
-
-test('initial-scan window: minimumMtimeOverride forces an explicit cap', async () => {
-  const oldPath = await seedSession('proj', 'old.jsonl', '{"type":"user","text":"old"}\n');
-  await seedSession('proj', 'fresh.jsonl', '{"type":"user","text":"fresh"}\n');
-  const oldEpoch = new Date('2024-01-01T00:00:00Z');
-  await utimes(oldPath, oldEpoch, oldEpoch);
-
-  setCursor(buffer, {
-    sourceApp: 'claude-code',
-    sourcePathHash: 'b'.repeat(64),
-    sourcePath: '/unrelated.jsonl',
-    sourceInode: 999,
-    watermarkTable: null,
-    watermarkEnd: 1,
-  });
-
-  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const poller = makeClaudeCodeSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
-  const result = await poller({
-    buffer,
-    gatewayVersion: 'gw-0.1',
-    maxDecompressedBytes: 9 * 1024 * 1024,
-    minimumMtimeOverride: cutoff,
-  });
-  expect(result.filesProcessed).toBe(1);
-  expect(result.capturedBatches).toBe(1);
-});
-
-test('initial-scan window: minimumMtimeOverride=null disables the cap on a fresh buffer', async () => {
-  const oldPath = await seedSession('proj', 'old.jsonl', '{"type":"user","text":"old"}\n');
-  await seedSession('proj', 'fresh.jsonl', '{"type":"user","text":"fresh"}\n');
-  const oldEpoch = new Date('2024-01-01T00:00:00Z');
-  await utimes(oldPath, oldEpoch, oldEpoch);
-
-  const poller = makeClaudeCodeSourcePoller({ baseDir: dir, initialScanWindowDays: 30 });
-  const result = await poller({
-    buffer,
-    gatewayVersion: 'gw-0.1',
-    maxDecompressedBytes: 9 * 1024 * 1024,
-    minimumMtimeOverride: null,
-  });
-  expect(result.filesProcessed).toBe(2);
 });

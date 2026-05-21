@@ -28,7 +28,6 @@ export async function checkStaleBinary(
   }
   const nowMs = (deps.now ?? Date.now)();
   const daysSinceInstall = Math.max(0, Math.floor((nowMs - installedAtMs) / MS_PER_DAY));
-
   if (deps.pauseAfterDays > 0 && daysSinceInstall >= deps.pauseAfterDays) {
     await pausePolling(
       deps.pauseSentinelPath,
@@ -44,7 +43,6 @@ export async function checkStaleBinary(
     );
     return { status: 'paused' };
   }
-
   if (deps.warnAfterDays > 0 && daysSinceInstall >= deps.warnAfterDays) {
     log?.warn(
       {
@@ -56,6 +54,5 @@ export async function checkStaleBinary(
     );
     return { status: 'warning' };
   }
-
   return { status: 'fresh' };
 }

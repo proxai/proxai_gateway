@@ -17,7 +17,6 @@ import {
   DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
   DEFAULT_BUFFER_SOFT_RESUME_BYTES,
   DEFAULT_FAILED_RETENTION_DAYS,
-  DEFAULT_INITIAL_SCAN_WINDOW_DAYS,
   DEFAULT_POLL_INTERVAL_SEC,
   DEFAULT_RECEIPT_RETENTION_DAYS,
   DEFAULT_STALE_PAUSE_DAYS,
@@ -202,7 +201,6 @@ async function writeExistingConfig(
       failedRetentionDays: DEFAULT_FAILED_RETENTION_DAYS,
       bufferSoftPauseBytes: DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
       bufferSoftResumeBytes: DEFAULT_BUFFER_SOFT_RESUME_BYTES,
-      initialScanWindowDays: DEFAULT_INITIAL_SCAN_WINDOW_DAYS,
       uploadMaxBatchesPerSec: DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
       uploadMaxBytesPerMinute: DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
       uploadBackoffOn429Multiplier: DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
@@ -241,7 +239,7 @@ test('does not overwrite CONSENT_ACCEPTED on --force replace', async () => {
 test('does not write CONSENT_ACCEPTED when consentSentinelPath is not provided', async () => {
   const control = newControl();
   const base = deps(control);
-  // Remove the optional consentSentinelPath to verify the code path that skips the writer.
+
   const { consentSentinelPath: _omit, ...rest } = base;
   void _omit;
   const result = await runSetup(rest, { apiKey: VALID_KEY });

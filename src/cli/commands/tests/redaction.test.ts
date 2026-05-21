@@ -25,7 +25,13 @@ async function seed(name: string, content: string): Promise<string> {
 }
 
 function stripAnsi(s: string): string {
-  return s.replace(/\[[0-9;]*m/g, '');
+  const ESC = String.fromCharCode(27);
+  const ESC2 = String.fromCharCode(155);
+  const ANSI_PATTERN = new RegExp(
+    '[' + ESC + ESC2 + '][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]',
+    'g',
+  );
+  return s.replace(ANSI_PATTERN, '');
 }
 
 test('test: redacts an inline-pattern key in input file', async () => {
