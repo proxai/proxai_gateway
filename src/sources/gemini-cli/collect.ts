@@ -53,7 +53,7 @@ export function isGeminiCliDialogueRecord(parsed: any): boolean {
   if (!parsed || typeof parsed !== 'object') {
     return false;
   }
-  return parsed.type === 'user' || parsed.type === 'assistant';
+  return parsed.type === 'user' || parsed.type === 'gemini';
 }
 
 export async function collectGeminiCliFile(

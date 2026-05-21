@@ -66,7 +66,7 @@ const HEADER_SUBAGENT = '{"sessionId":"abc","projectHash":"hex","kind":"subagent
 const EVENT_1 =
   '{"id":"e1","timestamp":"2026-01-01T00:00:00Z","type":"user","content":[{"text":"hi"}]}';
 const EVENT_2 =
-  '{"id":"e2","timestamp":"2026-01-01T00:00:01Z","type":"assistant","content":[{"text":"hello"}]}';
+  '{"id":"e2","timestamp":"2026-01-01T00:00:01Z","type":"gemini","content":[{"text":"hello"}]}';
 const EVENT_3 =
   '{"id":"e3","timestamp":"2026-01-01T00:00:02Z","type":"tool_call","content":[{"text":"call"}]}';
 
@@ -371,7 +371,8 @@ test('isGeminiCliDialogueRecord validation', () => {
   expect(isGeminiCliDialogueRecord('string')).toBe(false);
   expect(isGeminiCliDialogueRecord({})).toBe(false);
   expect(isGeminiCliDialogueRecord({ type: 'user' })).toBe(true);
-  expect(isGeminiCliDialogueRecord({ type: 'assistant' })).toBe(true);
+  expect(isGeminiCliDialogueRecord({ type: 'gemini' })).toBe(true);
+  expect(isGeminiCliDialogueRecord({ type: 'assistant' })).toBe(false);
   expect(isGeminiCliDialogueRecord({ type: 'tool_call' })).toBe(false);
   expect(isGeminiCliDialogueRecord({ type: 'tool_response' })).toBe(false);
   expect(isGeminiCliDialogueRecord({ type: 'system' })).toBe(false);

@@ -48,7 +48,7 @@ test('handleInspect: gemini-cli telemetry record filtering', async () => {
   const lines = [
     '{"sessionId":"abc","projectHash":"hex","kind":"main"}',
     '{"id":"e1","timestamp":"2026-01-01T00:00:00Z","type":"user","content":[{"text":"hi"}]}',
-    '{"id":"e2","timestamp":"2026-01-01T00:00:01Z","type":"assistant","content":[{"text":"hello"}]}',
+    '{"id":"e2","timestamp":"2026-01-01T00:00:01Z","type":"gemini","content":[{"text":"hello"}]}',
     '{"id":"e3","timestamp":"2026-01-01T00:00:02Z","type":"tool_call","content":[{"text":"call"}]}',
   ];
   await writeFile(logPath, lines.join('\n') + '\n');

@@ -135,7 +135,7 @@ test('falls back to "unknown" when message.version is missing', async () => {
 
 test('skips malformed JSON lines while scanning for version', async () => {
   const file = await makeFile(
-    'this-line-is-not-json\n{"type":"user","text":"hi"}\n{"type":"assistant","version":"3.5.7"}\n',
+    'this-line-is-not-json\n{"type":"user","text":"hi"}\n{"type":"assistant","version":"3.5.7","text":"hello"}\n',
   );
   await collectClaudeCodeFile(file, ctx(buffer));
   const batch = nextPendingBatch(buffer);
@@ -143,7 +143,7 @@ test('skips malformed JSON lines while scanning for version', async () => {
 });
 
 test('skips empty lines while scanning for version', async () => {
-  const file = await makeFile('\n\n{"type":"user","version":"4.0.0"}\n');
+  const file = await makeFile('\n\n{"type":"user","version":"4.0.0","text":"hello"}\n');
   await collectClaudeCodeFile(file, ctx(buffer));
   const batch = nextPendingBatch(buffer);
   expect(batch?.agentSchemaVersion).toBe('4.0.0');
@@ -419,10 +419,10 @@ test('isDialogueRecord extreme inputs and edge cases', () => {
   expect(isDialogueRecord('string')).toBe(false);
   expect(isDialogueRecord({ type: 'other' })).toBe(false);
 
-  expect(isDialogueRecord({ type: 'user' })).toBe(true);
-  expect(isDialogueRecord({ type: 'user', message: null })).toBe(true);
-  expect(isDialogueRecord({ type: 'user', message: {} })).toBe(true);
-  expect(isDialogueRecord({ type: 'user', message: { content: null } })).toBe(true);
+  expect(isDialogueRecord({ type: 'user' })).toBe(false);
+  expect(isDialogueRecord({ type: 'user', message: null })).toBe(false);
+  expect(isDialogueRecord({ type: 'user', message: {} })).toBe(false);
+  expect(isDialogueRecord({ type: 'user', message: { content: null } })).toBe(false);
   expect(isDialogueRecord({ type: 'user', message: { content: 'hello' } })).toBe(true);
   expect(isDialogueRecord({ type: 'user', message: { content: 123 } })).toBe(true);
 
@@ -454,10 +454,10 @@ test('isDialogueRecord extreme inputs and edge cases', () => {
     true,
   );
 
-  expect(isDialogueRecord({ type: 'assistant' })).toBe(true);
-  expect(isDialogueRecord({ type: 'assistant', message: null })).toBe(true);
-  expect(isDialogueRecord({ type: 'assistant', message: {} })).toBe(true);
-  expect(isDialogueRecord({ type: 'assistant', message: { content: null } })).toBe(true);
+  expect(isDialogueRecord({ type: 'assistant' })).toBe(false);
+  expect(isDialogueRecord({ type: 'assistant', message: null })).toBe(false);
+  expect(isDialogueRecord({ type: 'assistant', message: {} })).toBe(false);
+  expect(isDialogueRecord({ type: 'assistant', message: { content: null } })).toBe(false);
   expect(isDialogueRecord({ type: 'assistant', message: { content: 'hello' } })).toBe(true);
   expect(isDialogueRecord({ type: 'assistant', message: { content: 123 } })).toBe(true);
 

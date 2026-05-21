@@ -52,31 +52,42 @@ export function isDialogueRecord(parsed: any): boolean {
   if (parsed.type === 'user' || parsed.type === 'assistant') {
     const mContent = parsed.message?.content;
     const pContent = parsed.content;
-    const actualContent = mContent !== undefined && mContent !== null ? mContent : pContent;
-    if (actualContent !== undefined && actualContent !== null) {
-      let hasText = false;
-      if (Array.isArray(actualContent)) {
-        hasText = actualContent.some(
-          (item: any) =>
-            item &&
-            typeof item === 'object' &&
-            item.type === 'text' &&
-            typeof item.text === 'string' &&
-            item.text.trim().length > 0,
-        );
-      } else if (typeof actualContent === 'object') {
-        hasText =
-          (actualContent as any).type === 'text' &&
-          typeof (actualContent as any).text === 'string' &&
-          (actualContent as any).text.trim().length > 0;
-      } else if (typeof actualContent === 'string') {
-        hasText = actualContent.trim().length > 0;
-      } else {
-        hasText = String(actualContent).trim().length > 0;
-      }
-      if (!hasText) {
-        return false;
-      }
+    const mText = parsed.message?.text;
+    const pText = parsed.text;
+    const actualContent =
+      mContent !== undefined && mContent !== null
+        ? mContent
+        : pContent !== undefined && pContent !== null
+          ? pContent
+          : mText !== undefined && mText !== null
+            ? mText
+            : pText;
+
+    if (actualContent === undefined || actualContent === null) {
+      return false;
+    }
+    let hasText = false;
+    if (Array.isArray(actualContent)) {
+      hasText = actualContent.some(
+        (item: any) =>
+          item &&
+          typeof item === 'object' &&
+          item.type === 'text' &&
+          typeof item.text === 'string' &&
+          item.text.trim().length > 0,
+      );
+    } else if (typeof actualContent === 'object') {
+      hasText =
+        (actualContent as any).type === 'text' &&
+        typeof (actualContent as any).text === 'string' &&
+        (actualContent as any).text.trim().length > 0;
+    } else if (typeof actualContent === 'string') {
+      hasText = actualContent.trim().length > 0;
+    } else {
+      hasText = String(actualContent).trim().length > 0;
+    }
+    if (!hasText) {
+      return false;
     }
 
     if (parsed.type === 'user') {
