@@ -413,13 +413,43 @@ export async function runInspect(
 
     output.info(chalk.bold('💡 Highlights'));
 
+    const claudeRes = results.find((r) => r.sourceName === 'claude-code');
+    if (claudeRes && claudeRes.recordCount > 0) {
+      const totalRecs = claudeRes.recordCount;
+      const teleRecs = claudeRes.telemetryRecordCount;
+      const ratioSaved = (((totalRecs - teleRecs) / totalRecs) * 100).toFixed(1);
+      output.info(
+        `  • Claude Code Dialogue Filtering: Scanned ${chalk.yellow(totalRecs.toLocaleString())} raw records, kept ${chalk.green(teleRecs.toLocaleString())} high-level dialogue records (saved ${chalk.bold.green(ratioSaved + '%')} intermediate reasoning/tool noise).`,
+      );
+    }
+
     const cursorRes = results.find((r) => r.sourceName === 'cursor');
     if (cursorRes && cursorRes.totalBytes > 0) {
       const dbSize = cursorRes.totalBytes;
       const teleSize = cursorRes.telemetryRawBytes;
       const ratioSaved = (((dbSize - teleSize) / dbSize) * 100).toFixed(1);
       output.info(
-        `  • Database Overhead Optimization: Cursor database size is ${chalk.yellow(formatBytes(dbSize))} on disk, but actual telemetry payload is only ${chalk.green(formatBytes(teleSize))} (saved ${chalk.bold.green(ratioSaved + '%')} noise).`,
+        `  • Cursor Database Optimization: SQLite database size is ${chalk.yellow(formatBytes(dbSize))} on disk, but telemetry payload is only ${chalk.green(formatBytes(teleSize))} (saved ${chalk.bold.green(ratioSaved + '%')} metadata noise).`,
+      );
+    }
+
+    const geminiRes = results.find((r) => r.sourceName === 'gemini-cli');
+    if (geminiRes && geminiRes.recordCount > 0) {
+      const totalRecs = geminiRes.recordCount;
+      const teleRecs = geminiRes.telemetryRecordCount;
+      const ratioSaved = (((totalRecs - teleRecs) / totalRecs) * 100).toFixed(1);
+      output.info(
+        `  • Gemini CLI Dialogue Filtering: Scanned ${chalk.yellow(totalRecs.toLocaleString())} raw records, kept ${chalk.green(teleRecs.toLocaleString())} high-level dialogue records (saved ${chalk.bold.green(ratioSaved + '%')} process noise).`,
+      );
+    }
+
+    const codexRes = results.find((r) => r.sourceName === 'codex');
+    if (codexRes && codexRes.recordCount > 0) {
+      const totalRecs = codexRes.recordCount;
+      const teleRecs = codexRes.telemetryRecordCount;
+      const ratioSaved = (((totalRecs - teleRecs) / totalRecs) * 100).toFixed(1);
+      output.info(
+        `  • Codex Rollout Trimming: Scanned ${chalk.yellow(totalRecs.toLocaleString())} raw records, kept ${chalk.green(teleRecs.toLocaleString())} dialogue/session records (saved ${chalk.bold.green(ratioSaved + '%')} prompt/tool definition noise).`,
       );
     }
 
@@ -448,6 +478,36 @@ export async function runInspect(
         : '/tmp/proxai-gateway/reports';
     const reportFileName = `inspect_${timestampTz}.md`;
     const reportPath = join(reportDir, reportFileName);
+
+    const claudeRecsTotal = claudeRes?.recordCount ?? 0;
+    const claudeRecsTele = claudeRes?.telemetryRecordCount ?? 0;
+    const claudeSavings =
+      claudeRecsTotal > 0
+        ? (((claudeRecsTotal - claudeRecsTele) / claudeRecsTotal) * 100).toFixed(1)
+        : '0.0';
+
+    const cursorBytesTotal = cursorRes?.totalBytes ?? 0;
+    const cursorBytesTele = cursorRes?.telemetryRawBytes ?? 0;
+    const cursorSavings =
+      cursorBytesTotal > 0
+        ? (((cursorBytesTotal - cursorBytesTele) / cursorBytesTotal) * 100).toFixed(1)
+        : '0.0';
+
+    const geminiResFound = results.find((r) => r.sourceName === 'gemini-cli');
+    const geminiRecsTotal = geminiResFound?.recordCount ?? 0;
+    const geminiRecsTele = geminiResFound?.telemetryRecordCount ?? 0;
+    const geminiSavings =
+      geminiRecsTotal > 0
+        ? (((geminiRecsTotal - geminiRecsTele) / geminiRecsTotal) * 100).toFixed(1)
+        : '0.0';
+
+    const codexResFound = results.find((r) => r.sourceName === 'codex');
+    const codexRecsTotal = codexResFound?.recordCount ?? 0;
+    const codexRecsTele = codexResFound?.telemetryRecordCount ?? 0;
+    const codexSavings =
+      codexRecsTotal > 0
+        ? (((codexRecsTotal - codexRecsTele) / codexRecsTotal) * 100).toFixed(1)
+        : '0.0';
 
     const markdownContent = `# ProxAI Telemetry Inspection Report
 
@@ -494,8 +554,11 @@ ${results
 
 ## 💡 Key Highlights
 
-* **Database Overhead Ratio:** Cursor database size is ${formatBytes(results.find((r) => r.sourceName === 'cursor')?.totalBytes ?? 0)} on disk, but actual uncompressed telemetry payload is only ${formatBytes(results.find((r) => r.sourceName === 'cursor')?.telemetryRawBytes ?? 0)} (saving 99%+ of metadata noise).
-* **Bandwidth Optimization:** Zstd compression and selective extraction yields a total compressed upload size of **${formatBytes(totalCompressedBytes)}** vs. a **${formatBytes(totalBytes)}** raw disk footprint.
+* **Claude Code Dialogue Filtering:** Scanned ${claudeRecsTotal.toLocaleString()} raw records, kept ${claudeRecsTele.toLocaleString()} high-level dialogue records (saved ${claudeSavings}% intermediate reasoning and tool noise).
+* **Cursor Database Optimization:** SQLite database size is ${formatBytes(cursorBytesTotal)} on disk, but telemetry payload is only ${formatBytes(cursorBytesTele)} (saved ${cursorSavings}% metadata noise).
+* **Gemini CLI Dialogue Filtering:** Scanned ${geminiRecsTotal.toLocaleString()} raw records, kept ${geminiRecsTele.toLocaleString()} high-level dialogue records (saved ${geminiSavings}% process noise).
+* **Codex Rollout Trimming:** Scanned ${codexRecsTotal.toLocaleString()} raw records, kept ${codexRecsTele.toLocaleString()} dialogue/session records (saved ${codexSavings}% prompt/tool definition noise).
+* **Bandwidth Optimization:** Zstd compression and selective extraction yields a total compressed upload size of **${formatBytes(totalCompressedBytes)}** vs. a **${formatBytes(totalBytes)}** raw disk footprint (saved ${totalBytes > 0 ? (((totalBytes - totalCompressedBytes) / totalBytes) * 100).toFixed(1) : '0.0'}%).
 * **Oldest Telemetry Record:** ${oldestDateIso ? `${formatTimeWithRelative(oldestDateIso)} (from ${formatSourceLabel(overallOldestSource)})` : 'None found'}
 * **Dry-Run Mode:** No data was committed or modified during this inspection.
 `;
