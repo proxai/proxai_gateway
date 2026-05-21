@@ -75,7 +75,8 @@ test('inserts a batch covering newly added complete lines', async () => {
 });
 
 test('advances cursor to the safe end byte', async () => {
-  const content = '{"a":1}\n{"b":2}\n';
+  const content =
+    '{"type":"user","message":{"role":"user","content":"hi"}}\n{"type":"assistant","message":{"role":"assistant","content":"hello"}}\n';
   const file = await makeFile(content);
   await collectClaudeCodeFile(file, ctx(buffer));
   const cursor = getCursor(buffer, {
@@ -88,7 +89,7 @@ test('advances cursor to the safe end byte', async () => {
 });
 
 test('does nothing on a second poll with no new bytes', async () => {
-  const file = await makeFile('{"a":1}\n');
+  const file = await makeFile('{"type":"user","message":{"role":"user","content":"hi"}}\n');
   await collectClaudeCodeFile(file, ctx(buffer));
   const second = await collectClaudeCodeFile(file, ctx(buffer));
   expect(second.capturedBatches).toBe(0);
@@ -96,7 +97,9 @@ test('does nothing on a second poll with no new bytes', async () => {
 });
 
 test('holds back trailing partial line and only advances to last newline', async () => {
-  const file = await makeFile('{"a":1}\n{"b":');
+  const file = await makeFile(
+    '{"type":"user","message":{"role":"user","content":"a"}}\n{"type":"user","message":{"role":"user","content":',
+  );
   await collectClaudeCodeFile(file, ctx(buffer));
   const cursor = getCursor(buffer, {
     sourceApp: 'claude-code',
@@ -104,7 +107,9 @@ test('holds back trailing partial line and only advances to last newline', async
     sourceInode: file.inode,
     watermarkTable: null,
   });
-  expect(cursor?.watermarkEnd).toBe('{"a":1}\n'.length);
+  expect(cursor?.watermarkEnd).toBe(
+    '{"type":"user","message":{"role":"user","content":"a"}}\n'.length,
+  );
 });
 
 test('does not insert a batch when no complete line is present', async () => {
@@ -206,7 +211,7 @@ test('increments consecutive_errors on per-file collector failure', async () => 
 });
 
 test('resets consecutive_errors on success after prior failure', async () => {
-  const file = await makeFile('{"a":1}\n');
+  const file = await makeFile('{"type":"user","message":{"role":"user","content":"hi"}}\n');
   setCursor(buffer, {
     sourceApp: 'claude-code',
     sourcePathHash: file.sourcePathHash,
@@ -227,7 +232,9 @@ test('resets consecutive_errors on success after prior failure', async () => {
 });
 
 test('persists the wire-DTO fields needed by the uploader', async () => {
-  const file = await makeFile('{"type":"user","message":{"version":"2.1.122"}}\n');
+  const file = await makeFile(
+    '{"type":"user","message":{"version":"2.1.122","role":"user","content":"hi"}}\n',
+  );
   await collectClaudeCodeFile(file, ctx(buffer));
   const batch = nextPendingBatch(buffer)!;
   expect(batch.sourceApp).toBe('claude-code');
@@ -246,7 +253,13 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
   const linesArr: string[] = [];
   for (let i = 0; i < targetTotalLines; i++) {
     const noise = randomBytes(1500).toString('base64');
-    linesArr.push(JSON.stringify({ i, noise }));
+    linesArr.push(
+      JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: noise },
+        version: '2.1.122',
+      }),
+    );
   }
   const content = `${linesArr.join('\n')}\n`;
   const file = await makeFile(content, 'big.jsonl');
@@ -285,7 +298,13 @@ test('watermark continuity holds under redaction-induced byte-count changes', as
   const lines: string[] = [];
   for (let i = 0; i < 50; i++) {
     const longSecret = `sk-ant-${'A'.repeat(64)}`;
-    lines.push(JSON.stringify({ i, key: longSecret, version: '2.1.122' }));
+    lines.push(
+      JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: longSecret },
+        version: '2.1.122',
+      }),
+    );
   }
   const content = `${lines.join('\n')}\n`;
   const file = await makeFile(content, 'redaction.jsonl');
@@ -323,7 +342,7 @@ test('watermark continuity holds under redaction-induced byte-count changes', as
 
 test('surfaces OversizedDecompressedSliceError when single line exceeds BODY_MAX_DECOMPRESSED_BYTES', async () => {
   const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
-  const oneLine = `${JSON.stringify({ giant: giantPayload, version: '2.1.122' })}\n`;
+  const oneLine = `${JSON.stringify({ type: 'user', message: { role: 'user', content: giantPayload }, version: '2.1.122' })}\n`;
   const file = await makeFile(oneLine, 'oversized.jsonl');
 
   const result = await collectClaudeCodeFile(file, ctx(buffer));
@@ -334,7 +353,13 @@ test('surfaces OversizedDecompressedSliceError when single line exceeds BODY_MAX
 test('every batch satisfies BOTH compressed AND decompressed caps', async () => {
   const lines: string[] = [];
   for (let i = 0; i < 100; i++) {
-    lines.push(JSON.stringify({ i, payload: 'x'.repeat(40), version: '2.1.122' }));
+    lines.push(
+      JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: 'x'.repeat(40) },
+        version: '2.1.122',
+      }),
+    );
   }
   const content = `${lines.join('\n')}\n`;
   const file = await makeFile(content, 'invariant.jsonl');
@@ -353,11 +378,14 @@ test('every batch satisfies BOTH compressed AND decompressed caps', async () => 
 });
 
 test('resets watermark when source_inode changes (file rotated/replaced)', async () => {
-  const file = { ...(await makeFile('{"a":1}\n')), inode: 1001 };
+  const file = {
+    ...(await makeFile('{"type":"user","message":{"role":"user","content":"a"}}\n')),
+    inode: 1001,
+  };
   const first = await collectClaudeCodeFile(file, ctx(buffer));
   expect(first.capturedBatches).toBe(1);
 
-  const newContent = '{"b":2}\n';
+  const newContent = '{"type":"user","message":{"role":"user","content":"b"}}\n';
   await writeFile(file.sourcePath, newContent);
   const rotated = { ...file, inode: 1002, sizeBytes: newContent.length };
 
@@ -377,6 +405,8 @@ test('resets watermark when source_inode changes (file rotated/replaced)', async
     sourceInode: rotated.inode,
     watermarkTable: null,
   });
-  expect(cursorOld?.watermarkEnd).toBe('{"a":1}\n'.length);
+  expect(cursorOld?.watermarkEnd).toBe(
+    '{"type":"user","message":{"role":"user","content":"a"}}\n'.length,
+  );
   expect(cursorNew?.watermarkEnd).toBe(newContent.length);
 });

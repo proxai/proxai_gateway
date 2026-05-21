@@ -45,6 +45,65 @@ function createSliceRedactor(): (slice: Uint8Array) => SliceRedaction {
   };
 }
 
+export function isDialogueRecord(parsed: any): boolean {
+  if (!parsed || typeof parsed !== 'object') {
+    return false;
+  }
+  if (parsed.type === 'user') {
+    let hasToolResult = false;
+    const mContent = parsed.message?.content;
+    const pContent = parsed.content;
+    if (mContent && typeof mContent === 'object') {
+      if (Array.isArray(mContent)) {
+        hasToolResult = mContent.some(
+          (item: any) => item && typeof item === 'object' && item.type === 'tool_result',
+        );
+      } else if ((mContent as any).type === 'tool_result') {
+        hasToolResult = true;
+      }
+    }
+    if (pContent && typeof pContent === 'object') {
+      if (Array.isArray(pContent)) {
+        hasToolResult =
+          hasToolResult ||
+          pContent.some(
+            (item: any) => item && typeof item === 'object' && item.type === 'tool_result',
+          );
+      } else if ((pContent as any).type === 'tool_result') {
+        hasToolResult = true;
+      }
+    }
+    return !hasToolResult;
+  }
+  if (parsed.type === 'assistant') {
+    let hasToolUse = false;
+    const mContent = parsed.message?.content;
+    const pContent = parsed.content;
+    if (mContent && typeof mContent === 'object') {
+      if (Array.isArray(mContent)) {
+        hasToolUse = mContent.some(
+          (item: any) => item && typeof item === 'object' && item.type === 'tool_use',
+        );
+      } else if ((mContent as any).type === 'tool_use') {
+        hasToolUse = true;
+      }
+    }
+    if (pContent && typeof pContent === 'object') {
+      if (Array.isArray(pContent)) {
+        hasToolUse =
+          hasToolUse ||
+          pContent.some(
+            (item: any) => item && typeof item === 'object' && item.type === 'tool_use',
+          );
+      } else if ((pContent as any).type === 'tool_use') {
+        hasToolUse = true;
+      }
+    }
+    return !hasToolUse;
+  }
+  return false;
+}
+
 export async function collectClaudeCodeFile(
   file: DiscoveredClaudeCodeFile,
   context: ClaudeCodeCollectorContext,
@@ -74,11 +133,54 @@ export async function collectClaudeCodeFile(
       return result;
     }
 
-    const redactedFullText = applyRedaction(DECODER.decode(range.bytes)).redacted;
+    const rawText = DECODER.decode(range.bytes);
+    const lines = rawText.split('\n');
+
+    interface KeptLine {
+      text: string;
+      physicalEndOffset: number;
+    }
+    const kept: KeptLine[] = [];
+
+    let currentOffset = 0;
+    for (const line of lines) {
+      const lineByteLength = ENCODER.encode(line).byteLength;
+      const lineEndOffset = currentOffset + lineByteLength + 1;
+
+      if (line.trim().length > 0) {
+        try {
+          const parsed = JSON.parse(line);
+          if (isDialogueRecord(parsed)) {
+            kept.push({
+              text: line,
+              physicalEndOffset: lineEndOffset,
+            });
+          }
+        } catch {}
+      }
+      currentOffset = lineEndOffset;
+    }
+
+    const filteredText = kept.map((k) => k.text).join('\n') + '\n';
+    if (kept.length === 0) {
+      setCursor(context.buffer, {
+        sourceApp: CLAUDE_CODE_SOURCE_APP,
+        sourcePathHash: file.sourcePathHash,
+        sourcePath: file.sourcePath,
+        sourceInode: file.inode,
+        watermarkTable: null,
+        watermarkEnd: range.endByte,
+        consecutiveErrors: 0,
+      });
+      return result;
+    }
+
+    const filteredBytes = ENCODER.encode(filteredText);
+    const redactedFullText = applyRedaction(filteredText).redacted;
     const agentSchemaVersion = extractAgentSchemaVersion(redactedFullText);
 
     const redactSlice = createSliceRedactor();
-    const sourceSlices = splitJsonlAtBoundary(range.bytes, {
+    const sourceSlices = splitJsonlAtBoundary(filteredBytes, {
       targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
       maxDecompressedBytes: context.maxDecompressedBytes,
       measureCompressed: (slice) => redactSlice(slice).compressed.byteLength,
@@ -91,16 +193,29 @@ export async function collectClaudeCodeFile(
           source_app: CLAUDE_CODE_SOURCE_APP,
           source_path_hash: file.sourcePathHash,
           total_slices: sourceSlices.length,
-          uncompressed_bytes: range.bytes.byteLength,
+          uncompressed_bytes: filteredBytes.byteLength,
         },
         'oversized capture slice split into multiple batches',
       );
     }
 
-    let offset = 0;
+    let keptLineIndex = 0;
     for (let i = 0; i < sourceSlices.length; i++) {
       const slice = sourceSlices[i]!;
-      const sliceEndOffset = offset + slice.byteLength;
+
+      let sliceNewlines = 0;
+      for (let j = 0; j < slice.byteLength; j++) {
+        if (slice[j] === 10) {
+          sliceNewlines++;
+        }
+      }
+
+      const startOffset = keptLineIndex > 0 ? kept[keptLineIndex - 1]!.physicalEndOffset : 0;
+      let endOffset = kept[keptLineIndex + sliceNewlines - 1]!.physicalEndOffset;
+
+      if (i === sourceSlices.length - 1) {
+        endOffset = range.endByte - watermarkStart;
+      }
 
       const { redactedBytes: redactedSlice, compressed } = redactSlice(slice);
 
@@ -137,8 +252,8 @@ export async function collectClaudeCodeFile(
         sourcePathHash: file.sourcePathHash,
         sourceInode: file.inode,
         watermarkKind: 'byte_range',
-        watermarkStart: watermarkStart + offset,
-        watermarkEnd: watermarkStart + sliceEndOffset,
+        watermarkStart: watermarkStart + startOffset,
+        watermarkEnd: watermarkStart + endOffset,
         watermarkTable: null,
         agentSchemaVersion,
         gatewayVersion: context.gatewayVersion,
@@ -149,7 +264,8 @@ export async function collectClaudeCodeFile(
       };
 
       insertBatch(context.buffer, batch);
-      offset = sliceEndOffset;
+      keptLineIndex += sliceNewlines;
+      result.capturedBytes += compressed.byteLength;
     }
 
     setCursor(context.buffer, {

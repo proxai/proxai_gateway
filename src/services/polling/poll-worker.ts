@@ -5,7 +5,11 @@ import { makeCodexSourcePoller } from 'services/polling/poll-codex.ts';
 import { makeCursorSourcePoller } from 'services/polling/poll-cursor.ts';
 import { makeGeminiCliSourcePoller } from 'services/polling/poll-gemini-cli.ts';
 import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.types.ts';
-import { discoverClaudeCodeFiles, defaultClaudeCodeProjectsRoot } from 'sources/claude-code';
+import {
+  discoverClaudeCodeFiles,
+  defaultClaudeCodeProjectsRoot,
+  isDialogueRecord,
+} from 'sources/claude-code';
 import {
   discoverCodexRolloutFiles,
   discoverCodexStateSqlite,
@@ -67,6 +71,70 @@ async function countLinesAndOldestDate(
   return { count, oldestDate };
 }
 
+async function analyzeJsonlLogFile(
+  filePath: string,
+  isClaudeCode: boolean,
+): Promise<{
+  totalLines: number;
+  oldestDate: string | null;
+  telemetryRecordCount: number;
+  telemetryRawBytes: number;
+}> {
+  let totalLines = 0;
+  let oldestDate: string | null = null;
+  let telemetryRecordCount = 0;
+  let telemetryRawBytes = 0;
+  try {
+    const file = Bun.file(filePath);
+    const stream = file.stream();
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    let partial = '';
+    const processLine = (line: string) => {
+      if (line.trim().length === 0) return;
+      totalLines++;
+      try {
+        const parsed = JSON.parse(line);
+        const ts = parsed.timestamp ?? parsed.created_at ?? parsed.time;
+        if (ts && !isNaN(Date.parse(ts))) {
+          const dateStr = new Date(ts).toISOString();
+          if (oldestDate === null || Date.parse(dateStr) < Date.parse(oldestDate)) {
+            oldestDate = dateStr;
+          }
+        }
+        let match = false;
+        if (isClaudeCode) {
+          match = isDialogueRecord(parsed);
+        } else {
+          if (parsed && typeof parsed === 'object') {
+            if (parsed.type === 'user' || parsed.type === 'assistant') {
+              match = true;
+            }
+          }
+        }
+        if (match) {
+          telemetryRecordCount++;
+          telemetryRawBytes += Buffer.byteLength(line, 'utf8') + 1;
+        }
+      } catch {}
+    };
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = (partial + chunk).split('\n');
+      partial = lines.pop() ?? '';
+      for (const line of lines) {
+        processLine(line);
+      }
+    }
+    if (partial.length > 0) {
+      processLine(partial);
+    }
+  } catch {}
+  return { totalLines, oldestDate, telemetryRecordCount, telemetryRawBytes };
+}
+
 export async function handleInspect(
   sourceName: string,
   options: WorkerInput['options'],
@@ -99,13 +167,18 @@ export async function handleInspect(
     for (const f of files) {
       filesProcessed++;
       totalBytes += f.sizeBytes;
-      const { count, oldestDate } = await countLinesAndOldestDate(f.sourcePath);
-      recordCount += count;
+      const {
+        totalLines,
+        oldestDate,
+        telemetryRecordCount: telCount,
+        telemetryRawBytes: telBytes,
+      } = await analyzeJsonlLogFile(f.sourcePath, true);
+      recordCount += totalLines;
       updateOldest(oldestDate, f.lastModifiedMs);
 
-      telemetryRawBytes += f.sizeBytes;
-      telemetryCompressedBytes += Math.round(f.sizeBytes / 6.0);
-      telemetryRecordCount += count;
+      telemetryRawBytes += telBytes;
+      telemetryCompressedBytes += Math.round(telBytes / 6.0);
+      telemetryRecordCount += telCount;
     }
   } else if (sourceName === 'cursor') {
     const baseDir = options.baseDir ?? defaultCursorUserRoot();
@@ -157,14 +230,19 @@ export async function handleInspect(
     for (const f of files) {
       filesProcessed++;
       totalBytes += f.sizeBytes;
-      const { count, oldestDate } = await countLinesAndOldestDate(f.sourcePath);
-      const adjustedCount = count > 1 ? count - 1 : count;
+      const {
+        totalLines,
+        oldestDate,
+        telemetryRecordCount: telCount,
+        telemetryRawBytes: telBytes,
+      } = await analyzeJsonlLogFile(f.sourcePath, false);
+      const adjustedCount = totalLines > 1 ? totalLines - 1 : totalLines;
       recordCount += adjustedCount;
       updateOldest(oldestDate, f.lastModifiedMs);
 
-      telemetryRawBytes += f.sizeBytes;
-      telemetryCompressedBytes += Math.round(f.sizeBytes / 6.0);
-      telemetryRecordCount += adjustedCount;
+      telemetryRawBytes += telBytes;
+      telemetryCompressedBytes += Math.round(telBytes / 6.0);
+      telemetryRecordCount += telCount;
     }
   } else if (sourceName === 'codex') {
     const baseDir = options.baseDir ?? defaultCodexHome();
