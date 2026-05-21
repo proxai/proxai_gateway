@@ -102,7 +102,7 @@ test('snapshot falls back to immutable open when regular open throws SQLITE_CANT
   }
 });
 
-test('snapshot propagates non-CANTOPEN errors without retrying', async () => {
+test('snapshot propagates other errors after trying immutable fallback', async () => {
   let calls = 0;
   const fakeOpen: SnapshotOpenImpl = () => {
     calls++;
@@ -111,5 +111,5 @@ test('snapshot propagates non-CANTOPEN errors without retrying', async () => {
     throw err;
   };
   await expect(snapshotSqlite(dbPath, { openImpl: fakeOpen })).rejects.toThrow('disk i/o error');
-  expect(calls).toBe(1);
+  expect(calls).toBe(2);
 });

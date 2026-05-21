@@ -37,11 +37,12 @@ export async function snapshotSqlite(
 function openWithCantopenFallback(open: SnapshotOpenImpl, sourcePath: string): Database {
   try {
     return open(sourcePath);
-  } catch (err) {
-    if ((err as { code?: string }).code === 'SQLITE_CANTOPEN') {
+  } catch (firstErr) {
+    try {
       return open(sourcePath, { immutable: true });
+    } catch {
+      throw firstErr;
     }
-    throw err;
   }
 }
 
