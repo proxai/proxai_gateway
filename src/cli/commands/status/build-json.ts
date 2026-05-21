@@ -5,6 +5,7 @@ import type { StatusJsonOutput, StatusSnapshot } from 'cli/commands/status/statu
 export function buildEmptyStatusJson(): StatusJsonOutput {
   return {
     configured: false,
+    isDevMode: false,
     health: 'inactive',
     sentinels: {
       paused: false,
@@ -63,6 +64,7 @@ export function buildStatusJson(snapshot: StatusSnapshot): StatusJsonOutput {
   const installedAt = snapshot.cfg?.account.installedAt ?? null;
   return {
     configured: true,
+    isDevMode: snapshot.isDevMode,
     health: snapshot.health,
     sentinels: {
       paused: snapshot.paused,

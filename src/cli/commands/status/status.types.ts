@@ -18,6 +18,7 @@ export interface StatusCommandDeps {
   authFailedSentinelPath: string;
   sessionStoppedSentinelPath: string;
   updateAvailableSentinelPath?: string;
+  devModeSentinelPath?: string;
   serviceManager?: ServiceManager;
   loadConfig?: (path?: string) => Promise<GatewayConfig>;
   currentVersion?: string;
@@ -30,6 +31,7 @@ export interface StatusCommandOptions {
 
 export interface StatusJsonOutput {
   configured: boolean;
+  isDevMode: boolean;
   health: string;
   sentinels: {
     paused: boolean;
@@ -85,6 +87,7 @@ export interface StatusJsonOutput {
 
 export interface StatusSnapshot {
   health: StatusHealth;
+  isDevMode: boolean;
   paused: boolean;
   pausedReason: string;
   authFailed: boolean;

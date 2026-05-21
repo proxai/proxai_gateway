@@ -1,14 +1,16 @@
+import { existsSync } from 'node:fs';
+import { devModeSentinelPath } from 'core/io/fs';
 import type { InstallSource } from 'services/config/config.types.ts';
 
 const PROD_URL = 'https://proxainest-production.up.railway.app';
 const DEV_URL = 'http://localhost:3001';
 
-export function resolveNestBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
-  const override = env['PROXAI_GATEWAY_NEST_ENDPOINT']?.trim();
-  if (override !== undefined && override.length > 0) {
-    return override.replace(/\/$/, '');
-  }
-  if (env['NODE_ENV'] === 'development') return DEV_URL;
+export function resolveNestBaseUrl(): string {
+  try {
+    if (existsSync(devModeSentinelPath())) {
+      return DEV_URL;
+    }
+  } catch {}
   return PROD_URL;
 }
 

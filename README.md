@@ -73,6 +73,7 @@ Every long-form command also has a short alias.
 | `stop` | `x` | Halt the daemon for this session. Auto-restarts on next reboot. |
 | `restart` | `r` | Stop and start. |
 | `status` | `i` | Print health, buffer state, upload metrics, and sentinel flags. |
+| `dev` | `d` | Configure or toggle gateway development mode (on, off, or toggle). |
 | `tail` | `t` | Stream structured logs from the active log file. |
 | `pause` | — | Pause polling indefinitely. Persists across reboots until `resume`. |
 | `resume` | — | Clear an active pause. |
@@ -83,6 +84,16 @@ Every long-form command also has a short alias.
 | `uninstall` | `rm` | Decommission the service. Use `--reset` to also wipe local data. |
 
 Run any command with `--help` for full option details.
+
+### Development Mode
+
+`proxai-gateway dev` (alias `d`) allows toggling or setting development mode. When dev mode is active, the gateway forces the ingestion endpoint to `http://localhost:3001` with zero environment variable dependency, and the `status` command will display a `(dev mode)` health indicator.
+
+```sh
+proxai-gateway dev       # toggle dev mode on/off
+proxai-gateway dev on    # explicitly enable dev mode
+proxai-gateway dev off   # explicitly disable dev mode
+```
 
 ### Version flag
 

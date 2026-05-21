@@ -8,6 +8,7 @@ import {
   bufferDbPath,
   bufferFullSentinelPath,
   configFilePath,
+  devModeSentinelPath,
   pausedSentinelPath,
   sessionStoppedSentinelPath,
   updateAvailableSentinelPath,
@@ -47,6 +48,7 @@ export async function buildStatusContext(inputs: BuildStatusContextInputs): Prom
       authFailedSentinelPath: authFailedSentinelPath(),
       sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
       updateAvailableSentinelPath: updateAvailableSentinelPath(),
+      devModeSentinelPath: devModeSentinelPath(),
     };
     return { deps, options, cleanup: () => {} };
   }
@@ -68,6 +70,7 @@ export async function buildStatusContext(inputs: BuildStatusContextInputs): Prom
     authFailedSentinelPath: authFailedSentinelPath(),
     sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
     updateAvailableSentinelPath: updateAvailableSentinelPath(),
+    devModeSentinelPath: devModeSentinelPath(),
     currentVersion: PACKAGE_VERSION,
     loadConfig: (path) => loadConfigFromFile(path),
   };

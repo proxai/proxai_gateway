@@ -1,47 +1,34 @@
-import { expect, test } from 'bun:test';
+import { expect, test, mock } from 'bun:test';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { writeFileSync, unlinkSync, existsSync } from 'node:fs';
+
+const mockSentinelPath = join(tmpdir(), `DEV_MODE_TEST_${Math.random().toString(36).slice(2)}`);
+
+mock.module('core/io/fs', () => {
+  const actual = import.meta.require('core/io/fs');
+  return {
+    ...actual,
+    devModeSentinelPath: () => mockSentinelPath,
+  };
+});
 
 import { resolveNestBaseUrl } from 'services/config';
 
-test('defaults to the production Railway URL', () => {
-  expect(resolveNestBaseUrl({})).toBe('https://proxainest-production.up.railway.app');
+test('defaults to the production Railway URL when sentinel is absent', () => {
+  if (existsSync(mockSentinelPath)) {
+    unlinkSync(mockSentinelPath);
+  }
+  expect(resolveNestBaseUrl()).toBe('https://proxainest-production.up.railway.app');
 });
 
-test('uses localhost:3001 when NODE_ENV=development', () => {
-  expect(resolveNestBaseUrl({ NODE_ENV: 'development' })).toBe('http://localhost:3001');
-});
-
-test('PROXAI_GATEWAY_NEST_ENDPOINT override beats both defaults', () => {
-  expect(resolveNestBaseUrl({ PROXAI_GATEWAY_NEST_ENDPOINT: 'http://staging.example.com' })).toBe(
-    'http://staging.example.com',
-  );
-  expect(
-    resolveNestBaseUrl({
-      NODE_ENV: 'development',
-      PROXAI_GATEWAY_NEST_ENDPOINT: 'http://staging.example.com',
-    }),
-  ).toBe('http://staging.example.com');
-});
-
-test('strips trailing slash and surrounding whitespace from override', () => {
-  expect(resolveNestBaseUrl({ PROXAI_GATEWAY_NEST_ENDPOINT: '  http://x.example.com/  ' })).toBe(
-    'http://x.example.com',
-  );
-});
-
-test('empty or whitespace-only override falls back to production', () => {
-  expect(resolveNestBaseUrl({ PROXAI_GATEWAY_NEST_ENDPOINT: '' })).toBe(
-    'https://proxainest-production.up.railway.app',
-  );
-  expect(resolveNestBaseUrl({ PROXAI_GATEWAY_NEST_ENDPOINT: '   ' })).toBe(
-    'https://proxainest-production.up.railway.app',
-  );
-});
-
-test('NODE_ENV other than development uses production', () => {
-  expect(resolveNestBaseUrl({ NODE_ENV: 'production' })).toBe(
-    'https://proxainest-production.up.railway.app',
-  );
-  expect(resolveNestBaseUrl({ NODE_ENV: 'staging' })).toBe(
-    'https://proxainest-production.up.railway.app',
-  );
+test('uses localhost:3001 when sentinel is present', () => {
+  writeFileSync(mockSentinelPath, 'ENABLED');
+  try {
+    expect(resolveNestBaseUrl()).toBe('http://localhost:3001');
+  } finally {
+    if (existsSync(mockSentinelPath)) {
+      unlinkSync(mockSentinelPath);
+    }
+  }
 });

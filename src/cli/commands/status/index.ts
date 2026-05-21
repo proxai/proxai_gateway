@@ -1,4 +1,6 @@
 import chalk from 'chalk';
+import { existsSync } from 'node:fs';
+import { devModeSentinelPath } from 'core/io/fs';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
@@ -25,11 +27,16 @@ export async function runStatus(
 ): Promise<CommandResult> {
   const exists = await deps.configExists();
   if (!exists) {
+    const isDevMode = existsSync(deps.devModeSentinelPath ?? devModeSentinelPath());
     if (options.json === true) {
-      deps.output.info(JSON.stringify(buildEmptyStatusJson()));
+      const emptyJson = buildEmptyStatusJson();
+      emptyJson.isDevMode = isDevMode;
+      deps.output.info(JSON.stringify(emptyJson));
       return { exitCode: EXIT_CODE.notInstalled };
     }
-    deps.output.info(`Status: ${statusDot('inactive')} not configured`);
+    deps.output.info(
+      `Status: ${statusDot('inactive')} not configured${isDevMode ? chalk.cyan(' (dev mode)') : ''}`,
+    );
     deps.output.info('');
     deps.output.info(`Run ${chalk.cyan('proxai-gateway setup')} to begin.`);
     return { exitCode: EXIT_CODE.notInstalled };

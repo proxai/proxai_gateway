@@ -209,18 +209,13 @@ program
   });
 
 program
-  .command('dev', { hidden: true })
+  .command('dev [action]')
   .alias('d')
-  .action(async () => {
-    const ctrl = new AbortController();
-    process.on('SIGINT', () => ctrl.abort());
-    process.on('SIGTERM', () => ctrl.abort());
-    const result = await runDev(
-      buildDevDeps({
-        abortSignal: ctrl.signal,
-        binaryPath: process.execPath,
-      }),
-    );
+  .description(
+    'Configure or toggle gateway development mode (actions: "on" to force localhost, "off" to restore production, or empty/no option to toggle).',
+  )
+  .action(async (action?: string) => {
+    const result = await runDev(buildDevDeps(), action);
     process.exit(result.exitCode);
   });
 

@@ -26,7 +26,7 @@ export function renderHumanStatus(deps: StatusCommandDeps, snapshot: StatusSnaps
   const out = deps.output;
   const dot = statusDot(snapshot.health);
   const label = renderHealthLabel(snapshot);
-  out.info(`Status: ${dot} ${label}`);
+  out.info(`Status: ${dot} ${label}${snapshot.isDevMode ? chalk.cyan(' (dev mode)') : ''}`);
 
   renderSentinelLines(out, snapshot);
 

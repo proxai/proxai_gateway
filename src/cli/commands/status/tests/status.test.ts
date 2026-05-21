@@ -83,6 +83,7 @@ function makeDeps(
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
+    devModeSentinelPath: join(dir, 'DEV_MODE'),
     ...extras,
   };
 }
@@ -738,4 +739,19 @@ test('getMetadataWithFallback: primary present uses primary, no legacy lookup', 
   const out = captureOutput();
   const result = await runStatus(makeDeps({ output: out }), { json: true });
   expect(result.exitCode).toBe(0);
+});
+
+test('runStatus reports dev mode when sentinel file is present', async () => {
+  const out = captureOutput();
+  const devPath = join(dir, 'DEV_MODE');
+  await Bun.write(devPath, 'ENABLED');
+
+  const result = await runStatus(
+    makeDeps({
+      output: out,
+      devModeSentinelPath: devPath,
+    }),
+  );
+  expect(result.exitCode).toBe(0);
+  expect(out.lines.some((l) => l.msg.includes('(dev mode)'))).toBe(true);
 });

@@ -69,6 +69,10 @@ export function updateAvailableSentinelPath(): string {
   return join(configDir(), 'UPDATE_AVAILABLE');
 }
 
+export function devModeSentinelPath(): string {
+  return join(configDir(), 'DEV_MODE');
+}
+
 export function controlSocketPath(): string {
   switch (process.platform) {
     case 'darwin':

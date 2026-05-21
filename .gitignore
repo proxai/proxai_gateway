@@ -28,3 +28,5 @@ Thumbs.db
 .proxai/
 
 .claude/
+# Antigravity CLI
+.antigravitycli/

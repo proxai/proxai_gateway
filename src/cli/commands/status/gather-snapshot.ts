@@ -1,4 +1,6 @@
 import type { Database } from 'bun:sqlite';
+import { existsSync } from 'node:fs';
+import { devModeSentinelPath } from 'core/io/fs';
 
 import {
   countByStatus,
@@ -153,8 +155,11 @@ export async function gatherStatusSnapshot(
     drain: daemonState,
   });
 
+  const isDevMode = existsSync(deps.devModeSentinelPath ?? devModeSentinelPath());
+
   return {
     health,
+    isDevMode,
     paused,
     pausedReason,
     authFailed,
