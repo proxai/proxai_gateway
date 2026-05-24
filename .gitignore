@@ -48,7 +48,8 @@ GEMINI.md
 .codex/
 .gemini/
 .agent/
-# Nested per-scope AGENTS.md emitted by ai/dist into source subdirs
+.agents/
+# Nested per-scope AGENTS.md emitted by ai/mapper into source subdirs
 **/AGENTS.md
 
 
