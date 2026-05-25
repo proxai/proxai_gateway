@@ -74,12 +74,19 @@ export function isCodexDialogueRecord(parsed: unknown): boolean {
   return false;
 }
 
-export function trimCodexRecord(parsed: any): any {
-  if (!parsed || typeof parsed !== 'object') {
+export function trimCodexRecord(parsed: unknown): unknown {
+  if (parsed === null || typeof parsed !== 'object') {
     return parsed;
   }
-  if (parsed.type === 'session_meta' && parsed.payload && typeof parsed.payload === 'object') {
-    const trimmedPayload = { ...parsed.payload };
+  const record = parsed as { type?: unknown; payload?: unknown };
+  if (
+    record.type === 'session_meta' &&
+    record.payload !== null &&
+    typeof record.payload === 'object'
+  ) {
+    const trimmedPayload: Record<string, unknown> = {
+      ...(record.payload as Record<string, unknown>),
+    };
     if ('base_instructions' in trimmedPayload) {
       trimmedPayload.base_instructions = '<trimmed>';
     }
@@ -87,7 +94,7 @@ export function trimCodexRecord(parsed: any): any {
       trimmedPayload.dynamic_tools = [];
     }
     return {
-      ...parsed,
+      ...(record as Record<string, unknown>),
       payload: trimmedPayload,
     };
   }

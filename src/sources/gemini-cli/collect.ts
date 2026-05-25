@@ -49,19 +49,19 @@ function createSliceRedactor(): (slice: Uint8Array) => SliceRedaction {
   };
 }
 
-export function isGeminiCliDialogueRecord(parsed: any): boolean {
-  if (!parsed || typeof parsed !== 'object') {
+export function isGeminiCliDialogueRecord(parsed: unknown): boolean {
+  if (parsed === null || typeof parsed !== 'object') {
     return false;
   }
-  if (parsed.type === 'gemini') {
+  const record = parsed as { type?: unknown; content?: unknown };
+  if (record.type === 'gemini') {
     return true;
   }
-  if (parsed.type === 'user') {
-    const content = parsed.content;
-    if (!Array.isArray(content)) {
+  if (record.type === 'user') {
+    if (!Array.isArray(record.content)) {
       return true;
     }
-    return content.some(
+    return record.content.some(
       (item: unknown) =>
         item !== null &&
         typeof item === 'object' &&

@@ -24,6 +24,28 @@ import {
   writeBufferFullSentinel,
 } from 'services/polling';
 import type { CaptureCycleContext, RegisteredSource } from 'services/polling';
+import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.types.ts';
+
+type WorkerMessageHandler = ((event: MessageEvent<WorkerOutput>) => void) | null;
+type WorkerErrorHandler = ((event: ErrorEvent) => void) | null;
+
+// Bridge from a hand-rolled mock class to the global `Worker` constructor
+// signature. The mocks below only need a subset of the Worker interface; the
+// `unknown` hop is the canonical single-cast pattern (see ai/rules/_always.md)
+// for forcing a structurally-narrower stub into a wider DOM type.
+function asWorkerCtor(MockClass: new (...args: unknown[]) => unknown): typeof Worker {
+  return MockClass as unknown as typeof Worker;
+}
+
+// SourcePoller stub for tests that exercise the in-worker code path — the
+// captured `poll` callback is never actually invoked (the worker mock takes
+// over) but the type still has to match SourcePoller's return contract.
+const stubPoll = async () => ({
+  filesProcessed: 0,
+  capturedBatches: 0,
+  capturedBytes: 0,
+  errors: [],
+});
 
 let dir: string;
 let buffer: Database;
@@ -367,76 +389,79 @@ function makeFakeLogger(entries: { level: string; msg: string }[]): FakeLogger {
 
 test('capture-cycle runs worker successfully with cursors, batches, quarantine', async () => {
   const originalWorker = globalThis.Worker;
-  globalThis.Worker = class MockWorker {
-    onmessage: any = null;
-    onerror: any = null;
-    postMessage(..._args: any[]) {
-      setTimeout(() => {
-        if (this.onmessage) {
-          this.onmessage({
-            data: {
-              success: true,
-              captureResult: {
-                filesProcessed: 3,
-                capturedBytes: 150,
-                batches: [
-                  {
-                    captureId: generateUuidV7(),
-                    sourceApp: 'cursor',
-                    sourceKind: 'sqlite_diff',
-                    sourcePath: '/tmp/c.db',
-                    sourcePathHash: 'b'.repeat(64),
-                    sourceInode: 2,
-                    watermarkKind: 'rowid',
-                    watermarkStart: 1,
-                    watermarkEnd: 10,
-                    watermarkTable: 'workspace_tabs',
-                    agentSchemaVersion: '1.0',
-                    gatewayVersion: 'gw-0.1',
-                    capturedAtUtc: '2026-05-08T00:00:00Z',
-                    bodyFormat: 'jsonl',
-                    bodyCompression: 'zstd',
-                    body: zstdCompressSync('[]'),
-                  },
-                ],
-                quarantine: [
-                  {
-                    sourceApp: 'cursor',
-                    sourcePath: '/tmp/c.db',
-                    sourcePathHash: 'b'.repeat(64),
-                    sourceInode: 2,
-                    watermarkTable: 'workspace_tabs',
-                    watermarkPosition: 15,
-                    rowPk: 'pk1',
-                    redactedSizeBytes: 1000,
-                    reason: 'too big',
-                    quarantinedAtUtc: '2026-05-08T00:00:00Z',
-                    gatewayVersion: 'gw-0.1',
-                  },
-                ],
-                cursors: [
-                  {
-                    sourcePathHash: 'b'.repeat(64),
-                    sourcePath: '/tmp/c.db',
-                    sourceInode: 2,
-                    watermarkTable: 'workspace_tabs',
-                    watermarkEnd: 15,
-                    lastSeenSizeBytes: 2000,
-                    lastSeenPageCount: 1,
-                    consecutiveErrors: 0,
-                  },
-                ],
+  globalThis.Worker = asWorkerCtor(
+    class MockWorker {
+      onmessage: WorkerMessageHandler = null;
+      onerror: WorkerErrorHandler = null;
+      postMessage(_message: WorkerInput): void {
+        setTimeout(() => {
+          if (this.onmessage) {
+            this.onmessage({
+              data: {
+                sourceName: 'cursor',
+                success: true,
+                captureResult: {
+                  filesProcessed: 3,
+                  capturedBytes: 150,
+                  batches: [
+                    {
+                      captureId: generateUuidV7(),
+                      sourceApp: 'cursor',
+                      sourceKind: 'sqlite_diff',
+                      sourcePath: '/tmp/c.db',
+                      sourcePathHash: 'b'.repeat(64),
+                      sourceInode: 2,
+                      watermarkKind: 'rowid',
+                      watermarkStart: 1,
+                      watermarkEnd: 10,
+                      watermarkTable: 'workspace_tabs',
+                      agentSchemaVersion: '1.0',
+                      gatewayVersion: 'gw-0.1',
+                      capturedAtUtc: '2026-05-08T00:00:00Z',
+                      bodyFormat: 'jsonl',
+                      bodyCompression: 'zstd',
+                      body: zstdCompressSync('[]'),
+                    },
+                  ],
+                  quarantine: [
+                    {
+                      sourceApp: 'cursor',
+                      sourcePath: '/tmp/c.db',
+                      sourcePathHash: 'b'.repeat(64),
+                      sourceInode: 2,
+                      watermarkTable: 'workspace_tabs',
+                      watermarkPosition: 15,
+                      rowPk: 'pk1',
+                      redactedSizeBytes: 1000,
+                      reason: 'too big',
+                      quarantinedAtUtc: '2026-05-08T00:00:00Z',
+                      gatewayVersion: 'gw-0.1',
+                    },
+                  ],
+                  cursors: [
+                    {
+                      sourcePathHash: 'b'.repeat(64),
+                      sourcePath: '/tmp/c.db',
+                      sourceInode: 2,
+                      watermarkTable: 'workspace_tabs',
+                      watermarkEnd: 15,
+                      lastSeenSizeBytes: 2000,
+                      lastSeenPageCount: 1,
+                      consecutiveErrors: 0,
+                    },
+                  ],
+                },
               },
-            },
-          });
-        }
-      }, 0);
-    }
-    terminate() {}
-  } as any;
+            } as unknown as MessageEvent<WorkerOutput>);
+          }
+        }, 0);
+      }
+      terminate(): void {}
+    },
+  );
 
   try {
-    const ctx = makeContext([{ name: 'cursor', poll: async () => ({}) as any }]);
+    const ctx = makeContext([{ name: 'cursor', poll: stubPoll }]);
     ctx.buffer
       .query(
         `
@@ -468,20 +493,28 @@ test('capture-cycle runs worker successfully with cursors, batches, quarantine',
 
 test('capture-cycle handles worker success: false', async () => {
   const originalWorker = globalThis.Worker;
-  globalThis.Worker = class MockWorker {
-    onmessage: any = null;
-    postMessage(..._args: any[]) {
-      setTimeout(() => {
-        if (this.onmessage) {
-          this.onmessage({ data: { success: false, error: 'Worker error message' } });
-        }
-      }, 0);
-    }
-    terminate() {}
-  } as any;
+  globalThis.Worker = asWorkerCtor(
+    class MockWorker {
+      onmessage: WorkerMessageHandler = null;
+      postMessage(_message: WorkerInput): void {
+        setTimeout(() => {
+          if (this.onmessage) {
+            this.onmessage({
+              data: {
+                sourceName: 'cursor',
+                success: false,
+                error: 'Worker error message',
+              },
+            } as unknown as MessageEvent<WorkerOutput>);
+          }
+        }, 0);
+      }
+      terminate(): void {}
+    },
+  );
 
   try {
-    const ctx = makeContext([{ name: 'cursor', poll: async () => ({}) as any }]);
+    const ctx = makeContext([{ name: 'cursor', poll: stubPoll }]);
     const result = await runCaptureCycle(ctx);
     expect(result.sourceResults['cursor']?.filesProcessed).toBe(0);
     expect(result.sourceResults['cursor']?.errors[0]?.reason).toBe('Worker error message');
@@ -492,20 +525,24 @@ test('capture-cycle handles worker success: false', async () => {
 
 test('capture-cycle handles worker missing captureResult', async () => {
   const originalWorker = globalThis.Worker;
-  globalThis.Worker = class MockWorker {
-    onmessage: any = null;
-    postMessage(..._args: any[]) {
-      setTimeout(() => {
-        if (this.onmessage) {
-          this.onmessage({ data: { success: true } });
-        }
-      }, 0);
-    }
-    terminate() {}
-  } as any;
+  globalThis.Worker = asWorkerCtor(
+    class MockWorker {
+      onmessage: WorkerMessageHandler = null;
+      postMessage(_message: WorkerInput): void {
+        setTimeout(() => {
+          if (this.onmessage) {
+            this.onmessage({
+              data: { sourceName: 'cursor', success: true },
+            } as unknown as MessageEvent<WorkerOutput>);
+          }
+        }, 0);
+      }
+      terminate(): void {}
+    },
+  );
 
   try {
-    const ctx = makeContext([{ name: 'cursor', poll: async () => ({}) as any }]);
+    const ctx = makeContext([{ name: 'cursor', poll: stubPoll }]);
     const result = await runCaptureCycle(ctx);
     expect(result.sourceResults['cursor']?.filesProcessed).toBe(0);
     expect(result.sourceResults['cursor']?.capturedBatches).toBe(0);
@@ -516,50 +553,56 @@ test('capture-cycle handles worker missing captureResult', async () => {
 
 test('capture-cycle handles worker db transaction failure', async () => {
   const originalWorker = globalThis.Worker;
-  globalThis.Worker = class MockWorker {
-    onmessage: any = null;
-    postMessage(..._args: any[]) {
-      setTimeout(() => {
-        if (this.onmessage) {
-          this.onmessage({
-            data: {
-              success: true,
-              captureResult: {
-                filesProcessed: 1,
-                capturedBytes: 10,
-                batches: [
-                  {
-                    captureId: 'invalid-uuid-violating-db',
-                    sourceApp: 'cursor',
-                    sourceKind: 'sqlite_diff',
-                    sourcePath: '/tmp/c.db',
-                    sourcePathHash: 'b'.repeat(64),
-                    sourceInode: 2,
-                    watermarkKind: 'rowid',
-                    watermarkStart: 1,
-                    watermarkEnd: 10,
-                    watermarkTable: 'workspace_tabs',
-                    agentSchemaVersion: '1.0',
-                    gatewayVersion: 'gw-0.1',
-                    capturedAtUtc: '2026-05-08T00:00:00Z',
-                    bodyFormat: 'jsonl',
-                    bodyCompression: 'zstd',
-                    body: null,
-                  } as any,
-                ],
-                quarantine: [],
-                cursors: [],
+  globalThis.Worker = asWorkerCtor(
+    class MockWorker {
+      onmessage: WorkerMessageHandler = null;
+      postMessage(_message: WorkerInput): void {
+        setTimeout(() => {
+          if (this.onmessage) {
+            // Intentionally feed `body: null` to trigger a NOT NULL constraint
+            // violation in insertBatch — exercises the db-transaction error
+            // recovery path. The cast bridges the deliberately-invalid shape
+            // through WorkerOutput's typed `body: Uint8Array` field.
+            const invalidBatch = {
+              captureId: 'invalid-uuid-violating-db',
+              sourceApp: 'cursor',
+              sourceKind: 'sqlite_diff',
+              sourcePath: '/tmp/c.db',
+              sourcePathHash: 'b'.repeat(64),
+              sourceInode: 2,
+              watermarkKind: 'rowid',
+              watermarkStart: 1,
+              watermarkEnd: 10,
+              watermarkTable: 'workspace_tabs',
+              agentSchemaVersion: '1.0',
+              gatewayVersion: 'gw-0.1',
+              capturedAtUtc: '2026-05-08T00:00:00Z',
+              bodyFormat: 'jsonl',
+              bodyCompression: 'zstd',
+              body: null,
+            } as unknown as Required<WorkerOutput>['captureResult']['batches'][number];
+            this.onmessage({
+              data: {
+                sourceName: 'cursor',
+                success: true,
+                captureResult: {
+                  filesProcessed: 1,
+                  capturedBytes: 10,
+                  batches: [invalidBatch],
+                  quarantine: [],
+                  cursors: [],
+                },
               },
-            },
-          });
-        }
-      }, 0);
-    }
-    terminate() {}
-  } as any;
+            } as unknown as MessageEvent<WorkerOutput>);
+          }
+        }, 0);
+      }
+      terminate(): void {}
+    },
+  );
 
   try {
-    const ctx = makeContext([{ name: 'cursor', poll: async () => ({}) as any }]);
+    const ctx = makeContext([{ name: 'cursor', poll: stubPoll }]);
     const result = await runCaptureCycle(ctx);
     expect(result.sourceResults['cursor']?.capturedBatches).toBe(0);
     expect(result.sourceResults['cursor']?.errors.length).toBe(1);
@@ -570,20 +613,22 @@ test('capture-cycle handles worker db transaction failure', async () => {
 
 test('capture-cycle handles worker onerror event', async () => {
   const originalWorker = globalThis.Worker;
-  globalThis.Worker = class MockWorker {
-    onerror: any = null;
-    postMessage(..._args: any[]) {
-      setTimeout(() => {
-        if (this.onerror) {
-          this.onerror({ message: 'worker syntax error' } as any);
-        }
-      }, 0);
-    }
-    terminate() {}
-  } as any;
+  globalThis.Worker = asWorkerCtor(
+    class MockWorker {
+      onerror: WorkerErrorHandler = null;
+      postMessage(_message: WorkerInput): void {
+        setTimeout(() => {
+          if (this.onerror) {
+            this.onerror({ message: 'worker syntax error' } as ErrorEvent);
+          }
+        }, 0);
+      }
+      terminate(): void {}
+    },
+  );
 
   try {
-    const ctx = makeContext([{ name: 'cursor', poll: async () => ({}) as any }]);
+    const ctx = makeContext([{ name: 'cursor', poll: stubPoll }]);
     const result = await runCaptureCycle(ctx);
     expect(result.sourceResults['cursor']?.filesProcessed).toBe(0);
     expect(result.sourceResults['cursor']?.errors[0]?.reason).toBe('worker syntax error');
@@ -594,16 +639,18 @@ test('capture-cycle handles worker onerror event', async () => {
 
 test('capture-cycle handles worker construction throws exception', async () => {
   const originalWorker = globalThis.Worker;
-  globalThis.Worker = class MockWorker {
-    constructor(..._args: any[]) {
-      throw new Error('Worker constructor boom');
-    }
-    postMessage(..._args: any[]) {}
-    terminate() {}
-  } as any;
+  globalThis.Worker = asWorkerCtor(
+    class MockWorker {
+      constructor(..._args: unknown[]) {
+        throw new Error('Worker constructor boom');
+      }
+      postMessage(_message: WorkerInput): void {}
+      terminate(): void {}
+    },
+  );
 
   try {
-    const ctx = makeContext([{ name: 'cursor', poll: async () => ({}) as any }]);
+    const ctx = makeContext([{ name: 'cursor', poll: stubPoll }]);
     const result = await runCaptureCycle(ctx);
     expect(result.sourceResults['cursor']?.filesProcessed).toBe(0);
     expect(result.sourceResults['cursor']?.errors[0]?.reason).toBe('Worker constructor boom');

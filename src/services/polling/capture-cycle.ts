@@ -15,6 +15,8 @@ import type {
   PendingPressureResult,
   SourceCycleResult,
 } from 'services/buffer';
+import type { SourceApp } from 'services/contract';
+import { VALID_SOURCE_APPS } from 'services/contract';
 import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.types.ts';
 import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 import { isBufferFull, writeBufferFullSentinel } from 'services/polling/buffer-full-sentinel.ts';
@@ -28,6 +30,32 @@ import type {
   SourcePollerResult,
   RegisteredSource,
 } from 'services/polling/polling.types.ts';
+
+// Raw row shape for `SELECT * FROM source_cursors`. Mirrors the snake_case
+// columns declared in services/buffer/buffer.constants.ts.
+interface SourceCursorRow {
+  source_app: string;
+  source_path_hash: string;
+  source_path: string;
+  source_inode: number | null;
+  watermark_table: string | null;
+  watermark_end: number;
+  last_polled_at: string;
+  consecutive_errors: number;
+  last_seen_size_bytes: number | null;
+  last_seen_page_count: number | null;
+}
+
+// Why: RegisteredSource.name is typed as `string` so the registry can hold
+// arbitrary identifiers, but the buffer-insert APIs expect the closed
+// `SourceApp` union. Narrow once here so capture-cycle never reaches for an
+// `as any` cast when wiring the worker output back into buffer storage.
+function assertSourceApp(name: string): SourceApp {
+  if ((VALID_SOURCE_APPS as readonly string[]).includes(name)) {
+    return name as SourceApp;
+  }
+  throw new Error(`Unknown source app: ${name}`);
+}
 
 export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<CaptureCycleResult> {
   const startedAt = nowIsoUtc();
@@ -264,7 +292,7 @@ async function pollSourceInWorker(
 ): Promise<SourcePollerResult> {
   try {
     const cursorRows = ctx.buffer
-      .query<any, [string]>('SELECT * FROM source_cursors WHERE source_app = ?')
+      .query<SourceCursorRow, [string]>('SELECT * FROM source_cursors WHERE source_app = ?')
       .all(source.name);
 
     const priorCursors = cursorRows.map((c) => ({
@@ -302,35 +330,17 @@ async function pollSourceInWorker(
       try {
         ctx.buffer.transaction(() => {
           for (const b of capture.batches) {
-            insertBatch(ctx.buffer, {
-              ...b,
-              sourceApp: b.sourceApp as any,
-              sourceKind: b.sourceKind as any,
-              watermarkKind: b.watermarkKind as any,
-              bodyFormat: b.bodyFormat as any,
-              bodyCompression: b.bodyCompression as any,
-            });
+            insertBatch(ctx.buffer, b);
           }
 
           for (const q of capture.quarantine) {
-            recordQuarantine(ctx.buffer, {
-              sourceApp: q.sourceApp as any,
-              sourcePath: q.sourcePath,
-              sourcePathHash: q.sourcePathHash,
-              sourceInode: q.sourceInode,
-              watermarkTable: q.watermarkTable,
-              watermarkPosition: q.watermarkPosition,
-              rowPk: q.rowPk,
-              redactedSizeBytes: q.redactedSizeBytes,
-              reason: q.reason,
-              quarantinedAtUtc: q.quarantinedAtUtc,
-              gatewayVersion: q.gatewayVersion,
-            });
+            recordQuarantine(ctx.buffer, q);
           }
 
+          const sourceApp = assertSourceApp(source.name);
           for (const c of capture.cursors) {
             setCursor(ctx.buffer, {
-              sourceApp: source.name as any,
+              sourceApp,
               sourcePathHash: c.sourcePathHash,
               sourcePath: c.sourcePath,
               sourceInode: c.sourceInode,
@@ -402,35 +412,17 @@ async function pollSourceInWorker(
           try {
             ctx.buffer.transaction(() => {
               for (const b of capture.batches) {
-                insertBatch(ctx.buffer, {
-                  ...b,
-                  sourceApp: b.sourceApp as any,
-                  sourceKind: b.sourceKind as any,
-                  watermarkKind: b.watermarkKind as any,
-                  bodyFormat: b.bodyFormat as any,
-                  bodyCompression: b.bodyCompression as any,
-                });
+                insertBatch(ctx.buffer, b);
               }
 
               for (const q of capture.quarantine) {
-                recordQuarantine(ctx.buffer, {
-                  sourceApp: q.sourceApp as any,
-                  sourcePath: q.sourcePath,
-                  sourcePathHash: q.sourcePathHash,
-                  sourceInode: q.sourceInode,
-                  watermarkTable: q.watermarkTable,
-                  watermarkPosition: q.watermarkPosition,
-                  rowPk: q.rowPk,
-                  redactedSizeBytes: q.redactedSizeBytes,
-                  reason: q.reason,
-                  quarantinedAtUtc: q.quarantinedAtUtc,
-                  gatewayVersion: q.gatewayVersion,
-                });
+                recordQuarantine(ctx.buffer, q);
               }
 
+              const sourceApp = assertSourceApp(source.name);
               for (const c of capture.cursors) {
                 setCursor(ctx.buffer, {
-                  sourceApp: source.name as any,
+                  sourceApp,
                   sourcePathHash: c.sourcePathHash,
                   sourcePath: c.sourcePath,
                   sourceInode: c.sourceInode,

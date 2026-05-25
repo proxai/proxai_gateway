@@ -1,3 +1,11 @@
+import type {
+  BodyCompression,
+  BodyFormat,
+  SourceApp,
+  SourceKind,
+  WatermarkKind,
+} from 'services/contract';
+
 export interface WorkerInput {
   task: 'inspect' | 'capture';
   sourceName: string;
@@ -40,24 +48,24 @@ export interface WorkerOutput {
     capturedBytes: number;
     batches: Array<{
       captureId: string;
-      sourceApp: string;
-      sourceKind: string;
+      sourceApp: SourceApp;
+      sourceKind: SourceKind;
       sourcePath: string;
       sourcePathHash: string;
       sourceInode: number | null;
-      watermarkKind: string;
+      watermarkKind: WatermarkKind;
       watermarkStart: number;
       watermarkEnd: number;
       watermarkTable: string | null;
       agentSchemaVersion: string;
       gatewayVersion: string;
       capturedAtUtc: string;
-      bodyFormat: string;
-      bodyCompression: string;
+      bodyFormat: BodyFormat;
+      bodyCompression: BodyCompression;
       body: Uint8Array;
     }>;
     quarantine: Array<{
-      sourceApp: string;
+      sourceApp: SourceApp;
       sourcePath: string;
       sourcePathHash: string;
       sourceInode: number | null;

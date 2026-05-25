@@ -1,6 +1,13 @@
 import { openReadOnly, snapshotSqlite } from 'core/io/sqlite';
 import { zstdCompressSync } from 'core/utils';
 import { openInMemoryBufferDb } from 'services/buffer/db.ts';
+import type {
+  BodyCompression,
+  BodyFormat,
+  SourceApp,
+  SourceKind,
+  WatermarkKind,
+} from 'services/contract';
 import { makeClaudeCodeSourcePoller } from 'services/polling/poll-claude-code.ts';
 import { makeCodexSourcePoller } from 'services/polling/poll-codex.ts';
 import { makeCursorSourcePoller } from 'services/polling/poll-cursor.ts';
@@ -31,7 +38,16 @@ import {
   trimGeminiCliRecord,
 } from 'sources/gemini-cli';
 
-declare const self: any;
+// Why: Bun's worker entrypoint exposes `self` as a `DedicatedWorkerGlobalScope`
+// equivalent at runtime. The shape we use is a narrow subset — message handler
+// + postMessage — so declare those two fields directly instead of pulling the
+// full Web Worker lib.dom type just for one helper.
+declare const self:
+  | {
+      onmessage: ((event: MessageEvent<WorkerInput>) => void) | null;
+      postMessage: (message: WorkerOutput) => void;
+    }
+  | undefined;
 
 function createCompressedSizer(): { add: (text: string) => void; finish: () => number } {
   const flushThresholdBytes = 4 * 1024 * 1024;
@@ -528,12 +544,54 @@ export async function handleCapture(
     };
     const outcome = await poller(ctx);
 
-    const batches = tempDb.query<any, []>('SELECT * FROM upload_batches').all();
+    interface BatchRow {
+      capture_id: string;
+      source_app: SourceApp;
+      source_kind: SourceKind;
+      source_path: string;
+      source_path_hash: string;
+      source_inode: number | null;
+      watermark_kind: WatermarkKind;
+      watermark_start: number;
+      watermark_end: number;
+      watermark_table: string | null;
+      agent_schema_version: string;
+      gateway_version: string;
+      captured_at_utc: string;
+      body_format: BodyFormat;
+      body_compression: BodyCompression;
+      body: Uint8Array;
+    }
+    interface QuarantineRow {
+      source_app: SourceApp;
+      source_path: string;
+      source_path_hash: string;
+      source_inode: number | null;
+      watermark_table: string | null;
+      watermark_position: number;
+      row_pk: string | null;
+      redacted_size_bytes: number;
+      reason: string;
+      quarantined_at_utc: string;
+      gateway_version: string;
+    }
+    interface CursorRow {
+      source_path_hash: string;
+      source_path: string;
+      source_inode: number | null;
+      watermark_table: string | null;
+      watermark_end: number;
+      last_seen_size_bytes: number | null;
+      last_seen_page_count: number | null;
+      consecutive_errors: number;
+    }
 
-    const quarantine = tempDb.query<any, []>('SELECT * FROM quarantined_records').all();
+    const batches = tempDb.query<BatchRow, []>('SELECT * FROM upload_batches').all();
+
+    const quarantine = tempDb.query<QuarantineRow, []>('SELECT * FROM quarantined_records').all();
 
     const cursorRows = tempDb
-      .query<any, [string]>(`SELECT * FROM source_cursors WHERE source_app = ?`)
+      .query<CursorRow, [string]>(`SELECT * FROM source_cursors WHERE source_app = ?`)
       .all(sourceName);
 
     const cursors = cursorRows.map((cursorRow) => ({
@@ -589,32 +647,33 @@ export async function handleCapture(
 }
 
 if (typeof self !== 'undefined' && typeof self.postMessage === 'function') {
-  self.onmessage = async (event: MessageEvent<WorkerInput>) => {
+  const worker = self;
+  worker.onmessage = async (event: MessageEvent<WorkerInput>) => {
     const { task, sourceName, options } = event.data;
     try {
       if (task === 'inspect') {
         const inspectResult = await handleInspect(sourceName, options);
-        self.postMessage({
+        worker.postMessage({
           sourceName,
           success: true,
           inspectResult,
-        } as WorkerOutput);
+        });
       } else if (task === 'capture') {
         const captureResult = await handleCapture(sourceName, options);
-        self.postMessage({
+        worker.postMessage({
           sourceName,
           success: true,
           captureResult,
-        } as WorkerOutput);
+        });
       } else {
         throw new Error(`Unknown task: ${task}`);
       }
     } catch (err) {
-      self.postMessage({
+      worker.postMessage({
         sourceName,
         success: false,
         error: err instanceof Error ? err.message : String(err),
-      } as WorkerOutput);
+      });
     }
   };
 }

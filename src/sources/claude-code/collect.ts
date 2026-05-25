@@ -90,111 +90,94 @@ function isClaudeSyntheticText(text: string): boolean {
   return CLAUDE_SYNTHETIC_TEXT_PREFIXES.some((prefix) => trimmed.startsWith(prefix));
 }
 
-export function isDialogueRecord(parsed: any): boolean {
-  if (!parsed || typeof parsed !== 'object') {
+interface ClaudeContentItem {
+  type?: unknown;
+  text?: unknown;
+}
+type ClaudeContent = unknown;
+
+interface ClaudeRecord {
+  type?: unknown;
+  isMeta?: unknown;
+  isApiErrorMessage?: unknown;
+  message?: { content?: ClaudeContent; text?: unknown; model?: unknown };
+  content?: ClaudeContent;
+  text?: unknown;
+}
+
+function hasItemType(item: unknown, type: string): boolean {
+  return item !== null && typeof item === 'object' && (item as ClaudeContentItem).type === type;
+}
+
+function contentContainsType(content: ClaudeContent, type: string): boolean {
+  if (content === null || typeof content !== 'object') return false;
+  if (Array.isArray(content)) {
+    return content.some((item) => hasItemType(item, type));
+  }
+  return (content as ClaudeContentItem).type === type;
+}
+
+export function isDialogueRecord(parsed: unknown): boolean {
+  if (parsed === null || typeof parsed !== 'object') {
     return false;
   }
-  if (parsed.type === 'user' || parsed.type === 'assistant') {
-    if (parsed.isMeta === true) {
-      return false;
-    }
-    const mContent = parsed.message?.content;
-    const pContent = parsed.content;
-    const mText = parsed.message?.text;
-    const pText = parsed.text;
-    const actualContent =
-      mContent !== undefined && mContent !== null
-        ? mContent
-        : pContent !== undefined && pContent !== null
-          ? pContent
-          : mText !== undefined && mText !== null
-            ? mText
-            : pText;
-
-    if (actualContent === undefined || actualContent === null) {
-      return false;
-    }
-    let hasText = false;
-    if (Array.isArray(actualContent)) {
-      hasText = actualContent.some(
-        (item: any) =>
-          item &&
-          typeof item === 'object' &&
-          item.type === 'text' &&
-          typeof item.text === 'string' &&
-          item.text.trim().length > 0,
-      );
-    } else if (typeof actualContent === 'object') {
-      hasText =
-        (actualContent as any).type === 'text' &&
-        typeof (actualContent as any).text === 'string' &&
-        (actualContent as any).text.trim().length > 0;
-    } else if (typeof actualContent === 'string') {
-      hasText = actualContent.trim().length > 0;
-    } else {
-      hasText = String(actualContent).trim().length > 0;
-    }
-    if (!hasText) {
-      return false;
-    }
-
-    if (parsed.type === 'user') {
-      if (isClaudeSyntheticText(claudeFirstText(actualContent))) {
-        return false;
-      }
-      let hasToolResult = false;
-      if (mContent && typeof mContent === 'object') {
-        if (Array.isArray(mContent)) {
-          hasToolResult = mContent.some(
-            (item: any) => item && typeof item === 'object' && item.type === 'tool_result',
-          );
-        } else if ((mContent as any).type === 'tool_result') {
-          hasToolResult = true;
-        }
-      }
-      if (pContent && typeof pContent === 'object') {
-        if (Array.isArray(pContent)) {
-          hasToolResult =
-            hasToolResult ||
-            pContent.some(
-              (item: any) => item && typeof item === 'object' && item.type === 'tool_result',
-            );
-        } else if ((pContent as any).type === 'tool_result') {
-          hasToolResult = true;
-        }
-      }
-      return !hasToolResult;
-    }
-
-    if (parsed.type === 'assistant') {
-      if (parsed.message?.model === '<synthetic>' || parsed.isApiErrorMessage === true) {
-        return false;
-      }
-      let hasToolUse = false;
-      if (mContent && typeof mContent === 'object') {
-        if (Array.isArray(mContent)) {
-          hasToolUse = mContent.some(
-            (item: any) => item && typeof item === 'object' && item.type === 'tool_use',
-          );
-        } else if ((mContent as any).type === 'tool_use') {
-          hasToolUse = true;
-        }
-      }
-      if (pContent && typeof pContent === 'object') {
-        if (Array.isArray(pContent)) {
-          hasToolUse =
-            hasToolUse ||
-            pContent.some(
-              (item: any) => item && typeof item === 'object' && item.type === 'tool_use',
-            );
-        } else if ((pContent as any).type === 'tool_use') {
-          hasToolUse = true;
-        }
-      }
-      return !hasToolUse;
-    }
+  const record = parsed as ClaudeRecord;
+  if (record.type !== 'user' && record.type !== 'assistant') {
+    return false;
   }
-  return false;
+  if (record.isMeta === true) {
+    return false;
+  }
+  const mContent = record.message?.content;
+  const pContent = record.content;
+  const mText = record.message?.text;
+  const pText = record.text;
+  const actualContent =
+    mContent !== undefined && mContent !== null
+      ? mContent
+      : pContent !== undefined && pContent !== null
+        ? pContent
+        : mText !== undefined && mText !== null
+          ? mText
+          : pText;
+
+  if (actualContent === undefined || actualContent === null) {
+    return false;
+  }
+  let hasText = false;
+  if (Array.isArray(actualContent)) {
+    hasText = actualContent.some((item: unknown) => {
+      if (item === null || typeof item !== 'object') return false;
+      const node = item as ClaudeContentItem;
+      return node.type === 'text' && typeof node.text === 'string' && node.text.trim().length > 0;
+    });
+  } else if (typeof actualContent === 'object') {
+    const node = actualContent as ClaudeContentItem;
+    hasText = node.type === 'text' && typeof node.text === 'string' && node.text.trim().length > 0;
+  } else if (typeof actualContent === 'string') {
+    hasText = actualContent.trim().length > 0;
+  } else {
+    hasText = String(actualContent).trim().length > 0;
+  }
+  if (!hasText) {
+    return false;
+  }
+
+  if (record.type === 'user') {
+    if (isClaudeSyntheticText(claudeFirstText(actualContent))) {
+      return false;
+    }
+    const hasToolResult =
+      contentContainsType(mContent, 'tool_result') || contentContainsType(pContent, 'tool_result');
+    return !hasToolResult;
+  }
+
+  if (record.message?.model === '<synthetic>' || record.isApiErrorMessage === true) {
+    return false;
+  }
+  const hasToolUse =
+    contentContainsType(mContent, 'tool_use') || contentContainsType(pContent, 'tool_use');
+  return !hasToolUse;
 }
 
 export async function collectClaudeCodeFile(

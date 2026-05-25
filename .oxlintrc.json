@@ -17,7 +17,10 @@
     "no-empty-pattern": "warn",
     "no-empty-file": "off",
     "no-unmodified-loop-condition": "off",
-    "no-underscore-dangle": "off"
+    "no-underscore-dangle": "off",
+    "typescript/no-explicit-any": "error",
+    "unicorn/prefer-add-event-listener": "off",
+    "unicorn/require-post-message-target-origin": "off"
   },
   "overrides": [
     {
@@ -30,8 +33,10 @@
         "src/services/polling/poll-gemini-cli.ts",
         "src/services/polling/daemon-loops.ts",
         "src/services/polling/capture-cycle.ts",
+        "src/services/polling/poll-worker.ts",
         "src/services/uploader/drain-buffer.ts",
         "src/services/uploader/pacer.ts",
+        "src/cli/commands/inspect/index.ts",
         "src/cli/commands/tail/index.ts",
         "src/core/io/fs/rm-recursive.ts",
         "src/core/log/prune.ts",
