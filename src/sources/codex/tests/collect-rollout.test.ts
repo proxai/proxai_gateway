@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { rmRecursive, statFile } from 'core/io/fs';
-import { sha256Hex, zstdDecompressSync } from 'core/utils';
+import { sha256Hex, zstdDecompressSync, requireDefined } from 'core/utils';
 import {
   countByStatus,
   deleteBatch,
@@ -158,7 +158,7 @@ test('falls back to caller-provided default when reader returns null', async () 
 test('uses the provided agent_schema_version verbatim', async () => {
   const file = await makeFile('{"type":"session_meta","payload":{"a":1}}\n');
   await collectCodexRollout(file, ctx(buffer), '0.126.0-alpha.8');
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.agentSchemaVersion).toBe('0.126.0-alpha.8');
 });
 
@@ -179,7 +179,7 @@ test('redacts secrets from the body before storing', async () => {
     }) + '\n',
   );
   await collectCodexRollout(file, ctx(buffer), '0.1.0');
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   const decompressed = DECODER.decode(zstdDecompressSync(batch.body));
   expect(decompressed).toContain('[REDACTED:openai-api-key]');
   expect(decompressed).not.toContain('sk-AbCdEfGhIj');
@@ -249,7 +249,7 @@ test('resets consecutive_errors on success after prior failure', async () => {
 test('persists the wire-DTO fields needed by the uploader', async () => {
   const file = await makeFile('{"type":"session_meta","payload":{"a":1}}\n');
   await collectCodexRollout(file, ctx(buffer), '0.126.0-alpha.8');
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.sourceApp).toBe('codex');
   expect(batch.sourceKind).toBe('jsonl_append');
   expect(batch.bodyFormat).toBe('jsonl');
@@ -346,7 +346,7 @@ test('surfaces OversizedDecompressedSliceError when single line exceeds BODY_MAX
 
   const result = await collectCodexRollout(file, ctx(buffer), '0.1.0');
   expect(result.errors.length).toBeGreaterThanOrEqual(1);
-  expect(result.errors[0]!.reason).toMatch(/decompressed slice/);
+  expect(requireDefined(result.errors[0]).reason).toMatch(/decompressed slice/);
 }, 30_000);
 
 test('every batch satisfies BOTH compressed AND decompressed caps', async () => {
@@ -452,7 +452,7 @@ test('dialogue telemetry filtering, pruning, and discards', async () => {
   expect(result.errors).toEqual([]);
   expect(result.capturedBatches).toBe(1);
 
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   const decompressed = DECODER.decode(zstdDecompressSync(batch.body));
   const keptKinds = decompressed.trim().split('\n').map(codexRecordKind);
   expect(keptKinds).toEqual([

@@ -1,43 +1,43 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-26T03:55:31.525Z",
-  "sourceHash": "962ee0b77bf6b07810bd23e8e049ee81",
+  "generatedAt": "2026-05-26T05:00:05.402Z",
+  "sourceHash": "822aa3b2d142846fd08d53fab60a2dd6",
   "files": [
     {
       "path": "CLAUDE.md",
-      "hash": "45609ead083fa1dc"
+      "hash": "448d85da2b963bbb"
     },
     {
       "path": "AGENTS.md",
-      "hash": "e3d27582473e1213"
+      "hash": "e28400dac77560fb"
     },
     {
       "path": "GEMINI.md",
-      "hash": "4ba20a8ab61637c7"
+      "hash": "6e2805b62c02c3f7"
     },
     {
       "path": ".agent/AGENTS.md",
-      "hash": "0c34661a1cb2fe05"
+      "hash": "3a8630bcda7253e0"
     },
     {
       "path": ".claude/rules/_always.md",
-      "hash": "153780136013d67d"
+      "hash": "76125b09a378898c"
     },
     {
       "path": ".cursor/rules/_always.mdc",
-      "hash": "e5dade58a50d5e7a"
+      "hash": "fd087c3cab507b34"
     },
     {
       "path": ".codex/rules/_always.md",
-      "hash": "153780136013d67d"
+      "hash": "76125b09a378898c"
     },
     {
       "path": ".gemini/rules/_always.md",
-      "hash": "153780136013d67d"
+      "hash": "76125b09a378898c"
     },
     {
       "path": ".agent/rules/_always.md",
-      "hash": "153780136013d67d"
+      "hash": "76125b09a378898c"
     },
     {
       "path": ".claude/rules/modules/cross-platform-feature-flags.md",

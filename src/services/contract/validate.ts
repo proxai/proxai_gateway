@@ -126,12 +126,12 @@ function validateWatermark(wm: Record<string, unknown>, variant: SourceVariantSp
     throw new ValidationError('watermark.table must be null for sqlite_kv_snapshot');
   }
 
-  return {
-    kind: variant.watermarkKind,
-    start: start as number,
-    end: end as number,
-    table: table as string | null,
-  } as Watermark;
+  const startNum = start as number;
+  const endNum = end as number;
+  if (variant.watermarkKind === 'byte_range') {
+    return { kind: 'byte_range', start: startNum, end: endNum, table: null };
+  }
+  return { kind: 'rowid_range', start: startNum, end: endNum, table: table as string | null };
 }
 
 function validateSourceInode(value: unknown, variant: SourceVariantSpec): void {

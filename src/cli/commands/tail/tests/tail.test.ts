@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
@@ -36,8 +37,8 @@ test('emits last N lines when not following', async () => {
   );
   expect(result.exitCode).toBe(0);
   expect(lines).toHaveLength(2);
-  expect(JSON.parse(lines[0]!).msg).toBe('b');
-  expect(JSON.parse(lines[1]!).msg).toBe('c');
+  expect(JSON.parse(requireDefined(lines[0])).msg).toBe('b');
+  expect(JSON.parse(requireDefined(lines[1])).msg).toBe('c');
 });
 
 test('returns 0 with no output when log file is missing', async () => {
@@ -96,7 +97,7 @@ test('--since filters by time window', async () => {
     { since: '1h', raw: true },
   );
   expect(lines).toHaveLength(1);
-  expect(JSON.parse(lines[0]!).msg).toBe('recent');
+  expect(JSON.parse(requireDefined(lines[0])).msg).toBe('recent');
 });
 
 test('returns validationError on invalid --since duration', async () => {
@@ -387,7 +388,7 @@ test('parses different --since unit suffixes (s, m, h, d)', async () => {
     { since: '1d', raw: true },
   );
   expect(lines).toHaveLength(1);
-  expect(JSON.parse(lines[0]!).msg).toBe('recent');
+  expect(JSON.parse(requireDefined(lines[0])).msg).toBe('recent');
 });
 
 test('formatLine renders trace, debug, info, warn, error, fatal levels', () => {
@@ -453,5 +454,5 @@ test('skips malformed JSON lines silently', async () => {
     { raw: true },
   );
   expect(lines).toHaveLength(1);
-  expect(JSON.parse(lines[0]!).msg).toBe('good');
+  expect(JSON.parse(requireDefined(lines[0])).msg).toBe('good');
 });

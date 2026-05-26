@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
@@ -60,7 +61,7 @@ test('setCursor upserts on conflict', () => {
   };
   setCursor(db, { ...key, watermarkEnd: 100 });
   setCursor(db, { ...key, watermarkEnd: 500, consecutiveErrors: 3 });
-  const state = getCursor(db, key)!;
+  const state = requireDefined(getCursor(db, key));
   expect(state.watermarkEnd).toBe(500);
   expect(state.consecutiveErrors).toBe(3);
 });

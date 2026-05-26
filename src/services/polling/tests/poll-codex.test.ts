@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { zstdDecompressSync } from 'core/utils';
+import { zstdDecompressSync, requireDefined } from 'core/utils';
 import {
   countByStatus,
   markBatchDelivered,
@@ -123,7 +123,7 @@ test('rollouts use default version when no state file exists', async () => {
     maxDecompressedBytes: 9 * 1024 * 1024,
   });
   expect(result.capturedBatches).toBe(1);
-  const row = nextPendingBatch(buffer)!;
+  const row = requireDefined(nextPendingBatch(buffer));
   expect(row.agentSchemaVersion).toBe('unknown');
 });
 

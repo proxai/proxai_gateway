@@ -1,4 +1,10 @@
-import { generateUuidV7, nowIsoUtc, splitRowsByCompressedSize, zstdCompressSync } from 'core/utils';
+import {
+  generateUuidV7,
+  nowIsoUtc,
+  requireDefined,
+  splitRowsByCompressedSize,
+  zstdCompressSync,
+} from 'core/utils';
 import { getCursor, insertBatch, recordQuarantine, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import { BODY_MAX_DECOMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
@@ -213,10 +219,10 @@ export function processRows(input: ProcessRowsInput): void {
   let quarantinedCount = 0;
   let acceptedSlices = 0;
   for (let i = 0; i < slices.length; i++) {
-    const slice = slices[i]!;
+    const slice = requireDefined(slices[i], 'slice');
     if (slice.length === 0) continue;
-    const firstRowidInSlice = slice[0]!.rowid;
-    const lastRowidInSlice = slice[slice.length - 1]!.rowid;
+    const firstRowidInSlice = requireDefined(slice[0], 'first row in slice').rowid;
+    const lastRowidInSlice = requireDefined(slice[slice.length - 1], 'last row in slice').rowid;
     const sliceWatermarkEnd = lastRowidInSlice + 1;
 
     const measurement = measureSlice(slice);

@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
@@ -88,8 +89,8 @@ test('continues past intermittent retriable failures and resets consecutive coun
   expect(result.accepted).toBe(3);
   expect(result.retriable).toBe(2);
   expect(result.consecutiveRetriableBreak).toBe(false);
-  expect(getBatch(db, ids[0]!)).toBeNull();
-  expect(getReceipt(db, ids[0]!)).not.toBeNull();
+  expect(getBatch(db, requireDefined(ids[0]))).toBeNull();
+  expect(getReceipt(db, requireDefined(ids[0]))).not.toBeNull();
 });
 
 test('breaks after DRAIN_MAX_CONSECUTIVE_RETRIABLE consecutive retriable failures', async () => {
@@ -102,7 +103,7 @@ test('breaks after DRAIN_MAX_CONSECUTIVE_RETRIABLE consecutive retriable failure
   expect(result.consecutiveRetriableBreak).toBe(true);
   expect(result.lastUploadError).not.toBeNull();
   for (const id of ids) {
-    expect(getBatch(db, id)!.status).toBe('pending');
+    expect(requireDefined(getBatch(db, id)).status).toBe('pending');
   }
 });
 
@@ -173,11 +174,11 @@ test('continues past fatal outcomes', async () => {
   expect(result.attempted).toBe(3);
   expect(result.accepted).toBe(2);
   expect(result.fatal).toBe(1);
-  expect(getBatch(db, ids[0]!)).toBeNull();
-  expect(getReceipt(db, ids[0]!)).not.toBeNull();
-  expect(getBatch(db, ids[1]!)!.status).toBe('failed');
-  expect(getBatch(db, ids[2]!)).toBeNull();
-  expect(getReceipt(db, ids[2]!)).not.toBeNull();
+  expect(getBatch(db, requireDefined(ids[0]))).toBeNull();
+  expect(getReceipt(db, requireDefined(ids[0]))).not.toBeNull();
+  expect(requireDefined(getBatch(db, requireDefined(ids[1]))).status).toBe('failed');
+  expect(getBatch(db, requireDefined(ids[2]))).toBeNull();
+  expect(getReceipt(db, requireDefined(ids[2]))).not.toBeNull();
 });
 
 test('honors maxBatches cap', async () => {
@@ -380,10 +381,10 @@ test('watermark regression returns recovered and drain counts it separately', as
   expect(result.accepted).toBe(1);
   expect(result.attempted).toBe(2);
 
-  expect(getBatch(db, ids[0]!)).toBeNull();
-  expect(getReceipt(db, ids[0]!)).toBeNull();
-  expect(getBatch(db, ids[1]!)).toBeNull();
-  expect(getReceipt(db, ids[1]!)).not.toBeNull();
+  expect(getBatch(db, requireDefined(ids[0]))).toBeNull();
+  expect(getReceipt(db, requireDefined(ids[0]))).toBeNull();
+  expect(getBatch(db, requireDefined(ids[1]))).toBeNull();
+  expect(getReceipt(db, requireDefined(ids[1]))).not.toBeNull();
 });
 
 test('network failure retriable does not trigger any pacer distress signal', async () => {

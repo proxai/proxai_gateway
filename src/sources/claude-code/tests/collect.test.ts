@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { rmRecursive, statFile } from 'core/io/fs';
-import { sha256Hex, zstdDecompressSync } from 'core/utils';
+import { sha256Hex, zstdDecompressSync, requireDefined } from 'core/utils';
 import {
   countByStatus,
   deleteBatch,
@@ -165,7 +165,7 @@ test('redacts secrets from the body before storing', async () => {
   await collectClaudeCodeFile(file, ctx(buffer));
   const batch = nextPendingBatch(buffer);
   expect(batch).not.toBeNull();
-  const decompressed = DECODER.decode(zstdDecompressSync(batch!.body));
+  const decompressed = DECODER.decode(zstdDecompressSync(requireDefined(batch).body));
   expect(decompressed).toContain('[REDACTED:openai-api-key]');
   expect(decompressed).not.toContain('sk-AbCdEfGhIj');
 });
@@ -236,7 +236,7 @@ test('persists the wire-DTO fields needed by the uploader', async () => {
     '{"type":"user","message":{"version":"2.1.122","role":"user","content":"hi"}}\n',
   );
   await collectClaudeCodeFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.sourceApp).toBe('claude-code');
   expect(batch.sourceKind).toBe('jsonl_append');
   expect(batch.bodyFormat).toBe('jsonl');
@@ -347,7 +347,7 @@ test('surfaces OversizedDecompressedSliceError when single line exceeds BODY_MAX
 
   const result = await collectClaudeCodeFile(file, ctx(buffer));
   expect(result.errors.length).toBeGreaterThanOrEqual(1);
-  expect(result.errors[0]!.reason).toMatch(/decompressed slice/);
+  expect(requireDefined(result.errors[0]).reason).toMatch(/decompressed slice/);
 }, 30_000);
 
 test('every batch satisfies BOTH compressed AND decompressed caps', async () => {

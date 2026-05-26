@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { expect, test } from 'bun:test';
 
 import { trimCursorRowValue } from 'sources/cursor';
@@ -72,13 +73,13 @@ test('trimCursorRowValue: agentKv assistant drops reasoning and trims tool-call 
     Record<string, unknown>
   >;
   expect(content).toHaveLength(4);
-  expect(content[0]!.type).toBe('text');
-  expect(content[1]!.type).toBe('tool-call');
-  const args = content[1]!.args as Record<string, unknown>;
+  expect(requireDefined(content[0]).type).toBe('text');
+  expect(requireDefined(content[1]).type).toBe('tool-call');
+  const args = requireDefined(content[1]).args as Record<string, unknown>;
   expect(args.path).toBe('/a/b.ts');
   expect(args.body).toBe('<trimmed>');
   expect(content[2]).toBeNull();
-  expect(content[3]!.args).toBeNull();
+  expect(requireDefined(content[3]).args).toBeNull();
 });
 
 test('trimCursorRowValue: assistant with non-array content is left intact', () => {

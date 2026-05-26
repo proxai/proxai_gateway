@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { mkdir, mkdtemp, utimes, writeFile } from 'node:fs/promises';
@@ -32,7 +33,7 @@ test('discovers the global state.vscdb file', async () => {
 
   const found = await discoverCursorFiles(dir);
   expect(found).toHaveLength(1);
-  expect(found[0]!.sourcePath).toBe(join(dir, 'globalStorage', 'state.vscdb'));
+  expect(requireDefined(found[0]).sourcePath).toBe(join(dir, 'globalStorage', 'state.vscdb'));
 });
 
 test('discovers workspace state.vscdb files alongside the global one', async () => {
@@ -67,9 +68,9 @@ test('returns size, inode, and mtime for each file', async () => {
 
   const found = await discoverCursorFiles(dir);
   expect(found).toHaveLength(1);
-  expect(found[0]!.sizeBytes).toBe('placeholder'.length);
-  expect(found[0]!.inode).toBeGreaterThan(0);
-  expect(found[0]!.lastModifiedMs).toBeGreaterThan(0);
+  expect(requireDefined(found[0]).sizeBytes).toBe('placeholder'.length);
+  expect(requireDefined(found[0]).inode).toBeGreaterThan(0);
+  expect(requireDefined(found[0]).lastModifiedMs).toBeGreaterThan(0);
 });
 
 test('returns sha256 source_path_hash matching the absolute path', async () => {
@@ -77,7 +78,7 @@ test('returns sha256 source_path_hash matching the absolute path', async () => {
   await writeFile(join(dir, 'globalStorage', 'state.vscdb'), 'placeholder');
 
   const found = await discoverCursorFiles(dir);
-  expect(found[0]!.sourcePathHash).toMatch(/^[a-f0-9]{64}$/);
+  expect(requireDefined(found[0]).sourcePathHash).toMatch(/^[a-f0-9]{64}$/);
 });
 
 test('skips files older than minimumMtime, keeps newer ones', async () => {
@@ -94,7 +95,7 @@ test('skips files older than minimumMtime, keeps newer ones', async () => {
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const found = await discoverCursorFiles(dir, { minimumMtime: cutoff });
   expect(found).toHaveLength(1);
-  expect(found[0]!.sourcePath).toBe(newPath);
+  expect(requireDefined(found[0]).sourcePath).toBe(newPath);
 });
 
 test('defaultCursorUserRoot returns the macOS Library path on darwin', () => {

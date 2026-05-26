@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 import { rmRecursive } from 'core/io/fs';
@@ -8,6 +9,7 @@ import { join } from 'node:path';
 import { runStatus as runStatusImpl, formatBytes } from 'cli/commands/status/index.ts';
 import type { ReadableInputStream } from 'cli/commands/status/key-handler.types.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
+import { makeTestGatewayConfig, TEST_ACCOUNT_CONFIG } from 'services/config/tests/test-config.ts';
 
 function autoQuitStdin(): ReadableInputStream {
   return {
@@ -87,7 +89,10 @@ test('reports not-configured in JSON mode emits structured payload', async () =>
     { json: true },
   );
   expect(result.exitCode).toBe(4);
-  const json = JSON.parse(out.lines[0]!.msg) as { configured: boolean; health: string };
+  const json = JSON.parse(requireDefined(out.lines[0]).msg) as {
+    configured: boolean;
+    health: string;
+  };
   expect(json.configured).toBe(false);
   expect(json.health).toBe('inactive');
 });
@@ -111,7 +116,7 @@ test('JSON mode returns full structured payload when configured', async () => {
   const out = captureOutput();
   const result = await runStatus(makeDeps({ output: out }), { json: true });
   expect(result.exitCode).toBe(0);
-  const json = JSON.parse(out.lines[0]!.msg) as {
+  const json = JSON.parse(requireDefined(out.lines[0]).msg) as {
     configured: boolean;
     health: string;
     upload: { lastUploadError: string | null; consecutiveRetriableBreak: boolean | null };
@@ -135,7 +140,7 @@ test('JSON mode includes updateAvailable when sentinel present', async () => {
   );
   const out = captureOutput();
   await runStatus(makeDeps({ output: out, updateAvailableSentinelPath }), { json: true });
-  const json = JSON.parse(out.lines[0]!.msg) as {
+  const json = JSON.parse(requireDefined(out.lines[0]).msg) as {
     sentinels: { updateAvailable: { latestVersion: string; currentVersion: string } | null };
   };
   expect(json.sentinels.updateAvailable?.latestVersion).toBe('2026.5.10');
@@ -227,7 +232,7 @@ test('JSON mode handles authFailed and bufferFull and sessionStopped sentinels',
   );
   const out = captureOutput();
   await runStatus(makeDeps({ output: out }), { json: true });
-  const json = JSON.parse(out.lines[0]!.msg) as {
+  const json = JSON.parse(requireDefined(out.lines[0]).msg) as {
     sentinels: { authFailed: boolean; bufferFull: boolean; sessionStopped: boolean };
   };
   expect(json.sentinels.authFailed).toBe(true);
@@ -394,44 +399,20 @@ import {
 
 test('runStatus JSON mode reports binary age days when installedAt is set via loadConfig dep', async () => {
   const out = captureOutput();
+  const installedAt = new Date(Date.now() - 14 * 86_400_000).toISOString();
   const result = await runStatus(
     makeDeps({
       output: out,
       loadConfig: async () =>
-        ({
-          account: {
-            apiKey: 'k',
-            userId: 'u',
-            hostId: 'h',
-            installedAt: new Date(Date.now() - 14 * 86_400_000).toISOString(),
-            installSource: 'npm',
-          },
-          backend: {
-            ingestUrl: '',
-            verifyKeyUrl: '',
-            watermarksUrl: '',
-            registerHostIdUrl: '',
-          },
-          capture: {
-            pollIntervalSec: 60,
-            bufferPath: '',
-            receiptRetentionDays: 30,
-            failedRetentionDays: 30,
-            bufferSoftPauseBytes: 700_000_000,
-            bufferSoftResumeBytes: 600_000_000,
-            uploadMaxBatchesPerSec: 1,
-            uploadMaxBytesPerMinute: 1,
-            uploadBackoffOn429Multiplier: 1,
-          },
-          logging: { level: 'info', logDir: '' },
-          staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
-        }) as never,
+        makeTestGatewayConfig({
+          account: { ...TEST_ACCOUNT_CONFIG, installedAt, installSource: 'npm' },
+        }),
       currentVersion: '2026.5.9-3',
     }),
     { json: true },
   );
   expect(result.exitCode).toBe(0);
-  const json = JSON.parse(out.lines[0]!.msg) as {
+  const json = JSON.parse(requireDefined(out.lines[0]).msg) as {
     system: { binaryAge: { days: number | null } };
   };
   expect(json.system.binaryAge.days).toBeGreaterThanOrEqual(13);
@@ -443,39 +424,14 @@ test('runStatus JSON mode handles invalid installedAt timestamp gracefully (days
     makeDeps({
       output: out,
       loadConfig: async () =>
-        ({
-          account: {
-            apiKey: 'k',
-            userId: 'u',
-            hostId: 'h',
-            installedAt: 'not-a-date',
-            installSource: 'npm',
-          },
-          backend: {
-            ingestUrl: '',
-            verifyKeyUrl: '',
-            watermarksUrl: '',
-            registerHostIdUrl: '',
-          },
-          capture: {
-            pollIntervalSec: 60,
-            bufferPath: '',
-            receiptRetentionDays: 30,
-            failedRetentionDays: 30,
-            bufferSoftPauseBytes: 700_000_000,
-            bufferSoftResumeBytes: 600_000_000,
-            uploadMaxBatchesPerSec: 1,
-            uploadMaxBytesPerMinute: 1,
-            uploadBackoffOn429Multiplier: 1,
-          },
-          logging: { level: 'info', logDir: '' },
-          staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
-        }) as never,
+        makeTestGatewayConfig({
+          account: { ...TEST_ACCOUNT_CONFIG, installedAt: 'not-a-date', installSource: 'npm' },
+        }),
     }),
     { json: true },
   );
   expect(result.exitCode).toBe(0);
-  const json = JSON.parse(out.lines[0]!.msg) as {
+  const json = JSON.parse(requireDefined(out.lines[0]).msg) as {
     system: { binaryAge: { days: number | null } };
   };
   expect(json.system.binaryAge.days).toBeNull();
@@ -506,7 +462,9 @@ test('readNumberWithFallback: primary present but non-finite falls through to le
   const out = captureOutput();
   const result = await runStatus(makeDeps({ output: out }), { json: true });
   expect(result.exitCode).toBe(0);
-  const json = JSON.parse(out.lines[0]!.msg) as { upload: { totalBatchesShipped: number } };
+  const json = JSON.parse(requireDefined(out.lines[0]).msg) as {
+    upload: { totalBatchesShipped: number };
+  };
   expect(json.upload.totalBatchesShipped).toBe(42);
 });
 

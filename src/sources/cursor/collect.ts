@@ -1,6 +1,6 @@
 import { statFile } from 'core/io/fs';
 import { maxRowid, openReadOnly, pageCount, snapshotSqlite, tableExists } from 'core/io/sqlite';
-import { nextGenerationSuffix, sha256Hex } from 'core/utils';
+import { nextGenerationSuffix, requireDefined, sha256Hex } from 'core/utils';
 import { detectVacuum, getCursor, getCursorWithFallback, setCursor } from 'services/buffer';
 import { SUB_AGENT_CAPTURE_BY_SOURCE } from 'services/config/sub-agent-flags';
 import {
@@ -138,7 +138,7 @@ export async function collectCursorFile(
       }));
 
       const agentSchemaVersion = extractAgentSchemaVersion(kvRows);
-      const lastRow = rows[rows.length - 1]!;
+      const lastRow = requireDefined(rows[rows.length - 1], 'last row');
       const finalWatermarkEnd = lastRow.rowid + 1;
 
       processRows({

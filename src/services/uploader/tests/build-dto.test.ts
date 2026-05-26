@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
-import { zstdDecompressSync } from 'core/utils';
+import { zstdDecompressSync, requireDefined } from 'core/utils';
 import { getBatch, insertBatch, openInMemoryBufferDb } from 'services/buffer';
 import { validateRawRecordDTO } from 'services/contract';
 import { buildRawRecordDTO } from 'services/uploader';
@@ -25,7 +25,7 @@ afterEach(() => {
 test('produces a DTO that passes contract validation (claude-code)', () => {
   const batch = newClaudeCodeBatch('{"hello":"world"}\n');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const dto = buildRawRecordDTO(stored, TEST_HOST_ID);
   expect(() => validateRawRecordDTO(dto)).not.toThrow();
@@ -34,7 +34,7 @@ test('produces a DTO that passes contract validation (claude-code)', () => {
 test('host_id is set from the context arg, not from the batch', () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const dto = buildRawRecordDTO(stored, 'h_custom');
   expect(dto.host_id).toBe('h_custom');
@@ -43,7 +43,7 @@ test('host_id is set from the context arg, not from the batch', () => {
 test('preserves capture metadata fields verbatim', () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const dto = buildRawRecordDTO(stored, TEST_HOST_ID);
   expect(dto.capture_id).toBe(stored.captureId);
@@ -62,7 +62,7 @@ test('preserves capture metadata fields verbatim', () => {
 test('byte_range watermark omits table', () => {
   const batch = newClaudeCodeBatch('payload', { watermarkStart: 100, watermarkEnd: 250 });
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const dto = buildRawRecordDTO(stored, TEST_HOST_ID);
   expect(dto.watermark.kind).toBe('byte_range');
@@ -77,7 +77,7 @@ test('rowid_range watermark with null table (cursor kv snapshot)', () => {
     watermarkEnd: 42,
   });
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const dto = buildRawRecordDTO(stored, TEST_HOST_ID);
   expect(dto.watermark.kind).toBe('rowid_range');
@@ -93,7 +93,7 @@ test('rowid_range watermark with table (codex state)', () => {
     watermarkTable: 'thread_dynamic_tools',
   });
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const dto = buildRawRecordDTO(stored, TEST_HOST_ID);
   expect(dto.watermark.kind).toBe('rowid_range');
@@ -103,7 +103,7 @@ test('rowid_range watermark with table (codex state)', () => {
 test('body is base64-encoded recompressed bytes that decode back to redacted text', () => {
   const batch = newClaudeCodeBatch('hello world payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const dto = buildRawRecordDTO(stored, TEST_HOST_ID);
   expect(dto.body).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
@@ -117,7 +117,7 @@ test('does not redact at upload-time (redaction is single-pass at capture)', () 
   const text = 'TRAVIS_TOKEN=AbCdEfGhIjKlMnOpQrStUv';
   const batch = newClaudeCodeBatch(text);
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const dto = buildRawRecordDTO(stored, TEST_HOST_ID);
   const decoded = Buffer.from(dto.body, 'base64');
@@ -128,7 +128,7 @@ test('does not redact at upload-time (redaction is single-pass at capture)', () 
 test('emits the buffered body bytes verbatim as base64 (no decompress/recompress round-trip)', () => {
   const batch = newClaudeCodeBatch('hello payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const dto = buildRawRecordDTO(stored, TEST_HOST_ID);
   const decoded = Buffer.from(dto.body, 'base64');
@@ -138,9 +138,9 @@ test('emits the buffered body bytes verbatim as base64 (no decompress/recompress
 test('does not mutate the stored batch (body bytes unchanged)', () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const before = getBatch(db, batch.captureId)!.body;
+  const before = requireDefined(getBatch(db, batch.captureId)).body;
 
-  buildRawRecordDTO(getBatch(db, batch.captureId)!, TEST_HOST_ID);
-  const after = getBatch(db, batch.captureId)!.body;
+  buildRawRecordDTO(requireDefined(getBatch(db, batch.captureId)), TEST_HOST_ID);
+  const after = requireDefined(getBatch(db, batch.captureId)).body;
   expect(after).toEqual(before);
 });

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import { autoUpgradeFromConfig, type RunAutoUpgradeFn } from 'cli/wiring/auto-upgrade.ts';
-import type { GatewayConfig } from 'services/config';
+import { makeTestGatewayConfig, TEST_ACCOUNT_CONFIG } from 'services/config/tests/test-config.ts';
 
 test('autoUpgradeFromConfig: returns silently when loadConfig rejects', async () => {
   let runnerCalled = false;
@@ -24,7 +24,7 @@ test('autoUpgradeFromConfig: forwards installSource from config to runAutoUpgrad
   const runner: RunAutoUpgradeFn = async (deps) => {
     captured = deps;
   };
-  const cfg = { account: { installSource: 'brew' } } as GatewayConfig;
+  const cfg = makeTestGatewayConfig({ account: { ...TEST_ACCOUNT_CONFIG, installSource: 'brew' } });
   await autoUpgradeFromConfig({
     binaryPath: '/bin/p',
     currentVersion: '1.2.3',
@@ -39,12 +39,14 @@ test('autoUpgradeFromConfig: forwards installSource from config to runAutoUpgrad
   expect(captured?.devMode).toBe(false);
 });
 
-test('autoUpgradeFromConfig: omits installSource when undefined in config', async () => {
+test('autoUpgradeFromConfig: forwards github_release installSource from a complete config', async () => {
   let captured: Parameters<RunAutoUpgradeFn>[0] | undefined;
   const runner: RunAutoUpgradeFn = async (deps) => {
     captured = deps;
   };
-  const cfg = { account: {} } as GatewayConfig;
+  const cfg = makeTestGatewayConfig({
+    account: { ...TEST_ACCOUNT_CONFIG, installSource: 'github_release' },
+  });
   await autoUpgradeFromConfig({
     binaryPath: '/bin/p',
     currentVersion: '1.2.3',
@@ -54,6 +56,6 @@ test('autoUpgradeFromConfig: omits installSource when undefined in config', asyn
     runAutoUpgrade: runner,
   });
   expect(captured).toBeDefined();
-  expect('installSource' in (captured ?? {})).toBe(false);
+  expect(captured?.installSource).toBe('github_release');
   expect(captured?.devMode).toBe(true);
 });

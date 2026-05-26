@@ -16,6 +16,7 @@ import { setupMachine } from 'services/state-machines/setup';
 import { sourcePollMachine } from 'services/state-machines/source-poll';
 import { uninstallMachine } from 'services/state-machines/uninstall';
 import { workerMachine } from 'services/state-machines/worker';
+import type { AnyStateMachine } from 'xstate';
 import type {
   DiagramExportOutput,
   DiagramMachineSpec,
@@ -23,30 +24,28 @@ import type {
 } from 'scripts/export-diagrams/export-diagrams.types.ts';
 import { renderMermaid } from 'scripts/export-diagrams/render-mermaid.ts';
 
-interface XStateMachineLike {
-  config: MachineConfigLike;
+interface NamedMachine {
+  readonly name: string;
+  readonly machine: AnyStateMachine;
 }
 
-const MACHINES: readonly { readonly name: string; readonly machine: XStateMachineLike }[] = [
-  { name: 'daemon-root', machine: daemonRootMachine as unknown as XStateMachineLike },
-  { name: 'sentinel-registry', machine: sentinelRegistryMachine as unknown as XStateMachineLike },
-  { name: 'capture-loop', machine: captureLoopMachine as unknown as XStateMachineLike },
-  { name: 'drain-loop', machine: drainLoopMachine as unknown as XStateMachineLike },
-  { name: 'heartbeat-loop', machine: heartbeatLoopMachine as unknown as XStateMachineLike },
-  { name: 'binary-freshness', machine: binaryFreshnessMachine as unknown as XStateMachineLike },
-  { name: 'auto-upgrade', machine: autoUpgradeMachine as unknown as XStateMachineLike },
-  { name: 'source-poll', machine: sourcePollMachine as unknown as XStateMachineLike },
-  { name: 'cursor-lifecycle', machine: cursorLifecycleMachine as unknown as XStateMachineLike },
-  { name: 'batch-lifecycle', machine: batchLifecycleMachine as unknown as XStateMachineLike },
-  {
-    name: 'quarantine-lifecycle',
-    machine: quarantineLifecycleMachine as unknown as XStateMachineLike,
-  },
-  { name: 'pacer', machine: pacerMachine as unknown as XStateMachineLike },
-  { name: 'worker', machine: workerMachine as unknown as XStateMachineLike },
-  { name: 'service-manager', machine: serviceManagerMachine as unknown as XStateMachineLike },
-  { name: 'setup', machine: setupMachine as unknown as XStateMachineLike },
-  { name: 'uninstall', machine: uninstallMachine as unknown as XStateMachineLike },
+const MACHINES: readonly NamedMachine[] = [
+  { name: 'daemon-root', machine: daemonRootMachine },
+  { name: 'sentinel-registry', machine: sentinelRegistryMachine },
+  { name: 'capture-loop', machine: captureLoopMachine },
+  { name: 'drain-loop', machine: drainLoopMachine },
+  { name: 'heartbeat-loop', machine: heartbeatLoopMachine },
+  { name: 'binary-freshness', machine: binaryFreshnessMachine },
+  { name: 'auto-upgrade', machine: autoUpgradeMachine },
+  { name: 'source-poll', machine: sourcePollMachine },
+  { name: 'cursor-lifecycle', machine: cursorLifecycleMachine },
+  { name: 'batch-lifecycle', machine: batchLifecycleMachine },
+  { name: 'quarantine-lifecycle', machine: quarantineLifecycleMachine },
+  { name: 'pacer', machine: pacerMachine },
+  { name: 'worker', machine: workerMachine },
+  { name: 'service-manager', machine: serviceManagerMachine },
+  { name: 'setup', machine: setupMachine },
+  { name: 'uninstall', machine: uninstallMachine },
 ];
 
 export function buildDiagramExport(specs: readonly DiagramMachineSpec[]): DiagramExportOutput {
@@ -63,12 +62,17 @@ function buildIndex(names: readonly string[]): string {
   return lines.join('\n') + '\n';
 }
 
+function configOf(machine: AnyStateMachine): MachineConfigLike {
+  const value: unknown = machine.config;
+  return value as MachineConfigLike;
+}
+
 async function main(): Promise<void> {
   const outDir = join(process.cwd(), 'docs', 'architecture', 'diagrams');
   await mkdir(outDir, { recursive: true });
   const specs: DiagramMachineSpec[] = MACHINES.map((m) => ({
     name: m.name,
-    config: m.machine.config,
+    config: configOf(m.machine),
   }));
   const out = buildDiagramExport(specs);
   await Promise.all(

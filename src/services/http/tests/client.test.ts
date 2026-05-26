@@ -5,6 +5,7 @@ import {
   FatalError,
   NetworkError,
   RateLimitError,
+  requireDefined,
   RetriableError,
   ValidationError,
   WatermarkRegressionError,
@@ -330,7 +331,7 @@ describe('uploadRawRecord', () => {
       ),
     );
     await client.uploadRawRecord(validDto());
-    const headers = log[0]!.init.headers as Record<string, string>;
+    const headers = requireDefined(log[0]).init.headers as Record<string, string>;
     expect(headers['X-API-Key']).toBe('pxg-20260505-secret');
     expect(headers['Authorization']).toBeUndefined();
   });
@@ -344,7 +345,7 @@ describe('uploadRawRecord', () => {
       ),
     );
     await client.uploadRawRecord(validDto());
-    const headers = log[0]!.init.headers as Record<string, string>;
+    const headers = requireDefined(log[0]).init.headers as Record<string, string>;
     expect(headers['User-Agent']).toBe('@proxai/gateway');
   });
 
@@ -357,7 +358,7 @@ describe('uploadRawRecord', () => {
       ),
     );
     await client.uploadRawRecord(validDto());
-    const body = JSON.parse(log[0]!.init.body as string);
+    const body = JSON.parse(requireDefined(log[0]).init.body as string);
     expect(body.capture_id).toBe(VALID_UUID);
     expect(body.source_app).toBe('claude-code');
   });
@@ -371,8 +372,8 @@ describe('uploadRawRecord', () => {
       ),
     );
     await client.uploadRawRecord(validDto());
-    expect(log[0]!.url).toBe(endpoints.ingest);
-    expect(log[0]!.init.method).toBe('POST');
+    expect(requireDefined(log[0]).url).toBe(endpoints.ingest);
+    expect(requireDefined(log[0]).init.method).toBe('POST');
   });
 });
 
@@ -434,9 +435,9 @@ describe('verifyKey', () => {
       mockFetch(() => jsonResponse({ success: true, message: 'Key verified successfully' }), log),
     );
     await client.verifyKey();
-    expect(log[0]!.url).toBe(endpoints.verifyKey);
-    expect(log[0]!.init.method).toBe('GET');
-    const headers = log[0]!.init.headers as Record<string, string>;
+    expect(requireDefined(log[0]).url).toBe(endpoints.verifyKey);
+    expect(requireDefined(log[0]).init.method).toBe('GET');
+    const headers = requireDefined(log[0]).init.headers as Record<string, string>;
     expect(headers['X-API-Key']).toBe('pxg-20260505-secret');
   });
 

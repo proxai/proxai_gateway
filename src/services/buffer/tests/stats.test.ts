@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
@@ -37,7 +38,7 @@ test('totalPendingBytes excludes delivered batches', () => {
   const b = newBatch({ body: new Uint8Array(200) });
   insertBatch(db, a);
   insertBatch(db, b);
-  markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
+  markBatchDelivered(db, requireDefined(getBatch(db, a.captureId)), { idempotentOnServer: false });
   expect(totalPendingBytes(db)).toBe(200);
 });
 
@@ -61,7 +62,7 @@ test('countByStatus reports one of each bucket', () => {
   insertBatch(db, a);
   insertBatch(db, b);
   insertBatch(db, c);
-  markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
+  markBatchDelivered(db, requireDefined(getBatch(db, a.captureId)), { idempotentOnServer: false });
   markBatchFailed(db, b.captureId, 'err');
   expect(countByStatus(db)).toEqual({ pending: 1, failed: 1, delivered: 1 });
 });
@@ -109,7 +110,7 @@ test('countsBySource aggregates pending failed and delivered per source with byt
   insertBatch(db, b);
   insertBatch(db, c);
   insertBatch(db, d);
-  markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
+  markBatchDelivered(db, requireDefined(getBatch(db, a.captureId)), { idempotentOnServer: false });
   markBatchFailed(db, b.captureId, 'err');
   const counts = countsBySource(db);
   expect(counts['claude-code']).toEqual({
@@ -146,7 +147,7 @@ test('countsBySource ignores unknown source_app values defensively', () => {
 test('countsBySource ignores unknown source_app values in receipts defensively', () => {
   const a = newBatch({ sourceApp: 'claude-code' });
   insertBatch(db, a);
-  markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
+  markBatchDelivered(db, requireDefined(getBatch(db, a.captureId)), { idempotentOnServer: false });
   db.run("UPDATE upload_receipts SET source_app = 'unknown' WHERE capture_id = ?", [a.captureId]);
   const counts = countsBySource(db);
   expect(counts['claude-code'].delivered).toBe(0);

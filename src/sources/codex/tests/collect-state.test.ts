@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { rmRecursive, statFile } from 'core/io/fs';
-import { nextGenerationSuffix, sha256Hex, zstdDecompressSync } from 'core/utils';
+import { nextGenerationSuffix, sha256Hex, zstdDecompressSync, requireDefined } from 'core/utils';
 import {
   countByStatus,
   countQuarantined,
@@ -350,7 +350,7 @@ test('redacts secrets embedded in row values before storing', async () => {
     ],
   });
   await collectCodexState(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   const decompressed = DECODER.decode(zstdDecompressSync(batch.body));
   expect(decompressed).toContain('[REDACTED:openai-api-key]');
   expect(decompressed).not.toContain('sk-AbCdEfGhIj');
@@ -361,7 +361,7 @@ test('persists the wire-DTO fields needed by the uploader', async () => {
     threads: [{ id: 't1', cli_version: '0.126.0-alpha.8' }],
   });
   await collectCodexState(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.sourceApp).toBe('codex');
   expect(batch.sourceKind).toBe('sqlite_table_snapshot');
   expect(batch.bodyFormat).toBe('sqlite_rows_json');
@@ -490,8 +490,8 @@ test('a fresh poll persists last_seen_size_bytes and last_seen_page_count on eac
       watermarkTable: table,
     });
     expect(c).not.toBeNull();
-    expect(c!.lastSeenSizeBytes).toBeGreaterThan(0);
-    expect(c!.lastSeenPageCount).toBeGreaterThan(0);
+    expect(requireDefined(c).lastSeenSizeBytes).toBeGreaterThan(0);
+    expect(requireDefined(c).lastSeenPageCount).toBeGreaterThan(0);
   }
 });
 
@@ -537,7 +537,7 @@ test('rowid regression on a single codex table re-keys the whole file under #gen
       watermarkTable: table,
     });
     expect(c).not.toBeNull();
-    expect(c!.watermarkEnd).toBeGreaterThan(0);
+    expect(requireDefined(c).watermarkEnd).toBeGreaterThan(0);
   }
 
   const oldThreads = getCursor(buffer, {
@@ -566,7 +566,7 @@ test('size_decreased signal on any tracked table re-keys the whole codex file', 
 
   const { result } = await collectCodexState(file, ctx(buffer));
   expect(result.capturedBatches).toBe(1);
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.sourcePath).toBe(nextGenerationSuffix(file.sourcePath));
   expect(batch.watermarkStart).toBe(1);
 });
@@ -590,7 +590,7 @@ test('null last_seen columns on existing codex cursor do not trigger size/page_c
   });
 
   await collectCodexState(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
 
   expect(batch.sourcePath).toBe(file.sourcePath);
   expect(batch.sourcePathHash).toBe(file.sourcePathHash);
@@ -679,7 +679,7 @@ test('second poll with no new rows refreshes lastSeenSize/PageCount on the exist
     watermarkTable: 'threads',
   });
   expect(before).not.toBeNull();
-  const beforeWatermark = before!.watermarkEnd;
+  const beforeWatermark = requireDefined(before).watermarkEnd;
   expect(beforeWatermark).toBeGreaterThan(0);
 
   const db = new Database(file.sourcePath);
@@ -705,8 +705,10 @@ test('second poll with no new rows refreshes lastSeenSize/PageCount on the exist
   });
   expect(after).not.toBeNull();
 
-  expect(after!.watermarkEnd).toBe(beforeWatermark);
-  expect(after!.lastSeenSizeBytes).not.toBe(before!.lastSeenSizeBytes);
+  expect(requireDefined(after).watermarkEnd).toBe(beforeWatermark);
+  expect(requireDefined(after).lastSeenSizeBytes).not.toBe(
+    requireDefined(before).lastSeenSizeBytes,
+  );
 }, 30_000);
 
 test('logs quarantine.write_failed when quarantine insert throws', async () => {
@@ -839,8 +841,8 @@ test('quarantines oversized codex state row, advances cursor, and continues to n
     watermarkTable: 'threads',
   });
   expect(cursor).not.toBeNull();
-  expect(cursor!.watermarkEnd).toBeGreaterThan(1);
-  expect(cursor!.consecutiveErrors).toBeGreaterThanOrEqual(1);
+  expect(requireDefined(cursor).watermarkEnd).toBeGreaterThan(1);
+  expect(requireDefined(cursor).consecutiveErrors).toBeGreaterThanOrEqual(1);
 
   expect(result.capturedBatches).toBeGreaterThanOrEqual(1);
 }, 120_000);

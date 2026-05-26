@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -112,11 +113,13 @@ test('windows remover: schedules cmd /c with ping + del + del .new', async () =>
   expect(result.ok).toBe(true);
   expect(result.deferred).toBe(true);
   expect(result.message).toContain('scheduled removal');
-  expect(captured!.file).toBe('cmd.exe');
-  expect(captured!.args[0]).toBe('/c');
-  expect(captured!.args[1]).toContain('ping -n 3 127.0.0.1');
-  expect(captured!.args[1]).toContain('del /F /Q "C:\\Users\\x\\.proxai\\bin\\proxai-gateway.exe"');
-  expect(captured!.args[1]).toContain(
+  expect(requireDefined(captured).file).toBe('cmd.exe');
+  expect(requireDefined(captured).args[0]).toBe('/c');
+  expect(requireDefined(captured).args[1]).toContain('ping -n 3 127.0.0.1');
+  expect(requireDefined(captured).args[1]).toContain(
+    'del /F /Q "C:\\Users\\x\\.proxai\\bin\\proxai-gateway.exe"',
+  );
+  expect(requireDefined(captured).args[1]).toContain(
     'del /F /Q "C:\\Users\\x\\.proxai\\bin\\proxai-gateway.exe.new"',
   );
 });
@@ -128,7 +131,7 @@ test('windows remover: includes rmdir installDir 2>nul when installDir provided'
   };
   const remover = createWindowsBinaryRemover({ spawnImpl: spawn });
   await remover.remove('C:\\bin\\proxai.exe', { installDir: 'C:\\Users\\x\\.proxai\\bin' });
-  expect(captured!.args[1]).toContain('rmdir "C:\\Users\\x\\.proxai\\bin" 2>nul');
+  expect(requireDefined(captured).args[1]).toContain('rmdir "C:\\Users\\x\\.proxai\\bin" 2>nul');
 });
 
 test('windows remover: omits rmdir fragment when installDir not provided', async () => {
@@ -138,7 +141,7 @@ test('windows remover: omits rmdir fragment when installDir not provided', async
   };
   const remover = createWindowsBinaryRemover({ spawnImpl: spawn });
   await remover.remove('C:\\bin\\proxai.exe');
-  expect(captured!.args[1]).not.toContain('rmdir');
+  expect(requireDefined(captured).args[1]).not.toContain('rmdir');
 });
 
 test('windows remover: spawn throw is captured and surfaced as ok=false', async () => {

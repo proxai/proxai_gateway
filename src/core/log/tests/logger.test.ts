@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { mkdtemp, readdir } from 'node:fs/promises';
@@ -33,7 +34,7 @@ test('logs JSON lines with msg and bindings', async () => {
   const logger = await createLogger({ destination: dest });
   logger.info({ foo: 'bar' }, 'hello');
   expect(lines).toHaveLength(1);
-  const parsed = JSON.parse(lines[0]!);
+  const parsed = JSON.parse(requireDefined(lines[0]));
   expect(parsed.foo).toBe('bar');
   expect(parsed.msg).toBe('hello');
 });
@@ -46,8 +47,8 @@ test('respects level filter', async () => {
   logger.warn('captured');
   logger.error('captured');
   expect(lines).toHaveLength(2);
-  expect(JSON.parse(lines[0]!).msg).toBe('captured');
-  expect(JSON.parse(lines[1]!).msg).toBe('captured');
+  expect(JSON.parse(requireDefined(lines[0])).msg).toBe('captured');
+  expect(JSON.parse(requireDefined(lines[1])).msg).toBe('captured');
 });
 
 test('child logger inherits and extends bindings', async () => {
@@ -56,7 +57,7 @@ test('child logger inherits and extends bindings', async () => {
   const child = root.child({ source_app: 'claude-code' });
   child.info('test');
   expect(lines).toHaveLength(1);
-  const parsed = JSON.parse(lines[0]!);
+  const parsed = JSON.parse(requireDefined(lines[0]));
   expect(parsed.service).toBe('gateway');
   expect(parsed.source_app).toBe('claude-code');
 });
@@ -65,7 +66,7 @@ test('default base bindings exclude pid and hostname', async () => {
   const { lines, dest } = captureStream();
   const logger = await createLogger({ destination: dest });
   logger.info('test');
-  const parsed = JSON.parse(lines[0]!);
+  const parsed = JSON.parse(requireDefined(lines[0]));
   expect(parsed.pid).toBeUndefined();
   expect(parsed.hostname).toBeUndefined();
 });

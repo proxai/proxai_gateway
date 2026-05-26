@@ -116,7 +116,10 @@ export function createWindowsShellPathCleaner(
   const spawn = deps.spawnImpl ?? realPowershellSpawn;
   return {
     clean: async (installDir: string) => {
-      const env = { ...process.env, PROXAI_INSTALL_DIR: installDir } as Record<string, string>;
+      const env: Record<string, string> = {
+        ...(process.env as Record<string, string>),
+        PROXAI_INSTALL_DIR: installDir,
+      };
       try {
         const { ok, stderr } = await spawn(
           'powershell.exe',

@@ -5,7 +5,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { OversizedDecompressedSliceError } from 'core/utils';
+import { OversizedDecompressedSliceError, requireDefined } from 'core/utils';
 import {
   getBatch,
   getCursor,
@@ -42,7 +42,7 @@ function ctxWith(fetchFn: typeof globalThis.fetch): UploaderContext {
 test('uploadRawRecord passes UPLOAD_TIMEOUT_MS to AbortSignal.timeout', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
   const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
   const captured: number[] = [];
   (AbortSignal as { timeout: (ms: number) => AbortSignal }).timeout = (ms: number): AbortSignal => {
@@ -65,7 +65,7 @@ test('uploadRawRecord passes UPLOAD_TIMEOUT_MS to AbortSignal.timeout', async ()
 test('accepted upload writes receipt, deletes batch row, returns idempotent flag', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(
     mockFetch(() =>
@@ -82,19 +82,19 @@ test('accepted upload writes receipt, deletes batch row, returns idempotent flag
   expect(getBatch(db, batch.captureId)).toBeNull();
   const receipt = getReceipt(db, batch.captureId);
   expect(receipt).not.toBeNull();
-  expect(receipt!.sourceApp).toBe(stored.sourceApp);
-  expect(receipt!.sourcePathHash).toBe(stored.sourcePathHash);
-  expect(receipt!.watermarkKind).toBe(stored.watermarkKind);
-  expect(receipt!.watermarkStart).toBe(stored.watermarkStart);
-  expect(receipt!.watermarkEnd).toBe(stored.watermarkEnd);
-  expect(receipt!.watermarkTable).toBe(stored.watermarkTable);
-  expect(receipt!.idempotentOnServer).toBe(false);
+  expect(requireDefined(receipt).sourceApp).toBe(stored.sourceApp);
+  expect(requireDefined(receipt).sourcePathHash).toBe(stored.sourcePathHash);
+  expect(requireDefined(receipt).watermarkKind).toBe(stored.watermarkKind);
+  expect(requireDefined(receipt).watermarkStart).toBe(stored.watermarkStart);
+  expect(requireDefined(receipt).watermarkEnd).toBe(stored.watermarkEnd);
+  expect(requireDefined(receipt).watermarkTable).toBe(stored.watermarkTable);
+  expect(requireDefined(receipt).idempotentOnServer).toBe(false);
 });
 
 test('propagates idempotent: true from server into receipt', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(
     mockFetch(() =>
@@ -103,19 +103,19 @@ test('propagates idempotent: true from server into receipt', async () => {
   );
   const outcome = await uploadBatch(ctx, stored);
   if (outcome.kind === 'accepted') expect(outcome.idempotent).toBe(true);
-  expect(getReceipt(db, batch.captureId)!.idempotentOnServer).toBe(true);
+  expect(requireDefined(getReceipt(db, batch.captureId)).idempotentOnServer).toBe(true);
 });
 
 test('400 ValidationError marks batch failed (terminal)', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(mockFetch(() => emptyResponse(400)));
   const outcome = await uploadBatch(ctx, stored);
 
   expect(outcome.kind).toBe('fatal');
-  const row = getBatch(db, batch.captureId)!;
+  const row = requireDefined(getBatch(db, batch.captureId));
   expect(row.status).toBe('failed');
   expect(row.attempts).toBe(1);
   expect(row.lastError).not.toBeNull();
@@ -124,7 +124,7 @@ test('400 ValidationError marks batch failed (terminal)', async () => {
 test('400 watermark_regression updates cursor, drops batch, returns recovered', async () => {
   const batch = newClaudeCodeBatch('payload', { watermarkStart: 0, watermarkEnd: 100 });
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(
     mockFetch(
@@ -162,7 +162,7 @@ test('400 watermark_regression updates cursor, drops batch, returns recovered', 
 test('400 with non-regression body falls through to plain ValidationError -> fatal', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(
     mockFetch(
@@ -175,13 +175,13 @@ test('400 with non-regression body falls through to plain ValidationError -> fat
   );
   const outcome = await uploadBatch(ctx, stored);
   expect(outcome.kind).toBe('fatal');
-  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+  expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
 });
 
 test('403 AuthError + verify-key success keeps batch pending (transient)', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(
     mockFetch((call) => {
@@ -195,7 +195,7 @@ test('403 AuthError + verify-key success keeps batch pending (transient)', async
 
   expect(outcome.kind).toBe('retriable');
   if (outcome.kind === 'retriable') expect(outcome.retryAfterMs).toBeNull();
-  const row = getBatch(db, batch.captureId)!;
+  const row = requireDefined(getBatch(db, batch.captureId));
   expect(row.status).toBe('pending');
   expect(row.attempts).toBe(1);
 });
@@ -203,7 +203,7 @@ test('403 AuthError + verify-key success keeps batch pending (transient)', async
 test('429 RateLimitError surfaces retryAfterMs, reason=rate_limit, stays pending', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(mockFetch(() => emptyResponse(429, { 'Retry-After': '45' })));
   const outcome = await uploadBatch(ctx, stored);
@@ -213,13 +213,13 @@ test('429 RateLimitError surfaces retryAfterMs, reason=rate_limit, stays pending
     expect(outcome.retryAfterMs).toBe(45_000);
     expect(outcome.reason).toBe('rate_limit');
   }
-  expect(getBatch(db, batch.captureId)!.status).toBe('pending');
+  expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('pending');
 });
 
 test('503 RetriableError carries reason=service_unavailable, stays pending', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(mockFetch(() => emptyResponse(503)));
   const outcome = await uploadBatch(ctx, stored);
@@ -229,49 +229,49 @@ test('503 RetriableError carries reason=service_unavailable, stays pending', asy
     expect(outcome.reason).toBe('service_unavailable');
     expect(outcome.retryAfterMs).toBeNull();
   }
-  expect(getBatch(db, batch.captureId)!.status).toBe('pending');
+  expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('pending');
 });
 
 test('408 maps to ValidationError -> fatal', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(mockFetch(() => emptyResponse(408)));
   const outcome = await uploadBatch(ctx, stored);
 
   expect(outcome.kind).toBe('fatal');
-  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+  expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
 });
 
 test('413 maps to ValidationError -> fatal', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(mockFetch(() => emptyResponse(413)));
   const outcome = await uploadBatch(ctx, stored);
 
   expect(outcome.kind).toBe('fatal');
-  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+  expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
 });
 
 test('unexpected status maps to FatalError -> fatal', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(mockFetch(() => emptyResponse(418)));
   const outcome = await uploadBatch(ctx, stored);
 
   expect(outcome.kind).toBe('fatal');
-  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+  expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
 });
 
 test('network failure -> retriable, reason=network, pending, attempts++', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(mockFetch(() => new Error('connection refused')));
   const outcome = await uploadBatch(ctx, stored);
@@ -281,7 +281,7 @@ test('network failure -> retriable, reason=network, pending, attempts++', async 
     expect(outcome.reason).toBe('network');
     expect(outcome.retryAfterMs).toBeNull();
   }
-  const row = getBatch(db, batch.captureId)!;
+  const row = requireDefined(getBatch(db, batch.captureId));
   expect(row.status).toBe('pending');
   expect(row.attempts).toBe(1);
 });
@@ -289,7 +289,7 @@ test('network failure -> retriable, reason=network, pending, attempts++', async 
 test('AuthError + verify-key inconclusive -> retriable, reason=auth_unconfirmed', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(
     mockFetch((call) => {
@@ -305,7 +305,7 @@ test('AuthError + verify-key inconclusive -> retriable, reason=auth_unconfirmed'
 test('AuthError + verify-key transient-success -> retriable, reason=auth_unconfirmed', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(
     mockFetch((call) => {
@@ -323,7 +323,7 @@ test('AuthError + verify-key transient-success -> retriable, reason=auth_unconfi
 test('uploaded body is base64-encoded recompressed payload', async () => {
   const batch = newClaudeCodeBatch('hello upload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const seen: { body: string } = { body: '' };
   const ctx = ctxWith(
@@ -342,7 +342,7 @@ test('uploaded body is base64-encoded recompressed payload', async () => {
 test('host_id from context is sent on the wire', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const seen: { hostId: string } = { hostId: '' };
   const ctx: UploaderContext = {
@@ -363,7 +363,7 @@ test('host_id from context is sent on the wire', async () => {
 test('unknown thrown value (non-Error) is captured and marks batch failed', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(mockFetch(() => jsonResponse({})));
   ctx.http.uploadRawRecord = (async () => {
@@ -373,13 +373,13 @@ test('unknown thrown value (non-Error) is captured and marks batch failed', asyn
   const outcome = await uploadBatch(ctx, stored);
   expect(outcome.kind).toBe('fatal');
   if (outcome.kind === 'fatal') expect(outcome.error).toContain('unknown error');
-  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+  expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
 });
 
 test('unknown error with a falsy message falls back to String(err)', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx = ctxWith(mockFetch(() => jsonResponse({})));
   ctx.http.uploadRawRecord = (async () => {
@@ -388,7 +388,7 @@ test('unknown error with a falsy message falls back to String(err)', async () =>
 
   const outcome = await uploadBatch(ctx, stored);
   expect(outcome.kind).toBe('fatal');
-  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+  expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
 });
 
 test('AuthError + verify-key returns success: false → fatal, sentinel written', async () => {
@@ -397,7 +397,7 @@ test('AuthError + verify-key returns success: false → fatal, sentinel written'
   try {
     const batch = newClaudeCodeBatch('payload');
     insertBatch(db, batch);
-    const stored = getBatch(db, batch.captureId)!;
+    const stored = requireDefined(getBatch(db, batch.captureId));
 
     const ctx: UploaderContext = {
       db,
@@ -420,7 +420,7 @@ test('AuthError + verify-key returns success: false → fatal, sentinel written'
 
     expect(outcome.kind).toBe('fatal');
     if (outcome.kind === 'fatal') expect(outcome.error).toContain('ingestion key invalid');
-    const row = getBatch(db, batch.captureId)!;
+    const row = requireDefined(getBatch(db, batch.captureId));
     expect(row.status).toBe('failed');
     expect(await Bun.file(sentinelPath).exists()).toBe(true);
     const payload = JSON.parse(await Bun.file(sentinelPath).text()) as Record<string, unknown>;
@@ -437,7 +437,7 @@ test('AuthError + verify-key returns success: true → retriable, no sentinel', 
   try {
     const batch = newClaudeCodeBatch('payload');
     insertBatch(db, batch);
-    const stored = getBatch(db, batch.captureId)!;
+    const stored = requireDefined(getBatch(db, batch.captureId));
 
     const ctx: UploaderContext = {
       db,
@@ -459,7 +459,7 @@ test('AuthError + verify-key returns success: true → retriable, no sentinel', 
     const outcome = await uploadBatch(ctx, stored);
 
     expect(outcome.kind).toBe('retriable');
-    const row = getBatch(db, batch.captureId)!;
+    const row = requireDefined(getBatch(db, batch.captureId));
     expect(row.status).toBe('pending');
     expect(await Bun.file(sentinelPath).exists()).toBe(false);
   } finally {
@@ -473,7 +473,7 @@ test('AuthError + verify-key throws RetriableError → retriable, no sentinel', 
   try {
     const batch = newClaudeCodeBatch('payload');
     insertBatch(db, batch);
-    const stored = getBatch(db, batch.captureId)!;
+    const stored = requireDefined(getBatch(db, batch.captureId));
 
     const ctx: UploaderContext = {
       db,
@@ -491,7 +491,7 @@ test('AuthError + verify-key throws RetriableError → retriable, no sentinel', 
     const outcome = await uploadBatch(ctx, stored);
 
     expect(outcome.kind).toBe('retriable');
-    const row = getBatch(db, batch.captureId)!;
+    const row = requireDefined(getBatch(db, batch.captureId));
     expect(row.status).toBe('pending');
     expect(await Bun.file(sentinelPath).exists()).toBe(false);
   } finally {
@@ -505,7 +505,7 @@ test('AuthError + verify-key throws AuthError → fatal, sentinel written', asyn
   try {
     const batch = newClaudeCodeBatch('payload');
     insertBatch(db, batch);
-    const stored = getBatch(db, batch.captureId)!;
+    const stored = requireDefined(getBatch(db, batch.captureId));
 
     const ctx: UploaderContext = {
       db,
@@ -517,7 +517,7 @@ test('AuthError + verify-key throws AuthError → fatal, sentinel written', asyn
 
     expect(outcome.kind).toBe('fatal');
     if (outcome.kind === 'fatal') expect(outcome.error).toContain('ingestion key invalid');
-    expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+    expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
     expect(await Bun.file(sentinelPath).exists()).toBe(true);
   } finally {
     await rmRecursive(dirAuth);
@@ -530,7 +530,7 @@ test('AuthError + verify-key throws non-Error → retriable, log uses typeof and
   try {
     const batch = newClaudeCodeBatch('payload');
     insertBatch(db, batch);
-    const stored = getBatch(db, batch.captureId)!;
+    const stored = requireDefined(getBatch(db, batch.captureId));
 
     const http = createTestHttpClient(mockFetch(() => emptyResponse(403)));
     Object.defineProperty(http, 'verifyKey', {
@@ -562,7 +562,7 @@ test('AuthError + verify-key throws non-Error → retriable, log uses typeof and
     const outcome = await uploadBatch(ctx, stored);
 
     expect(outcome.kind).toBe('retriable');
-    expect(getBatch(db, batch.captureId)!.status).toBe('pending');
+    expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('pending');
     expect(await Bun.file(sentinelPath).exists()).toBe(false);
     const inconclusive = loggedErrors.find((w) => w.msg.includes('verify-key inconclusive'));
     expect(inconclusive).toBeDefined();
@@ -581,7 +581,7 @@ test('AuthError + verify-key returns success: false → fatal even when sentinel
   try {
     const batch = newClaudeCodeBatch('payload');
     insertBatch(db, batch);
-    const stored = getBatch(db, batch.captureId)!;
+    const stored = requireDefined(getBatch(db, batch.captureId));
 
     const http = createTestHttpClient(
       mockFetch((call) => {
@@ -616,7 +616,7 @@ test('AuthError + verify-key returns success: false → fatal even when sentinel
 
     expect(outcome.kind).toBe('fatal');
     if (outcome.kind === 'fatal') expect(outcome.error).toContain('ingestion key invalid');
-    expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+    expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
     expect(loggedErrors.some((e) => e.msg.includes('failed to write AUTH_FAILED sentinel'))).toBe(
       true,
     );
@@ -628,7 +628,7 @@ test('AuthError + verify-key returns success: false → fatal even when sentinel
 test('AuthError without authFailedSentinelPath: still classifies, no sentinel side-effect', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const ctx: UploaderContext = {
     db,
@@ -643,7 +643,7 @@ test('AuthError without authFailedSentinelPath: still classifies, no sentinel si
 test('OversizedDecompressedSliceError thrown by http surfaces raw_bytes/cap/slice_index in fatal log', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   const oversize = new OversizedDecompressedSliceError({
     sourcePath: '/x.jsonl',
@@ -685,12 +685,12 @@ test('OversizedDecompressedSliceError thrown by http surfaces raw_bytes/cap/slic
   const outcome = await uploadBatch(ctx, stored);
 
   expect(outcome.kind).toBe('fatal');
-  expect(getBatch(db, batch.captureId)!.status).toBe('failed');
+  expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
   const fatalLog = loggedErrors.find((e) => e.msg === 'upload failed (fatal)');
   expect(fatalLog).toBeDefined();
-  expect(fatalLog!.obj['raw_bytes']).toBe(11 * 1024 * 1024);
-  expect(fatalLog!.obj['cap']).toBe(10 * 1024 * 1024);
-  expect(fatalLog!.obj['slice_index']).toBe(2);
-  expect(fatalLog!.obj['source_path_hash']).toBe(stored.sourcePathHash);
-  expect(fatalLog!.obj['compressed_bytes']).toBe(stored.body.byteLength);
+  expect(requireDefined(fatalLog).obj['raw_bytes']).toBe(11 * 1024 * 1024);
+  expect(requireDefined(fatalLog).obj['cap']).toBe(10 * 1024 * 1024);
+  expect(requireDefined(fatalLog).obj['slice_index']).toBe(2);
+  expect(requireDefined(fatalLog).obj['source_path_hash']).toBe(stored.sourcePathHash);
+  expect(requireDefined(fatalLog).obj['compressed_bytes']).toBe(stored.body.byteLength);
 });

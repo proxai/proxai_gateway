@@ -1,7 +1,13 @@
 import type { Database } from 'bun:sqlite';
 
 import { tableExists } from 'core/io/sqlite';
-import { generateUuidV7, nowIsoUtc, splitRowsByCompressedSize, zstdCompressSync } from 'core/utils';
+import {
+  generateUuidV7,
+  nowIsoUtc,
+  requireDefined,
+  splitRowsByCompressedSize,
+  zstdCompressSync,
+} from 'core/utils';
 import {
   getCursor,
   getCursorWithFallback,
@@ -103,16 +109,16 @@ export function collectOneTable(
     );
   }
 
-  const lastRow = rows[rows.length - 1]!;
+  const lastRow = requireDefined(rows[rows.length - 1], 'last row');
   const finalWatermarkEnd = lastRow.rowid + 1;
 
   let quarantinedCount = 0;
   let acceptedSlices = 0;
   for (let i = 0; i < slices.length; i++) {
-    const slice = slices[i]!;
+    const slice = requireDefined(slices[i], 'slice');
     if (slice.length === 0) continue;
-    const firstRowidInSlice = slice[0]!.rowid;
-    const lastRowidInSlice = slice[slice.length - 1]!.rowid;
+    const firstRowidInSlice = requireDefined(slice[0], 'first row in slice').rowid;
+    const lastRowidInSlice = requireDefined(slice[slice.length - 1], 'last row in slice').rowid;
     const sliceWatermarkEnd = lastRowidInSlice + 1;
 
     const measurement = measureSlice(slice);

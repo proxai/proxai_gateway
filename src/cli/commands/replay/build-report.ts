@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import type {
   ReplayEvent,
   ReplayMachineSummary,
@@ -19,8 +20,8 @@ export function buildReport(events: readonly ReplayEvent[], machineFilter?: stri
   const machines: ReplayMachineSummary[] = [];
   for (const [name, entries] of grouped.entries()) {
     if (entries.length === 0) continue;
-    const first = entries[0]!;
-    const last = entries[entries.length - 1]!;
+    const first = requireDefined(entries[0], 'first entry');
+    const last = requireDefined(entries[entries.length - 1], 'last entry');
     machines.push({
       machine: name,
       transitionCount: entries.length,

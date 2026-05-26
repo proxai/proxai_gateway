@@ -1,3 +1,5 @@
+import { requireDefined } from 'core/utils';
+
 export interface Version {
   readonly year: number;
   readonly month: number;
@@ -10,9 +12,9 @@ export function parseVersion(tag: string): Version | null {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:-(\d+))?$/.exec(stripped);
   if (match === null) return null;
   return {
-    year: Number.parseInt(match[1]!, 10),
-    month: Number.parseInt(match[2]!, 10),
-    day: Number.parseInt(match[3]!, 10),
+    year: Number.parseInt(requireDefined(match[1]), 10),
+    month: Number.parseInt(requireDefined(match[2]), 10),
+    day: Number.parseInt(requireDefined(match[3]), 10),
     suffix: match[4] !== undefined ? Number.parseInt(match[4], 10) : null,
   };
 }
@@ -53,7 +55,7 @@ export function pickLatestTag(tags: readonly string[]): Version | null {
   }
   if (versions.length === 0) return null;
   versions.sort(compareVersions);
-  return versions[versions.length - 1]!;
+  return requireDefined(versions[versions.length - 1]);
 }
 
 export function computeNextVersion(latest: Version | null, today: Version): Version {

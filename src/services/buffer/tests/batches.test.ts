@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
-import { generateUuidV7 } from 'core/utils';
+import { generateUuidV7, requireDefined } from 'core/utils';
 import {
   countReceipts,
   dropOldestPending,
@@ -32,14 +32,14 @@ test('insertBatch + getBatch round-trip preserves all fields', () => {
   insertBatch(db, batch);
   const stored = getBatch(db, batch.captureId);
   expect(stored).not.toBeNull();
-  expect(stored!.captureId).toBe(batch.captureId);
-  expect(stored!.sourceApp).toBe(batch.sourceApp);
-  expect(stored!.watermarkStart).toBe(batch.watermarkStart);
-  expect(stored!.watermarkEnd).toBe(batch.watermarkEnd);
-  expect(stored!.body).toEqual(batch.body);
-  expect(stored!.status).toBe('pending');
-  expect(stored!.attempts).toBe(0);
-  expect(stored!.lastError).toBeNull();
+  expect(requireDefined(stored).captureId).toBe(batch.captureId);
+  expect(requireDefined(stored).sourceApp).toBe(batch.sourceApp);
+  expect(requireDefined(stored).watermarkStart).toBe(batch.watermarkStart);
+  expect(requireDefined(stored).watermarkEnd).toBe(batch.watermarkEnd);
+  expect(requireDefined(stored).body).toEqual(batch.body);
+  expect(requireDefined(stored).status).toBe('pending');
+  expect(requireDefined(stored).attempts).toBe(0);
+  expect(requireDefined(stored).lastError).toBeNull();
 });
 
 test('getBatch returns null for unknown id', () => {
@@ -72,7 +72,7 @@ test('nextPendingBatch returns null when nothing pending', () => {
   expect(nextPendingBatch(db)).toBeNull();
   const batch = newBatch();
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
   markBatchDelivered(db, stored, { idempotentOnServer: false });
   expect(nextPendingBatch(db)).toBeNull();
 });
@@ -80,7 +80,7 @@ test('nextPendingBatch returns null when nothing pending', () => {
 test('markBatchDelivered deletes the batch row', () => {
   const batch = newBatch();
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
   markBatchDelivered(db, stored, { idempotentOnServer: false });
   expect(getBatch(db, batch.captureId)).toBeNull();
 });
@@ -88,7 +88,7 @@ test('markBatchDelivered deletes the batch row', () => {
 test('markBatchDelivered inserts a receipt row with derived fields', () => {
   const batch = newBatch();
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
   markBatchDelivered(db, stored, {
     idempotentOnServer: false,
     deliveredAt: '2026-05-06T12:00:00.000Z',
@@ -96,38 +96,38 @@ test('markBatchDelivered inserts a receipt row with derived fields', () => {
 
   const receipt = getReceipt(db, batch.captureId);
   expect(receipt).not.toBeNull();
-  expect(receipt!.captureId).toBe(batch.captureId);
-  expect(receipt!.sourceApp).toBe(batch.sourceApp);
-  expect(receipt!.sourcePathHash).toBe(batch.sourcePathHash);
-  expect(receipt!.watermarkKind).toBe(batch.watermarkKind);
-  expect(receipt!.watermarkStart).toBe(batch.watermarkStart);
-  expect(receipt!.watermarkEnd).toBe(batch.watermarkEnd);
-  expect(receipt!.watermarkTable).toBe(batch.watermarkTable);
-  expect(receipt!.deliveredAt).toBe('2026-05-06T12:00:00.000Z');
-  expect(receipt!.idempotentOnServer).toBe(false);
+  expect(requireDefined(receipt).captureId).toBe(batch.captureId);
+  expect(requireDefined(receipt).sourceApp).toBe(batch.sourceApp);
+  expect(requireDefined(receipt).sourcePathHash).toBe(batch.sourcePathHash);
+  expect(requireDefined(receipt).watermarkKind).toBe(batch.watermarkKind);
+  expect(requireDefined(receipt).watermarkStart).toBe(batch.watermarkStart);
+  expect(requireDefined(receipt).watermarkEnd).toBe(batch.watermarkEnd);
+  expect(requireDefined(receipt).watermarkTable).toBe(batch.watermarkTable);
+  expect(requireDefined(receipt).deliveredAt).toBe('2026-05-06T12:00:00.000Z');
+  expect(requireDefined(receipt).idempotentOnServer).toBe(false);
 });
 
 test('markBatchDelivered persists idempotentOnServer: true', () => {
   const batch = newBatch();
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
   markBatchDelivered(db, stored, { idempotentOnServer: true });
 
-  const receipt = getReceipt(db, batch.captureId)!;
+  const receipt = requireDefined(getReceipt(db, batch.captureId));
   expect(receipt.idempotentOnServer).toBe(true);
 });
 
 test('markBatchDelivered transaction is atomic on duplicate receipt', () => {
   const batch = newBatch();
   insertBatch(db, batch);
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
 
   markBatchDelivered(db, stored, { idempotentOnServer: false });
 
   insertBatch(db, batch);
   expect(getBatch(db, batch.captureId)).not.toBeNull();
 
-  const second = getBatch(db, batch.captureId)!;
+  const second = requireDefined(getBatch(db, batch.captureId));
   expect(() => {
     markBatchDelivered(db, second, { idempotentOnServer: false });
   }).toThrow();
@@ -140,7 +140,7 @@ test('markBatchFailed sets status, error, attempts', () => {
   const batch = newBatch();
   insertBatch(db, batch);
   markBatchFailed(db, batch.captureId, '400 invalid DTO');
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
   expect(stored.status).toBe('failed');
   expect(stored.lastError).toBe('400 invalid DTO');
   expect(stored.attempts).toBe(1);
@@ -151,7 +151,7 @@ test('recordRetriableFailure increments attempts and stores error without changi
   insertBatch(db, batch);
   recordRetriableFailure(db, batch.captureId, 'network');
   recordRetriableFailure(db, batch.captureId, '503');
-  const stored = getBatch(db, batch.captureId)!;
+  const stored = requireDefined(getBatch(db, batch.captureId));
   expect(stored.status).toBe('pending');
   expect(stored.attempts).toBe(2);
   expect(stored.lastError).toBe('503');
@@ -174,7 +174,7 @@ test('dropOldestPending skips delivered (already-removed) and failed batches', (
   const b = newBatch();
   insertBatch(db, a);
   insertBatch(db, b);
-  markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
+  markBatchDelivered(db, requireDefined(getBatch(db, a.captureId)), { idempotentOnServer: false });
 
   expect(dropOldestPending(db)).toBe(b.captureId);
 });
@@ -189,8 +189,8 @@ test('nextPendingBatchAfter returns next pending batch chronologically or by ID 
   insertBatch(db, a);
   insertBatch(db, b);
 
-  const storedA = getBatch(db, a.captureId)!;
-  const storedB = getBatch(db, b.captureId)!;
+  const storedA = requireDefined(getBatch(db, a.captureId));
+  const storedB = requireDefined(getBatch(db, b.captureId));
 
   const next = nextPendingBatchAfter(db, {
     createdAt: storedA.createdAt,

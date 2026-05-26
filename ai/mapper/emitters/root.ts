@@ -41,7 +41,8 @@ async function generateFileTree(repoRoot: string, maxDepth = 3): Promise<string>
   const lines: string[] = [`${basename(repoRoot)}/`];
   for (const d of sorted) {
     const depth = d.split('/').length;
-    const name = d.split('/').pop()!;
+    const parts = d.split('/');
+    const name = parts[parts.length - 1] ?? d;
     lines.push(`${'  '.repeat(depth)}${name}/`);
   }
   return lines.join('\n');

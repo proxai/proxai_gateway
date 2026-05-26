@@ -1,12 +1,16 @@
 import { expect, test } from 'bun:test';
 
 import { buildRunDeps } from 'cli/wiring/run-deps.ts';
-import type { GatewayConfig, InstallSource } from 'services/config';
+import {
+  makeTestGatewayConfig,
+  TEST_ACCOUNT_CONFIG,
+  TEST_CAPTURE_CONFIG,
+} from 'services/config/tests/test-config.ts';
 
-const cfg = {
-  capture: { bufferPath: '/tmp/b.db' },
-  account: { installSource: 'github_release' as InstallSource },
-} as GatewayConfig;
+const cfg = makeTestGatewayConfig({
+  account: { ...TEST_ACCOUNT_CONFIG, installSource: 'github_release' },
+  capture: { ...TEST_CAPTURE_CONFIG, bufferPath: '/tmp/b.db' },
+});
 
 test('buildRunDeps: wires sentinels, version strings, abort, exitProcess', () => {
   const ctrl = new AbortController();

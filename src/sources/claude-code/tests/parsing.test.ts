@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { rmRecursive, statFile } from 'core/io/fs';
-import { sha256Hex, zstdDecompressSync } from 'core/utils';
+import { sha256Hex, zstdDecompressSync, requireDefined } from 'core/utils';
 import { getCursor, nextPendingBatch, openInMemoryBufferDb } from 'services/buffer';
 import { BODY_TARGET_DECOMPRESSED_BYTES } from 'services/contract';
 import { collectClaudeCodeFile } from 'sources/claude-code';
@@ -56,7 +56,7 @@ test('session-basic.jsonl: parses end-to-end and extracts message version from l
   const result = await collectClaudeCodeFile(file, ctx(buffer));
   expect(result.errors).toEqual([]);
   expect(result.capturedBatches).toBe(1);
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.agentSchemaVersion).toBe('2.1.122');
   expect(batch.sourceApp).toBe('claude-code');
   expect(batch.sourceKind).toBe('jsonl_append');
@@ -67,7 +67,7 @@ test('session-basic.jsonl: parses end-to-end and extracts message version from l
 test('session-basic.jsonl: redacts an OpenAI-shaped key in body', async () => {
   const file = await copyFixture('session-basic.jsonl');
   await collectClaudeCodeFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   const decoded = DECODER.decode(zstdDecompressSync(batch.body));
   expect(decoded).toContain('[REDACTED:openai-api-key]');
   expect(decoded).not.toContain('sk-FakeAbCdEfGhIj');
@@ -88,7 +88,7 @@ test('session-basic.jsonl: cursor advances to the end of the last newline', asyn
 test('session-trailing-partial.jsonl: holds back the unterminated last line', async () => {
   const file = await copyFixture('session-trailing-partial.jsonl');
   await collectClaudeCodeFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   const decoded = DECODER.decode(zstdDecompressSync(batch.body));
   expect(decoded.endsWith('\n')).toBe(true);
   expect(decoded).not.toContain('"partial');
@@ -149,6 +149,6 @@ test('session-with-rotation: same path with new inode produces a fresh cursor', 
 test('session-with-rotation: agent_schema_version reflects the version found in each segment', async () => {
   const fileA = await copyFixture('session-with-rotation.jsonl', 'session.jsonl');
   await collectClaudeCodeFile(fileA, ctx(buffer));
-  const batchA = nextPendingBatch(buffer)!;
+  const batchA = requireDefined(nextPendingBatch(buffer));
   expect(batchA.agentSchemaVersion).toBe('2.1.100');
 });

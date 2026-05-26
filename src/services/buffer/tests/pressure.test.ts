@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
@@ -93,7 +94,7 @@ test('failed and delivered batches do not contribute to pending bytes', () => {
   insertBatch(db, b);
   insertBatch(db, c);
   markBatchFailed(db, a.captureId, 'oops');
-  markBatchDelivered(db, getBatch(db, b.captureId)!, { idempotentOnServer: false });
+  markBatchDelivered(db, requireDefined(getBatch(db, b.captureId)), { idempotentOnServer: false });
 
   const result = checkPendingPressure({
     db,

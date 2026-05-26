@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { expect, test } from 'bun:test';
 
 import {
@@ -59,21 +60,21 @@ test('buildPlatformServiceContext: returns null on unsupported platform', () => 
 test('buildPlatformServiceContext: returns context with platform/unitPath/serviceManager on darwin', () => {
   const ctx = buildPlatformServiceContext('darwin', '/path/to/binary');
   expect(ctx).not.toBe(null);
-  expect(ctx!.platform).toBe('darwin');
-  expect(ctx!.unitPath.length).toBeGreaterThan(0);
-  expect(typeof ctx!.serviceManager.isRunning).toBe('function');
+  expect(requireDefined(ctx).platform).toBe('darwin');
+  expect(requireDefined(ctx).unitPath.length).toBeGreaterThan(0);
+  expect(typeof requireDefined(ctx).serviceManager.isRunning).toBe('function');
 });
 
 test('buildPlatformServiceContext: works on linux', () => {
   const ctx = buildPlatformServiceContext('linux', '/path/to/binary');
   expect(ctx).not.toBe(null);
-  expect(ctx!.platform).toBe('linux');
+  expect(requireDefined(ctx).platform).toBe('linux');
 });
 
 test('buildPlatformServiceContext: works on win32', () => {
   const ctx = buildPlatformServiceContext('win32', 'C:\\bin\\proxai.exe');
   expect(ctx).not.toBe(null);
-  expect(ctx!.platform).toBe('win32');
+  expect(requireDefined(ctx).platform).toBe('win32');
 });
 
 test('buildServiceUnitRecreate: omits windowsUserId on non-win32', () => {

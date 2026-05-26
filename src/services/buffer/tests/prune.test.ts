@@ -16,7 +16,7 @@ import {
   recordQuarantine,
 } from 'services/buffer';
 import { newBatch } from 'services/buffer/tests/fixtures.ts';
-import { generateUuidV7 } from 'core/utils';
+import { generateUuidV7, requireDefined } from 'core/utils';
 
 const DAY_MS = 86_400_000;
 
@@ -207,7 +207,7 @@ test('prunes quarantined records older than failed retention window', () => {
 test('runs in a single transaction (delivered batches with markBatchDelivered + then prune)', () => {
   const a = newBatch();
   insertBatch(db, a);
-  markBatchDelivered(db, getBatch(db, a.captureId)!, { idempotentOnServer: false });
+  markBatchDelivered(db, requireDefined(getBatch(db, a.captureId)), { idempotentOnServer: false });
 
   const result = pruneBuffer({
     db,

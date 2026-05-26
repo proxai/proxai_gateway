@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { expect, test } from 'bun:test';
 
 import { trimGeminiCliRecord } from 'sources/gemini-cli';
@@ -31,18 +32,18 @@ test('trimGeminiCliRecord: drops tool result/resultDisplay and trims heavy args'
   expect(trimmed.tokens).toEqual({ total: 10 });
 
   const toolCalls = trimmed.toolCalls as Array<Record<string, unknown>>;
-  expect(toolCalls[0]!.result).toBeUndefined();
-  expect(toolCalls[0]!.resultDisplay).toBeUndefined();
-  expect(toolCalls[0]!.renderOutputAsMarkdown).toBeUndefined();
-  expect(toolCalls[0]!.name).toBe('run_shell_command');
+  expect(requireDefined(toolCalls[0]).result).toBeUndefined();
+  expect(requireDefined(toolCalls[0]).resultDisplay).toBeUndefined();
+  expect(requireDefined(toolCalls[0]).renderOutputAsMarkdown).toBeUndefined();
+  expect(requireDefined(toolCalls[0]).name).toBe('run_shell_command');
 
-  const args = toolCalls[0]!.args as Record<string, unknown>;
+  const args = requireDefined(toolCalls[0]).args as Record<string, unknown>;
   expect(args.command).toBe('ls');
   expect(args.new_string).toBe('<trimmed>');
 
   const thoughts = trimmed.thoughts as Array<Record<string, unknown>>;
-  expect(thoughts[0]!.subject).toBe('plan');
-  expect(thoughts[0]!.description).toBeUndefined();
+  expect(requireDefined(thoughts[0]).subject).toBe('plan');
+  expect(requireDefined(thoughts[0]).description).toBeUndefined();
 });
 
 test('trimGeminiCliRecord: leaves non-gemini records unchanged', () => {

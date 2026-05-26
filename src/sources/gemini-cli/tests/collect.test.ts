@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { rmRecursive, statFile } from 'core/io/fs';
-import { sha256Hex, zstdDecompressSync } from 'core/utils';
+import { sha256Hex, zstdDecompressSync, requireDefined } from 'core/utils';
 import {
   countByStatus,
   deleteBatch,
@@ -76,7 +76,7 @@ test('first poll: header on line 1, three events on lines 2-4 produce one batch 
   expect(result.errors).toEqual([]);
   expect(result.capturedBatches).toBe(1);
   expect(countByStatus(buffer).pending).toBe(1);
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   const decoded = DECODER.decode(zstdDecompressSync(batch.body));
   const lines = decoded.split('\n').filter((l) => l.length > 0);
   expect(lines).toHaveLength(2);
@@ -177,7 +177,7 @@ test('subsequent poll: appended event captured without re-reading the header', a
     deleteBatch(buffer, b.captureId);
   }
   expect(batches).toHaveLength(2);
-  const second = batches[1]!;
+  const second = requireDefined(batches[1]);
   const decoded = DECODER.decode(zstdDecompressSync(second.body));
   const lines = decoded.split('\n').filter((l) => l.length > 0);
   expect(lines).toHaveLength(1);
@@ -189,7 +189,7 @@ test('subsequent poll: agent_schema_version reflects detected version on each po
   const initial = `${HEADER_SUBAGENT}\n${EVENT_1}\n`;
   const file = await makeFile(initial);
   await collectGeminiCliFile(file, ctx(buffer, '0.41.2'));
-  const firstBatch = nextPendingBatch(buffer)!;
+  const firstBatch = requireDefined(nextPendingBatch(buffer));
   deleteBatch(buffer, firstBatch.captureId);
 
   const appended = `${initial}${EVENT_2}\n`;
@@ -200,7 +200,7 @@ test('subsequent poll: agent_schema_version reflects detected version on each po
     sizeBytes: stat.exists ? stat.size : appended.length,
   };
   await collectGeminiCliFile(file2, ctx(buffer, '0.42.0'));
-  const secondBatch = nextPendingBatch(buffer)!;
+  const secondBatch = requireDefined(nextPendingBatch(buffer));
   expect(secondBatch.agentSchemaVersion).toBe('gemini-cli/0.42.0');
 });
 
@@ -213,7 +213,7 @@ test('uses default detector when context.detectVersion is omitted', async () => 
   });
   expect(result.errors).toEqual([]);
   expect(result.capturedBatches).toBe(1);
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.agentSchemaVersion).toMatch(/^gemini-cli\//);
 });
 
@@ -233,7 +233,7 @@ test('redacts secrets from event content before storing', async () => {
   const evt = `{"id":"e1","timestamp":"2026-01-01T00:00:00Z","type":"user","content":[{"text":"export OPENAI_KEY=sk-AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQrSt"}]}`;
   const file = await makeFile(`${HEADER_MAIN}\n${evt}\n`);
   await collectGeminiCliFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   const decompressed = DECODER.decode(zstdDecompressSync(batch.body));
   expect(decompressed).toContain('[REDACTED:openai-api-key]');
   expect(decompressed).not.toContain('sk-AbCdEfGhIj');
@@ -255,7 +255,7 @@ test('records errors and does not advance cursor when the file is unreadable', a
 test('persists the wire-DTO fields needed by the uploader', async () => {
   const file = await makeFile(`${HEADER_MAIN}\n${EVENT_1}\n`);
   await collectGeminiCliFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.sourceApp).toBe('gemini-cli');
   expect(batch.sourceKind).toBe('jsonl_append');
   expect(batch.bodyFormat).toBe('jsonl');
@@ -313,14 +313,14 @@ test('surfaces OversizedDecompressedSliceError when single line exceeds BODY_MAX
 
   const result = await collectGeminiCliFile(file, ctx(buffer));
   expect(result.errors.length).toBeGreaterThanOrEqual(1);
-  expect(result.errors[0]!.reason).toMatch(/decompressed slice/);
+  expect(requireDefined(result.errors[0]).reason).toMatch(/decompressed slice/);
 }, 30_000);
 
 test('subsequent poll where appended bytes lack a newline is a no-op (partial trailing line)', async () => {
   const initial = `${HEADER_MAIN}\n${EVENT_1}\n`;
   const file = await makeFile(initial);
   await collectGeminiCliFile(file, ctx(buffer));
-  const firstBatch = nextPendingBatch(buffer)!;
+  const firstBatch = requireDefined(nextPendingBatch(buffer));
   deleteBatch(buffer, firstBatch.captureId);
 
   const appended = `${initial}{"id":"e2","timestamp":"2026-01-01T0`;

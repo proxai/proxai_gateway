@@ -619,7 +619,7 @@ test('capture-cycle handles worker onerror event', async () => {
       postMessage(_message: WorkerInput): void {
         setTimeout(() => {
           if (this.onerror) {
-            this.onerror({ message: 'worker syntax error' } as ErrorEvent);
+            this.onerror(new ErrorEvent('error', { message: 'worker syntax error' }));
           }
         }, 0);
       }

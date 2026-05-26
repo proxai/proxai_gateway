@@ -482,11 +482,12 @@ async function pollSourceInWorker(
           optionsObj.baseDir = source.baseDir;
         }
 
-        worker.postMessage({
+        const workerInput: WorkerInput = {
           task: 'capture',
           sourceName: source.name,
           options: optionsObj,
-        } as WorkerInput);
+        };
+        worker.postMessage(workerInput);
       } catch (e) {
         resolve({
           filesProcessed: 0,

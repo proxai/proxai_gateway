@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { mkdir, mkdtemp, utimes, writeFile } from 'node:fs/promises';
@@ -44,7 +45,7 @@ test('skips files at the projects-root level (only one-level-nested)', async () 
 
   const found = await discoverClaudeCodeFiles(dir);
   expect(found).toHaveLength(1);
-  expect(found[0]!.sourcePath).toContain('project-a');
+  expect(requireDefined(found[0]).sourcePath).toContain('project-a');
 });
 
 test('skips non-jsonl files', async () => {
@@ -62,9 +63,9 @@ test('returns size, inode, and mtime for each file', async () => {
 
   const found = await discoverClaudeCodeFiles(dir);
   expect(found).toHaveLength(1);
-  expect(found[0]!.sizeBytes).toBe(8);
-  expect(found[0]!.inode).toBeGreaterThan(0);
-  expect(found[0]!.lastModifiedMs).toBeGreaterThan(0);
+  expect(requireDefined(found[0]).sizeBytes).toBe(8);
+  expect(requireDefined(found[0]).inode).toBeGreaterThan(0);
+  expect(requireDefined(found[0]).lastModifiedMs).toBeGreaterThan(0);
 });
 
 test('returns sha256 source_path_hash matching the absolute path', async () => {
@@ -72,7 +73,7 @@ test('returns sha256 source_path_hash matching the absolute path', async () => {
   await writeFile(join(dir, 'project-a', 'session.jsonl'), '{"a":1}\n');
 
   const found = await discoverClaudeCodeFiles(dir);
-  expect(found[0]!.sourcePathHash).toMatch(/^[a-f0-9]{64}$/);
+  expect(requireDefined(found[0]).sourcePathHash).toMatch(/^[a-f0-9]{64}$/);
 });
 
 test('skips files older than minimumMtime, keeps newer ones', async () => {
@@ -90,7 +91,7 @@ test('skips files older than minimumMtime, keeps newer ones', async () => {
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const found = await discoverClaudeCodeFiles(dir, { minimumMtime: cutoff });
   expect(found).toHaveLength(1);
-  expect(found[0]!.sourcePath).toBe(newPath);
+  expect(requireDefined(found[0]).sourcePath).toBe(newPath);
 });
 
 test('null minimumMtime means no cap (all files included)', async () => {

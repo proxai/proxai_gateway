@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
@@ -136,7 +137,7 @@ test('list: every rule shows id, description, pattern, replacement', () => {
   const lines: string[] = [];
   runRedactionList({ output: captureOutput(), emit: (l) => lines.push(l) }, {});
   const joined = stripAnsi(lines.join('\n'));
-  const sampleRule = ALL_RULES[0]!;
+  const sampleRule = requireDefined(ALL_RULES[0]);
   expect(joined).toContain(sampleRule.id);
   expect(joined).toContain(sampleRule.description);
   expect(joined).toContain(sampleRule.pattern.toString());
@@ -153,12 +154,12 @@ test('list: --categories shows only category summaries', () => {
     expect(joined).toContain(cat.description);
   }
 
-  const firstPattern = ALL_RULES[0]!.pattern.toString();
+  const firstPattern = requireDefined(ALL_RULES[0]).pattern.toString();
   expect(joined.includes(firstPattern)).toBe(false);
 });
 
 test('list: --category filters to one category', () => {
-  const target = RULE_CATEGORIES[0]!;
+  const target = requireDefined(RULE_CATEGORIES[0]);
   const lines: string[] = [];
   const result = runRedactionList(
     { output: captureOutput(), emit: (l) => lines.push(l) },
@@ -210,7 +211,7 @@ test('list: --json --categories emits category summaries only (no rule arrays)',
 });
 
 test('list: --json --category filters to one category', () => {
-  const target = RULE_CATEGORIES[0]!;
+  const target = requireDefined(RULE_CATEGORIES[0]);
   const lines: string[] = [];
   runRedactionList(
     { output: captureOutput(), emit: (l) => lines.push(l) },

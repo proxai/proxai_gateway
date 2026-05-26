@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 
-import { AuthError, NetworkError, RetriableError, ValidationError } from 'core/utils';
+import {
+  AuthError,
+  NetworkError,
+  RetriableError,
+  ValidationError,
+  requireDefined,
+} from 'core/utils';
 import { HttpClient } from 'services/http';
 import type { HttpEndpoints } from 'services/http';
 
@@ -136,9 +142,9 @@ describe('fetchWatermarks', () => {
       'h_test',
     );
     await client.fetchWatermarks();
-    expect(log[0]!.url).toBe(`${endpoints.watermarks}?host_id=h_test`);
-    expect(log[0]!.init.method).toBe('GET');
-    const headers = log[0]!.init.headers as Record<string, string>;
+    expect(requireDefined(log[0]).url).toBe(`${endpoints.watermarks}?host_id=h_test`);
+    expect(requireDefined(log[0]).init.method).toBe('GET');
+    const headers = requireDefined(log[0]).init.headers as Record<string, string>;
     expect(headers['X-API-Key']).toBe('pxg-20260505-secret');
   });
 
@@ -149,7 +155,7 @@ describe('fetchWatermarks', () => {
       'h+special id',
     );
     await client.fetchWatermarks();
-    expect(log[0]!.url).toContain('host_id=h%2Bspecial%20id');
+    expect(requireDefined(log[0]).url).toContain('host_id=h%2Bspecial%20id');
   });
 
   test('throws AuthError on 401', async () => {

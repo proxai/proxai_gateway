@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 
-import { UserAbortedError } from 'core/utils';
+import { UserAbortedError, requireDefined } from 'core/utils';
 import { inquirerPrompts, scriptedPrompts } from 'cli/prompts.ts';
 
 test('scriptedPrompts.askApiKey returns the configured value (back-compat shim)', async () => {
@@ -68,8 +68,8 @@ test('inquirerPrompts.confirmPhrase: typing the exact phrase resolves to true', 
   const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
   expect(await fresh().confirmPhrase('Type uninstall:', 'uninstall')).toBe(true);
   expect(inputCalls).toHaveLength(1);
-  expect(inputCalls[0]!.message).toBe('Type uninstall:');
-  const validate = inputCalls[0]!.validate!;
+  expect(requireDefined(inputCalls[0]).message).toBe('Type uninstall:');
+  const validate = requireDefined(requireDefined(inputCalls[0]).validate);
   expect(validate('uninstall')).toBe(true);
   expect(validate('   uninstall   ')).toBe(true);
   expect(validate('')).toBe(true);
@@ -100,8 +100,8 @@ test('inquirerPrompts.confirmUpgrade wires up to @inquirer/prompts confirm with 
   const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
   expect(await fresh().confirmUpgrade('upgrade?')).toBe(true);
   expect(calls).toHaveLength(1);
-  expect(calls[0]!.message).toBe('upgrade?');
-  expect(calls[0]!.default).toBe(true);
+  expect(requireDefined(calls[0]).message).toBe('upgrade?');
+  expect(requireDefined(calls[0]).default).toBe(true);
   mock.restore();
 });
 
@@ -210,15 +210,15 @@ test('inquirerPrompts.askApiKey wires up to @inquirer/prompts and accepts a cust
   const apiKey = await p.askApiKey();
   expect(apiKey).toBe('mocked-api-key');
   expect(inputCalls).toHaveLength(1);
-  expect(inputCalls[0]!.message).toBe('Enter your ProxAI ingestion key:');
-  const validate = inputCalls[0]!.validate!;
+  expect(requireDefined(inputCalls[0]).message).toBe('Enter your ProxAI ingestion key:');
+  const validate = requireDefined(requireDefined(inputCalls[0]).validate);
   expect(validate('valid-key')).toBe(true);
   expect(validate('   ')).toBe('ingestion key is required');
 
   const customMessage = 'Type the same key again to confirm:';
   await p.askApiKey(customMessage);
   expect(inputCalls).toHaveLength(2);
-  expect(inputCalls[1]!.message).toBe(customMessage);
+  expect(requireDefined(inputCalls[1]).message).toBe(customMessage);
 
   mock.restore();
 });

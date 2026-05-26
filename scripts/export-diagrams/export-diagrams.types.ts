@@ -1,27 +1,29 @@
-export interface MachineConfigLike {
-  readonly id?: string;
-  readonly initial?: string;
-  readonly type?: string;
-  readonly states?: Record<string, StateConfigLike>;
-  readonly on?: Record<string, TransitionConfigLike | TransitionConfigLike[]>;
+export interface TransitionConfigLike {
+  readonly target?: string | undefined;
+  readonly guard?: string | { readonly type?: string | undefined } | undefined;
+}
+
+export interface InvokeConfigLike {
+  readonly src?: string | undefined;
+  readonly onDone?: TransitionConfigLike | TransitionConfigLike[] | undefined;
+  readonly onError?: TransitionConfigLike | undefined;
 }
 
 export interface StateConfigLike {
-  readonly initial?: string;
-  readonly type?: string;
-  readonly states?: Record<string, StateConfigLike>;
-  readonly on?: Record<string, TransitionConfigLike | TransitionConfigLike[]>;
-  readonly invoke?: {
-    readonly src?: string;
-    readonly onDone?: TransitionConfigLike | TransitionConfigLike[];
-    readonly onError?: TransitionConfigLike;
-  };
-  readonly always?: TransitionConfigLike | TransitionConfigLike[];
+  readonly initial?: string | undefined;
+  readonly type?: string | undefined;
+  readonly states?: Record<string, StateConfigLike> | undefined;
+  readonly on?: Record<string, TransitionConfigLike | TransitionConfigLike[]> | undefined;
+  readonly invoke?: InvokeConfigLike | undefined;
+  readonly always?: TransitionConfigLike | TransitionConfigLike[] | undefined;
 }
 
-export interface TransitionConfigLike {
-  readonly target?: string;
-  readonly guard?: string | { readonly type?: string };
+export interface MachineConfigLike {
+  readonly id?: string | undefined;
+  readonly initial?: string | undefined;
+  readonly type?: string | undefined;
+  readonly states?: Record<string, StateConfigLike> | undefined;
+  readonly on?: Record<string, TransitionConfigLike | TransitionConfigLike[]> | undefined;
 }
 
 export interface DiagramMachineSpec {

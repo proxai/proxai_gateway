@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
@@ -33,7 +34,7 @@ test('setDaemonState persists and getDaemonState round-trips', () => {
       'claude-code': { filesProcessed: 1, capturedBatches: 2, capturedBytes: 100, errorsCount: 0 },
     },
   });
-  const round = getDaemonState(db)!;
+  const round = requireDefined(getDaemonState(db));
   expect(round.lastCycleStartedAt).toBe('2026-05-08T02:40:00Z');
   expect(round.lastDrainAttempted).toBe(5);
   expect(round.lastUploadError).toBe('503');
@@ -68,7 +69,7 @@ test('setDaemonState upserts (single row only)', () => {
     lastConsecutiveRetriableBreak: true,
     lastSourceCaptures: {},
   });
-  const round = getDaemonState(db)!;
+  const round = requireDefined(getDaemonState(db));
   expect(round.lastCycleStartedAt).toBe('c');
   expect(round.lastUploadError).toBe('oops');
   expect(round.lastConsecutiveRetriableBreak).toBe(true);
@@ -89,7 +90,7 @@ test('getDaemonState handles malformed JSON in source captures column gracefully
     lastSourceCaptures: {},
   });
   db.run("UPDATE daemon_state SET last_source_captures = '{not valid json' WHERE id = 1");
-  const round = getDaemonState(db)!;
+  const round = requireDefined(getDaemonState(db));
   expect(round.lastSourceCaptures).toEqual({});
 });
 
@@ -108,7 +109,7 @@ test('getDaemonState handles non-object JSON in source captures column gracefull
     lastSourceCaptures: {},
   });
   db.run('UPDATE daemon_state SET last_source_captures = \'"a string"\' WHERE id = 1');
-  const round = getDaemonState(db)!;
+  const round = requireDefined(getDaemonState(db));
   expect(round.lastSourceCaptures).toEqual({});
 });
 
@@ -127,7 +128,7 @@ test('getDaemonState handles null source captures column', () => {
     lastSourceCaptures: {},
   });
   db.run('UPDATE daemon_state SET last_source_captures = NULL WHERE id = 1');
-  const round = getDaemonState(db)!;
+  const round = requireDefined(getDaemonState(db));
   expect(round.lastSourceCaptures).toEqual({});
 });
 
@@ -145,6 +146,6 @@ test('getDaemonState round-trips null consecutiveRetriableBreak as null', () => 
     lastConsecutiveRetriableBreak: null,
     lastSourceCaptures: {},
   });
-  const round = getDaemonState(db)!;
+  const round = requireDefined(getDaemonState(db));
   expect(round.lastConsecutiveRetriableBreak).toBeNull();
 });

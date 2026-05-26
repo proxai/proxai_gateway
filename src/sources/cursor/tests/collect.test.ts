@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { rmRecursive, statFile } from 'core/io/fs';
-import { nextGenerationSuffix, sha256Hex, zstdDecompressSync } from 'core/utils';
+import { nextGenerationSuffix, sha256Hex, zstdDecompressSync, requireDefined } from 'core/utils';
 import {
   countByStatus,
   countQuarantined,
@@ -108,7 +108,7 @@ test('body is wrapped as { rows: [...] } per nest kv_pairs_json contract', async
     { key: 'bubbleId:c1:b1', value: '{"_v":3,"text":"hi"}' },
   ]);
   await collectCursorFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   const decoded = DECODER.decode(zstdDecompressSync(batch.body));
   const parsed = JSON.parse(decoded) as { rows: { rowid: number; key: string; value: string }[] };
   expect(parsed).not.toBeInstanceOf(Array);
@@ -127,7 +127,7 @@ test('skip-listed keys are filtered out of the body', async () => {
     { key: 'bubbleId:c1:b1', value: '{"_v":3,"type":1,"text":"hello"}' },
   ]);
   await collectCursorFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   const text = DECODER.decode(zstdDecompressSync(batch.body));
   expect(text).toContain('composerData:c1');
   expect(text).toContain('bubbleId:c1:b1');
@@ -160,7 +160,7 @@ test('persists the rowid range watermark with end = last_rowid + 1', async () =>
     { key: 'bubbleId:c1:b2', value: '{"_v":3,"text":"there"}' },
   ]);
   await collectCursorFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.watermarkKind).toBe('rowid_range');
   expect(batch.watermarkStart).toBe(1);
   expect(batch.watermarkEnd).toBe(4);
@@ -236,7 +236,7 @@ test('extracts agent_schema_version from composer and bubble _v fields', async (
     { key: 'bubbleId:c1:b1', value: '{"_v":3,"type":1,"text":"hi"}' },
   ]);
   await collectCursorFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.agentSchemaVersion).toBe('13:3');
 });
 
@@ -246,7 +246,7 @@ test('falls back to "unknown" when neither prefix yields parseable rows', async 
     { key: 'bubbleId:c1:b1', value: 'also-not-json' },
   ]);
   await collectCursorFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.agentSchemaVersion).toBe('unknown');
 });
 
@@ -260,7 +260,7 @@ test('redacts secrets embedded in row values before storing', async () => {
     },
   ]);
   await collectCursorFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   const decompressed = DECODER.decode(zstdDecompressSync(batch.body));
   expect(decompressed).toContain('[REDACTED:openai-api-key]');
   expect(decompressed).not.toContain('sk-AbCdEfGhIj');
@@ -336,7 +336,7 @@ test('persists the wire-DTO fields needed by the uploader', async () => {
     { key: 'bubbleId:c1:b1', value: '{"_v":3,"text":"hi"}' },
   ]);
   await collectCursorFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.sourceApp).toBe('cursor');
   expect(batch.sourceKind).toBe('sqlite_kv_snapshot');
   expect(batch.bodyFormat).toBe('kv_pairs_json');
@@ -361,8 +361,8 @@ test('a fresh poll persists last_seen_size_bytes and last_seen_page_count on the
     watermarkTable: null,
   });
   expect(cursor).not.toBeNull();
-  expect(cursor!.lastSeenSizeBytes).toBeGreaterThan(0);
-  expect(cursor!.lastSeenPageCount).toBeGreaterThan(0);
+  expect(requireDefined(cursor).lastSeenSizeBytes).toBeGreaterThan(0);
+  expect(requireDefined(cursor).lastSeenPageCount).toBeGreaterThan(0);
 });
 
 test('rowid regression triggers re-keying under #gen=1 with a fresh watermark', async () => {
@@ -384,7 +384,7 @@ test('rowid regression triggers re-keying under #gen=1 with a fresh watermark', 
   const result = await collectCursorFile(file, ctx(buffer));
   expect(result.capturedBatches).toBe(1);
 
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
 
   const expectedNewPath = nextGenerationSuffix(file.sourcePath);
   expect(batch.sourcePath).toBe(expectedNewPath);
@@ -429,7 +429,7 @@ test('size_decreased signal also triggers re-keying via #gen suffix', async () =
 
   const result = await collectCursorFile(file, ctx(buffer));
   expect(result.capturedBatches).toBe(1);
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.sourcePath).toBe(nextGenerationSuffix(file.sourcePath));
   expect(batch.watermarkStart).toBe(1);
 });
@@ -497,7 +497,7 @@ test('null last_seen columns on existing cursor never trigger size/page_count si
   });
 
   await collectCursorFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
 
   expect(batch.sourcePath).toBe(file.sourcePath);
   expect(batch.sourcePathHash).toBe(file.sourcePathHash);
@@ -565,8 +565,8 @@ test('quarantines oversized cursor row, advances cursor past it, and continues',
     watermarkTable: null,
   });
   expect(cursor).not.toBeNull();
-  expect(cursor!.watermarkEnd).toBeGreaterThan(1);
-  expect(cursor!.consecutiveErrors).toBeGreaterThanOrEqual(1);
+  expect(requireDefined(cursor).watermarkEnd).toBeGreaterThan(1);
+  expect(requireDefined(cursor).consecutiveErrors).toBeGreaterThanOrEqual(1);
   expect(result.errors.some((e) => /quarantined/.test(e.reason))).toBe(true);
 }, 60_000);
 

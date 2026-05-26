@@ -19,6 +19,12 @@
     "no-unmodified-loop-condition": "off",
     "no-underscore-dangle": "off",
     "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/consistent-type-assertions": [
+      "error",
+      { "assertionStyle": "as", "objectLiteralTypeAssertions": "never" }
+    ],
+    "typescript/no-unnecessary-type-assertion": "error",
     "unicorn/prefer-add-event-listener": "off",
     "unicorn/require-post-message-target-origin": "off",
     "no-restricted-imports": [
@@ -72,6 +78,12 @@
       "files": ["scripts/export-diagrams/**/*.ts"],
       "rules": {
         "no-await-in-loop": "off"
+      }
+    },
+    {
+      "files": ["src/services/state-machines/**/*.machine.ts"],
+      "rules": {
+        "typescript/consistent-type-assertions": "off"
       }
     },
     {

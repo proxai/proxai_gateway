@@ -63,12 +63,15 @@ function findLargestPrefixEndingAtNewline(
     if (bytes[i] === NEWLINE_BYTE) splits.push(i + 1);
   }
 
-  let best = splits[0]!;
+  const first = splits[0];
+  if (first === undefined) return end;
+  let best = first;
   let lo = 0;
   let hi = splits.length - 1;
   while (lo <= hi) {
     const mid = (lo + hi) >>> 1;
-    const splitAt = splits[mid]!;
+    const splitAt = splits[mid];
+    if (splitAt === undefined) break;
     const candidate = bytes.subarray(start, splitAt);
     if (
       measureCompressed(candidate) <= targetCompressedBytes &&

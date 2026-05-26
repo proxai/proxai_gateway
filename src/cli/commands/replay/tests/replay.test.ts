@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import { expect, test } from 'bun:test';
 import { buildReport, parseLog, renderReport, runReplay } from 'cli/commands/replay';
 
@@ -26,7 +27,7 @@ test('buildReport groups transitions by machine and computes final values', () =
   const report = buildReport(events);
   expect(report.totalEvents).toBe(3);
   expect(report.machineCount).toBe(2);
-  const batch = report.machines.find((m) => m.machine === 'batch-lifecycle')!;
+  const batch = requireDefined(report.machines.find((m) => m.machine === 'batch-lifecycle'));
   expect(batch.transitionCount).toBe(2);
   expect(batch.finalValue).toBe('delivered');
   expect(batch.finalStatus).toBe('done');

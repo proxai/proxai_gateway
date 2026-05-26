@@ -1,3 +1,4 @@
+import { requireDefined } from 'core/utils';
 import type { Database } from 'bun:sqlite';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
@@ -75,7 +76,7 @@ test('discoverCodexRolloutFiles ignores files at the wrong depth', async () => {
 
   const found = await discoverCodexRolloutFiles(dir);
   expect(found).toHaveLength(1);
-  expect(found[0]!.sourcePath).toContain('rollout-deep.jsonl');
+  expect(requireDefined(found[0]).sourcePath).toContain('rollout-deep.jsonl');
 });
 
 test('discoverCodexRolloutFiles returns size, inode, mtime, and source_path_hash', async () => {
@@ -83,10 +84,10 @@ test('discoverCodexRolloutFiles returns size, inode, mtime, and source_path_hash
   await writeFile(join(dir, 'sessions', '2026', '04', '29', 'rollout-x.jsonl'), '{"a":1}\n');
 
   const found = await discoverCodexRolloutFiles(dir);
-  expect(found[0]!.sizeBytes).toBe(8);
-  expect(found[0]!.inode).toBeGreaterThan(0);
-  expect(found[0]!.lastModifiedMs).toBeGreaterThan(0);
-  expect(found[0]!.sourcePathHash).toMatch(/^[a-f0-9]{64}$/);
+  expect(requireDefined(found[0]).sizeBytes).toBe(8);
+  expect(requireDefined(found[0]).inode).toBeGreaterThan(0);
+  expect(requireDefined(found[0]).lastModifiedMs).toBeGreaterThan(0);
+  expect(requireDefined(found[0]).sourcePathHash).toMatch(/^[a-f0-9]{64}$/);
 });
 
 test('discoverCodexStateSqlite returns null when the codex home does not exist', async () => {
@@ -106,7 +107,7 @@ test('discoverCodexStateSqlite picks the highest-numbered state file', async () 
 
   const found = await discoverCodexStateSqlite(dir);
   expect(found).not.toBeNull();
-  expect(found!.sourcePath).toBe(join(dir, 'state_5.sqlite'));
+  expect(requireDefined(found).sourcePath).toBe(join(dir, 'state_5.sqlite'));
 });
 
 test('discoverCodexStateSqlite ignores files that do not match state_<N>.sqlite', async () => {
@@ -117,7 +118,7 @@ test('discoverCodexStateSqlite ignores files that do not match state_<N>.sqlite'
 
   const found = await discoverCodexStateSqlite(dir);
   expect(found).not.toBeNull();
-  expect(found!.sourcePath).toBe(join(dir, 'state_5.sqlite'));
+  expect(requireDefined(found).sourcePath).toBe(join(dir, 'state_5.sqlite'));
 });
 
 test('discoverCodexRolloutFiles skips rollouts older than minimumMtime', async () => {
@@ -134,7 +135,7 @@ test('discoverCodexRolloutFiles skips rollouts older than minimumMtime', async (
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const found = await discoverCodexRolloutFiles(dir, { minimumMtime: cutoff });
   expect(found).toHaveLength(1);
-  expect(found[0]!.sourcePath).toBe(newPath);
+  expect(requireDefined(found[0]).sourcePath).toBe(newPath);
 });
 
 test('discoverCodexRolloutFiles with null minimumMtime returns all files', async () => {

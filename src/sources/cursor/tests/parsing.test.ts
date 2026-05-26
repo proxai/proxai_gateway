@@ -5,7 +5,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { zstdDecompressSync } from 'core/utils';
+import { zstdDecompressSync, requireDefined } from 'core/utils';
 import { countByStatus, getCursor, nextPendingBatch, openInMemoryBufferDb } from 'services/buffer';
 import { BODY_TARGET_DECOMPRESSED_BYTES } from 'services/contract';
 import { collectCursorFile } from 'sources/cursor';
@@ -53,7 +53,7 @@ test('typical session: composer + bubble rows derive agent_schema_version from f
   const result = await collectCursorFile(file, ctx(buffer));
   expect(result.errors).toEqual([]);
   expect(result.capturedBatches).toBe(1);
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.agentSchemaVersion).toBe(TYPICAL_SESSION_FIXTURE.expectedAgentSchemaVersion);
   const text = bodyText(batch);
   expect(text).toContain('composerData:00000000-0000-0000-0000-000000000001');
@@ -64,7 +64,7 @@ test('typical session: composer + bubble rows derive agent_schema_version from f
 test('mixed _v values: derive from FIRST row of each prefix, not aggregate', async () => {
   const file = await writeFixtureDb(dir, MIXED_VERSIONS_FIXTURE);
   await collectCursorFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.agentSchemaVersion).toBe(MIXED_VERSIONS_FIXTURE.expectedAgentSchemaVersion);
   expect(batch.agentSchemaVersion).toBe('10:3');
   const text = bodyText(batch);
@@ -76,7 +76,7 @@ test('mixed _v values: derive from FIRST row of each prefix, not aggregate', asy
 test('composer-only fixture: bubble half falls back to "unknown"', async () => {
   const file = await writeFixtureDb(dir, COMPOSER_ONLY_FIXTURE);
   await collectCursorFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.agentSchemaVersion).toBe('13:unknown');
 });
 
@@ -92,7 +92,7 @@ test('null value rows and missing _v fields fall back per-prefix without errorin
   const file = await writeFixtureDb(dir, NULL_AND_MISSING_V_FIXTURE);
   const result = await collectCursorFile(file, ctx(buffer));
   expect(result.errors).toEqual([]);
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.agentSchemaVersion).toBe(NULL_AND_MISSING_V_FIXTURE.expectedAgentSchemaVersion);
   expect(batch.agentSchemaVersion).toBe('14:3');
 });
@@ -100,7 +100,7 @@ test('null value rows and missing _v fields fall back per-prefix without errorin
 test('Stage 1 redaction is applied to fixture row content before compression', async () => {
   const file = await writeFixtureDb(dir, REDACTION_FIXTURE);
   await collectCursorFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   const text = bodyText(batch);
   expect(text).toContain('[REDACTED:openai-api-key]');
   expect(text).not.toContain('sk-AbCdEfGhIj');
@@ -109,7 +109,7 @@ test('Stage 1 redaction is applied to fixture row content before compression', a
 test('non-allowlisted key prefixes are filtered out of the body', async () => {
   const file = await writeFixtureDb(dir, MIXED_KEY_PREFIXES_FIXTURE);
   await collectCursorFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   const text = bodyText(batch);
   expect(text).toContain('composerData:00000000-0000-0000-0000-000000000111');
   expect(text).toContain('bubbleId:00000000-0000-0000-0000-000000000111:b-1');
@@ -122,7 +122,7 @@ test('non-allowlisted key prefixes are filtered out of the body', async () => {
 test('rowid_range watermark: start = first matching rowid, end = last matching rowid + 1', async () => {
   const file = await writeFixtureDb(dir, MIXED_KEY_PREFIXES_FIXTURE);
   await collectCursorFile(file, ctx(buffer));
-  const batch = nextPendingBatch(buffer)!;
+  const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.watermarkKind).toBe('rowid_range');
   expect(batch.watermarkStart).toBe(1);
   expect(batch.watermarkEnd).toBe(7);

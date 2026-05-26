@@ -3,7 +3,9 @@ const GEN_SUFFIX_RE = /#gen=(\d+)$/;
 export function currentGenerationNumber(path: string): number {
   const match = path.match(GEN_SUFFIX_RE);
   if (match === null) return 0;
-  const parsed = Number.parseInt(match[1]!, 10);
+  const captured = match[1];
+  if (captured === undefined) return 0;
+  const parsed = Number.parseInt(captured, 10);
   if (!Number.isFinite(parsed) || parsed < 0) return 0;
   return parsed;
 }

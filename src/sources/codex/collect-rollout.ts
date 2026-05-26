@@ -3,6 +3,7 @@ import {
   OversizedDecompressedSliceError,
   generateUuidV7,
   nowIsoUtc,
+  requireDefined,
   splitJsonlAtBoundary,
   zstdCompressSync,
 } from 'core/utils';
@@ -202,7 +203,7 @@ export async function collectCodexRollout(
 
     let keptLineIndex = 0;
     for (let i = 0; i < sourceSlices.length; i++) {
-      const slice = sourceSlices[i]!;
+      const slice = requireDefined(sourceSlices[i], 'source slice');
 
       let sliceNewlines = 0;
       for (let j = 0; j < slice.byteLength; j++) {
@@ -211,8 +212,14 @@ export async function collectCodexRollout(
         }
       }
 
-      const startOffset = keptLineIndex > 0 ? kept[keptLineIndex - 1]!.physicalEndOffset : 0;
-      let endOffset = kept[keptLineIndex + sliceNewlines - 1]!.physicalEndOffset;
+      const startOffset =
+        keptLineIndex > 0
+          ? requireDefined(kept[keptLineIndex - 1], 'kept prev').physicalEndOffset
+          : 0;
+      let endOffset = requireDefined(
+        kept[keptLineIndex + sliceNewlines - 1],
+        'kept end',
+      ).physicalEndOffset;
 
       if (i === sourceSlices.length - 1) {
         endOffset = range.endByte - watermarkStart;

@@ -1,3 +1,4 @@
+export * from 'core/utils/assert.ts';
 export * from 'core/utils/backoff.ts';
 export * from 'core/utils/compress.ts';
 export * from 'core/utils/errors.ts';
