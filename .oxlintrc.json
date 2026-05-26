@@ -55,6 +55,12 @@
       "rules": {
         "no-await-in-loop": "off"
       }
+    },
+    {
+      "files": ["scripts/arch-lint/**/*.ts", "scripts/export-diagrams/**/*.ts"],
+      "rules": {
+        "no-await-in-loop": "off"
+      }
     }
   ],
   "ignorePatterns": ["dist", "node_modules", "*.md"]
