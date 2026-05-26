@@ -17,3 +17,4 @@ export * from 'services/state-machines/batch-lifecycle/index.ts';
 export * from 'services/state-machines/pacer/index.ts';
 export * from 'services/state-machines/cursor-lifecycle/index.ts';
 export * from 'services/state-machines/auto-upgrade/index.ts';
+export * from 'services/state-machines/worker/index.ts';
