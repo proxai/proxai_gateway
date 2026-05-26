@@ -41,6 +41,16 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function waitUntil(check: () => boolean, timeoutMs = 5_000, stepMs = 25): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  const step = async (): Promise<void> => {
+    if (check() || Date.now() >= deadline) return;
+    await sleep(stepMs);
+    return step();
+  };
+  return step();
+}
+
 test('classifySentinel returns the right kind for known sentinel filenames', () => {
   expect(classifySentinel('AUTH_FAILED', paths)).toBe('auth-failed');
   expect(classifySentinel('PAUSED', paths)).toBe('paused');
@@ -73,7 +83,7 @@ test('writing a sentinel file triggers a present transition via fs.watch (deboun
   watcher = await startSentinelWatcher({ paths, target: registry, debounceMs: 20 });
   expect(registry.getSnapshot().matches({ pause: 'absent' })).toBe(true);
   await writeFile(paths.paused, 'maintenance');
-  await sleep(300);
+  await waitUntil(() => registry.getSnapshot().matches({ pause: 'present' }));
   expect(registry.getSnapshot().matches({ pause: 'present' })).toBe(true);
   expect(registry.getSnapshot().context.pausePayload?.reason).toBe('maintenance');
 });
@@ -83,7 +93,7 @@ test('removing a sentinel file triggers an absent transition', async () => {
   watcher = await startSentinelWatcher({ paths, target: registry, debounceMs: 20 });
   expect(registry.getSnapshot().matches({ pause: 'present' })).toBe(true);
   await unlink(paths.paused);
-  await sleep(300);
+  await waitUntil(() => registry.getSnapshot().matches({ pause: 'absent' }));
   expect(registry.getSnapshot().matches({ pause: 'absent' })).toBe(true);
 });
 
@@ -126,7 +136,7 @@ test('dispatch failure is logged via deps.logger.warn without crashing the watch
   });
   throwOnSend = true;
   await writeFile(paths.paused, 'reason');
-  await sleep(200);
+  await waitUntil(() => warnCalls.some((c) => c['event'] === 'sentinel_watcher.dispatch_failed'));
   await local.stop();
   expect(warnCalls.some((c) => c['event'] === 'sentinel_watcher.dispatch_failed')).toBe(true);
 });
@@ -155,7 +165,7 @@ test('fs.watch errors on a missing configDir are logged via deps.logger.warn', a
     target: registry,
     logger: fakeLogger as never,
   });
-  await sleep(200);
+  await waitUntil(() => warnCalls.some((c) => c['event'] === 'sentinel_watcher.fatal'));
   await local.stop();
   dir = await mkdtemp(join(tmpdir(), 'proxai-sentinel-watcher-restored-'));
   expect(warnCalls.some((c) => c['event'] === 'sentinel_watcher.fatal')).toBe(true);

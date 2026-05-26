@@ -100,7 +100,17 @@ test('writing a sentinel file after boot updates the registry via fs.watch', asy
   const handle = await startDaemonActors({ buffer, paths });
   expect(handle.registry.getSnapshot().matches({ pause: 'absent' })).toBe(true);
   await writeFile(paths.paused, 'manual');
-  await sleep(250);
+  await waitUntilTrue(() => handle.registry.getSnapshot().matches({ pause: 'present' }));
   expect(handle.registry.getSnapshot().matches({ pause: 'present' })).toBe(true);
   await handle.stop();
 });
+
+async function waitUntilTrue(check: () => boolean, timeoutMs = 5_000, stepMs = 25): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  const step = async (): Promise<void> => {
+    if (check() || Date.now() >= deadline) return;
+    await sleep(stepMs);
+    return step();
+  };
+  return step();
+}
