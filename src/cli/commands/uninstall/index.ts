@@ -1,8 +1,10 @@
 import { unlink } from 'node:fs/promises';
+import { createActor } from 'xstate';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
 import { rmRecursive } from 'core/io/fs';
+import { uninstallMachine } from 'services/state-machines/uninstall';
 
 import { buildConfirmationMessage } from 'cli/commands/uninstall/confirmation-message.ts';
 import { runBinaryRemoval } from 'cli/commands/uninstall/run-binary-removal.ts';
@@ -23,6 +25,8 @@ export async function runUninstall(
   options: UninstallCommandOptions = {},
 ): Promise<CommandResult> {
   const reset = options.reset === true;
+  const machine = createActor(uninstallMachine, { input: { resetMode: reset } });
+  machine.start();
 
   const cfgExists = await deps.configExists();
   const unitFileExists =
@@ -36,6 +40,7 @@ export async function runUninstall(
 
   if (!cfgExists && !unitFileExists && !registered) {
     deps.output.info('no installation found');
+    machine.stop();
     return { exitCode: EXIT_CODE.ok };
   }
 
@@ -45,9 +50,12 @@ export async function runUninstall(
     const confirmed = await deps.prompts.confirmPhrase(message, phrase);
     if (!confirmed) {
       deps.output.info('aborted — nothing changed');
+      machine.stop();
       return { exitCode: EXIT_CODE.alreadyInstalled };
     }
   }
+
+  machine.send({ type: 'BEGIN' });
 
   try {
     await deps.serviceManager.stop();
@@ -75,24 +83,32 @@ export async function runUninstall(
       }
     }
   }
+  machine.send({ type: 'SERVICE_STOPPED' });
 
+  let pathsSwept = 0;
   if (reset) {
     await rmRecursive(deps.configDir);
     await rmRecursive(deps.logDir);
+    pathsSwept += 2;
     deps.output.success('local state wiped');
   }
 
   if (deps.sweep !== undefined) {
     await runSweep(deps, deps.sweep);
+    pathsSwept += 1;
   }
+  machine.send({ type: 'PATHS_SWEPT', count: pathsSwept });
 
   await runBinaryRemoval(deps);
+  machine.send({ type: 'BUFFER_REMOVED' });
   await runPathCleanup(deps);
+  machine.send({ type: 'SENTINELS_REMOVED', count: 0 });
 
   if (reset) {
     deps.output.success('uninstalled and reset');
   } else {
     deps.output.success('uninstalled');
   }
+  machine.stop();
   return { exitCode: EXIT_CODE.ok };
 }

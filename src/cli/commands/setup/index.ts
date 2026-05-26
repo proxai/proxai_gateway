@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { createActor } from 'xstate';
 
 import { sentinelHandle } from 'core/io/fs';
 import { nowIsoUtc } from 'core/utils';
@@ -7,6 +8,7 @@ import type { CommandResult } from 'cli/cli.types.ts';
 import { loadConfigFromFile } from 'services/config';
 import type { InstallSource } from 'services/config';
 import { clearAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
+import { setupMachine } from 'services/state-machines/setup';
 
 import { buildGatewayConfig, writeConfigArtifacts } from 'cli/commands/setup/build-config.ts';
 import { autoStartDaemon, writeServiceUnitIfNeeded } from 'cli/commands/setup/install-and-start.ts';
@@ -14,21 +16,36 @@ import { acquireApiKey } from 'cli/commands/setup/key-flow.ts';
 import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup/setup.types.ts';
 import { verifyAndRegister } from 'cli/commands/setup/verify-and-register.ts';
 
+function maskKey(key: string): string {
+  if (key.length <= 8) return '***';
+  return `${key.slice(0, 4)}…${key.slice(-4)}`;
+}
+
 export type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup/setup.types.ts';
 
 export async function runSetup(
   deps: SetupCommandDeps,
   options: SetupCommandOptions = {},
 ): Promise<CommandResult> {
+  const machine = createActor(setupMachine);
+  machine.start();
+  machine.send({ type: 'CONSENT_ACCEPTED' });
+
   const isReplace = await deps.configExists();
 
   if (isReplace && options.apiKey === undefined && options.force !== true) {
+    machine.stop();
     return reportAlreadyConfigured(deps);
   }
 
   const keyResult = await acquireApiKey(deps, options, isReplace);
-  if (!keyResult.ok) return keyResult.result;
+  if (!keyResult.ok) {
+    machine.send({ type: 'ERROR', message: 'key acquisition failed' });
+    machine.stop();
+    return keyResult.result;
+  }
   const apiKey = keyResult.apiKey;
+  machine.send({ type: 'KEY_PROVIDED', maskedKey: maskKey(apiKey) });
 
   let installedAt: string;
   let installSource: InstallSource;
@@ -49,7 +66,12 @@ export async function runSetup(
     hostId: previousHostId,
     userId: previousUserId,
   });
-  if (!verifyResult.ok) return verifyResult.result;
+  if (!verifyResult.ok) {
+    machine.send({ type: 'KEY_VERIFY_FAILURE', reason: 'verify-and-register failed' });
+    machine.stop();
+    return verifyResult.result;
+  }
+  machine.send({ type: 'KEY_VERIFY_SUCCESS' });
 
   const config = buildGatewayConfig({
     apiKey,
@@ -61,12 +83,14 @@ export async function runSetup(
     logDir: deps.logDir,
   });
   await writeConfigArtifacts(config, deps);
+  machine.send({ type: 'CONFIG_WRITTEN' });
   await clearAuthFailedSentinel(deps.authFailedSentinelPath);
   await writeServiceUnitIfNeeded(deps);
 
   if (!isReplace) {
     await maybeWriteConsentSentinel(deps);
   }
+  machine.send({ type: 'SENTINEL_WRITTEN' });
 
   if (isReplace) {
     deps.output.success(`replaced (host_id: ${verifyResult.hostId})`);
@@ -74,7 +98,9 @@ export async function runSetup(
     deps.output.success(`installed (host_id: ${verifyResult.hostId})`);
   }
 
-  return autoStartDaemon(deps, options);
+  const result = await autoStartDaemon(deps, options);
+  machine.stop();
+  return result;
 }
 
 async function maybeWriteConsentSentinel(deps: SetupCommandDeps): Promise<void> {
