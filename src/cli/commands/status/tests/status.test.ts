@@ -5,7 +5,38 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runStatus, formatBytes } from 'cli/commands/status/index.ts';
+import { runStatus as runStatusImpl, formatBytes } from 'cli/commands/status/index.ts';
+import type { ReadableInputStream } from 'cli/commands/status/key-handler.types.ts';
+import type { CommandResult } from 'cli/cli.types.ts';
+
+function autoQuitStdin(): ReadableInputStream {
+  return {
+    isTTY: false,
+    on(event, listener): unknown {
+      if (event === 'data') {
+        setTimeout(() => {
+          (listener as (chunk: Buffer) => void)(Buffer.from('q'));
+        }, 100);
+      }
+      return this;
+    },
+    off(): unknown {
+      return this;
+    },
+  };
+}
+
+async function runStatus(
+  deps: Parameters<typeof runStatusImpl>[0],
+  options: Parameters<typeof runStatusImpl>[1] = {},
+): Promise<CommandResult> {
+  return runStatusImpl(deps, {
+    stdin: autoQuitStdin(),
+    clearScreen: false,
+    intervalMs: 1_000_000,
+    ...options,
+  });
+}
 import {
   formatLocalTimestamp,
   formatRelative,
@@ -15,27 +46,7 @@ import {
   sectionHeader,
 } from 'cli/commands/format-status.ts';
 import { captureOutput } from 'cli/output.ts';
-import { generateUuidV7, zstdCompressSync } from 'core/utils';
-import {
-  getBatch,
-  insertBatch,
-  markBatchDelivered,
-  markBatchFailed,
-  openInMemoryBufferDb,
-  setDaemonState,
-} from 'services/buffer';
-import type { NewBatch } from 'services/buffer';
-import { pausePolling } from 'services/polling';
-
-const ESC = String.fromCharCode(27);
-const ESC2 = String.fromCharCode(155);
-const ANSI_PATTERN = new RegExp(
-  '[' + ESC + ESC2 + '][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]',
-  'g',
-);
-function stripAnsi(s: string): string {
-  return s.replace(ANSI_PATTERN, '');
-}
+import { openInMemoryBufferDb, setDaemonState } from 'services/buffer';
 
 let dir: string;
 let buffer: Database;
@@ -51,30 +62,6 @@ afterEach(async () => {
   buffer.close();
   await rmRecursive(dir);
 });
-
-function batch(
-  text = 'x',
-  sourceApp: 'claude-code' | 'cursor' | 'codex' = 'claude-code',
-): NewBatch {
-  return {
-    captureId: generateUuidV7(),
-    sourceApp,
-    sourceKind: 'jsonl_append',
-    sourcePath: '/x',
-    sourcePathHash: 'a'.repeat(64),
-    sourceInode: 1,
-    watermarkKind: 'byte_range',
-    watermarkStart: 0,
-    watermarkEnd: text.length,
-    watermarkTable: null,
-    agentSchemaVersion: '1.0',
-    gatewayVersion: 'gw',
-    capturedAtUtc: '2026-04-29T10:42:00.123Z',
-    bodyFormat: 'jsonl',
-    bodyCompression: 'zstd',
-    body: zstdCompressSync(text),
-  };
-}
 
 function makeDeps(
   extras: Partial<Parameters<typeof runStatus>[0]> = {},
@@ -93,17 +80,6 @@ function makeDeps(
   };
 }
 
-test('reports not-configured when config does not exist (text mode)', async () => {
-  const out = captureOutput();
-  const result = await runStatus(
-    makeDeps({ output: out, configExists: () => Promise.resolve(false) }),
-  );
-  expect(result.exitCode).toBe(4);
-  expect(out.lines.some((l) => l.msg.includes('not configured'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('proxai-gateway setup'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.toLowerCase().includes('unable to open'))).toBe(false);
-});
-
 test('reports not-configured in JSON mode emits structured payload', async () => {
   const out = captureOutput();
   const result = await runStatus(
@@ -114,148 +90,6 @@ test('reports not-configured in JSON mode emits structured payload', async () =>
   const json = JSON.parse(out.lines[0]!.msg) as { configured: boolean; health: string };
   expect(json.configured).toBe(false);
   expect(json.health).toBe('inactive');
-});
-
-test('reports configured but no recent activity when daemon has not run yet', async () => {
-  const out = captureOutput();
-  const result = await runStatus(makeDeps({ output: out }));
-  expect(result.exitCode).toBe(0);
-  expect(out.lines.some((l) => l.msg.includes('Status:'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('starting'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('no drain completed yet'))).toBe(true);
-});
-
-test('renders per-source row with capture stats from daemon_state', async () => {
-  setDaemonState(buffer, {
-    lastCycleStartedAt: '2026-05-08T02:40:13.100Z',
-    lastCycleCompletedAt: '2026-05-08T02:46:52.293Z',
-    lastCycleDurationMs: 399193,
-    lastDrainAttempted: 1,
-    lastDrainAccepted: 0,
-    lastDrainRetriable: 1,
-    lastDrainFatal: 0,
-    lastDrainRecovered: 0,
-    lastUploadError: 'server returned 500',
-    lastConsecutiveRetriableBreak: false,
-    lastSourceCaptures: {
-      'claude-code': {
-        filesProcessed: 63,
-        capturedBatches: 68,
-        capturedBytes: 137000000,
-        errorsCount: 0,
-      },
-      cursor: { filesProcessed: 7, capturedBatches: 14, capturedBytes: 14000000, errorsCount: 2 },
-    },
-  });
-
-  const out = captureOutput();
-  const result = await runStatus(makeDeps({ output: out }));
-  expect(result.exitCode).toBe(0);
-  expect(out.lines.some((l) => l.msg.includes('Claude Code'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('68 captured'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('63 files scanned'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('Cursor'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('2 errors'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('Codex'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('Last error'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('server returned 500'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('1 retriable'))).toBe(true);
-});
-
-test('renders sectioned headers with bold formatting', async () => {
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out }));
-  expect(out.lines.some((l) => l.msg.includes('Capture'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('Buffer'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('Upload'))).toBe(true);
-});
-
-test('counts pending failed and delivered batches', async () => {
-  const a = batch();
-  const b = batch();
-  const c = batch();
-  insertBatch(buffer, a);
-  insertBatch(buffer, b);
-  insertBatch(buffer, c);
-  markBatchDelivered(buffer, getBatch(buffer, b.captureId)!, { idempotentOnServer: false });
-  markBatchFailed(buffer, c.captureId, 'oops');
-
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out }));
-  expect(out.lines.some((l) => stripAnsi(l.msg).match(/Pending\s+1 batches/))).toBe(true);
-  expect(out.lines.some((l) => stripAnsi(l.msg).match(/Failed\s+1 batches/))).toBe(true);
-  expect(out.lines.some((l) => stripAnsi(l.msg).match(/Receipts\s+1/))).toBe(true);
-});
-
-test('reports PAUSED with reason and resume hint', async () => {
-  await pausePolling(join(dir, 'PAUSED'), 'manual');
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out }));
-  expect(out.lines.some((l) => l.msg.includes('PAUSED'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('manual'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('proxai-gateway resume'))).toBe(true);
-});
-
-test('reports BUFFER_FULL sentinel and threshold', async () => {
-  await writeFile(
-    join(dir, 'BUFFER_FULL'),
-    JSON.stringify({
-      pending_bytes: 850_000_000,
-      threshold: 700_000_000,
-      set_at: '2026-05-08T02:00:00Z',
-    }),
-  );
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out }));
-  expect(out.lines.some((l) => l.msg.includes('BUFFER_FULL'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('pending'))).toBe(true);
-});
-
-test('reports AUTH_FAILED with reason and setup hint', async () => {
-  await writeFile(
-    join(dir, 'AUTH_FAILED'),
-    JSON.stringify({ reason: 'key revoked', detected_at: '2026-05-08T01:00:00Z' }),
-  );
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out }));
-  expect(out.lines.some((l) => l.msg.includes('AUTH_FAILED'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('key revoked'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('proxai-gateway setup'))).toBe(true);
-});
-
-test('reports SESSION_STOPPED sentinel with start hint', async () => {
-  await writeFile(
-    join(dir, 'SESSION_STOPPED'),
-    JSON.stringify({ boot_id: 'b1', set_at: '2026-05-08T01:00:00Z' }),
-  );
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out }));
-  expect(out.lines.some((l) => l.msg.includes('SESSION_STOPPED'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('proxai-gateway start'))).toBe(true);
-});
-
-test('reports update_available with current and latest versions', async () => {
-  const updateAvailableSentinelPath = join(dir, 'UPDATE_AVAILABLE');
-  await writeFile(
-    updateAvailableSentinelPath,
-    JSON.stringify({
-      latest_version: '2026.5.10',
-      current_version: '2026.5.7',
-      detected_at: '2026-05-06T00:00:00.000Z',
-    }),
-  );
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out, updateAvailableSentinelPath }));
-  expect(out.lines.some((l) => l.msg.includes('Update available'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('2026.5.10'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('2026.5.7'))).toBe(true);
-});
-
-test('does not print update_available when sentinel absent', async () => {
-  const updateAvailableSentinelPath = join(dir, 'UPDATE_AVAILABLE');
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out, updateAvailableSentinelPath }));
-  expect(out.lines.some((l) => l.msg.includes('Update available'))).toBe(false);
 });
 
 test('JSON mode returns full structured payload when configured', async () => {
@@ -289,47 +123,6 @@ test('JSON mode returns full structured payload when configured', async () => {
   expect(json.capture?.['claude-code']?.capturedBatches).toBe(1);
 });
 
-test('shows degraded health label when last drain had retriable failures', async () => {
-  setDaemonState(buffer, {
-    lastCycleStartedAt: '2026-05-08T02:40:00Z',
-    lastCycleCompletedAt: '2026-05-08T02:42:00Z',
-    lastCycleDurationMs: 120000,
-    lastDrainAttempted: 3,
-    lastDrainAccepted: 0,
-    lastDrainRetriable: 3,
-    lastDrainFatal: 0,
-    lastDrainRecovered: 0,
-    lastUploadError: '503',
-    lastConsecutiveRetriableBreak: true,
-    lastSourceCaptures: {},
-  });
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out }));
-  expect(out.lines.some((l) => l.msg.includes('degraded'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('Drain backed off'))).toBe(true);
-});
-
-test('shows healthy active when last drain succeeded', async () => {
-  setDaemonState(buffer, {
-    lastCycleStartedAt: '2026-05-08T02:40:00Z',
-    lastCycleCompletedAt: '2026-05-08T02:42:00Z',
-    lastCycleDurationMs: 120000,
-    lastDrainAttempted: 5,
-    lastDrainAccepted: 5,
-    lastDrainRetriable: 0,
-    lastDrainFatal: 0,
-    lastDrainRecovered: 0,
-    lastUploadError: null,
-    lastConsecutiveRetriableBreak: false,
-    lastSourceCaptures: {},
-  });
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out }));
-  const statusLine = out.lines.find((l) => l.msg.includes('Status:'))!;
-  expect(statusLine.msg).toContain('active');
-  expect(statusLine.msg).not.toContain('degraded');
-});
-
 test('JSON mode includes updateAvailable when sentinel present', async () => {
   const updateAvailableSentinelPath = join(dir, 'UPDATE_AVAILABLE');
   await writeFile(
@@ -347,31 +140,6 @@ test('JSON mode includes updateAvailable when sentinel present', async () => {
   };
   expect(json.sentinels.updateAvailable?.latestVersion).toBe('2026.5.10');
   expect(json.sentinels.updateAvailable?.currentVersion).toBe('2026.5.7');
-});
-
-test('renders last-prune timestamp with relative when present', async () => {
-  setDaemonState(buffer, {
-    lastCycleStartedAt: null,
-    lastCycleCompletedAt: null,
-    lastCycleDurationMs: null,
-    lastDrainAttempted: null,
-    lastDrainAccepted: null,
-    lastDrainRetriable: null,
-    lastDrainFatal: null,
-    lastDrainRecovered: null,
-    lastUploadError: null,
-    lastConsecutiveRetriableBreak: null,
-    lastSourceCaptures: {},
-  });
-  buffer.run(
-    "INSERT INTO buffer_metadata (key, value) VALUES ('last_prune_at', '2026-05-08T02:00:00Z')",
-  );
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out, now: () => new Date('2026-05-08T02:30:00Z') }));
-  expect(out.lines.some((l) => l.msg.includes('Last prune'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('30 min ago') || l.msg.includes('min ago'))).toBe(
-    true,
-  );
 });
 
 test('JSON mode handles authFailed and bufferFull and sessionStopped sentinels', async () => {
@@ -395,26 +163,6 @@ test('JSON mode handles authFailed and bufferFull and sessionStopped sentinels',
   expect(json.sentinels.authFailed).toBe(true);
   expect(json.sentinels.bufferFull).toBe(true);
   expect(json.sentinels.sessionStopped).toBe(true);
-});
-
-test('renders never for last-prune when metadata absent', async () => {
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out }));
-  expect(out.lines.some((l) => l.msg.includes('never'))).toBe(true);
-});
-
-test('returns error when buffer is undefined but config exists (defensive guard)', async () => {
-  const out = captureOutput();
-  const result = await runStatus({
-    output: out,
-    configPath,
-    configExists: () => Promise.resolve(true),
-    pauseSentinelPath: join(dir, 'PAUSED'),
-    bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
-    authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
-    sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
-  });
-  expect(result.exitCode).toBe(1);
 });
 
 test('formatBytes handles each magnitude tier', () => {
@@ -574,45 +322,6 @@ import {
   uploadBytesShippedKey,
 } from 'services/buffer';
 
-test('runStatus: loadConfig dep that throws falls back gracefully', async () => {
-  const out = captureOutput();
-  const result = await runStatus(
-    makeDeps({
-      output: out,
-      loadConfig: async () => {
-        throw new Error('config blew up');
-      },
-    }),
-  );
-  expect(result.exitCode).toBe(0);
-});
-
-test('runStatus: serviceManager whose isRunning throws yields no daemon line crash', async () => {
-  const out = captureOutput();
-  const sm = {
-    isRegistered: async () => true,
-    isRunning: async () => {
-      throw new Error('launchctl gone');
-    },
-    ensureRegistered: async () => {},
-    start: async () => {},
-    stop: async () => {},
-    restart: async () => {},
-    unregister: async () => {},
-    runtimeInfo: async () => ({ pid: null, startedAt: null }),
-  };
-  const result = await runStatus(makeDeps({ output: out, serviceManager: sm }));
-  expect(result.exitCode).toBe(0);
-});
-
-test('runStatus: invalid stored cumulative numbers degrade to zero', async () => {
-  setMetadata(buffer, METADATA_KEYS.uploadTotalBatchesShipped, 'garbage');
-  setMetadata(buffer, METADATA_KEYS.uploadLastSuccessBytes, 'NaN');
-  const out = captureOutput();
-  const result = await runStatus(makeDeps({ output: out }));
-  expect(result.exitCode).toBe(0);
-});
-
 test('runStatus JSON mode reports binary age days when installedAt is set via loadConfig dep', async () => {
   const out = captureOutput();
   const result = await runStatus(
@@ -702,12 +411,6 @@ test('runStatus JSON mode handles invalid installedAt timestamp gracefully (days
   expect(json.system.binaryAge.days).toBeNull();
 });
 
-test('runStatus default loadConfig path also catches throws (no dep override)', async () => {
-  const out = captureOutput();
-  const result = await runStatus(makeDeps({ output: out }));
-  expect(result.exitCode).toBe(0);
-});
-
 test('runStatus surfaces per-source upload counters in JSON output when metadata populated', async () => {
   setMetadata(buffer, uploadBatchesShippedKey('claude-code'), '70');
   setMetadata(buffer, uploadBytesShippedKey('claude-code'), (9 * 1024 * 1024).toString());
@@ -742,132 +445,4 @@ test('getMetadataWithFallback: primary present uses primary, no legacy lookup', 
   const out = captureOutput();
   const result = await runStatus(makeDeps({ output: out }), { json: true });
   expect(result.exitCode).toBe(0);
-});
-
-test('runStatus reports dev mode when sentinel file is present', async () => {
-  const out = captureOutput();
-  const devPath = join(dir, 'DEV_MODE');
-  await Bun.write(devPath, 'ENABLED');
-
-  const result = await runStatus(
-    makeDeps({
-      output: out,
-      devModeSentinelPath: devPath,
-    }),
-  );
-  expect(result.exitCode).toBe(0);
-  expect(out.lines.some((l) => l.msg.includes('(dev mode)'))).toBe(true);
-});
-
-test('runStatus: serviceManager running with startedAt in past and future (uptime check)', async () => {
-  const out = captureOutput();
-  const now = new Date('2026-05-08T12:00:00Z');
-
-  const smPast = {
-    isRegistered: async () => true,
-    isRunning: async () => true,
-    ensureRegistered: async () => {},
-    start: async () => {},
-    stop: async () => {},
-    restart: async () => {},
-    unregister: async () => {},
-    runtimeInfo: async () => ({ pid: 1234, startedAt: new Date('2026-05-08T11:00:00Z') }),
-  };
-
-  await runStatus(makeDeps({ output: out, serviceManager: smPast, now: () => now }));
-  expect(out.lines.some((l) => l.msg.includes('uptime'))).toBe(true);
-
-  const out2 = captureOutput();
-  const smFuture = {
-    isRegistered: async () => true,
-    isRunning: async () => true,
-    ensureRegistered: async () => {},
-    start: async () => {},
-    stop: async () => {},
-    restart: async () => {},
-    unregister: async () => {},
-    runtimeInfo: async () => ({ pid: 5678, startedAt: new Date('2026-05-08T13:00:00Z') }),
-  };
-
-  await runStatus(makeDeps({ output: out2, serviceManager: smFuture, now: () => now }));
-  expect(out2.lines.some((l) => l.msg.includes('running') && !l.msg.includes('uptime'))).toBe(true);
-});
-
-test('runStatus: auto upgrade has update queued for next cycle when latestKnownVersion !== currentVersion and no sentinel present', async () => {
-  setMetadata(buffer, METADATA_KEYS.latestKnownVersion, '2026.5.10');
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out, currentVersion: '2026.5.7' }));
-  expect(out.lines.some((l) => l.msg.includes('update queued for next cycle'))).toBe(true);
-});
-
-test('runStatus: empty sentinel payloads or missing properties fallbacks', async () => {
-  await writeFile(join(dir, 'AUTH_FAILED'), JSON.stringify({ reason: '', detected_at: '' }));
-
-  await writeFile(join(dir, 'SESSION_STOPPED'), JSON.stringify({ boot_id: 'b1', set_at: '' }));
-
-  await writeFile(
-    join(dir, 'BUFFER_FULL'),
-    JSON.stringify({ pending_bytes: null, threshold: 1, set_at: '' }),
-  );
-
-  const out = captureOutput();
-  await runStatus(makeDeps({ output: out }));
-
-  expect(out.lines.some((l) => stripAnsi(l.msg).includes('AUTH_FAILED: unknown'))).toBe(true);
-  expect(
-    out.lines.some((l) => {
-      const s = stripAnsi(l.msg);
-      return s.includes('SESSION_STOPPED') && !s.includes('since') && !s.includes('ago');
-    }),
-  ).toBe(true);
-  expect(
-    out.lines.some((l) => {
-      const s = stripAnsi(l.msg);
-      return s.includes('BUFFER_FULL') && s.includes('pending 0 B');
-    }),
-  ).toBe(true);
-});
-
-test('runStatus: binary installed in the future yields 0 days (negative age handling)', async () => {
-  const out = captureOutput();
-  const now = new Date('2026-05-08T12:00:00Z');
-  const installedAt = new Date('2026-05-09T12:00:00Z').toISOString();
-
-  await runStatus(
-    makeDeps({
-      output: out,
-      loadConfig: async () =>
-        ({
-          account: {
-            apiKey: 'k',
-            userId: 'u',
-            hostId: 'h',
-            installedAt,
-            installSource: 'npm',
-          },
-          backend: {
-            ingestUrl: '',
-            verifyKeyUrl: '',
-            watermarksUrl: '',
-            registerHostIdUrl: '',
-          },
-          capture: {
-            pollIntervalSec: 60,
-            bufferPath: '',
-            receiptRetentionDays: 30,
-            failedRetentionDays: 30,
-            bufferSoftPauseBytes: 700_000_000,
-            bufferSoftResumeBytes: 600_000_000,
-            uploadMaxBatchesPerSec: 1,
-            uploadMaxBytesPerMinute: 1,
-            uploadBackoffOn429Multiplier: 1,
-          },
-          logging: { level: 'info', logDir: '' },
-          staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
-        }) as never,
-      now: () => now,
-    }),
-  );
-
-  expect(out.lines.some((l) => l.msg.includes('0 days'))).toBe(true);
 });

@@ -26,8 +26,14 @@ export interface StatusCommandDeps {
   now?: () => Date;
 }
 
+import type { ReadableInputStream } from 'cli/commands/status/key-handler.types.ts';
+
 export interface StatusCommandOptions {
   json?: boolean;
+  verbose?: boolean;
+  stdin?: ReadableInputStream;
+  intervalMs?: number;
+  clearScreen?: boolean;
 }
 
 export interface StatusJsonOutput {

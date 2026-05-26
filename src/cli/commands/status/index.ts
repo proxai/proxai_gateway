@@ -1,4 +1,3 @@
-import chalk from 'chalk';
 import { existsSync } from 'node:fs';
 import { devModeSentinelPath } from 'core/io/fs';
 
@@ -6,11 +5,14 @@ import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
 import { formatBytes } from 'core/utils';
 
-import { statusDot } from 'cli/commands/status/decorators.ts';
 import { buildEmptyStatusJson, buildStatusJson } from 'cli/commands/status/build-json.ts';
 import { gatherStatusSnapshot } from 'cli/commands/status/gather-snapshot.ts';
-import { renderHumanStatus } from 'cli/commands/status/render-human.ts';
+import { renderBasic } from 'cli/commands/status/render/render-basic.ts';
+import { renderVerbose } from 'cli/commands/status/render/render-verbose.ts';
+import type { RenderInputs } from 'cli/commands/status/render/render.types.ts';
 import type { StatusCommandDeps, StatusCommandOptions } from 'cli/commands/status/status.types.ts';
+import { deriveUnifiedSummary } from 'cli/commands/status/unified-summary.ts';
+import { startWatchLoop } from 'cli/commands/status/watch-loop.ts';
 
 export type {
   StatusCommandDeps,
@@ -20,40 +22,126 @@ export type {
 } from 'cli/commands/status/status.types.ts';
 export { formatBytes };
 export { readShippedBySource } from 'cli/commands/status/gather-snapshot.ts';
+export { deriveUnifiedSummary } from 'cli/commands/status/unified-summary.ts';
+export type {
+  UnifiedStatusLevel,
+  UnifiedStatusSummary,
+} from 'cli/commands/status/unified-summary.types.ts';
 
 export async function runStatus(
   deps: StatusCommandDeps,
   options: StatusCommandOptions = {},
 ): Promise<CommandResult> {
+  if (options.json === true) {
+    return runJsonStatus(deps);
+  }
+  return runWatchStatus(deps, options);
+}
+
+async function runJsonStatus(deps: StatusCommandDeps): Promise<CommandResult> {
   const exists = await deps.configExists();
   if (!exists) {
     const isDevMode = existsSync(deps.devModeSentinelPath ?? devModeSentinelPath());
-    if (options.json === true) {
-      const emptyJson = buildEmptyStatusJson();
-      emptyJson.isDevMode = isDevMode;
-      deps.output.info(JSON.stringify(emptyJson));
-      return { exitCode: EXIT_CODE.notInstalled };
-    }
-    deps.output.info(
-      `Status: ${statusDot('inactive')} not configured${isDevMode ? chalk.cyan(' (dev mode)') : ''}`,
-    );
-    deps.output.info('');
-    deps.output.info(`Run ${chalk.cyan('proxai-gateway setup')} to begin.`);
+    const emptyJson = buildEmptyStatusJson();
+    emptyJson.isDevMode = isDevMode;
+    deps.output.info(JSON.stringify(emptyJson));
     return { exitCode: EXIT_CODE.notInstalled };
   }
-
   if (deps.buffer === undefined) {
     deps.output.error('buffer database is unavailable');
     return { exitCode: EXIT_CODE.error };
   }
-
   const snapshot = await gatherStatusSnapshot(deps, deps.buffer);
+  deps.output.info(JSON.stringify(buildStatusJson(snapshot)));
+  return { exitCode: EXIT_CODE.ok };
+}
 
-  if (options.json === true) {
-    deps.output.info(JSON.stringify(buildStatusJson(snapshot)));
-    return { exitCode: EXIT_CODE.ok };
+async function runWatchStatus(
+  deps: StatusCommandDeps,
+  options: StatusCommandOptions,
+): Promise<CommandResult> {
+  const stdin = options.stdin ?? process.stdin;
+  const verbose = options.verbose === true;
+  const render = verbose ? renderVerbose : renderBasic;
+
+  const handle = startWatchLoop({
+    output: deps.output,
+    stdin,
+    render,
+    gatherFrame: () => buildFrame(deps),
+    ...(options.intervalMs !== undefined ? { intervalMs: options.intervalMs } : {}),
+    ...(options.clearScreen !== undefined ? { clearScreen: options.clearScreen } : {}),
+  });
+  await handle.wait();
+  return { exitCode: EXIT_CODE.ok };
+}
+
+async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
+  const exists = await deps.configExists();
+  const isDevMode = existsSync(deps.devModeSentinelPath ?? devModeSentinelPath());
+  const nowLocal = (deps.now ?? ((): Date => new Date()))();
+  const version = deps.currentVersion ?? null;
+
+  if (!exists) {
+    return {
+      summary: deriveUnifiedSummary({
+        configured: false,
+        daemonRunning: false,
+        authFailed: false,
+        paused: false,
+        pausedReason: '',
+        bufferFull: false,
+        bufferFullPendingBytes: null,
+        bufferFullThreshold: null,
+        sessionStopped: false,
+      }),
+      snapshot: null,
+      notConfigured: true,
+      isDevMode,
+      nowLocal,
+      version,
+    };
   }
 
-  renderHumanStatus(deps, snapshot);
-  return { exitCode: EXIT_CODE.ok };
+  if (deps.buffer === undefined) {
+    return {
+      summary: deriveUnifiedSummary({
+        configured: true,
+        daemonRunning: false,
+        authFailed: false,
+        paused: false,
+        pausedReason: '',
+        bufferFull: false,
+        bufferFullPendingBytes: null,
+        bufferFullThreshold: null,
+        sessionStopped: false,
+      }),
+      snapshot: null,
+      notConfigured: false,
+      isDevMode,
+      nowLocal,
+      version,
+    };
+  }
+
+  const snapshot = await gatherStatusSnapshot(deps, deps.buffer);
+  const summary = deriveUnifiedSummary({
+    configured: true,
+    daemonRunning: snapshot.runtime.isRunning,
+    authFailed: snapshot.authFailed,
+    paused: snapshot.paused,
+    pausedReason: snapshot.pausedReason,
+    bufferFull: snapshot.bufferFull,
+    bufferFullPendingBytes: snapshot.bufferFullPendingBytes,
+    bufferFullThreshold: snapshot.bufferFullThreshold,
+    sessionStopped: snapshot.sessionStopped,
+  });
+  return {
+    summary,
+    snapshot,
+    notConfigured: false,
+    isDevMode,
+    nowLocal,
+    version,
+  };
 }

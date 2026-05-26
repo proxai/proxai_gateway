@@ -228,8 +228,9 @@ program
     'Print gateway state: health dot, per-source captures, buffer occupancy, last-cycle drain results, sentinel flags.',
   )
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
-  .option('--json', 'emit machine-readable JSON instead of the human-readable layout', false)
-  .action(async (opts: { config?: string; json?: boolean }) => {
+  .option('--json', 'emit machine-readable JSON instead of the watch-mode UI', false)
+  .option('-v, --verbose', 'show the full breakdown (sources, signals, runtime)', false)
+  .action(async (opts: { config?: string; json?: boolean; verbose?: boolean }) => {
     const ctx = buildPlatformServiceContext(process.platform, process.execPath);
     const statusContextInputs: Parameters<typeof buildStatusContext>[0] = {
       json: opts.json === true,
@@ -238,6 +239,7 @@ program
     };
     if (opts.config !== undefined) statusContextInputs.configOverride = opts.config;
     const sCtx = await buildStatusContext(statusContextInputs);
+    if (opts.verbose === true) sCtx.options.verbose = true;
     try {
       const result = await runStatus(sCtx.deps, sCtx.options);
       process.exit(result.exitCode);
