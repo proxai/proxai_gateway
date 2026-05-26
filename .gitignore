@@ -34,10 +34,9 @@ Thumbs.db
 scratch/
 .tmp/
 
-# Local AI tooling — this repo is open source but the ai/ folder + generated
-# per-tool artifacts are private to the proxai org. Distributor lives at
-# ai/dist/ and is run locally via `bun run ai/dist/index.ts`.
-ai/
+# Local AI tooling — the ai/ folder is the source of truth and is checked in.
+# Generated per-tool artifacts (CLAUDE.md, AGENTS.md, .cursor/, etc.) are
+# emitted by `bun run ai:sync` and are not committed.
 AGENTS.md
 CLAUDE.md
 GEMINI.md

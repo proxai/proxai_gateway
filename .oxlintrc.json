@@ -49,6 +49,12 @@
       "rules": {
         "no-await-in-loop": "off"
       }
+    },
+    {
+      "files": ["ai/mapper/**/*.ts"],
+      "rules": {
+        "no-await-in-loop": "off"
+      }
     }
   ],
   "ignorePatterns": ["dist", "node_modules", "*.md"]

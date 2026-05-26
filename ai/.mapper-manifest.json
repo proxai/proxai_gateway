@@ -1,0 +1,1571 @@
+{
+  "version": 1,
+  "generatedAt": "2026-05-25T06:16:31.642Z",
+  "sourceHash": "edbe60ed0d81da500a13275a8dd9b5f0",
+  "files": [
+    {
+      "path": "CLAUDE.md",
+      "hash": "99335c113527eedc"
+    },
+    {
+      "path": "AGENTS.md",
+      "hash": "09ec3676d2dee1b1"
+    },
+    {
+      "path": "GEMINI.md",
+      "hash": "c578c0b7e1e2d6e4"
+    },
+    {
+      "path": ".agent/AGENTS.md",
+      "hash": "0a27714c610f9474"
+    },
+    {
+      "path": ".claude/rules/_always.md",
+      "hash": "47caa144abf611cc"
+    },
+    {
+      "path": ".cursor/rules/_always.mdc",
+      "hash": "f1f3c77422ce7375"
+    },
+    {
+      "path": ".codex/rules/_always.md",
+      "hash": "47caa144abf611cc"
+    },
+    {
+      "path": ".gemini/rules/_always.md",
+      "hash": "47caa144abf611cc"
+    },
+    {
+      "path": ".agent/rules/_always.md",
+      "hash": "47caa144abf611cc"
+    },
+    {
+      "path": ".claude/rules/modules/cross-platform-feature-flags.md",
+      "hash": "a48473b2607d4e56"
+    },
+    {
+      "path": ".cursor/rules/modules/cross-platform-feature-flags.mdc",
+      "hash": "cb945716acd6a2df"
+    },
+    {
+      "path": ".codex/rules/modules/cross-platform-feature-flags.md",
+      "hash": "a48473b2607d4e56"
+    },
+    {
+      "path": ".gemini/rules/modules/cross-platform-feature-flags.md",
+      "hash": "a48473b2607d4e56"
+    },
+    {
+      "path": ".agent/rules/modules/cross-platform-feature-flags.md",
+      "hash": "a48473b2607d4e56"
+    },
+    {
+      "path": ".claude/rules/modules/cross-platform.md",
+      "hash": "a409f6e5bfb0e6d1"
+    },
+    {
+      "path": ".cursor/rules/modules/cross-platform.mdc",
+      "hash": "112f22ad5c738d97"
+    },
+    {
+      "path": ".codex/rules/modules/cross-platform.md",
+      "hash": "a409f6e5bfb0e6d1"
+    },
+    {
+      "path": ".gemini/rules/modules/cross-platform.md",
+      "hash": "a409f6e5bfb0e6d1"
+    },
+    {
+      "path": ".agent/rules/modules/cross-platform.md",
+      "hash": "a409f6e5bfb0e6d1"
+    },
+    {
+      "path": ".claude/rules/modules/typescript.md",
+      "hash": "1431e7ed8295a439"
+    },
+    {
+      "path": ".cursor/rules/modules/typescript.mdc",
+      "hash": "f50cb3a1d716ba38"
+    },
+    {
+      "path": ".codex/rules/modules/typescript.md",
+      "hash": "1431e7ed8295a439"
+    },
+    {
+      "path": ".gemini/rules/modules/typescript.md",
+      "hash": "1431e7ed8295a439"
+    },
+    {
+      "path": ".agent/rules/modules/typescript.md",
+      "hash": "1431e7ed8295a439"
+    },
+    {
+      "path": ".claude/rules/process/calver-version-only-via-script.md",
+      "hash": "95ee70562b53097f"
+    },
+    {
+      "path": ".cursor/rules/process/calver-version-only-via-script.mdc",
+      "hash": "5d483898f6ccced0"
+    },
+    {
+      "path": ".codex/rules/process/calver-version-only-via-script.md",
+      "hash": "95ee70562b53097f"
+    },
+    {
+      "path": ".gemini/rules/process/calver-version-only-via-script.md",
+      "hash": "95ee70562b53097f"
+    },
+    {
+      "path": ".agent/rules/process/calver-version-only-via-script.md",
+      "hash": "95ee70562b53097f"
+    },
+    {
+      "path": ".claude/rules/process/tests.md",
+      "hash": "4b4aefd7dd8463f0"
+    },
+    {
+      "path": ".cursor/rules/process/tests.mdc",
+      "hash": "c662305321d2d6ae"
+    },
+    {
+      "path": ".codex/rules/process/tests.md",
+      "hash": "4b4aefd7dd8463f0"
+    },
+    {
+      "path": ".gemini/rules/process/tests.md",
+      "hash": "4b4aefd7dd8463f0"
+    },
+    {
+      "path": ".agent/rules/process/tests.md",
+      "hash": "4b4aefd7dd8463f0"
+    },
+    {
+      "path": ".claude/rules/services/backend-protocol.md",
+      "hash": "3c1e89b3fd4b0468"
+    },
+    {
+      "path": ".cursor/rules/services/backend-protocol.mdc",
+      "hash": "7e71e4fc3e95fe4e"
+    },
+    {
+      "path": ".codex/rules/services/backend-protocol.md",
+      "hash": "3c1e89b3fd4b0468"
+    },
+    {
+      "path": ".gemini/rules/services/backend-protocol.md",
+      "hash": "3c1e89b3fd4b0468"
+    },
+    {
+      "path": ".agent/rules/services/backend-protocol.md",
+      "hash": "3c1e89b3fd4b0468"
+    },
+    {
+      "path": ".claude/rules/services/buffer-schema.md",
+      "hash": "d6db72f4781ed864"
+    },
+    {
+      "path": ".cursor/rules/services/buffer-schema.mdc",
+      "hash": "943a707f23531460"
+    },
+    {
+      "path": ".codex/rules/services/buffer-schema.md",
+      "hash": "d6db72f4781ed864"
+    },
+    {
+      "path": ".gemini/rules/services/buffer-schema.md",
+      "hash": "d6db72f4781ed864"
+    },
+    {
+      "path": ".agent/rules/services/buffer-schema.md",
+      "hash": "d6db72f4781ed864"
+    },
+    {
+      "path": ".claude/rules/services/bun-sqlite.md",
+      "hash": "875ed6baf8d69cd8"
+    },
+    {
+      "path": ".cursor/rules/services/bun-sqlite.mdc",
+      "hash": "53a0e8cfd3ac0c70"
+    },
+    {
+      "path": ".codex/rules/services/bun-sqlite.md",
+      "hash": "875ed6baf8d69cd8"
+    },
+    {
+      "path": ".gemini/rules/services/bun-sqlite.md",
+      "hash": "875ed6baf8d69cd8"
+    },
+    {
+      "path": ".agent/rules/services/bun-sqlite.md",
+      "hash": "875ed6baf8d69cd8"
+    },
+    {
+      "path": ".claude/rules/services/config.md",
+      "hash": "8bfb063448938fd5"
+    },
+    {
+      "path": ".cursor/rules/services/config.mdc",
+      "hash": "a7d7ba2c0a0ae9f0"
+    },
+    {
+      "path": ".codex/rules/services/config.md",
+      "hash": "8bfb063448938fd5"
+    },
+    {
+      "path": ".gemini/rules/services/config.md",
+      "hash": "8bfb063448938fd5"
+    },
+    {
+      "path": ".agent/rules/services/config.md",
+      "hash": "8bfb063448938fd5"
+    },
+    {
+      "path": ".claude/rules/services/daemon-loops.md",
+      "hash": "68d3bff06c9030d2"
+    },
+    {
+      "path": ".cursor/rules/services/daemon-loops.mdc",
+      "hash": "8b85cd385ae03bf8"
+    },
+    {
+      "path": ".codex/rules/services/daemon-loops.md",
+      "hash": "68d3bff06c9030d2"
+    },
+    {
+      "path": ".gemini/rules/services/daemon-loops.md",
+      "hash": "68d3bff06c9030d2"
+    },
+    {
+      "path": ".agent/rules/services/daemon-loops.md",
+      "hash": "68d3bff06c9030d2"
+    },
+    {
+      "path": ".claude/rules/services/no-direct-sqlite-outside-buffer.md",
+      "hash": "a87a3f4d18fa22e1"
+    },
+    {
+      "path": ".cursor/rules/services/no-direct-sqlite-outside-buffer.mdc",
+      "hash": "5c4429be5ab1dda4"
+    },
+    {
+      "path": ".codex/rules/services/no-direct-sqlite-outside-buffer.md",
+      "hash": "a87a3f4d18fa22e1"
+    },
+    {
+      "path": ".gemini/rules/services/no-direct-sqlite-outside-buffer.md",
+      "hash": "a87a3f4d18fa22e1"
+    },
+    {
+      "path": ".agent/rules/services/no-direct-sqlite-outside-buffer.md",
+      "hash": "a87a3f4d18fa22e1"
+    },
+    {
+      "path": ".claude/rules/services/redaction.md",
+      "hash": "fc3312a5bcb96846"
+    },
+    {
+      "path": ".cursor/rules/services/redaction.mdc",
+      "hash": "fbfc09933395a365"
+    },
+    {
+      "path": ".codex/rules/services/redaction.md",
+      "hash": "fc3312a5bcb96846"
+    },
+    {
+      "path": ".gemini/rules/services/redaction.md",
+      "hash": "fc3312a5bcb96846"
+    },
+    {
+      "path": ".agent/rules/services/redaction.md",
+      "hash": "fc3312a5bcb96846"
+    },
+    {
+      "path": ".claude/rules/services/sentinels.md",
+      "hash": "638fc52cd39bf571"
+    },
+    {
+      "path": ".cursor/rules/services/sentinels.mdc",
+      "hash": "67c412d020af8b5f"
+    },
+    {
+      "path": ".codex/rules/services/sentinels.md",
+      "hash": "638fc52cd39bf571"
+    },
+    {
+      "path": ".gemini/rules/services/sentinels.md",
+      "hash": "638fc52cd39bf571"
+    },
+    {
+      "path": ".agent/rules/services/sentinels.md",
+      "hash": "638fc52cd39bf571"
+    },
+    {
+      "path": ".claude/rules/services/watermark-monotonic-only.md",
+      "hash": "7ada18dae87564c5"
+    },
+    {
+      "path": ".cursor/rules/services/watermark-monotonic-only.mdc",
+      "hash": "bcd4a98b8cd4d97d"
+    },
+    {
+      "path": ".codex/rules/services/watermark-monotonic-only.md",
+      "hash": "7ada18dae87564c5"
+    },
+    {
+      "path": ".gemini/rules/services/watermark-monotonic-only.md",
+      "hash": "7ada18dae87564c5"
+    },
+    {
+      "path": ".agent/rules/services/watermark-monotonic-only.md",
+      "hash": "7ada18dae87564c5"
+    },
+    {
+      "path": ".claude/rules/sources/parser-version-bump-required.md",
+      "hash": "351828e7283e7099"
+    },
+    {
+      "path": ".cursor/rules/sources/parser-version-bump-required.mdc",
+      "hash": "7c5bb7650d83a466"
+    },
+    {
+      "path": ".codex/rules/sources/parser-version-bump-required.md",
+      "hash": "351828e7283e7099"
+    },
+    {
+      "path": ".gemini/rules/sources/parser-version-bump-required.md",
+      "hash": "351828e7283e7099"
+    },
+    {
+      "path": ".agent/rules/sources/parser-version-bump-required.md",
+      "hash": "351828e7283e7099"
+    },
+    {
+      "path": ".claude/rules/sources/sources.md",
+      "hash": "2f6f8406c5bc7437"
+    },
+    {
+      "path": ".cursor/rules/sources/sources.mdc",
+      "hash": "e3265f97d42bedbe"
+    },
+    {
+      "path": ".codex/rules/sources/sources.md",
+      "hash": "2f6f8406c5bc7437"
+    },
+    {
+      "path": ".gemini/rules/sources/sources.md",
+      "hash": "2f6f8406c5bc7437"
+    },
+    {
+      "path": ".agent/rules/sources/sources.md",
+      "hash": "2f6f8406c5bc7437"
+    },
+    {
+      "path": ".claude/knowledge/architecture/data-flow.md",
+      "hash": "5cbc1955cfe3bf13"
+    },
+    {
+      "path": ".cursor/knowledge/architecture/data-flow.md",
+      "hash": "5cbc1955cfe3bf13"
+    },
+    {
+      "path": ".codex/knowledge/architecture/data-flow.md",
+      "hash": "5cbc1955cfe3bf13"
+    },
+    {
+      "path": ".gemini/knowledge/architecture/data-flow.md",
+      "hash": "5cbc1955cfe3bf13"
+    },
+    {
+      "path": ".agent/knowledge/architecture/data-flow.md",
+      "hash": "5cbc1955cfe3bf13"
+    },
+    {
+      "path": ".claude/knowledge/architecture/overview.md",
+      "hash": "b675546a8f259161"
+    },
+    {
+      "path": ".cursor/knowledge/architecture/overview.md",
+      "hash": "b675546a8f259161"
+    },
+    {
+      "path": ".codex/knowledge/architecture/overview.md",
+      "hash": "b675546a8f259161"
+    },
+    {
+      "path": ".gemini/knowledge/architecture/overview.md",
+      "hash": "b675546a8f259161"
+    },
+    {
+      "path": ".agent/knowledge/architecture/overview.md",
+      "hash": "b675546a8f259161"
+    },
+    {
+      "path": ".claude/knowledge/cli/commands-overview.md",
+      "hash": "5a4b1bba3f42facf"
+    },
+    {
+      "path": ".cursor/knowledge/cli/commands-overview.md",
+      "hash": "5a4b1bba3f42facf"
+    },
+    {
+      "path": ".codex/knowledge/cli/commands-overview.md",
+      "hash": "5a4b1bba3f42facf"
+    },
+    {
+      "path": ".gemini/knowledge/cli/commands-overview.md",
+      "hash": "5a4b1bba3f42facf"
+    },
+    {
+      "path": ".agent/knowledge/cli/commands-overview.md",
+      "hash": "5a4b1bba3f42facf"
+    },
+    {
+      "path": ".claude/knowledge/cli/service-unit.md",
+      "hash": "4412d7609aeb682d"
+    },
+    {
+      "path": ".cursor/knowledge/cli/service-unit.md",
+      "hash": "4412d7609aeb682d"
+    },
+    {
+      "path": ".codex/knowledge/cli/service-unit.md",
+      "hash": "4412d7609aeb682d"
+    },
+    {
+      "path": ".gemini/knowledge/cli/service-unit.md",
+      "hash": "4412d7609aeb682d"
+    },
+    {
+      "path": ".agent/knowledge/cli/service-unit.md",
+      "hash": "4412d7609aeb682d"
+    },
+    {
+      "path": ".claude/knowledge/cli/wiring.md",
+      "hash": "52eafe40d726d5fc"
+    },
+    {
+      "path": ".cursor/knowledge/cli/wiring.md",
+      "hash": "52eafe40d726d5fc"
+    },
+    {
+      "path": ".codex/knowledge/cli/wiring.md",
+      "hash": "52eafe40d726d5fc"
+    },
+    {
+      "path": ".gemini/knowledge/cli/wiring.md",
+      "hash": "52eafe40d726d5fc"
+    },
+    {
+      "path": ".agent/knowledge/cli/wiring.md",
+      "hash": "52eafe40d726d5fc"
+    },
+    {
+      "path": ".claude/knowledge/conventions.md",
+      "hash": "3bb90f0f13f502ab"
+    },
+    {
+      "path": ".cursor/knowledge/conventions.md",
+      "hash": "3bb90f0f13f502ab"
+    },
+    {
+      "path": ".codex/knowledge/conventions.md",
+      "hash": "3bb90f0f13f502ab"
+    },
+    {
+      "path": ".gemini/knowledge/conventions.md",
+      "hash": "3bb90f0f13f502ab"
+    },
+    {
+      "path": ".agent/knowledge/conventions.md",
+      "hash": "3bb90f0f13f502ab"
+    },
+    {
+      "path": ".claude/knowledge/core/io.md",
+      "hash": "0450ea4b0934a332"
+    },
+    {
+      "path": ".cursor/knowledge/core/io.md",
+      "hash": "0450ea4b0934a332"
+    },
+    {
+      "path": ".codex/knowledge/core/io.md",
+      "hash": "0450ea4b0934a332"
+    },
+    {
+      "path": ".gemini/knowledge/core/io.md",
+      "hash": "0450ea4b0934a332"
+    },
+    {
+      "path": ".agent/knowledge/core/io.md",
+      "hash": "0450ea4b0934a332"
+    },
+    {
+      "path": ".claude/knowledge/core/log.md",
+      "hash": "5a023f61e4c8009a"
+    },
+    {
+      "path": ".cursor/knowledge/core/log.md",
+      "hash": "5a023f61e4c8009a"
+    },
+    {
+      "path": ".codex/knowledge/core/log.md",
+      "hash": "5a023f61e4c8009a"
+    },
+    {
+      "path": ".gemini/knowledge/core/log.md",
+      "hash": "5a023f61e4c8009a"
+    },
+    {
+      "path": ".agent/knowledge/core/log.md",
+      "hash": "5a023f61e4c8009a"
+    },
+    {
+      "path": ".claude/knowledge/core/system.md",
+      "hash": "781e3c5389a3f568"
+    },
+    {
+      "path": ".cursor/knowledge/core/system.md",
+      "hash": "781e3c5389a3f568"
+    },
+    {
+      "path": ".codex/knowledge/core/system.md",
+      "hash": "781e3c5389a3f568"
+    },
+    {
+      "path": ".gemini/knowledge/core/system.md",
+      "hash": "781e3c5389a3f568"
+    },
+    {
+      "path": ".agent/knowledge/core/system.md",
+      "hash": "781e3c5389a3f568"
+    },
+    {
+      "path": ".claude/knowledge/core/utils.md",
+      "hash": "382cb00018d07f2c"
+    },
+    {
+      "path": ".cursor/knowledge/core/utils.md",
+      "hash": "382cb00018d07f2c"
+    },
+    {
+      "path": ".codex/knowledge/core/utils.md",
+      "hash": "382cb00018d07f2c"
+    },
+    {
+      "path": ".gemini/knowledge/core/utils.md",
+      "hash": "382cb00018d07f2c"
+    },
+    {
+      "path": ".agent/knowledge/core/utils.md",
+      "hash": "382cb00018d07f2c"
+    },
+    {
+      "path": ".claude/knowledge/cross-platform/file-paths-per-platform.md",
+      "hash": "a314c09ff2d07846"
+    },
+    {
+      "path": ".cursor/knowledge/cross-platform/file-paths-per-platform.md",
+      "hash": "a314c09ff2d07846"
+    },
+    {
+      "path": ".codex/knowledge/cross-platform/file-paths-per-platform.md",
+      "hash": "a314c09ff2d07846"
+    },
+    {
+      "path": ".gemini/knowledge/cross-platform/file-paths-per-platform.md",
+      "hash": "a314c09ff2d07846"
+    },
+    {
+      "path": ".agent/knowledge/cross-platform/file-paths-per-platform.md",
+      "hash": "a314c09ff2d07846"
+    },
+    {
+      "path": ".claude/knowledge/cross-platform/permissions-per-platform.md",
+      "hash": "6c3411224d98cb6d"
+    },
+    {
+      "path": ".cursor/knowledge/cross-platform/permissions-per-platform.md",
+      "hash": "6c3411224d98cb6d"
+    },
+    {
+      "path": ".codex/knowledge/cross-platform/permissions-per-platform.md",
+      "hash": "6c3411224d98cb6d"
+    },
+    {
+      "path": ".gemini/knowledge/cross-platform/permissions-per-platform.md",
+      "hash": "6c3411224d98cb6d"
+    },
+    {
+      "path": ".agent/knowledge/cross-platform/permissions-per-platform.md",
+      "hash": "6c3411224d98cb6d"
+    },
+    {
+      "path": ".claude/knowledge/cross-platform/platform-detection.md",
+      "hash": "3b60ae9fd4c7738d"
+    },
+    {
+      "path": ".cursor/knowledge/cross-platform/platform-detection.md",
+      "hash": "3b60ae9fd4c7738d"
+    },
+    {
+      "path": ".codex/knowledge/cross-platform/platform-detection.md",
+      "hash": "3b60ae9fd4c7738d"
+    },
+    {
+      "path": ".gemini/knowledge/cross-platform/platform-detection.md",
+      "hash": "3b60ae9fd4c7738d"
+    },
+    {
+      "path": ".agent/knowledge/cross-platform/platform-detection.md",
+      "hash": "3b60ae9fd4c7738d"
+    },
+    {
+      "path": ".claude/knowledge/cross-platform/service-manager-per-platform.md",
+      "hash": "b693659a000404ad"
+    },
+    {
+      "path": ".cursor/knowledge/cross-platform/service-manager-per-platform.md",
+      "hash": "b693659a000404ad"
+    },
+    {
+      "path": ".codex/knowledge/cross-platform/service-manager-per-platform.md",
+      "hash": "b693659a000404ad"
+    },
+    {
+      "path": ".gemini/knowledge/cross-platform/service-manager-per-platform.md",
+      "hash": "b693659a000404ad"
+    },
+    {
+      "path": ".agent/knowledge/cross-platform/service-manager-per-platform.md",
+      "hash": "b693659a000404ad"
+    },
+    {
+      "path": ".claude/knowledge/process/agent-rationale.md",
+      "hash": "c0d65a63f0cee64e"
+    },
+    {
+      "path": ".cursor/knowledge/process/agent-rationale.md",
+      "hash": "c0d65a63f0cee64e"
+    },
+    {
+      "path": ".codex/knowledge/process/agent-rationale.md",
+      "hash": "c0d65a63f0cee64e"
+    },
+    {
+      "path": ".gemini/knowledge/process/agent-rationale.md",
+      "hash": "c0d65a63f0cee64e"
+    },
+    {
+      "path": ".agent/knowledge/process/agent-rationale.md",
+      "hash": "c0d65a63f0cee64e"
+    },
+    {
+      "path": ".claude/knowledge/process/skill-rationale.md",
+      "hash": "0c53d6ce7524b993"
+    },
+    {
+      "path": ".cursor/knowledge/process/skill-rationale.md",
+      "hash": "0c53d6ce7524b993"
+    },
+    {
+      "path": ".codex/knowledge/process/skill-rationale.md",
+      "hash": "0c53d6ce7524b993"
+    },
+    {
+      "path": ".gemini/knowledge/process/skill-rationale.md",
+      "hash": "0c53d6ce7524b993"
+    },
+    {
+      "path": ".agent/knowledge/process/skill-rationale.md",
+      "hash": "0c53d6ce7524b993"
+    },
+    {
+      "path": ".claude/knowledge/process/workflow-rationale.md",
+      "hash": "5166d0ce79e7765f"
+    },
+    {
+      "path": ".cursor/knowledge/process/workflow-rationale.md",
+      "hash": "5166d0ce79e7765f"
+    },
+    {
+      "path": ".codex/knowledge/process/workflow-rationale.md",
+      "hash": "5166d0ce79e7765f"
+    },
+    {
+      "path": ".gemini/knowledge/process/workflow-rationale.md",
+      "hash": "5166d0ce79e7765f"
+    },
+    {
+      "path": ".agent/knowledge/process/workflow-rationale.md",
+      "hash": "5166d0ce79e7765f"
+    },
+    {
+      "path": ".claude/knowledge/release/auto-update-flow.md",
+      "hash": "0bfdd4dac34a2c5c"
+    },
+    {
+      "path": ".cursor/knowledge/release/auto-update-flow.md",
+      "hash": "0bfdd4dac34a2c5c"
+    },
+    {
+      "path": ".codex/knowledge/release/auto-update-flow.md",
+      "hash": "0bfdd4dac34a2c5c"
+    },
+    {
+      "path": ".gemini/knowledge/release/auto-update-flow.md",
+      "hash": "0bfdd4dac34a2c5c"
+    },
+    {
+      "path": ".agent/knowledge/release/auto-update-flow.md",
+      "hash": "0bfdd4dac34a2c5c"
+    },
+    {
+      "path": ".claude/knowledge/release/build-and-publish.md",
+      "hash": "9752978005c0d965"
+    },
+    {
+      "path": ".cursor/knowledge/release/build-and-publish.md",
+      "hash": "9752978005c0d965"
+    },
+    {
+      "path": ".codex/knowledge/release/build-and-publish.md",
+      "hash": "9752978005c0d965"
+    },
+    {
+      "path": ".gemini/knowledge/release/build-and-publish.md",
+      "hash": "9752978005c0d965"
+    },
+    {
+      "path": ".agent/knowledge/release/build-and-publish.md",
+      "hash": "9752978005c0d965"
+    },
+    {
+      "path": ".claude/knowledge/release/calver-versioning.md",
+      "hash": "79fab39fa456174c"
+    },
+    {
+      "path": ".cursor/knowledge/release/calver-versioning.md",
+      "hash": "79fab39fa456174c"
+    },
+    {
+      "path": ".codex/knowledge/release/calver-versioning.md",
+      "hash": "79fab39fa456174c"
+    },
+    {
+      "path": ".gemini/knowledge/release/calver-versioning.md",
+      "hash": "79fab39fa456174c"
+    },
+    {
+      "path": ".agent/knowledge/release/calver-versioning.md",
+      "hash": "79fab39fa456174c"
+    },
+    {
+      "path": ".claude/knowledge/release/release-flow.md",
+      "hash": "bf678ab0d4331f26"
+    },
+    {
+      "path": ".cursor/knowledge/release/release-flow.md",
+      "hash": "bf678ab0d4331f26"
+    },
+    {
+      "path": ".codex/knowledge/release/release-flow.md",
+      "hash": "bf678ab0d4331f26"
+    },
+    {
+      "path": ".gemini/knowledge/release/release-flow.md",
+      "hash": "bf678ab0d4331f26"
+    },
+    {
+      "path": ".agent/knowledge/release/release-flow.md",
+      "hash": "bf678ab0d4331f26"
+    },
+    {
+      "path": ".claude/knowledge/runbooks/_overview.md",
+      "hash": "9cb7b6464c982867"
+    },
+    {
+      "path": ".cursor/knowledge/runbooks/_overview.md",
+      "hash": "9cb7b6464c982867"
+    },
+    {
+      "path": ".codex/knowledge/runbooks/_overview.md",
+      "hash": "9cb7b6464c982867"
+    },
+    {
+      "path": ".gemini/knowledge/runbooks/_overview.md",
+      "hash": "9cb7b6464c982867"
+    },
+    {
+      "path": ".agent/knowledge/runbooks/_overview.md",
+      "hash": "9cb7b6464c982867"
+    },
+    {
+      "path": ".claude/knowledge/runbooks/buffer-grows-unbounded.md",
+      "hash": "f2b81792f6fb9112"
+    },
+    {
+      "path": ".cursor/knowledge/runbooks/buffer-grows-unbounded.md",
+      "hash": "f2b81792f6fb9112"
+    },
+    {
+      "path": ".codex/knowledge/runbooks/buffer-grows-unbounded.md",
+      "hash": "f2b81792f6fb9112"
+    },
+    {
+      "path": ".gemini/knowledge/runbooks/buffer-grows-unbounded.md",
+      "hash": "f2b81792f6fb9112"
+    },
+    {
+      "path": ".agent/knowledge/runbooks/buffer-grows-unbounded.md",
+      "hash": "f2b81792f6fb9112"
+    },
+    {
+      "path": ".claude/knowledge/runbooks/daemon-not-uploading.md",
+      "hash": "85995d48fa34ba2f"
+    },
+    {
+      "path": ".cursor/knowledge/runbooks/daemon-not-uploading.md",
+      "hash": "85995d48fa34ba2f"
+    },
+    {
+      "path": ".codex/knowledge/runbooks/daemon-not-uploading.md",
+      "hash": "85995d48fa34ba2f"
+    },
+    {
+      "path": ".gemini/knowledge/runbooks/daemon-not-uploading.md",
+      "hash": "85995d48fa34ba2f"
+    },
+    {
+      "path": ".agent/knowledge/runbooks/daemon-not-uploading.md",
+      "hash": "85995d48fa34ba2f"
+    },
+    {
+      "path": ".claude/knowledge/runbooks/debug-stuck-daemon.md",
+      "hash": "bb38c8c3d6964f22"
+    },
+    {
+      "path": ".cursor/knowledge/runbooks/debug-stuck-daemon.md",
+      "hash": "bb38c8c3d6964f22"
+    },
+    {
+      "path": ".codex/knowledge/runbooks/debug-stuck-daemon.md",
+      "hash": "bb38c8c3d6964f22"
+    },
+    {
+      "path": ".gemini/knowledge/runbooks/debug-stuck-daemon.md",
+      "hash": "bb38c8c3d6964f22"
+    },
+    {
+      "path": ".agent/knowledge/runbooks/debug-stuck-daemon.md",
+      "hash": "bb38c8c3d6964f22"
+    },
+    {
+      "path": ".claude/knowledge/runbooks/fix-coverage-gap.md",
+      "hash": "3595e4379d877e02"
+    },
+    {
+      "path": ".cursor/knowledge/runbooks/fix-coverage-gap.md",
+      "hash": "3595e4379d877e02"
+    },
+    {
+      "path": ".codex/knowledge/runbooks/fix-coverage-gap.md",
+      "hash": "3595e4379d877e02"
+    },
+    {
+      "path": ".gemini/knowledge/runbooks/fix-coverage-gap.md",
+      "hash": "3595e4379d877e02"
+    },
+    {
+      "path": ".agent/knowledge/runbooks/fix-coverage-gap.md",
+      "hash": "3595e4379d877e02"
+    },
+    {
+      "path": ".claude/knowledge/runbooks/platform-specific-install-failure.md",
+      "hash": "8ee302e2303900dd"
+    },
+    {
+      "path": ".cursor/knowledge/runbooks/platform-specific-install-failure.md",
+      "hash": "8ee302e2303900dd"
+    },
+    {
+      "path": ".codex/knowledge/runbooks/platform-specific-install-failure.md",
+      "hash": "8ee302e2303900dd"
+    },
+    {
+      "path": ".gemini/knowledge/runbooks/platform-specific-install-failure.md",
+      "hash": "8ee302e2303900dd"
+    },
+    {
+      "path": ".agent/knowledge/runbooks/platform-specific-install-failure.md",
+      "hash": "8ee302e2303900dd"
+    },
+    {
+      "path": ".claude/knowledge/runbooks/redaction-false-positive.md",
+      "hash": "0b458e8911397d93"
+    },
+    {
+      "path": ".cursor/knowledge/runbooks/redaction-false-positive.md",
+      "hash": "0b458e8911397d93"
+    },
+    {
+      "path": ".codex/knowledge/runbooks/redaction-false-positive.md",
+      "hash": "0b458e8911397d93"
+    },
+    {
+      "path": ".gemini/knowledge/runbooks/redaction-false-positive.md",
+      "hash": "0b458e8911397d93"
+    },
+    {
+      "path": ".agent/knowledge/runbooks/redaction-false-positive.md",
+      "hash": "0b458e8911397d93"
+    },
+    {
+      "path": ".claude/knowledge/runbooks/upgrade-failure.md",
+      "hash": "538798b26f7ce5b6"
+    },
+    {
+      "path": ".cursor/knowledge/runbooks/upgrade-failure.md",
+      "hash": "538798b26f7ce5b6"
+    },
+    {
+      "path": ".codex/knowledge/runbooks/upgrade-failure.md",
+      "hash": "538798b26f7ce5b6"
+    },
+    {
+      "path": ".gemini/knowledge/runbooks/upgrade-failure.md",
+      "hash": "538798b26f7ce5b6"
+    },
+    {
+      "path": ".agent/knowledge/runbooks/upgrade-failure.md",
+      "hash": "538798b26f7ce5b6"
+    },
+    {
+      "path": ".claude/knowledge/services/_overview.md",
+      "hash": "83a8b35c76a9e119"
+    },
+    {
+      "path": ".cursor/knowledge/services/_overview.md",
+      "hash": "83a8b35c76a9e119"
+    },
+    {
+      "path": ".codex/knowledge/services/_overview.md",
+      "hash": "83a8b35c76a9e119"
+    },
+    {
+      "path": ".gemini/knowledge/services/_overview.md",
+      "hash": "83a8b35c76a9e119"
+    },
+    {
+      "path": ".agent/knowledge/services/_overview.md",
+      "hash": "83a8b35c76a9e119"
+    },
+    {
+      "path": ".claude/knowledge/services/buffer.md",
+      "hash": "a05fa21148007a9f"
+    },
+    {
+      "path": ".cursor/knowledge/services/buffer.md",
+      "hash": "a05fa21148007a9f"
+    },
+    {
+      "path": ".codex/knowledge/services/buffer.md",
+      "hash": "a05fa21148007a9f"
+    },
+    {
+      "path": ".gemini/knowledge/services/buffer.md",
+      "hash": "a05fa21148007a9f"
+    },
+    {
+      "path": ".agent/knowledge/services/buffer.md",
+      "hash": "a05fa21148007a9f"
+    },
+    {
+      "path": ".claude/knowledge/services/config.md",
+      "hash": "5862d85fa9ac90e9"
+    },
+    {
+      "path": ".cursor/knowledge/services/config.md",
+      "hash": "5862d85fa9ac90e9"
+    },
+    {
+      "path": ".codex/knowledge/services/config.md",
+      "hash": "5862d85fa9ac90e9"
+    },
+    {
+      "path": ".gemini/knowledge/services/config.md",
+      "hash": "5862d85fa9ac90e9"
+    },
+    {
+      "path": ".agent/knowledge/services/config.md",
+      "hash": "5862d85fa9ac90e9"
+    },
+    {
+      "path": ".claude/knowledge/services/contract.md",
+      "hash": "c0ada9f54d53eb82"
+    },
+    {
+      "path": ".cursor/knowledge/services/contract.md",
+      "hash": "c0ada9f54d53eb82"
+    },
+    {
+      "path": ".codex/knowledge/services/contract.md",
+      "hash": "c0ada9f54d53eb82"
+    },
+    {
+      "path": ".gemini/knowledge/services/contract.md",
+      "hash": "c0ada9f54d53eb82"
+    },
+    {
+      "path": ".agent/knowledge/services/contract.md",
+      "hash": "c0ada9f54d53eb82"
+    },
+    {
+      "path": ".claude/knowledge/services/http.md",
+      "hash": "38271dcb20365435"
+    },
+    {
+      "path": ".cursor/knowledge/services/http.md",
+      "hash": "38271dcb20365435"
+    },
+    {
+      "path": ".codex/knowledge/services/http.md",
+      "hash": "38271dcb20365435"
+    },
+    {
+      "path": ".gemini/knowledge/services/http.md",
+      "hash": "38271dcb20365435"
+    },
+    {
+      "path": ".agent/knowledge/services/http.md",
+      "hash": "38271dcb20365435"
+    },
+    {
+      "path": ".claude/knowledge/services/observability-events.md",
+      "hash": "8ca0bf4b29aaed3d"
+    },
+    {
+      "path": ".cursor/knowledge/services/observability-events.md",
+      "hash": "8ca0bf4b29aaed3d"
+    },
+    {
+      "path": ".codex/knowledge/services/observability-events.md",
+      "hash": "8ca0bf4b29aaed3d"
+    },
+    {
+      "path": ".gemini/knowledge/services/observability-events.md",
+      "hash": "8ca0bf4b29aaed3d"
+    },
+    {
+      "path": ".agent/knowledge/services/observability-events.md",
+      "hash": "8ca0bf4b29aaed3d"
+    },
+    {
+      "path": ".claude/knowledge/services/polling.md",
+      "hash": "d01b5c1487584c36"
+    },
+    {
+      "path": ".cursor/knowledge/services/polling.md",
+      "hash": "d01b5c1487584c36"
+    },
+    {
+      "path": ".codex/knowledge/services/polling.md",
+      "hash": "d01b5c1487584c36"
+    },
+    {
+      "path": ".gemini/knowledge/services/polling.md",
+      "hash": "d01b5c1487584c36"
+    },
+    {
+      "path": ".agent/knowledge/services/polling.md",
+      "hash": "d01b5c1487584c36"
+    },
+    {
+      "path": ".claude/knowledge/services/redaction.md",
+      "hash": "7791dbed5e99d870"
+    },
+    {
+      "path": ".cursor/knowledge/services/redaction.md",
+      "hash": "7791dbed5e99d870"
+    },
+    {
+      "path": ".codex/knowledge/services/redaction.md",
+      "hash": "7791dbed5e99d870"
+    },
+    {
+      "path": ".gemini/knowledge/services/redaction.md",
+      "hash": "7791dbed5e99d870"
+    },
+    {
+      "path": ".agent/knowledge/services/redaction.md",
+      "hash": "7791dbed5e99d870"
+    },
+    {
+      "path": ".claude/knowledge/services/sentinels/dedup-stack.md",
+      "hash": "1d3b13311f8c5112"
+    },
+    {
+      "path": ".cursor/knowledge/services/sentinels/dedup-stack.md",
+      "hash": "1d3b13311f8c5112"
+    },
+    {
+      "path": ".codex/knowledge/services/sentinels/dedup-stack.md",
+      "hash": "1d3b13311f8c5112"
+    },
+    {
+      "path": ".gemini/knowledge/services/sentinels/dedup-stack.md",
+      "hash": "1d3b13311f8c5112"
+    },
+    {
+      "path": ".agent/knowledge/services/sentinels/dedup-stack.md",
+      "hash": "1d3b13311f8c5112"
+    },
+    {
+      "path": ".claude/knowledge/services/sentinels/sentinel-lifecycle.md",
+      "hash": "742eb3b19ba961ec"
+    },
+    {
+      "path": ".cursor/knowledge/services/sentinels/sentinel-lifecycle.md",
+      "hash": "742eb3b19ba961ec"
+    },
+    {
+      "path": ".codex/knowledge/services/sentinels/sentinel-lifecycle.md",
+      "hash": "742eb3b19ba961ec"
+    },
+    {
+      "path": ".gemini/knowledge/services/sentinels/sentinel-lifecycle.md",
+      "hash": "742eb3b19ba961ec"
+    },
+    {
+      "path": ".agent/knowledge/services/sentinels/sentinel-lifecycle.md",
+      "hash": "742eb3b19ba961ec"
+    },
+    {
+      "path": ".claude/knowledge/services/sentinels/watermark-pattern.md",
+      "hash": "9bdde6b6b23e995e"
+    },
+    {
+      "path": ".cursor/knowledge/services/sentinels/watermark-pattern.md",
+      "hash": "9bdde6b6b23e995e"
+    },
+    {
+      "path": ".codex/knowledge/services/sentinels/watermark-pattern.md",
+      "hash": "9bdde6b6b23e995e"
+    },
+    {
+      "path": ".gemini/knowledge/services/sentinels/watermark-pattern.md",
+      "hash": "9bdde6b6b23e995e"
+    },
+    {
+      "path": ".agent/knowledge/services/sentinels/watermark-pattern.md",
+      "hash": "9bdde6b6b23e995e"
+    },
+    {
+      "path": ".claude/knowledge/services/uninstall.md",
+      "hash": "5728da925ee6c456"
+    },
+    {
+      "path": ".cursor/knowledge/services/uninstall.md",
+      "hash": "5728da925ee6c456"
+    },
+    {
+      "path": ".codex/knowledge/services/uninstall.md",
+      "hash": "5728da925ee6c456"
+    },
+    {
+      "path": ".gemini/knowledge/services/uninstall.md",
+      "hash": "5728da925ee6c456"
+    },
+    {
+      "path": ".agent/knowledge/services/uninstall.md",
+      "hash": "5728da925ee6c456"
+    },
+    {
+      "path": ".claude/knowledge/services/upgrade.md",
+      "hash": "be2f9f92cb98ea8c"
+    },
+    {
+      "path": ".cursor/knowledge/services/upgrade.md",
+      "hash": "be2f9f92cb98ea8c"
+    },
+    {
+      "path": ".codex/knowledge/services/upgrade.md",
+      "hash": "be2f9f92cb98ea8c"
+    },
+    {
+      "path": ".gemini/knowledge/services/upgrade.md",
+      "hash": "be2f9f92cb98ea8c"
+    },
+    {
+      "path": ".agent/knowledge/services/upgrade.md",
+      "hash": "be2f9f92cb98ea8c"
+    },
+    {
+      "path": ".claude/knowledge/services/uploader.md",
+      "hash": "e2072796b62eea8c"
+    },
+    {
+      "path": ".cursor/knowledge/services/uploader.md",
+      "hash": "e2072796b62eea8c"
+    },
+    {
+      "path": ".codex/knowledge/services/uploader.md",
+      "hash": "e2072796b62eea8c"
+    },
+    {
+      "path": ".gemini/knowledge/services/uploader.md",
+      "hash": "e2072796b62eea8c"
+    },
+    {
+      "path": ".agent/knowledge/services/uploader.md",
+      "hash": "e2072796b62eea8c"
+    },
+    {
+      "path": ".claude/knowledge/sources/add-new-source.md",
+      "hash": "7d01006fd08e6ce4"
+    },
+    {
+      "path": ".cursor/knowledge/sources/add-new-source.md",
+      "hash": "7d01006fd08e6ce4"
+    },
+    {
+      "path": ".codex/knowledge/sources/add-new-source.md",
+      "hash": "7d01006fd08e6ce4"
+    },
+    {
+      "path": ".gemini/knowledge/sources/add-new-source.md",
+      "hash": "7d01006fd08e6ce4"
+    },
+    {
+      "path": ".agent/knowledge/sources/add-new-source.md",
+      "hash": "7d01006fd08e6ce4"
+    },
+    {
+      "path": ".claude/knowledge/sources/formats/claude-code-format.md",
+      "hash": "714fea1ddc0284c7"
+    },
+    {
+      "path": ".cursor/knowledge/sources/formats/claude-code-format.md",
+      "hash": "714fea1ddc0284c7"
+    },
+    {
+      "path": ".codex/knowledge/sources/formats/claude-code-format.md",
+      "hash": "714fea1ddc0284c7"
+    },
+    {
+      "path": ".gemini/knowledge/sources/formats/claude-code-format.md",
+      "hash": "714fea1ddc0284c7"
+    },
+    {
+      "path": ".agent/knowledge/sources/formats/claude-code-format.md",
+      "hash": "714fea1ddc0284c7"
+    },
+    {
+      "path": ".claude/knowledge/sources/formats/codex-format.md",
+      "hash": "5ff3229521a51a24"
+    },
+    {
+      "path": ".cursor/knowledge/sources/formats/codex-format.md",
+      "hash": "5ff3229521a51a24"
+    },
+    {
+      "path": ".codex/knowledge/sources/formats/codex-format.md",
+      "hash": "5ff3229521a51a24"
+    },
+    {
+      "path": ".gemini/knowledge/sources/formats/codex-format.md",
+      "hash": "5ff3229521a51a24"
+    },
+    {
+      "path": ".agent/knowledge/sources/formats/codex-format.md",
+      "hash": "5ff3229521a51a24"
+    },
+    {
+      "path": ".claude/knowledge/sources/formats/cursor-format.md",
+      "hash": "e272d85df89ba211"
+    },
+    {
+      "path": ".cursor/knowledge/sources/formats/cursor-format.md",
+      "hash": "e272d85df89ba211"
+    },
+    {
+      "path": ".codex/knowledge/sources/formats/cursor-format.md",
+      "hash": "e272d85df89ba211"
+    },
+    {
+      "path": ".gemini/knowledge/sources/formats/cursor-format.md",
+      "hash": "e272d85df89ba211"
+    },
+    {
+      "path": ".agent/knowledge/sources/formats/cursor-format.md",
+      "hash": "e272d85df89ba211"
+    },
+    {
+      "path": ".claude/knowledge/sources/formats/gemini-cli-format.md",
+      "hash": "856dee0c1ab35c34"
+    },
+    {
+      "path": ".cursor/knowledge/sources/formats/gemini-cli-format.md",
+      "hash": "856dee0c1ab35c34"
+    },
+    {
+      "path": ".codex/knowledge/sources/formats/gemini-cli-format.md",
+      "hash": "856dee0c1ab35c34"
+    },
+    {
+      "path": ".gemini/knowledge/sources/formats/gemini-cli-format.md",
+      "hash": "856dee0c1ab35c34"
+    },
+    {
+      "path": ".agent/knowledge/sources/formats/gemini-cli-format.md",
+      "hash": "856dee0c1ab35c34"
+    },
+    {
+      "path": ".claude/knowledge/sources/parsers/_overview.md",
+      "hash": "8ebe48c3c151194a"
+    },
+    {
+      "path": ".cursor/knowledge/sources/parsers/_overview.md",
+      "hash": "8ebe48c3c151194a"
+    },
+    {
+      "path": ".codex/knowledge/sources/parsers/_overview.md",
+      "hash": "8ebe48c3c151194a"
+    },
+    {
+      "path": ".gemini/knowledge/sources/parsers/_overview.md",
+      "hash": "8ebe48c3c151194a"
+    },
+    {
+      "path": ".agent/knowledge/sources/parsers/_overview.md",
+      "hash": "8ebe48c3c151194a"
+    },
+    {
+      "path": ".claude/knowledge/sources/parsers/claude-code.md",
+      "hash": "fa8585a906ea7566"
+    },
+    {
+      "path": ".cursor/knowledge/sources/parsers/claude-code.md",
+      "hash": "fa8585a906ea7566"
+    },
+    {
+      "path": ".codex/knowledge/sources/parsers/claude-code.md",
+      "hash": "fa8585a906ea7566"
+    },
+    {
+      "path": ".gemini/knowledge/sources/parsers/claude-code.md",
+      "hash": "fa8585a906ea7566"
+    },
+    {
+      "path": ".agent/knowledge/sources/parsers/claude-code.md",
+      "hash": "fa8585a906ea7566"
+    },
+    {
+      "path": ".claude/knowledge/sources/parsers/codex.md",
+      "hash": "7170914bf224aa6b"
+    },
+    {
+      "path": ".cursor/knowledge/sources/parsers/codex.md",
+      "hash": "7170914bf224aa6b"
+    },
+    {
+      "path": ".codex/knowledge/sources/parsers/codex.md",
+      "hash": "7170914bf224aa6b"
+    },
+    {
+      "path": ".gemini/knowledge/sources/parsers/codex.md",
+      "hash": "7170914bf224aa6b"
+    },
+    {
+      "path": ".agent/knowledge/sources/parsers/codex.md",
+      "hash": "7170914bf224aa6b"
+    },
+    {
+      "path": ".claude/knowledge/sources/parsers/cursor.md",
+      "hash": "13113b909f8cf27f"
+    },
+    {
+      "path": ".cursor/knowledge/sources/parsers/cursor.md",
+      "hash": "13113b909f8cf27f"
+    },
+    {
+      "path": ".codex/knowledge/sources/parsers/cursor.md",
+      "hash": "13113b909f8cf27f"
+    },
+    {
+      "path": ".gemini/knowledge/sources/parsers/cursor.md",
+      "hash": "13113b909f8cf27f"
+    },
+    {
+      "path": ".agent/knowledge/sources/parsers/cursor.md",
+      "hash": "13113b909f8cf27f"
+    },
+    {
+      "path": ".claude/knowledge/sources/parsers/gemini-cli.md",
+      "hash": "219369606b192461"
+    },
+    {
+      "path": ".cursor/knowledge/sources/parsers/gemini-cli.md",
+      "hash": "219369606b192461"
+    },
+    {
+      "path": ".codex/knowledge/sources/parsers/gemini-cli.md",
+      "hash": "219369606b192461"
+    },
+    {
+      "path": ".gemini/knowledge/sources/parsers/gemini-cli.md",
+      "hash": "219369606b192461"
+    },
+    {
+      "path": ".agent/knowledge/sources/parsers/gemini-cli.md",
+      "hash": "219369606b192461"
+    },
+    {
+      "path": ".claude/knowledge/sources/source-formats.md",
+      "hash": "a267df234659f45c"
+    },
+    {
+      "path": ".cursor/knowledge/sources/source-formats.md",
+      "hash": "a267df234659f45c"
+    },
+    {
+      "path": ".codex/knowledge/sources/source-formats.md",
+      "hash": "a267df234659f45c"
+    },
+    {
+      "path": ".gemini/knowledge/sources/source-formats.md",
+      "hash": "a267df234659f45c"
+    },
+    {
+      "path": ".agent/knowledge/sources/source-formats.md",
+      "hash": "a267df234659f45c"
+    },
+    {
+      "path": ".claude/skills/add-source-parser/SKILL.md",
+      "hash": "1443e1da216f919f"
+    },
+    {
+      "path": ".claude/skills/audit-sqlite-usage/SKILL.md",
+      "hash": "3fbb56c3dec31c82"
+    },
+    {
+      "path": ".claude/skills/redaction-validator/SKILL.md",
+      "hash": "a5298c99eaa0930d"
+    },
+    {
+      "path": ".cursor/skills/add-source-parser/SKILL.md",
+      "hash": "1443e1da216f919f"
+    },
+    {
+      "path": ".cursor/skills/audit-sqlite-usage/SKILL.md",
+      "hash": "3fbb56c3dec31c82"
+    },
+    {
+      "path": ".cursor/skills/redaction-validator/SKILL.md",
+      "hash": "a5298c99eaa0930d"
+    },
+    {
+      "path": ".agents/skills/add-source-parser/SKILL.md",
+      "hash": "1443e1da216f919f"
+    },
+    {
+      "path": ".agents/skills/audit-sqlite-usage/SKILL.md",
+      "hash": "3fbb56c3dec31c82"
+    },
+    {
+      "path": ".agents/skills/redaction-validator/SKILL.md",
+      "hash": "a5298c99eaa0930d"
+    },
+    {
+      "path": ".gemini/skills/add-source-parser/SKILL.md",
+      "hash": "1443e1da216f919f"
+    },
+    {
+      "path": ".gemini/skills/audit-sqlite-usage/SKILL.md",
+      "hash": "3fbb56c3dec31c82"
+    },
+    {
+      "path": ".gemini/skills/redaction-validator/SKILL.md",
+      "hash": "a5298c99eaa0930d"
+    },
+    {
+      "path": ".agent/skills/add-source-parser/SKILL.md",
+      "hash": "1443e1da216f919f"
+    },
+    {
+      "path": ".agent/skills/audit-sqlite-usage/SKILL.md",
+      "hash": "3fbb56c3dec31c82"
+    },
+    {
+      "path": ".agent/skills/redaction-validator/SKILL.md",
+      "hash": "a5298c99eaa0930d"
+    },
+    {
+      "path": ".claude/agents/cross-platform-test-runner.md",
+      "hash": "85bf2829606ff49e"
+    },
+    {
+      "path": ".cursor/agents/cross-platform-test-runner.md",
+      "hash": "85bf2829606ff49e"
+    },
+    {
+      "path": ".gemini/agents/cross-platform-test-runner.md",
+      "hash": "85bf2829606ff49e"
+    },
+    {
+      "path": ".codex/agents/cross-platform-test-runner.toml",
+      "hash": "9575510e1a4d2bd4"
+    },
+    {
+      "path": ".claude/agents/source-implementation-reviewer.md",
+      "hash": "f7de4838147caaa7"
+    },
+    {
+      "path": ".cursor/agents/source-implementation-reviewer.md",
+      "hash": "f7de4838147caaa7"
+    },
+    {
+      "path": ".gemini/agents/source-implementation-reviewer.md",
+      "hash": "f7de4838147caaa7"
+    },
+    {
+      "path": ".codex/agents/source-implementation-reviewer.toml",
+      "hash": "0c6418fa84569a90"
+    },
+    {
+      "path": ".claude/commands/contribution.md",
+      "hash": "3b82e97a7d3e724a"
+    },
+    {
+      "path": ".cursor/commands/contribution.md",
+      "hash": "3b82e97a7d3e724a"
+    },
+    {
+      "path": ".gemini/commands/contribution.toml",
+      "hash": "9ffa1c6a1208292e"
+    },
+    {
+      "path": ".agent/workflows/contribution.md",
+      "hash": "3b82e97a7d3e724a"
+    },
+    {
+      "path": ".claude/tools/.gitkeep",
+      "hash": "e3b0c44298fc1c14"
+    },
+    {
+      "path": ".codex/tools/.gitkeep",
+      "hash": "e3b0c44298fc1c14"
+    },
+    {
+      "path": ".cursor/tools/.gitkeep",
+      "hash": "e3b0c44298fc1c14"
+    },
+    {
+      "path": ".gemini/tools/.gitkeep",
+      "hash": "e3b0c44298fc1c14"
+    },
+    {
+      "path": ".agent/tools/.gitkeep",
+      "hash": "e3b0c44298fc1c14"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@proxai-gateway/ai-mapper",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test"
+  },
+  "engines": {
+    "bun": ">=1.0"
+  }
+}
