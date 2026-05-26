@@ -1,43 +1,43 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-25T06:16:31.642Z",
-  "sourceHash": "edbe60ed0d81da500a13275a8dd9b5f0",
+  "generatedAt": "2026-05-26T03:34:55.609Z",
+  "sourceHash": "451c12d36e6bf5faf39ae5418a39448b",
   "files": [
     {
       "path": "CLAUDE.md",
-      "hash": "99335c113527eedc"
+      "hash": "45609ead083fa1dc"
     },
     {
       "path": "AGENTS.md",
-      "hash": "09ec3676d2dee1b1"
+      "hash": "e3d27582473e1213"
     },
     {
       "path": "GEMINI.md",
-      "hash": "c578c0b7e1e2d6e4"
+      "hash": "4ba20a8ab61637c7"
     },
     {
       "path": ".agent/AGENTS.md",
-      "hash": "0a27714c610f9474"
+      "hash": "0c34661a1cb2fe05"
     },
     {
       "path": ".claude/rules/_always.md",
-      "hash": "47caa144abf611cc"
+      "hash": "a88cdcf05ff86464"
     },
     {
       "path": ".cursor/rules/_always.mdc",
-      "hash": "f1f3c77422ce7375"
+      "hash": "07580abad0b24f4f"
     },
     {
       "path": ".codex/rules/_always.md",
-      "hash": "47caa144abf611cc"
+      "hash": "a88cdcf05ff86464"
     },
     {
       "path": ".gemini/rules/_always.md",
-      "hash": "47caa144abf611cc"
+      "hash": "a88cdcf05ff86464"
     },
     {
       "path": ".agent/rules/_always.md",
-      "hash": "47caa144abf611cc"
+      "hash": "a88cdcf05ff86464"
     },
     {
       "path": ".claude/rules/modules/cross-platform-feature-flags.md",
@@ -298,6 +298,26 @@
     {
       "path": ".agent/rules/services/sentinels.md",
       "hash": "638fc52cd39bf571"
+    },
+    {
+      "path": ".claude/rules/services/state-machines.md",
+      "hash": "96b585254d1d59e6"
+    },
+    {
+      "path": ".cursor/rules/services/state-machines.mdc",
+      "hash": "26c22911e1f8ad7a"
+    },
+    {
+      "path": ".codex/rules/services/state-machines.md",
+      "hash": "96b585254d1d59e6"
+    },
+    {
+      "path": ".gemini/rules/services/state-machines.md",
+      "hash": "96b585254d1d59e6"
+    },
+    {
+      "path": ".agent/rules/services/state-machines.md",
+      "hash": "96b585254d1d59e6"
     },
     {
       "path": ".claude/rules/services/watermark-monotonic-only.md",
@@ -1158,6 +1178,26 @@
     {
       "path": ".agent/knowledge/services/sentinels/watermark-pattern.md",
       "hash": "9bdde6b6b23e995e"
+    },
+    {
+      "path": ".claude/knowledge/services/state-machines.md",
+      "hash": "4e54336dc8ccc0a4"
+    },
+    {
+      "path": ".cursor/knowledge/services/state-machines.md",
+      "hash": "4e54336dc8ccc0a4"
+    },
+    {
+      "path": ".codex/knowledge/services/state-machines.md",
+      "hash": "4e54336dc8ccc0a4"
+    },
+    {
+      "path": ".gemini/knowledge/services/state-machines.md",
+      "hash": "4e54336dc8ccc0a4"
+    },
+    {
+      "path": ".agent/knowledge/services/state-machines.md",
+      "hash": "4e54336dc8ccc0a4"
     },
     {
       "path": ".claude/knowledge/services/uninstall.md",

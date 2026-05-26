@@ -7,7 +7,7 @@
 - Conventional Commits required; subjects ≤70 chars in imperative mood; no AI/Co-Authored-By trailers.
 - Be decisive in technical communication; do not lecture or narrate verification steps.
 - For non-trivial fixes with design choices, write a 2-3-option plan and wait for explicit go before coding.
-- Brainstorm specs and implementation plans live in `/tmp/`; never write a `docs/` folder in this repo.
+- Brainstorm specs and implementation plans live in `.tmp/`; the repo's `docs/` folder is the canonical product documentation tree imported from `~/repos/proxai/docs/proxai-gateway/` and may be added to.
 - Zero inline or block code comments (`//`, `/* */`) in any `src/` file; write self-documenting code instead. Comments are permitted only in the root `README.md`, CLI help text, and terminal output formatting variables.
-- For common tasks use the canonical package.json scripts: `bun run check` (lint + format + typecheck), `bun run test:cov` (all tests with coverage), `bun run format` (format only), `bun run typecheck` (typecheck only). Never assume raw flags.
+- For common tasks use the canonical package.json scripts: `bun run check` (lint + format + typecheck + arch-lint), `bun run test:cov` (all tests with coverage), `bun run format` (format only), `bun run typecheck` (typecheck only), `bun run lint:arch` (architectural-invariant scan), `bun run diagrams:export` (regenerate state-machine diagrams). Never assume raw flags.
 - Temporary files, logs, and scratch outputs go in `.tmp/` at repo root; never commit `.tmp/` or `scratch/` contents.
