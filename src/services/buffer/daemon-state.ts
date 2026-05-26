@@ -1,6 +1,13 @@
 import type { Database } from 'bun:sqlite';
 
+import { columnExists } from 'core/io/sqlite';
 import { BUFFER_TABLES } from 'services/buffer/buffer.constants.ts';
+
+export const DAEMON_STATE_MACHINE_SNAPSHOTS_COL = 'machine_snapshots';
+
+export const ALTER_ADD_MACHINE_SNAPSHOTS_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.daemonState} ADD COLUMN ${DAEMON_STATE_MACHINE_SNAPSHOTS_COL} TEXT
+`;
 
 export const DAEMON_STATE_TABLE_DDL = `
   CREATE TABLE IF NOT EXISTS ${BUFFER_TABLES.daemonState} (
@@ -103,6 +110,31 @@ export function setDaemonState(db: Database, snapshot: DaemonStateSnapshot): voi
         : 0,
     JSON.stringify(snapshot.lastSourceCaptures),
   );
+}
+
+export function migrateDaemonStateMachineSnapshots(db: Database): void {
+  if (!columnExists(db, BUFFER_TABLES.daemonState, DAEMON_STATE_MACHINE_SNAPSHOTS_COL)) {
+    db.run(ALTER_ADD_MACHINE_SNAPSHOTS_DDL);
+  }
+}
+
+const SET_MACHINE_SNAPSHOTS_SQL = `
+  INSERT INTO ${BUFFER_TABLES.daemonState} (id, ${DAEMON_STATE_MACHINE_SNAPSHOTS_COL})
+  VALUES (1, ?)
+  ON CONFLICT(id) DO UPDATE SET ${DAEMON_STATE_MACHINE_SNAPSHOTS_COL} = excluded.${DAEMON_STATE_MACHINE_SNAPSHOTS_COL}
+`;
+
+const GET_MACHINE_SNAPSHOTS_SQL = `
+  SELECT ${DAEMON_STATE_MACHINE_SNAPSHOTS_COL} FROM ${BUFFER_TABLES.daemonState} WHERE id = 1
+`;
+
+export function setMachineSnapshots(db: Database, snapshotsJson: string): void {
+  db.query(SET_MACHINE_SNAPSHOTS_SQL).run(snapshotsJson);
+}
+
+export function getMachineSnapshots(db: Database): string | null {
+  const row = db.query<{ machine_snapshots: string | null }, []>(GET_MACHINE_SNAPSHOTS_SQL).get();
+  return row?.machine_snapshots ?? null;
 }
 
 export function getDaemonState(db: Database): DaemonStateSnapshot | null {

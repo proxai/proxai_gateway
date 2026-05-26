@@ -1,9 +1,4 @@
-export type {
-  MachineName,
-  MachineRuntime,
-  SentinelPaths,
-  SentinelKind,
-} from 'services/state-machines/state-machines.types.ts';
+export type { MachineName, MachineRuntime } from 'services/state-machines/state-machines.types.ts';
 
 export {
   ALL_MACHINES,
@@ -27,3 +22,6 @@ export * from 'services/state-machines/service-manager/index.ts';
 export * from 'services/state-machines/setup/index.ts';
 export * from 'services/state-machines/uninstall/index.ts';
 export * from 'services/state-machines/daemon-root/index.ts';
+export * from 'services/state-machines/snapshot/index.ts';
+export * from 'services/state-machines/sentinel-watcher/index.ts';
+export * from 'services/state-machines/event-router/index.ts';

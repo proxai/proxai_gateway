@@ -22,14 +22,3 @@ export interface MachineRuntime {
   readonly name: MachineName;
   readonly logger: Logger;
 }
-
-export interface SentinelPaths {
-  readonly authFailed: string;
-  readonly paused: string;
-  readonly bufferFull: string;
-  readonly sessionStopped: string;
-  readonly consentAccepted: string;
-  readonly updateAvailable: string;
-}
-
-export type SentinelKind = keyof SentinelPaths;
