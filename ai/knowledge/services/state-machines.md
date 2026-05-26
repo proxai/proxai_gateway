@@ -73,4 +73,27 @@ files (the canonical visualization).
 `state_machine.transition` events (emitted by `event-router`) and prints the
 final state of each machine. Used for incident debugging.
 
+## Where each machine is driven
+
+| Machine | Concrete driver | Lifetime |
+| --- | --- | --- |
+| `daemonRootMachine`, `sentinelRegistryMachine` | `services/polling/daemon-loops.ts` (`startDaemonActors`) | Daemon process lifetime |
+| `captureLoopMachine` | `services/polling/capture-cycle.ts` (`runCaptureCycle`) | Per capture cycle |
+| `drainLoopMachine` | `services/polling/drain-cycle.ts` (`runDrainCycle`) | Per drain cycle |
+| `heartbeatLoopMachine` | `services/polling/heartbeat-cycle.ts` (`runHeartbeatCycle`) | Per heartbeat cycle |
+| `sourcePollMachine` | `runCaptureCycle` per registered source | Per source poll |
+| `workerMachine` | `pollSourceInWorker` (default sources) | Per worker invocation |
+| `cursorLifecycleMachine`, `quarantineLifecycleMachine` | `commitWorkerCapture` for each record in the worker output | Ephemeral per record |
+| `batchLifecycleMachine` | `services/uploader/upload-batch.ts` (`uploadBatch` + `classifyAndPersist`) | Per outbound batch attempt |
+| `pacerMachine` | `services/uploader/pacer.ts` (`createPacer`) | Pacer instance lifetime |
+| `setupMachine` | `cli/commands/setup/index.ts` (`runSetup`) | Per `setup` command |
+| `uninstallMachine` | `cli/commands/uninstall/index.ts` (`runUninstall`) | Per `uninstall` command |
+| `serviceManagerMachine` | `cli/service-manager/index.ts` (`getServiceManager`) wraps the platform manager | Per service-manager instance |
+| `binaryFreshnessMachine`, `autoUpgradeMachine` | Type-only contracts referenced by `heartbeat-cycle.ts` and `services/upgrade/auto-upgrade.ts`; the imperative implementations remain the runtime authority for side effects | — |
+
+`runCaptureCycle`, `runDrainCycle`, and `runHeartbeatCycle` are still the
+runtime authority for I/O, gating, and persistence. The cycle machines
+*describe* the transitions they make as they go. There is no parallel
+imperative-only path left for any cycle.
+
 [source: src/services/state-machines/*, scripts/export-diagrams/*, src/cli/commands/replay/*]

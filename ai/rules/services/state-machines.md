@@ -11,4 +11,27 @@
 - `event-router` is the single subscription chokepoint. Cross-machine event forwarding belongs there, not inside individual machines.
 - The `MachineName` union in `state-machines.types.ts` is the canonical list of machines. Adding a new machine requires updating that union and the diagram exporter's machine list.
 
+## Machine integration points (active)
+
+Every machine listed below is created/driven by a concrete caller. Do not delete or rename the caller without coordinating the machine update; do not introduce a machine without a real driver.
+
+| Machine | Driver | Lifetime |
+| --- | --- | --- |
+| `daemonRootMachine` | `services/polling/daemon-loops.ts` (`startDaemonActors`) | Daemon process lifetime |
+| `sentinelRegistryMachine` | Composed inside `daemon-actors.ts` (via `startSentinelWatcher`) | Daemon process lifetime |
+| `captureLoopMachine` | `services/polling/capture-cycle.ts` (`runCaptureCycle`) | Per capture cycle |
+| `drainLoopMachine` | `services/polling/drain-cycle.ts` (`runDrainCycle`) | Per drain cycle |
+| `heartbeatLoopMachine` | `services/polling/heartbeat-cycle.ts` (`runHeartbeatCycle`) | Per heartbeat cycle |
+| `sourcePollMachine` | `runCaptureCycle` per registered source | Per source poll within a cycle |
+| `workerMachine` | `runCaptureCycle` → `pollSourceInWorker` for default sources | Per worker invocation |
+| `cursorLifecycleMachine` | `runCaptureCycle` → `commitWorkerCapture` for each cursor in the worker output | Ephemeral per cursor commit |
+| `quarantineLifecycleMachine` | `runCaptureCycle` → `commitWorkerCapture` for each quarantined record | Ephemeral per quarantine entry |
+| `batchLifecycleMachine` | `services/uploader/upload-batch.ts` (`uploadBatch` + `classifyAndPersist`) | Per outbound batch attempt |
+| `pacerMachine` | `services/uploader/pacer.ts` (`createPacer`) | Pacer instance lifetime |
+| `binaryFreshnessMachine` | (Type-only; freshness check side effects live in `services/polling/stale-binary.ts`) | — |
+| `autoUpgradeMachine` | (Type-only; auto-upgrade side effects live in `services/upgrade/auto-upgrade.ts`) | — |
+| `setupMachine` | `cli/commands/setup/index.ts` (`runSetup`) | Per `setup` command invocation |
+| `uninstallMachine` | `cli/commands/uninstall/index.ts` (`runUninstall`) | Per `uninstall` command invocation |
+| `serviceManagerMachine` | `cli/service-manager/index.ts` (`getServiceManager`) | Per service-manager instance |
+
 [source: src/services/state-machines, scripts/export-diagrams, src/cli/commands/replay, ai/rules/services/no-direct-sqlite-outside-buffer.md]

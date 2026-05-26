@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-26T05:00:05.402Z",
-  "sourceHash": "822aa3b2d142846fd08d53fab60a2dd6",
+  "generatedAt": "2026-05-26T08:52:56.982Z",
+  "sourceHash": "2152884edb6d70633fe162f74416ecc9",
   "files": [
     {
       "path": "CLAUDE.md",
@@ -301,23 +301,23 @@
     },
     {
       "path": ".claude/rules/services/state-machines.md",
-      "hash": "96b585254d1d59e6"
+      "hash": "d9ed5255381ef3b4"
     },
     {
       "path": ".cursor/rules/services/state-machines.mdc",
-      "hash": "26c22911e1f8ad7a"
+      "hash": "97e56c8cdf07a809"
     },
     {
       "path": ".codex/rules/services/state-machines.md",
-      "hash": "96b585254d1d59e6"
+      "hash": "d9ed5255381ef3b4"
     },
     {
       "path": ".gemini/rules/services/state-machines.md",
-      "hash": "96b585254d1d59e6"
+      "hash": "d9ed5255381ef3b4"
     },
     {
       "path": ".agent/rules/services/state-machines.md",
-      "hash": "96b585254d1d59e6"
+      "hash": "d9ed5255381ef3b4"
     },
     {
       "path": ".claude/rules/services/watermark-monotonic-only.md",
@@ -1181,23 +1181,23 @@
     },
     {
       "path": ".claude/knowledge/services/state-machines.md",
-      "hash": "4e54336dc8ccc0a4"
+      "hash": "a6dfcc2c9b85e85e"
     },
     {
       "path": ".cursor/knowledge/services/state-machines.md",
-      "hash": "4e54336dc8ccc0a4"
+      "hash": "a6dfcc2c9b85e85e"
     },
     {
       "path": ".codex/knowledge/services/state-machines.md",
-      "hash": "4e54336dc8ccc0a4"
+      "hash": "a6dfcc2c9b85e85e"
     },
     {
       "path": ".gemini/knowledge/services/state-machines.md",
-      "hash": "4e54336dc8ccc0a4"
+      "hash": "a6dfcc2c9b85e85e"
     },
     {
       "path": ".agent/knowledge/services/state-machines.md",
-      "hash": "4e54336dc8ccc0a4"
+      "hash": "a6dfcc2c9b85e85e"
     },
     {
       "path": ".claude/knowledge/services/uninstall.md",
