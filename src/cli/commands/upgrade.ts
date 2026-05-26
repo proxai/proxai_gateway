@@ -3,7 +3,6 @@ import { basename } from 'node:path';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
-import type { PromptSink } from 'cli/prompts.ts';
 import {
   downloadAsset,
   expectedAssetName,
@@ -16,14 +15,11 @@ export interface UpgradeCommandDeps {
   output: OutputSink;
   currentVersion: string;
   binaryPath: string;
-  prompts?: PromptSink;
   fetch?: FetchFn;
   platform?: NodeJS.Platform;
-  isTty?: () => boolean;
 }
 
 export interface UpgradeCommandOptions {
-  yes?: boolean;
   force?: boolean;
 }
 
@@ -59,18 +55,7 @@ export async function runUpgrade(
     return { exitCode: EXIT_CODE.ok };
   }
 
-  deps.output.info(`upgrade available: ${deps.currentVersion} -> ${latestVersion}`);
-
-  if (options.yes !== true && (deps.isTty ?? defaultIsTty)()) {
-    const prompts = deps.prompts;
-    if (prompts !== undefined) {
-      const ok = await prompts.confirmUpgrade(`upgrade to ${latestVersion}?`);
-      if (!ok) {
-        deps.output.info('upgrade cancelled — current version retained');
-        return { exitCode: EXIT_CODE.ok };
-      }
-    }
-  }
+  deps.output.info(`upgrading: ${deps.currentVersion} -> ${latestVersion}`);
 
   const asset = findAssetForPlatform(release, platform, arch);
   if (asset === undefined) {
@@ -143,8 +128,4 @@ function parseVersion(v: string): number[] {
     const n = Number.parseInt(part, 10);
     return Number.isFinite(n) ? n : 0;
   });
-}
-
-function defaultIsTty(): boolean {
-  return Boolean(process.stdout.isTTY);
 }

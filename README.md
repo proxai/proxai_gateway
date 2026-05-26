@@ -28,14 +28,13 @@ The binary installs to a user-writable location — no `sudo` and no admin promp
 
 ## Set up
 
-Run setup, then start the service:
-
 ```sh
 proxai-gateway setup
-proxai-gateway start
 ```
 
-`setup` configures the gateway with the ingestion key from your ProxAI dashboard. `start` registers it as a background service that launches on login and keeps running across reboots.
+`setup` asks for your ingestion key (from the ProxAI dashboard), verifies it, writes `~/.proxai/proxai-gateway/config.toml`, registers the gateway as a background service that launches on login, and starts the daemon. If the machine is already configured, `setup` reconciles the daemon state — starting it if it isn't running, leaving it alone if you previously paused it.
+
+You can also pass the key inline: `proxai-gateway setup <ingestion-key>`.
 
 ## Check status
 
@@ -43,15 +42,20 @@ proxai-gateway start
 proxai-gateway status
 ```
 
-Shows whether the gateway is active and how capture and uploads are doing.
+Shows whether the gateway is active and how capture and uploads are doing. Refreshes live; press `q` to quit.
 
 ## Manage the service
 
 ```sh
-proxai-gateway stop        # stop until the next reboot
-proxai-gateway restart     # stop, then start again
+proxai-gateway pause       # keep the daemon process alive but skip capture/upload cycles (persists across reboots; resume with `resume`)
+proxai-gateway resume      # clear PAUSED and let cycles run again
+proxai-gateway stop        # stop the daemon process for this session; the service stays registered and respawns on next reboot
+proxai-gateway restart     # stop, then start
+proxai-gateway update      # fetch and install the latest release (alias: upgrade)
 proxai-gateway uninstall   # remove the service — add --reset to also wipe local data
 ```
+
+`pause` vs `stop`: pause keeps the daemon process running but tells it to do nothing (capture and drain cycles short-circuit on the PAUSED sentinel). Stop actually halts the process. Pause survives reboots; stop does not.
 
 Run `proxai-gateway --help` to see every command.
 

@@ -48,7 +48,7 @@ import { buildStatusContext } from 'cli/wiring/status-deps.ts';
 import { buildStopDeps } from 'cli/wiring/stop-deps.ts';
 import { buildTailDeps, buildTailOptions } from 'cli/wiring/tail-deps.ts';
 import { buildUninstallDeps, buildUninstallOptions } from 'cli/wiring/uninstall-deps.ts';
-import { buildUpgradeDeps, buildUpgradeOptions } from 'cli/wiring/upgrade-deps.ts';
+import { buildUpgradeDeps } from 'cli/wiring/upgrade-deps.ts';
 import { buildVersionString } from 'cli/wiring/version-string.ts';
 import { configFilePath, logDir as defaultLogDir } from 'core/io/fs';
 import { GatewayError, PACKAGE_DESCRIPTION, PACKAGE_VERSION, UserAbortedError } from 'core/utils';
@@ -331,15 +331,10 @@ program
   .command('upgrade')
   .alias('update')
   .description(
-    'Manually fetch the latest gateway release from GitHub and replace the running binary. On Windows, writes the new binary alongside the existing one (restart required to apply).',
+    'Fetch the latest gateway release from GitHub and replace the running binary. On Windows, writes the new binary alongside the existing one (restart required to apply).',
   )
-  .option('-y, --yes', 'skip the interactive confirmation prompt', false)
-  .option('--force', 'redownload and reinstall even if already on the latest version', false)
-  .action(async (opts: { yes?: boolean; force?: boolean }) => {
-    const result = await runUpgrade(
-      buildUpgradeDeps({ binaryPath: process.execPath }),
-      buildUpgradeOptions(opts),
-    );
+  .action(async () => {
+    const result = await runUpgrade(buildUpgradeDeps({ binaryPath: process.execPath }));
     process.exit(result.exitCode);
   });
 
