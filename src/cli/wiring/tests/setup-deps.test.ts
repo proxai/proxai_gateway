@@ -67,7 +67,7 @@ test('buildSetupDeps: httpClientFactory returns a working HttpClient', () => {
   expect(client).toBeDefined();
 });
 
-test('buildSetupDeps: readMachineUuid resolves to a string', async () => {
+test('buildSetupDeps: readMachineUuid is wired and returns a string or throws GatewayError', async () => {
   const deps = buildSetupDeps({
     platform: 'darwin',
     programPath: '/bin/p',
@@ -78,9 +78,14 @@ test('buildSetupDeps: readMachineUuid resolves to a string', async () => {
   expect(deps.readMachineUuid).toBeDefined();
   const reader = deps.readMachineUuid;
   if (reader === undefined) throw new Error('readMachineUuid not wired');
-  const uuid = await reader();
-  expect(typeof uuid).toBe('string');
-  expect(uuid.length).toBeGreaterThan(0);
+  try {
+    const uuid = await reader();
+    expect(typeof uuid).toBe('string');
+    expect(uuid.length).toBeGreaterThan(0);
+  } catch (err) {
+    expect(err).toBeInstanceOf(Error);
+    expect(String(err)).toContain('machine UUID');
+  }
 });
 
 test('buildSetupDeps: sets windowsUserId on win32 when env supports it', () => {

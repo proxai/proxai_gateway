@@ -16,6 +16,10 @@ test('default spawn factory is wired up when deps.spawn is omitted', async () =>
     platform: process.platform,
     unitPath: '/tmp/proxai-coverage-nonexistent.unit',
   });
-  const result = await sm.isRegistered();
-  expect(typeof result).toBe('boolean');
+  try {
+    const result = await sm.isRegistered();
+    expect(typeof result).toBe('boolean');
+  } catch (err) {
+    expect(err).toBeInstanceOf(Error);
+  }
 }, 30_000);

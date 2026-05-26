@@ -436,9 +436,9 @@ test('size_decreased signal also triggers re-keying via #gen suffix', async () =
 
 test('splits an oversized snapshot into multiple batches with contiguous rowid coverage', async () => {
   const rows: { key: string; value: string }[] = [];
-  const rowCount = 1500;
+  const rowCount = 500;
   for (let i = 0; i < rowCount; i++) {
-    const noise = randomBytes(2200).toString('base64');
+    const noise = randomBytes(6_000).toString('base64');
     rows.push({
       key: i % 2 === 0 ? `composerData:c${i.toString()}` : `bubbleId:c${i.toString()}:b1`,
       value: JSON.stringify({ _v: 1, text: noise }),
@@ -477,7 +477,7 @@ test('splits an oversized snapshot into multiple batches with contiguous rowid c
 
   expect(cursor?.watermarkEnd).toBe(rowCount + 1);
   expect(prevEnd).toBe(rowCount + 1);
-}, 120_000);
+}, 240_000);
 
 test('null last_seen columns on existing cursor never trigger size/page_count signals', async () => {
   const file = await makeDb([

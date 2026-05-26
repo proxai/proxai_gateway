@@ -50,5 +50,7 @@ GEMINI.md
 .agents/
 # Nested per-scope AGENTS.md emitted by ai/mapper into source subdirs
 **/AGENTS.md
+# Keep mapper test fixtures
+!ai/mapper/tests/fixtures/**/AGENTS.md
 
 

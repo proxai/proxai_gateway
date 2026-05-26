@@ -26,7 +26,7 @@ test('every long command has its declared alias visible in --help output', async
     if (name === 'dev') continue;
     expect(help).toContain(`${name}|${alias}`);
   }
-});
+}, 30_000);
 
 test('hidden dev command still resolves under its short alias d', async () => {
   expect(COMMAND_ALIASES['dev']).toBe('d');

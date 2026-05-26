@@ -92,7 +92,7 @@ test('test: returns fileUnreadable when file is missing', async () => {
   expect(out.lines.some((l) => l.msg.includes('file not found'))).toBe(true);
 });
 
-test.skipIf(process.platform === 'win32')(
+test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
   'test: returns fileUnreadable when text() throws for an unreadable file',
   async () => {
     const filePath = await seed('locked.txt', 'secret content');
