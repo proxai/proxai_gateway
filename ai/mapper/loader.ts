@@ -1,5 +1,5 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { join, basename, extname } from 'node:path';
+import { join, basename, extname, sep } from 'node:path';
 import { parseFrontmatter, type FrontmatterData } from './frontmatter';
 
 export interface RuleFile {
@@ -80,9 +80,19 @@ async function listMd(dir: string): Promise<string[]> {
   return out.toSorted();
 }
 
+function relUnder(absPath: string, parentDir: string): string {
+  return absPath
+    .slice(parentDir.length + 1)
+    .split(sep)
+    .join('/');
+}
+
 function subpathUnder(absPath: string, parentDir: string): string {
-  // strip the parentDir prefix + leading slash, then strip the .md extension
-  const rel = absPath.slice(parentDir.length + 1);
+  // strip the parentDir prefix + leading sep, normalize Windows backslashes
+  // to forward slashes (subpath is a logical doc path used in markdown
+  // references and the manifest, not an OS filesystem path), then strip
+  // the .md extension
+  const rel = relUnder(absPath, parentDir);
   return rel.endsWith('.md') ? rel.slice(0, -3) : rel;
 }
 
@@ -93,7 +103,7 @@ async function loadMdPlain(
 ): Promise<KnowledgeFile> {
   const body = await readFile(absPath, 'utf8');
   return {
-    path: absPath.slice(aiRoot.length + 1),
+    path: relUnder(absPath, aiRoot),
     basename: basename(absPath, extname(absPath)),
     subpath: subpathUnder(absPath, parentDir),
     body,
@@ -104,7 +114,7 @@ async function loadMdWithFrontmatter(absPath: string, aiRoot: string): Promise<W
   const raw = await readFile(absPath, 'utf8');
   const { data, body } = parseFrontmatter(raw);
   return {
-    path: absPath.slice(aiRoot.length + 1),
+    path: relUnder(absPath, aiRoot),
     basename: basename(absPath, extname(absPath)),
     frontmatter: data,
     body,
@@ -121,7 +131,7 @@ export async function loadTree(aiRoot: string): Promise<AiTree> {
     rulesPaths.map(async (p) => {
       const body = await readFile(p, 'utf8');
       return {
-        path: p.slice(aiRoot.length + 1),
+        path: relUnder(p, aiRoot),
         basename: basename(p, extname(p)),
         subpath: subpathUnder(p, rulesRoot),
         body,

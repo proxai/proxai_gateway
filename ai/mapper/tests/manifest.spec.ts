@@ -24,6 +24,16 @@ describe('Manifest', () => {
     ]);
   });
 
+  test('normalizes Windows backslash paths to forward slashes', () => {
+    const m = new Manifest(tmp);
+    m.recordEmit('.claude\\rules\\auth\\nested-rule.md', 'h1');
+    m.recordEmit('.cursor/rules/_always.mdc', 'h2');
+    const paths = m.files().map((f) => f.path);
+    expect(paths).toContain('.claude/rules/auth/nested-rule.md');
+    expect(paths).toContain('.cursor/rules/_always.mdc');
+    expect(paths.some((p) => p.includes('\\'))).toBe(false);
+  });
+
   test('write/load roundtrip', async () => {
     const m1 = new Manifest(tmp);
     m1.recordEmit('AGENTS.md', 'hashA');
