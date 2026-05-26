@@ -1,3 +1,4 @@
+import { createActor } from 'xstate';
 import { nowIsoUtc } from 'core/utils';
 import { getMetadata, setMetadata } from 'services/buffer';
 import { METADATA_KEYS } from 'services/buffer';
@@ -6,37 +7,58 @@ import type {
   HeartbeatCycleContext,
   HeartbeatCycleResult,
 } from 'services/polling/polling.types.ts';
-import { checkStaleBinary } from 'services/polling/stale-binary.ts';
+import { checkStaleBinary, type StaleBinaryStatus } from 'services/polling/stale-binary.ts';
 import {
   clearUpdateAvailableSentinel,
   writeUpdateAvailableSentinel,
 } from 'services/polling/update-available-sentinel.ts';
 import { checkLatestVersion } from 'services/polling/version-check.ts';
+import type { BinaryFreshnessStatus } from 'services/state-machines/binary-freshness';
+import { heartbeatLoopMachine } from 'services/state-machines/heartbeat-loop';
 import { runAutoUpgrade } from 'services/upgrade';
 
 const DEFAULT_VERSION_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
+
+function toFreshnessStatus(status: StaleBinaryStatus): BinaryFreshnessStatus {
+  if (status === 'paused') return 'stale_paused';
+  return status;
+}
 
 export async function runHeartbeatCycle(ctx: HeartbeatCycleContext): Promise<HeartbeatCycleResult> {
   const startedAt = nowIsoUtc();
   const startMs = Date.now();
   const log = ctx.logger;
 
+  const cycleMachine = createActor(heartbeatLoopMachine, {
+    input: {
+      intervalMs: 0,
+      versionCheckIntervalMs: ctx.versionCheckIntervalMs ?? DEFAULT_VERSION_CHECK_INTERVAL_MS,
+    },
+  });
+  cycleMachine.start();
+  cycleMachine.send({ type: 'TICK', startedAtUtc: startedAt });
+
   log?.info({ event: 'heartbeat.cycle.start', started_at: startedAt }, 'heartbeat cycle started');
 
   if (await isPaused(ctx.pauseSentinelPath)) {
+    cycleMachine.send({ type: 'GATE_BLOCKED' });
     const completedAt = nowIsoUtc();
+    const durationMs = Date.now() - startMs;
     log?.info(
       { event: 'heartbeat.cycle.skipped', reason: 'paused' },
       'heartbeat cycle skipped: paused sentinel present',
     );
+    cycleMachine.send({ type: 'METRICS_PERSISTED', finishedAtUtc: completedAt, durationMs });
+    cycleMachine.stop();
     return {
       paused: true,
       startedAt,
       completedAt,
-      durationMs: Date.now() - startMs,
+      durationMs,
       ranAutoUpgrade: false,
     };
   }
+  cycleMachine.send({ type: 'GATE_CLEAR' });
 
   const staleDeps: Parameters<typeof checkStaleBinary>[0] = {
     installedAt: ctx.installedAt,
@@ -45,18 +67,37 @@ export async function runHeartbeatCycle(ctx: HeartbeatCycleContext): Promise<Hea
     pauseSentinelPath: ctx.pauseSentinelPath,
   };
   if (log !== undefined) staleDeps.logger = log;
-  await checkStaleBinary(staleDeps);
+  const freshness = await checkStaleBinary(staleDeps);
+  cycleMachine.send({ type: 'FRESHNESS_CHECKED', status: toFreshnessStatus(freshness.status) });
 
   let ranAutoUpgrade = false;
   if (shouldRunAutoUpgrade(ctx)) {
     try {
-      ranAutoUpgrade = await maybeRunAutoUpgrade(ctx);
+      const interval = ctx.versionCheckIntervalMs ?? DEFAULT_VERSION_CHECK_INTERVAL_MS;
+      const lastCheck = getMetadata(ctx.buffer, METADATA_KEYS.lastVersionCheckAt);
+      const lastMs = lastCheck === null ? 0 : Date.parse(lastCheck);
+      const throttled =
+        lastCheck !== null && Number.isFinite(lastMs) && Date.now() - lastMs < interval;
+      if (throttled) {
+        cycleMachine.send({ type: 'THROTTLE_BLOCKS' });
+      } else {
+        cycleMachine.send({ type: 'THROTTLE_ALLOWS' });
+        ranAutoUpgrade = await maybeRunAutoUpgrade(ctx);
+        cycleMachine.send({
+          type: 'VERSION_CHECK_COMPLETE',
+          ranAutoUpgrade,
+          checkedAtUtc: nowIsoUtc(),
+        });
+      }
     } catch (err) {
       log?.warn(
         { event: 'version_check.failed', error: (err as Error).message ?? String(err) },
         'version check failed; continuing heartbeat',
       );
+      cycleMachine.send({ type: 'THROTTLE_BLOCKS' });
     }
+  } else {
+    cycleMachine.send({ type: 'THROTTLE_BLOCKS' });
   }
 
   const completedAt = nowIsoUtc();
@@ -65,6 +106,9 @@ export async function runHeartbeatCycle(ctx: HeartbeatCycleContext): Promise<Hea
     { event: 'heartbeat.cycle.complete', duration_ms: durationMs, completed_at: completedAt },
     'heartbeat cycle complete',
   );
+
+  cycleMachine.send({ type: 'METRICS_PERSISTED', finishedAtUtc: completedAt, durationMs });
+  cycleMachine.stop();
 
   return { paused: false, startedAt, completedAt, durationMs, ranAutoUpgrade };
 }
@@ -77,13 +121,6 @@ export function shouldRunAutoUpgrade(ctx: HeartbeatCycleContext): boolean {
 }
 
 async function maybeRunAutoUpgrade(ctx: HeartbeatCycleContext): Promise<boolean> {
-  const interval = ctx.versionCheckIntervalMs ?? DEFAULT_VERSION_CHECK_INTERVAL_MS;
-  const lastCheck = getMetadata(ctx.buffer, METADATA_KEYS.lastVersionCheckAt);
-  const lastMs = lastCheck === null ? 0 : Date.parse(lastCheck);
-  if (lastCheck !== null && Number.isFinite(lastMs) && Date.now() - lastMs < interval) {
-    return false;
-  }
-
   if (ctx.installSource === 'brew') {
     await runBrewSentinelCheck(ctx);
     setMetadata(ctx.buffer, METADATA_KEYS.lastVersionCheckAt, nowIsoUtc());
