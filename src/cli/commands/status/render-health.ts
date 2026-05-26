@@ -8,6 +8,8 @@ import { keyCol } from 'cli/commands/status/layout.ts';
 
 export interface HealthDaemonInput {
   isRunning: boolean;
+  inferredAlive?: boolean;
+  isDevMode?: boolean;
   pid: number | null;
   startedAt: Date | null;
   now: Date;
@@ -53,7 +55,13 @@ export function renderHealthSection(input: {
 }
 
 function renderDaemonLine(d: HealthDaemonInput): string {
-  if (!d.isRunning) return chalk.dim('not running');
+  if (!d.isRunning) {
+    if (d.inferredAlive === true) {
+      const label = d.isDevMode === true ? 'running (dev)' : 'running (not registered)';
+      return chalk.green(label);
+    }
+    return chalk.dim('not running');
+  }
   const parts: string[] = [];
   if (d.pid !== null) parts.push(`pid ${d.pid.toString()}`);
   if (d.startedAt !== null) {

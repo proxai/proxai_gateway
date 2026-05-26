@@ -30,7 +30,6 @@ import type { ReadableInputStream } from 'cli/commands/status/key-handler.types.
 
 export interface StatusCommandOptions {
   json?: boolean;
-  verbose?: boolean;
   stdin?: ReadableInputStream;
   intervalMs?: number;
   clearScreen?: boolean;

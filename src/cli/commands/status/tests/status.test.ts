@@ -197,7 +197,7 @@ test('watch mode renders the configured-but-buffer-unavailable summary', async (
   buffer = await import('services/buffer').then((m) => m.openInMemoryBufferDb());
 });
 
-test('watch mode in verbose mode includes the by-source section', async () => {
+test('watch mode renders the full breakdown by default', async () => {
   setDaemonState(buffer, {
     lastCycleStartedAt: '2026-05-08T02:40:13.100Z',
     lastCycleCompletedAt: '2026-05-08T02:46:52.293Z',
@@ -214,11 +214,13 @@ test('watch mode in verbose mode includes the by-source section', async () => {
     },
   });
   const out = captureOutput();
-  const result = await runStatus(makeDeps({ output: out }), { verbose: true });
+  const result = await runStatus(makeDeps({ output: out }), {});
   expect(result.exitCode).toBe(0);
   const all = out.lines.map((l) => l.msg).join('\n');
-  expect(all).toContain('By source');
-  expect(all).toContain('Recent activity');
+  expect(all).toContain('Capture');
+  expect(all).toContain('Buffer');
+  expect(all).toContain('Upload');
+  expect(all).toContain('Health');
 });
 
 test('JSON mode handles authFailed and bufferFull and sessionStopped sentinels', async () => {

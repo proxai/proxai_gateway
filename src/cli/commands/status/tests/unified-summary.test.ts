@@ -4,6 +4,7 @@ import type { UnifiedSummaryInputs } from 'cli/commands/status/unified-summary.t
 
 const BASE: UnifiedSummaryInputs = {
   configured: true,
+  isDevMode: false,
   daemonRunning: true,
   daemonInferredAlive: false,
   daemonLastCycleAt: null,

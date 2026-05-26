@@ -17,3 +17,9 @@ const ESC = String.fromCharCode(27);
 export const CLEAR_SCREEN = `${ESC}[2J${ESC}[H`;
 export const HIDE_CURSOR = `${ESC}[?25l`;
 export const SHOW_CURSOR = `${ESC}[?25h`;
+
+export const ENTER_ALT_BUFFER = `${ESC}[?1049h`;
+export const LEAVE_ALT_BUFFER = `${ESC}[?1049l`;
+export const CURSOR_HOME = `${ESC}[H`;
+export const CLEAR_TO_END_OF_LINE = `${ESC}[K`;
+export const CLEAR_TO_END_OF_SCREEN = `${ESC}[J`;

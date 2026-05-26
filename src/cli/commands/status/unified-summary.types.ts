@@ -8,6 +8,7 @@ export interface UnifiedStatusSummary {
 
 export interface UnifiedSummaryInputs {
   readonly configured: boolean;
+  readonly isDevMode: boolean;
   readonly daemonRunning: boolean;
   readonly daemonInferredAlive: boolean;
   readonly daemonLastCycleAt: string | null;

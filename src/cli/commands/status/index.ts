@@ -5,30 +5,12 @@ import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
 import { formatBytes } from 'core/utils';
 
-const DAEMON_INFER_FROM_DRAIN_MS = 90_000;
-const DAEMON_INFER_FROM_CAPTURE_MS = 360_000;
-
-export function inferDaemonAlive(
-  drainLastCycleAt: string | null,
-  captureLastCycleAt: string | null,
-  now: Date,
-): boolean {
-  const nowMs = now.getTime();
-  if (drainLastCycleAt !== null) {
-    const t = Date.parse(drainLastCycleAt);
-    if (Number.isFinite(t) && nowMs - t < DAEMON_INFER_FROM_DRAIN_MS) return true;
-  }
-  if (captureLastCycleAt !== null) {
-    const t = Date.parse(captureLastCycleAt);
-    if (Number.isFinite(t) && nowMs - t < DAEMON_INFER_FROM_CAPTURE_MS) return true;
-  }
-  return false;
-}
+export { inferDaemonAlive } from 'cli/commands/status/daemon-liveness.ts';
+import { inferDaemonAlive } from 'cli/commands/status/daemon-liveness.ts';
 
 import { buildEmptyStatusJson, buildStatusJson } from 'cli/commands/status/build-json.ts';
 import { gatherStatusSnapshot } from 'cli/commands/status/gather-snapshot.ts';
-import { renderBasic } from 'cli/commands/status/render/render-basic.ts';
-import { renderVerbose } from 'cli/commands/status/render/render-verbose.ts';
+import { renderFullStatus } from 'cli/commands/status/render/render-full.ts';
 import type { RenderInputs } from 'cli/commands/status/render/render.types.ts';
 import type { StatusCommandDeps, StatusCommandOptions } from 'cli/commands/status/status.types.ts';
 import { deriveUnifiedSummary } from 'cli/commands/status/unified-summary.ts';
@@ -81,8 +63,7 @@ async function runWatchStatus(
   options: StatusCommandOptions,
 ): Promise<CommandResult> {
   const stdin = options.stdin ?? process.stdin;
-  const verbose = options.verbose === true;
-  const render = verbose ? renderVerbose : renderBasic;
+  const render = (inputs: RenderInputs): string => renderFullStatus(inputs, deps);
 
   const handle = startWatchLoop({
     output: deps.output,
@@ -106,6 +87,7 @@ async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
     return {
       summary: deriveUnifiedSummary({
         configured: false,
+        isDevMode,
         daemonRunning: false,
         daemonInferredAlive: false,
         daemonLastCycleAt: null,
@@ -129,6 +111,7 @@ async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
     return {
       summary: deriveUnifiedSummary({
         configured: true,
+        isDevMode,
         daemonRunning: false,
         daemonInferredAlive: false,
         daemonLastCycleAt: null,
@@ -156,6 +139,7 @@ async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
   );
   const summary = deriveUnifiedSummary({
     configured: true,
+    isDevMode,
     daemonRunning: snapshot.runtime.isRunning,
     daemonInferredAlive,
     daemonLastCycleAt: snapshot.drainLastCycleAt ?? snapshot.captureLastCycleAt,

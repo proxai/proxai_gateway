@@ -1,6 +1,6 @@
 import { daysSince } from 'core/utils';
 
-import { inferDaemonAlive } from 'cli/commands/status/index.ts';
+import { inferDaemonAlive } from 'cli/commands/status/daemon-liveness.ts';
 import type { StatusJsonOutput, StatusSnapshot } from 'cli/commands/status/status.types.ts';
 
 export function buildEmptyStatusJson(): StatusJsonOutput {

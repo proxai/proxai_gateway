@@ -22,7 +22,9 @@ export function deriveUnifiedSummary(inputs: UnifiedSummaryInputs): UnifiedStatu
     return {
       level: 'warning',
       headline: 'Account configured. Session stopped for this boot.',
-      hint: 'Reboot your machine or run `proxai-gateway start` to resume.',
+      hint: inputs.isDevMode
+        ? 'Restart your dev daemon to resume.'
+        : 'Reboot your machine or run `proxai-gateway start` to resume.',
     };
   }
   if (inputs.paused) {
@@ -44,11 +46,25 @@ export function deriveUnifiedSummary(inputs: UnifiedSummaryInputs): UnifiedStatu
   if (!inputs.daemonRunning) {
     if (inputs.daemonInferredAlive) {
       const age = formatLastCycleAge(inputs.daemonLastCycleAt);
-      const hintPrefix = age === null ? '' : `Last cycle ${age} · `;
+      const agePrefix = age === null ? '' : `Last cycle ${age} · `;
+      if (inputs.isDevMode) {
+        return {
+          level: 'ok',
+          headline: 'Dev daemon active — running locally.',
+          hint: `${agePrefix}Stop with Ctrl-C in the daemon terminal.`,
+        };
+      }
       return {
         level: 'ok',
         headline: 'Account configured. Background service is running (not registered with OS).',
-        hint: `${hintPrefix}Run \`proxai-gateway start\` to register with launchd/systemd for auto-restart.`,
+        hint: `${agePrefix}Run \`proxai-gateway start\` to register with launchd/systemd for auto-restart.`,
+      };
+    }
+    if (inputs.isDevMode) {
+      return {
+        level: 'warning',
+        headline: 'Account configured. Dev daemon is not running.',
+        hint: 'Start it with `bun run dev` or `dist/<platform>/proxai-gateway run`.',
       };
     }
     return {

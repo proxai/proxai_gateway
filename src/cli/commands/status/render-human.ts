@@ -9,6 +9,7 @@ import {
   type InstallSource,
 } from 'services/config';
 
+import { inferDaemonAlive } from 'cli/commands/status/daemon-liveness.ts';
 import { sectionHeader, statusDot } from 'cli/commands/status/decorators.ts';
 import { renderCaptureCyclesLine, renderCaptureRow } from 'cli/commands/status/render-capture.ts';
 import { renderBufferSection } from 'cli/commands/status/render-buffer.ts';
@@ -30,15 +31,23 @@ const SOURCE_ORDER: ('claude-code' | 'cursor' | 'codex' | 'gemini-cli')[] = [
   'gemini-cli',
 ];
 
-export function renderHumanStatus(deps: StatusCommandDeps, snapshot: StatusSnapshot): void {
+export interface RenderHumanStatusOptions {
+  skipTopBanner?: boolean;
+}
+
+export function renderHumanStatus(
+  deps: StatusCommandDeps,
+  snapshot: StatusSnapshot,
+  options: RenderHumanStatusOptions = {},
+): void {
   const out = deps.output;
-  const dot = statusDot(snapshot.health);
-  const label = renderHealthLabel(snapshot);
-  out.info(`Status: ${dot} ${label}${snapshot.isDevMode ? chalk.cyan(' (dev mode)') : ''}`);
-
-  renderSentinelLines(out, snapshot);
-
-  out.info('');
+  if (options.skipTopBanner !== true) {
+    const dot = statusDot(snapshot.health);
+    const label = renderHealthLabel(snapshot);
+    out.info(`Status: ${dot} ${label}${snapshot.isDevMode ? chalk.cyan(' (dev mode)') : ''}`);
+    renderSentinelLines(out, snapshot);
+    out.info('');
+  }
   out.info(sectionHeader('Capture'));
   for (const app of SOURCE_ORDER) {
     const cap = snapshot.daemonState?.lastSourceCaptures[app];
@@ -97,10 +106,17 @@ export function renderHumanStatus(deps: StatusCommandDeps, snapshot: StatusSnaps
   }
 
   const installSource: InstallSource | null = snapshot.cfg?.account.installSource ?? null;
+  const inferredAlive = inferDaemonAlive(
+    snapshot.drainLastCycleAt,
+    snapshot.captureLastCycleAt,
+    snapshot.now,
+  );
   out.info('');
   for (const line of renderHealthSection({
     daemon: {
       isRunning: snapshot.runtime.isRunning,
+      inferredAlive,
+      isDevMode: snapshot.isDevMode,
       pid: snapshot.runtime.pid,
       startedAt: snapshot.runtime.startedAt,
       now: snapshot.now,
