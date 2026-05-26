@@ -168,3 +168,49 @@ test('gateDecision returns null reason and no skips when all sentinels are clear
   expect(decision.skipHeartbeat).toBe(false);
   actor.stop();
 });
+
+test('brewUpdate region: unknown -> up_to_date via BREW_UP_TO_DATE then -> available', () => {
+  const actor = startRegistry();
+  actor.send({ type: 'BREW_UP_TO_DATE', latestVersion: '2026.5.1' });
+  expect(actor.getSnapshot().matches({ brewUpdate: 'up_to_date' })).toBe(true);
+  expect(actor.getSnapshot().context.brewLatestKnownVersion).toBe('2026.5.1');
+
+  actor.send({
+    type: 'BREW_UPDATE_AVAILABLE',
+    payload: {
+      latestVersion: '2026.5.10',
+      currentVersion: '2026.5.1',
+      detectedAtUtc: '2026-05-25T12:00:00.000Z',
+      assetUrl: 'https://example/asset',
+    },
+  });
+  expect(actor.getSnapshot().matches({ brewUpdate: 'available' })).toBe(true);
+  expect(actor.getSnapshot().context.brewUpdatePayload?.assetUrl).toBe('https://example/asset');
+  actor.stop();
+});
+
+test('brewUpdate region: up_to_date -> unknown via BREW_VERSION_UNKNOWN', () => {
+  const actor = startRegistry();
+  actor.send({ type: 'BREW_UP_TO_DATE', latestVersion: '2026.5.1' });
+  actor.send({ type: 'BREW_VERSION_UNKNOWN' });
+  expect(actor.getSnapshot().matches({ brewUpdate: 'unknown' })).toBe(true);
+  actor.stop();
+});
+
+test('brewUpdate region: available -> unknown via BREW_VERSION_UNKNOWN clears payload', () => {
+  const actor = startRegistry();
+  actor.send({
+    type: 'BREW_UPDATE_AVAILABLE',
+    payload: {
+      latestVersion: '2026.5.10',
+      currentVersion: '2026.5.1',
+      detectedAtUtc: '2026-05-25T12:00:00.000Z',
+      assetUrl: null,
+    },
+  });
+  expect(actor.getSnapshot().matches({ brewUpdate: 'available' })).toBe(true);
+  actor.send({ type: 'BREW_VERSION_UNKNOWN' });
+  expect(actor.getSnapshot().matches({ brewUpdate: 'unknown' })).toBe(true);
+  expect(actor.getSnapshot().context.brewUpdatePayload).toBeNull();
+  actor.stop();
+});

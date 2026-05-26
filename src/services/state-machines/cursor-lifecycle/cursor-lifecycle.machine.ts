@@ -46,17 +46,6 @@ export const cursorLifecycleMachine = setup({
         },
       },
     },
-    syncing: {
-      on: {
-        SYNCED: {
-          target: 'healthy',
-          actions: assign({
-            watermarkEnd: ({ event }) => event.watermarkEnd,
-            lastPolledAt: ({ event }) => event.polledAtUtc,
-          }),
-        },
-      },
-    },
     healthy: {
       on: {
         POLL_SUCCESS: {

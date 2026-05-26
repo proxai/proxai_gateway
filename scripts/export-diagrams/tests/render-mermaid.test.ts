@@ -73,6 +73,82 @@ test('renders invoke onDone transitions', () => {
   expect(result).toContain('fetching --> done: onDone');
 });
 
+test('renders top-level on transitions as wildcard sources', () => {
+  const config: MachineConfigLike = {
+    initial: 'a',
+    states: { a: {} },
+    on: {
+      RESET: { target: 'a' },
+    },
+  };
+  const result = renderMermaid('demo', config);
+  expect(result).toContain('[*] --> a: RESET');
+});
+
+test('renders invoke onError transitions', () => {
+  const config: MachineConfigLike = {
+    initial: 'fetching',
+    states: {
+      fetching: {
+        invoke: { src: 'fetch', onError: { target: 'failed' } },
+      },
+      failed: { type: 'final' },
+    },
+  };
+  const result = renderMermaid('demo', config);
+  expect(result).toContain('fetching --> failed: onError');
+});
+
+test('renders final and always inside a nested state', () => {
+  const config: MachineConfigLike = {
+    initial: 'parent',
+    states: {
+      parent: {
+        initial: 'child',
+        states: {
+          child: { always: { target: 'leaf', guard: 'ready' } },
+          leaf: { type: 'final' },
+        },
+      },
+    },
+  };
+  const result = renderMermaid('demo', config);
+  expect(result).toContain('leaf --> [*]');
+  expect(result).toContain('child --> leaf: always [ready]');
+});
+
+test('renders guard as object with type', () => {
+  const config: MachineConfigLike = {
+    initial: 'checking',
+    states: {
+      checking: {
+        on: {
+          EVAL: { target: 'done', guard: { type: 'isReady' } },
+        },
+      },
+      done: {},
+    },
+  };
+  const result = renderMermaid('demo', config);
+  expect(result).toContain('checking --> done: EVAL [isReady]');
+});
+
+test('renders guard as object without type as guarded', () => {
+  const config: MachineConfigLike = {
+    initial: 'checking',
+    states: {
+      checking: {
+        on: {
+          EVAL: { target: 'done', guard: {} },
+        },
+      },
+      done: {},
+    },
+  };
+  const result = renderMermaid('demo', config);
+  expect(result).toContain('checking --> done: EVAL [guarded]');
+});
+
 test('lists multiple guarded transitions on the same event', () => {
   const config: MachineConfigLike = {
     initial: 'checking',

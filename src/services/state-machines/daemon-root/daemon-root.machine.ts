@@ -47,14 +47,6 @@ export const daemonRootMachine = setup({
         target: 'running',
       },
     },
-    syncing_watermarks: {
-      on: {
-        WATERMARKS_SYNCED: {
-          target: 'running',
-          actions: assign({ watermarksSynced: () => true }),
-        },
-      },
-    },
     running: {
       entry: assign({
         bootedAtUtc: ({ event }) =>

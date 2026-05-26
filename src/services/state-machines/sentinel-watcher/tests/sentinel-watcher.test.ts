@@ -93,3 +93,70 @@ test('stop() releases the fs.watch loop without errors', async () => {
   watcher = null;
   expect(true).toBe(true);
 });
+
+test('dispatch failure is logged via deps.logger.warn without crashing the watcher', async () => {
+  let throwOnSend = false;
+  const conditionalTarget = {
+    send: (): void => {
+      if (throwOnSend) throw new Error('target boom');
+    },
+  };
+  const warnCalls: Record<string, unknown>[] = [];
+  const fakeLogger = {
+    warn: (fields: Record<string, unknown>): void => {
+      warnCalls.push(fields);
+    },
+    info: (): void => {},
+    debug: (): void => {},
+    trace: (): void => {},
+    error: (): void => {},
+    fatal: (): void => {},
+    child: () => fakeLogger,
+    level: 'info',
+    silent: () => fakeLogger,
+    bindings: () => ({}),
+    flush: () => {},
+    isLevelEnabled: () => true,
+  };
+  const local = await startSentinelWatcher({
+    paths,
+    target: conditionalTarget,
+    debounceMs: 20,
+    logger: fakeLogger as never,
+  });
+  throwOnSend = true;
+  await writeFile(paths.paused, 'reason');
+  await sleep(200);
+  await local.stop();
+  expect(warnCalls.some((c) => c['event'] === 'sentinel_watcher.dispatch_failed')).toBe(true);
+});
+
+test('fs.watch errors on a missing configDir are logged via deps.logger.warn', async () => {
+  await rmRecursive(dir);
+  const warnCalls: Record<string, unknown>[] = [];
+  const fakeLogger = {
+    warn: (fields: Record<string, unknown>): void => {
+      warnCalls.push(fields);
+    },
+    info: (): void => {},
+    debug: (): void => {},
+    trace: (): void => {},
+    error: (): void => {},
+    fatal: (): void => {},
+    child: () => fakeLogger,
+    level: 'info',
+    silent: () => fakeLogger,
+    bindings: () => ({}),
+    flush: () => {},
+    isLevelEnabled: () => true,
+  };
+  const local = await startSentinelWatcher({
+    paths,
+    target: registry,
+    logger: fakeLogger as never,
+  });
+  await sleep(200);
+  await local.stop();
+  dir = await mkdtemp(join(tmpdir(), 'proxai-sentinel-watcher-restored-'));
+  expect(warnCalls.some((c) => c['event'] === 'sentinel_watcher.fatal')).toBe(true);
+});

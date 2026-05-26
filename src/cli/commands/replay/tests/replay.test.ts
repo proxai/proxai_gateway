@@ -84,3 +84,58 @@ test('runReplay returns error exit when readFile throws', async () => {
   expect(result.exitCode).toBeGreaterThan(0);
   expect(lines.some((l) => l.startsWith('ERR'))).toBe(true);
 });
+
+test('renderReport stringifies object values via JSON.stringify', () => {
+  const events = [
+    {
+      machine: 'sentinel-registry',
+      value: { auth: 'present', pause: 'absent' },
+      status: 'active',
+      capturedAtUtc: '2026-05-25T12:00:00.000Z',
+    },
+  ];
+  const report = buildReport(events);
+  const text = renderReport(report);
+  expect(text).toContain('auth');
+});
+
+test('renderReport falls back to String() when value cannot be JSON-stringified (circular)', () => {
+  const circular: Record<string, unknown> = {};
+  circular['self'] = circular;
+  const events = [
+    {
+      machine: 'pacer',
+      value: circular,
+      status: 'active',
+      capturedAtUtc: '2026-05-25T12:00:00.000Z',
+    },
+  ];
+  const report = buildReport(events);
+  const text = renderReport(report);
+  expect(text).toContain('object');
+});
+
+test('defaultReplayDeps.readFile reads a real file via fs.readFile', async () => {
+  const { defaultReplayDeps } = await import('cli/commands/replay');
+  const { mkdtemp, writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { rmRecursive } = await import('core/io/fs');
+  const dir = await mkdtemp(join(tmpdir(), 'proxai-default-replay-'));
+  const path = join(dir, 'log.jsonl');
+  await writeFile(path, 'hello world');
+  try {
+    const body = await defaultReplayDeps.readFile(path);
+    expect(body).toBe('hello world');
+  } finally {
+    await rmRecursive(dir);
+  }
+});
+
+test('defaultReplayDeps.output methods write through process streams without throwing', async () => {
+  const { defaultReplayDeps } = await import('cli/commands/replay');
+  expect(() => defaultReplayDeps.output.info('test-info')).not.toThrow();
+  expect(() => defaultReplayDeps.output.warn('test-warn')).not.toThrow();
+  expect(() => defaultReplayDeps.output.error('test-error')).not.toThrow();
+  expect(() => defaultReplayDeps.output.success('test-success')).not.toThrow();
+});

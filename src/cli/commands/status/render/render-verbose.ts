@@ -36,12 +36,11 @@ function sectionHeader(label: string): string {
 function renderBySource(s: StatusSnapshot): string {
   const lines: string[] = [];
   lines.push(sectionHeader('By source'));
-  const apps = Object.keys(s.shippedBySource);
-  if (apps.length === 0 && Object.keys(s.sourceCounts).length === 0) {
-    lines.push(`  ${dim('No source activity yet.')}`);
-    return lines.join('\n');
-  }
-  const universe = new Set<string>([...apps, ...Object.keys(s.sourceCounts)]);
+  const universe = new Set<string>([
+    ...Object.keys(s.shippedBySource),
+    ...Object.keys(s.sourceCounts),
+  ]);
+  const activeRows: string[] = [];
   for (const app of universe) {
     const shipped = s.shippedBySource[app as keyof typeof s.shippedBySource];
     const counts = s.sourceCounts[app as keyof typeof s.sourceCounts];
@@ -49,10 +48,16 @@ function renderBySource(s: StatusSnapshot): string {
     const shippedBytes = shipped?.bytes ?? 0;
     const pendingSessions = counts?.pending ?? 0;
     const failedSessions = counts?.failed ?? 0;
-    lines.push(
+    if (shippedSessions === 0 && pendingSessions === 0 && failedSessions === 0) continue;
+    activeRows.push(
       `  ${padLabel(app, SOURCE_LABEL_WIDTH)}${dim('uploaded')} ${formatCount(shippedSessions)} ${dim(`(${formatByteCount(shippedBytes)})`)}  ${dim('pending')} ${formatCount(pendingSessions)}${failedSessions > 0 ? `  ${chalk.red(`failed ${formatCount(failedSessions)}`)}` : ''}`,
     );
   }
+  if (activeRows.length === 0) {
+    lines.push(`  ${dim('No source activity yet.')}`);
+    return lines.join('\n');
+  }
+  for (const row of activeRows) lines.push(row);
   return lines.join('\n');
 }
 

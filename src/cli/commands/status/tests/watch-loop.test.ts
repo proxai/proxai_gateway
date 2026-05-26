@@ -125,6 +125,25 @@ test('watch loop quits on Ctrl+C', async () => {
   expect(true).toBe(true);
 });
 
+test('handle.stop() causes the loop to exit cleanly without sending a quit key', async () => {
+  const stream = makeStream();
+  const { output } = makeOutput();
+  let renderCount = 0;
+  const handle = startWatchLoop({
+    output,
+    stdin: stream,
+    intervalMs: 30,
+    clearScreen: false,
+    render: () => `frame ${(++renderCount).toString()}`,
+    gatherFrame: async () => frameInputs(),
+  });
+  await sleep(60);
+  await handle.stop();
+  const after = renderCount;
+  await sleep(100);
+  expect(renderCount).toBe(after);
+});
+
 test('gatherFrame errors are surfaced via output.error and loop keeps trying', async () => {
   const stream = makeStream();
   const { calls, output } = makeOutput();

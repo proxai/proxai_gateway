@@ -77,6 +77,23 @@ test('THROTTLE_BLOCKS short-circuits to persisting_metrics without running versi
   actor.stop();
 });
 
+test('METRICS_PERSISTED from skipped returns to waiting without bumping cyclesCompleted', () => {
+  const actor = startLoop();
+  actor.send({ type: 'TICK', startedAtUtc: '2026-05-25T12:00:00.000Z' });
+  actor.send({ type: 'GATE_BLOCKED' });
+  actor.send({
+    type: 'METRICS_PERSISTED',
+    finishedAtUtc: '2026-05-25T12:00:01.000Z',
+    durationMs: 1_000,
+  });
+  const s = actor.getSnapshot();
+  expect(s.value).toBe('waiting');
+  expect(s.context.cyclesCompleted).toBe(0);
+  expect(s.context.cyclesSkipped).toBe(1);
+  expect(s.context.lastCycleDurationMs).toBe(1_000);
+  actor.stop();
+});
+
 test('FRESHNESS_CHECKED with stale_paused status is recorded in context', () => {
   const actor = startLoop();
   actor.send({ type: 'TICK', startedAtUtc: '2026-05-25T12:00:00.000Z' });

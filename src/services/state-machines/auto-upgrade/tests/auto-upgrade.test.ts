@@ -172,3 +172,21 @@ test('non-brew without binary path: START routes directly to done', () => {
   expect(actor.getSnapshot().value).toBe('done');
   actor.stop();
 });
+
+test('in_place: VERSION_NO_RELEASE during fetching_release_meta terminates at failed -> done', () => {
+  const actor = startInPlace();
+  actor.send({ type: 'START' });
+  actor.send({ type: 'VERSION_NO_RELEASE', reason: 'no releases yet' });
+  expect(actor.getSnapshot().value).toBe('done');
+  expect(actor.getSnapshot().context.lastError).toBe('no releases yet');
+  actor.stop();
+});
+
+test('in_place: VERSION_ERROR during fetching_release_meta terminates at failed -> done', () => {
+  const actor = startInPlace();
+  actor.send({ type: 'START' });
+  actor.send({ type: 'VERSION_ERROR', reason: 'network error' });
+  expect(actor.getSnapshot().value).toBe('done');
+  expect(actor.getSnapshot().context.lastError).toBe('network error');
+  actor.stop();
+});

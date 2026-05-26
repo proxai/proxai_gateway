@@ -142,6 +142,76 @@ test('JSON mode includes updateAvailable when sentinel present', async () => {
   expect(json.sentinels.updateAvailable?.currentVersion).toBe('2026.5.7');
 });
 
+test('watch mode renders the unified summary for a configured running daemon', async () => {
+  const out = captureOutput();
+  const result = await runStatus(
+    makeDeps({
+      output: out,
+      currentVersion: '2026.5.25',
+      now: () => new Date('2026-05-25T12:00:00Z'),
+    }),
+  );
+  expect(result.exitCode).toBe(0);
+  const all = out.lines.map((l) => l.msg).join('\n');
+  expect(all).toContain('proxai-gateway');
+});
+
+test('watch mode renders the not-configured summary when configExists returns false', async () => {
+  const out = captureOutput();
+  const result = await runStatus(
+    makeDeps({ output: out, configExists: () => Promise.resolve(false) }),
+  );
+  expect(result.exitCode).toBe(0);
+  const all = out.lines.map((l) => l.msg).join('\n');
+  expect(all).toContain('Not set up');
+});
+
+test('JSON mode returns error when configured but buffer is undefined', async () => {
+  const out = captureOutput();
+  buffer.close();
+  const bufferlessDeps = { ...makeDeps({ output: out }) };
+  delete (bufferlessDeps as { buffer?: unknown }).buffer;
+  const result = await runStatus(bufferlessDeps, { json: true });
+  expect(result.exitCode).toBeGreaterThan(0);
+  buffer = await import('services/buffer').then((m) => m.openInMemoryBufferDb());
+});
+
+test('watch mode renders the configured-but-buffer-unavailable summary', async () => {
+  const out = captureOutput();
+  buffer.close();
+  const bufferlessDeps = { ...makeDeps({ output: out }) };
+  delete (bufferlessDeps as { buffer?: unknown }).buffer;
+  const result = await runStatus(bufferlessDeps);
+  expect(result.exitCode).toBe(0);
+  const all = out.lines.map((l) => l.msg).join('\n');
+  expect(all).toContain('Account configured');
+  buffer = await import('services/buffer').then((m) => m.openInMemoryBufferDb());
+});
+
+test('watch mode in verbose mode includes the by-source section', async () => {
+  setDaemonState(buffer, {
+    lastCycleStartedAt: '2026-05-08T02:40:13.100Z',
+    lastCycleCompletedAt: '2026-05-08T02:46:52.293Z',
+    lastCycleDurationMs: 5000,
+    lastDrainAttempted: 1,
+    lastDrainAccepted: 1,
+    lastDrainRetriable: 0,
+    lastDrainFatal: 0,
+    lastDrainRecovered: 0,
+    lastUploadError: null,
+    lastConsecutiveRetriableBreak: false,
+    lastSourceCaptures: {
+      'claude-code': { filesProcessed: 1, capturedBatches: 1, capturedBytes: 100, errorsCount: 0 },
+    },
+  });
+  const out = captureOutput();
+  const result = await runStatus(makeDeps({ output: out }), { verbose: true });
+  expect(result.exitCode).toBe(0);
+  const all = out.lines.map((l) => l.msg).join('\n');
+  expect(all).toContain('By source');
+  expect(all).toContain('Recent activity');
+});
+
 test('JSON mode handles authFailed and bufferFull and sessionStopped sentinels', async () => {
   await writeFile(
     join(dir, 'AUTH_FAILED'),
