@@ -1,0 +1,18 @@
+# State machines
+
+- [daemon-root](./daemon-root.md)
+- [sentinel-registry](./sentinel-registry.md)
+- [capture-loop](./capture-loop.md)
+- [drain-loop](./drain-loop.md)
+- [heartbeat-loop](./heartbeat-loop.md)
+- [binary-freshness](./binary-freshness.md)
+- [auto-upgrade](./auto-upgrade.md)
+- [source-poll](./source-poll.md)
+- [cursor-lifecycle](./cursor-lifecycle.md)
+- [batch-lifecycle](./batch-lifecycle.md)
+- [quarantine-lifecycle](./quarantine-lifecycle.md)
+- [pacer](./pacer.md)
+- [worker](./worker.md)
+- [service-manager](./service-manager.md)
+- [setup](./setup.md)
+- [uninstall](./uninstall.md)

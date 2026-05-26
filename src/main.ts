@@ -18,6 +18,7 @@ import { runTail } from 'cli/commands/tail';
 import { runUninstall } from 'cli/commands/uninstall';
 import { runUpgrade } from 'cli/commands/upgrade.ts';
 import { runInspect } from 'cli/commands/inspect';
+import { defaultReplayDeps, runReplay } from 'cli/commands/replay';
 import { autoUpgradeFromConfig } from 'cli/wiring/auto-upgrade.ts';
 
 import { consoleOutput } from 'cli/output.ts';
@@ -402,6 +403,19 @@ redaction
       buildRedactionTestDeps(),
       buildRedactionTestOptions(filePath, opts),
     );
+    process.exit(result.exitCode);
+  });
+
+program
+  .command('replay <logPath>')
+  .description(
+    'Replay a JSONL log of state-machine transitions and print the final state per machine. Useful for incident debugging.',
+  )
+  .option('--machine <name>', 'limit the replay to a single machine')
+  .action(async (logPath: string, opts: { machine?: string }) => {
+    const replayOptions: { logPath: string; machine?: string } = { logPath };
+    if (opts.machine !== undefined) replayOptions.machine = opts.machine;
+    const result = await runReplay(defaultReplayDeps, replayOptions);
     process.exit(result.exitCode);
   });
 
