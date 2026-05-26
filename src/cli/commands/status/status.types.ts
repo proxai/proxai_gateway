@@ -23,6 +23,7 @@ export interface StatusCommandDeps {
   serviceManager?: ServiceManager;
   loadConfig?: (path?: string) => Promise<GatewayConfig>;
   currentVersion?: string;
+  binaryPath?: string;
   now?: () => Date;
 }
 

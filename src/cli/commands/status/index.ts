@@ -7,6 +7,7 @@ import { formatBytes } from 'core/utils';
 
 export { inferDaemonAlive } from 'cli/commands/status/daemon-liveness.ts';
 import { inferDaemonAlive } from 'cli/commands/status/daemon-liveness.ts';
+import { isLocalBuildPath } from 'cli/commands/status/local-build.ts';
 
 import { buildEmptyStatusJson, buildStatusJson } from 'cli/commands/status/build-json.ts';
 import { gatherStatusSnapshot } from 'cli/commands/status/gather-snapshot.ts';
@@ -80,14 +81,17 @@ async function runWatchStatus(
 async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
   const exists = await deps.configExists();
   const isDevMode = existsSync(deps.devModeSentinelPath ?? devModeSentinelPath());
+  const isLocalBuild = isLocalBuildPath(deps.binaryPath);
+  const devLike = isDevMode || isLocalBuild;
   const nowLocal = (deps.now ?? ((): Date => new Date()))();
   const version = deps.currentVersion ?? null;
+  const binaryPath = deps.binaryPath ?? null;
 
   if (!exists) {
     return {
       summary: deriveUnifiedSummary({
         configured: false,
-        isDevMode,
+        isDevMode: devLike,
         daemonRunning: false,
         daemonInferredAlive: false,
         daemonLastCycleAt: null,
@@ -102,6 +106,8 @@ async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
       snapshot: null,
       notConfigured: true,
       isDevMode,
+      isLocalBuild,
+      binaryPath,
       nowLocal,
       version,
     };
@@ -111,7 +117,7 @@ async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
     return {
       summary: deriveUnifiedSummary({
         configured: true,
-        isDevMode,
+        isDevMode: devLike,
         daemonRunning: false,
         daemonInferredAlive: false,
         daemonLastCycleAt: null,
@@ -126,6 +132,8 @@ async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
       snapshot: null,
       notConfigured: false,
       isDevMode,
+      isLocalBuild,
+      binaryPath,
       nowLocal,
       version,
     };
@@ -139,7 +147,7 @@ async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
   );
   const summary = deriveUnifiedSummary({
     configured: true,
-    isDevMode,
+    isDevMode: devLike,
     daemonRunning: snapshot.runtime.isRunning,
     daemonInferredAlive,
     daemonLastCycleAt: snapshot.drainLastCycleAt ?? snapshot.captureLastCycleAt,
@@ -156,6 +164,8 @@ async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
     snapshot,
     notConfigured: false,
     isDevMode,
+    isLocalBuild,
+    binaryPath,
     nowLocal,
     version,
   };

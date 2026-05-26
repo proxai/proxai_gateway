@@ -56,6 +56,8 @@ function frameInputs(): RenderInputs {
     snapshot: null,
     notConfigured: false,
     isDevMode: false,
+    isLocalBuild: false,
+    binaryPath: null,
     nowLocal: new Date('2026-05-25T12:00:00Z'),
     version: null,
   };

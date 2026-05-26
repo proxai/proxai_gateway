@@ -14,6 +14,8 @@ import {
   updateAvailableSentinelPath,
 } from 'core/io/fs';
 import { PACKAGE_VERSION } from 'core/utils';
+
+const STATUS_BINARY_PATH = process.execPath;
 import { openBufferDb } from 'services/buffer';
 import { loadConfigFromFile } from 'services/config';
 
@@ -49,6 +51,7 @@ export async function buildStatusContext(inputs: BuildStatusContextInputs): Prom
       sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
       updateAvailableSentinelPath: updateAvailableSentinelPath(),
       devModeSentinelPath: devModeSentinelPath(),
+      binaryPath: STATUS_BINARY_PATH,
     };
     return { deps, options, cleanup: () => {} };
   }
@@ -72,6 +75,7 @@ export async function buildStatusContext(inputs: BuildStatusContextInputs): Prom
     updateAvailableSentinelPath: updateAvailableSentinelPath(),
     devModeSentinelPath: devModeSentinelPath(),
     currentVersion: PACKAGE_VERSION,
+    binaryPath: STATUS_BINARY_PATH,
     loadConfig: (path) => loadConfigFromFile(path),
   };
   if (inputs.serviceManager !== null) {

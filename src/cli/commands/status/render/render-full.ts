@@ -1,54 +1,90 @@
 import chalk from 'chalk';
 
-import type { OutputSink } from 'cli/cli.types.ts';
 import { dim } from 'cli/commands/status/render/format-helpers.ts';
-import { renderHumanStatus } from 'cli/commands/status/render-human.ts';
+import { inferDaemonAlive } from 'cli/commands/status/daemon-liveness.ts';
+import {
+  renderBufferSection,
+  renderCaptureSection,
+  renderHealthSection,
+  renderHistorySection,
+  renderUploadSection,
+} from 'cli/commands/status/render/render-sections.ts';
 import type { RenderInputs } from 'cli/commands/status/render/render.types.ts';
 import type { StatusCommandDeps } from 'cli/commands/status/status.types.ts';
 
-const HEADER_LABEL = '  proxai-gateway';
+const HEADER_LABEL = 'proxai-gateway';
 const DEV_BADGE = chalk.bgYellow.black(' DEV MODE ');
-const FOOTER_HINT = '  Press q or Esc to quit';
+const LOCAL_BUILD_BADGE = chalk.bgCyan.black(' LOCAL BUILD ');
+const FOOTER_HINT = 'Press q or Esc to quit';
 
 export function renderFullStatus(inputs: RenderInputs, deps: StatusCommandDeps): string {
   const lines: string[] = [];
   lines.push(renderHeaderLine(inputs));
-  if (inputs.isDevMode) {
-    lines.push(renderDevBanner(inputs));
+  if (inputs.isDevMode || inputs.isLocalBuild) {
+    lines.push(...renderDevBanner(inputs));
   }
   lines.push('');
   lines.push(renderSummaryLine(inputs));
   if (inputs.summary.hint !== null) {
-    lines.push(`  ${dim(inputs.summary.hint)}`);
+    lines.push(`     ${dim(inputs.summary.hint)}`);
   }
-  lines.push('');
   if (inputs.snapshot !== null) {
-    const sink = makeStringSink();
-    renderHumanStatus({ ...deps, output: sink.out }, inputs.snapshot, { skipTopBanner: true });
-    lines.push(...sink.lines);
+    lines.push(...renderCaptureSection(inputs.snapshot));
+    lines.push(...renderBufferSection(inputs.snapshot));
+    lines.push(...renderUploadSection(inputs.snapshot));
+    lines.push(...renderHistorySection(inputs.snapshot));
+    const inferredAlive = inferDaemonAlive(
+      inputs.snapshot.drainLastCycleAt,
+      inputs.snapshot.captureLastCycleAt,
+      inputs.snapshot.now,
+    );
+    lines.push(
+      ...renderHealthSection({
+        s: inputs.snapshot,
+        currentVersion: deps.currentVersion ?? '',
+        inferredAlive,
+        isDevLike: inputs.isDevMode || inputs.isLocalBuild,
+      }),
+    );
   }
   lines.push('');
-  lines.push(dim(FOOTER_HINT));
+  lines.push(`  ${dim(FOOTER_HINT)}`);
   return lines.join('\n');
 }
 
 function renderHeaderLine(inputs: RenderInputs): string {
   const version = inputs.version !== null ? ` ${dim(`v${inputs.version}`)}` : '';
   const dev = inputs.isDevMode ? ` ${DEV_BADGE}` : '';
+  const local = inputs.isLocalBuild ? ` ${LOCAL_BUILD_BADGE}` : '';
   const ts = dim(formatLocalDateTime(inputs.nowLocal));
-  return `${HEADER_LABEL}${version}${dev}    ${ts}`;
+  return `  ${chalk.bold(HEADER_LABEL)}${version}${dev}${local}    ${ts}`;
 }
 
-function renderDevBanner(inputs: RenderInputs): string {
+function renderDevBanner(inputs: RenderInputs): string[] {
+  const lines: string[] = [];
   const ingest = inputs.snapshot?.cfg?.backend.ingestUrl ?? null;
-  const backend = ingest === null ? '' : `  ${dim('backend:')} ${chalk.cyan(ingest)}`;
-  return `  ${chalk.yellow('⚠  DEV MODE')}  ${dim('running local build outside the OS service manager')}${backend}`;
+  if (inputs.isLocalBuild) {
+    const path =
+      inputs.binaryPath !== null ? `  ${dim('binary:')} ${chalk.cyan(inputs.binaryPath)}` : '';
+    lines.push(
+      `  ${chalk.cyan('▸ LOCAL BUILD')}  ${dim('running outside the OS service manager')}${path}`,
+    );
+  }
+  if (inputs.isDevMode) {
+    const backend = ingest === null ? '' : `  ${dim('backend:')} ${chalk.cyan(ingest)}`;
+    lines.push(
+      `  ${chalk.yellow('⚠ DEV MODE')}    ${dim('localhost backend sentinel active')}${backend}`,
+    );
+  } else if (inputs.isLocalBuild && ingest !== null) {
+    lines.push(`  ${' '.repeat(15)}${dim('backend:')} ${chalk.cyan(ingest)}`);
+  }
+  return lines;
 }
 
 function renderSummaryLine(inputs: RenderInputs): string {
   const glyph = glyphForLevel(inputs.summary.level);
   const color = colorForLevel(inputs.summary.level);
-  return `  ${glyph} ${color(inputs.summary.headline)}`;
+  return `  ${glyph} ${chalk.bold(color(inputs.summary.headline))}`;
 }
 
 function formatLocalDateTime(d: Date): string {
@@ -68,23 +104,4 @@ function colorForLevel(level: RenderInputs['summary']['level']): (s: string) => 
   if (level === 'warning') return chalk.yellow;
   if (level === 'error') return chalk.red;
   return dim;
-}
-
-interface StringSink {
-  readonly lines: string[];
-  readonly out: OutputSink;
-}
-
-function makeStringSink(): StringSink {
-  const lines: string[] = [];
-  const push = (s: string): void => {
-    for (const ln of s.split('\n')) lines.push(ln);
-  };
-  const out: OutputSink = {
-    info: push,
-    warn: push,
-    error: push,
-    success: push,
-  };
-  return { lines, out };
 }

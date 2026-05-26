@@ -6,6 +6,8 @@ export interface RenderInputs {
   readonly snapshot: StatusSnapshot | null;
   readonly notConfigured: boolean;
   readonly isDevMode: boolean;
+  readonly isLocalBuild: boolean;
+  readonly binaryPath: string | null;
   readonly nowLocal: Date;
   readonly version: string | null;
 }
