@@ -17,6 +17,7 @@ jobs:
   check:
     name: Typecheck + Lint + Format + Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -38,3 +39,4 @@ jobs:
         run: bun run format:check
       - name: Tests with coverage
         run: bun run test:cov
+        timeout-minutes: 8

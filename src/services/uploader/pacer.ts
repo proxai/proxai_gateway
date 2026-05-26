@@ -28,6 +28,8 @@ export interface Pacer {
   notify429(): void;
 
   notifyServiceUnavailable(retryAfterMs?: number): void;
+
+  stop(): void;
 }
 
 interface Bucket {
@@ -197,5 +199,9 @@ export function createPacer(options: PacerOptions): Pacer {
     });
   }
 
-  return { acquire, notifyRetryAfter, notify429, notifyServiceUnavailable };
+  function stop(): void {
+    machine.stop();
+  }
+
+  return { acquire, notifyRetryAfter, notify429, notifyServiceUnavailable, stop };
 }

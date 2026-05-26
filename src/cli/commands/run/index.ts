@@ -130,7 +130,11 @@ export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
       drain: drainCtx,
       heartbeat: heartbeatCtx,
     });
-    await runDaemonLoops(contexts, buildLoopOptions(deps));
+    try {
+      await runDaemonLoops(contexts, buildLoopOptions(deps));
+    } finally {
+      pacer.stop();
+    }
   } finally {
     logger.info({ event: 'daemon.stop' }, 'daemon shutting down');
     buffer.close();

@@ -257,6 +257,7 @@ function makePacerSpy(): PacerSpy {
     notifyServiceUnavailable: (ms?: number) => {
       serviceUnavailableCalls.push(ms);
     },
+    stop: () => {},
   };
   return { pacer, acquires, retryAfters, notify429Count, serviceUnavailableCalls };
 }

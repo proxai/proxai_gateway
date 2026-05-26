@@ -191,6 +191,7 @@ test('compat: covers optional cycle params', async () => {
     notifyRetryAfter: () => {},
     notify429: () => {},
     notifyServiceUnavailable: () => {},
+    stop: () => {},
   } satisfies Pacer;
   ctx.logger = mockLogger;
   ctx.minimumMtimeOverride = new Date('2026-05-08T00:00:00Z');
