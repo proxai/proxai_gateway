@@ -10,3 +10,5 @@ export {
   SENTINEL_WATCHER_DEBOUNCE_MS,
   SNAPSHOT_FLUSH_INTERVAL_MS,
 } from 'services/state-machines/state-machines.constants.ts';
+
+export * from 'services/state-machines/binary-freshness/index.ts';
