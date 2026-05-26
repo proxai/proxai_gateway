@@ -1,8 +1,11 @@
+import { existsSync } from 'node:fs';
+
 import type { RunCommandDeps } from 'cli/commands/run';
 import { consoleOutput } from 'cli/output.ts';
 import {
   authFailedSentinelPath,
   bufferFullSentinelPath,
+  devModeSentinelPath,
   pausedSentinelPath,
   sessionStoppedSentinelPath,
   updateAvailableSentinelPath,
@@ -31,7 +34,7 @@ export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
     currentVersion: PACKAGE_VERSION,
     binaryPath: inputs.binaryPath,
     installSource: inputs.config.account.installSource,
-    devMode: false,
+    devMode: existsSync(devModeSentinelPath()),
     exitProcess: inputs.exitProcess,
   };
 }
