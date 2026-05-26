@@ -210,12 +210,18 @@ program
     const ctrl = new AbortController();
     process.on('SIGINT', () => ctrl.abort());
     process.on('SIGTERM', () => ctrl.abort());
+    // Auto-upgrade exits non-zero so launchd (KeepAlive.SuccessfulExit=false),
+    // systemd (Restart=on-failure), and Windows scheduled tasks respawn the
+    // process under the freshly-replaced binary. A clean SIGINT/SIGTERM still
+    // returns through the normal `process.exit(result.exitCode)` path below
+    // with 0, so the user-initiated `proxai-gateway stop` continues to mean
+    // "stay stopped".
     const result = await runDaemon(
       buildRunDeps({
         config,
         abortSignal: ctrl.signal,
         binaryPath: process.execPath,
-        exitProcess: () => process.exit(0),
+        exitProcess: () => process.exit(EXIT_CODE.upgradeRespawn),
       }),
     );
     process.exit(result.exitCode);
@@ -323,6 +329,7 @@ program
 
 program
   .command('upgrade')
+  .alias('update')
   .description(
     'Manually fetch the latest gateway release from GitHub and replace the running binary. On Windows, writes the new binary alongside the existing one (restart required to apply).',
   )
