@@ -42,6 +42,15 @@ export function deriveUnifiedSummary(inputs: UnifiedSummaryInputs): UnifiedStatu
     };
   }
   if (!inputs.daemonRunning) {
+    if (inputs.daemonInferredAlive) {
+      const age = formatLastCycleAge(inputs.daemonLastCycleAt);
+      const hintPrefix = age === null ? '' : `Last cycle ${age} · `;
+      return {
+        level: 'ok',
+        headline: 'Account configured. Background service is running (not registered with OS).',
+        hint: `${hintPrefix}Run \`proxai-gateway start\` to register with launchd/systemd for auto-restart.`,
+      };
+    }
     return {
       level: 'warning',
       headline: 'Account configured. Background service is not running.',
@@ -59,4 +68,14 @@ function formatPressurePercent(pending: number | null, threshold: number | null)
   if (pending === null || threshold === null || threshold === 0) return '';
   const pct = Math.min(100, Math.round((pending / threshold) * 100));
   return ` (${pct.toString()}%)`;
+}
+
+function formatLastCycleAge(iso: string | null): string | null {
+  if (iso === null) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const secs = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (secs < 60) return `${secs.toString()}s ago`;
+  if (secs < 3600) return `${Math.round(secs / 60).toString()}m ago`;
+  return `${Math.round(secs / 3600).toString()}h ago`;
 }

@@ -9,6 +9,8 @@ export interface UnifiedStatusSummary {
 export interface UnifiedSummaryInputs {
   readonly configured: boolean;
   readonly daemonRunning: boolean;
+  readonly daemonInferredAlive: boolean;
+  readonly daemonLastCycleAt: string | null;
   readonly authFailed: boolean;
   readonly paused: boolean;
   readonly pausedReason: string;

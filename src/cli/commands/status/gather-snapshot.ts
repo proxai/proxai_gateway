@@ -83,6 +83,7 @@ export async function gatherStatusSnapshot(
     METADATA_KEYS.captureLastCycleAt,
     null,
   );
+  const drainLastCycleAt = getMetadata(buffer, METADATA_KEYS.drainLastCycleAt);
   const drainCyclesTotal = readNumber(buffer, METADATA_KEYS.drainCyclesTotal);
   const drainCyclesTotalDurationMs = readNumber(buffer, METADATA_KEYS.drainLastCycleDurationMs);
   const totalBatchesShipped = readNumberWithFallback(
@@ -184,6 +185,7 @@ export async function gatherStatusSnapshot(
     captureCyclesTotal,
     captureCyclesWithErrors,
     captureLastCycleAt,
+    drainLastCycleAt,
     drainCyclesTotal,
     drainCyclesTotalDurationMs,
     totalBatchesShipped,

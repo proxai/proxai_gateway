@@ -5,6 +5,8 @@ import type { UnifiedSummaryInputs } from 'cli/commands/status/unified-summary.t
 const BASE: UnifiedSummaryInputs = {
   configured: true,
   daemonRunning: true,
+  daemonInferredAlive: false,
+  daemonLastCycleAt: null,
   authFailed: false,
   paused: false,
   pausedReason: '',
@@ -59,6 +61,20 @@ test('buffer full state computes pressure percentage', () => {
 test('daemon not running reports start hint', () => {
   const s = deriveUnifiedSummary({ ...BASE, daemonRunning: false });
   expect(s.level).toBe('warning');
+  expect(s.hint).toContain('start');
+});
+
+test('daemon not service-managed but recently cycled reports ok with registration hint', () => {
+  const recent = new Date(Date.now() - 8_000).toISOString();
+  const s = deriveUnifiedSummary({
+    ...BASE,
+    daemonRunning: false,
+    daemonInferredAlive: true,
+    daemonLastCycleAt: recent,
+  });
+  expect(s.level).toBe('ok');
+  expect(s.headline).toContain('not registered with OS');
+  expect(s.hint).toContain('Last cycle');
   expect(s.hint).toContain('start');
 });
 

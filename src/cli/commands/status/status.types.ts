@@ -78,6 +78,7 @@ export interface StatusJsonOutput {
     captureCyclesTotal: number;
     captureCyclesWithErrors: number;
     captureLastCycleAt: string | null;
+    drainLastCycleAt: string | null;
     drainCyclesTotal: number;
     drainCyclesTotalDurationMs: number;
     lastSuccessAt: string | null;
@@ -86,7 +87,12 @@ export interface StatusJsonOutput {
     shippedBySource: UploadBySource;
   };
   system: {
-    daemon: { isRunning: boolean; pid: number | null; startedAt: string | null };
+    daemon: {
+      isRunning: boolean;
+      pid: number | null;
+      startedAt: string | null;
+      inferredAlive: boolean;
+    };
     autoUpgrade: { lastCheckAt: string | null; latestKnownVersion: string | null };
     binaryAge: { installedAt: string | null; days: number | null };
   };
@@ -124,6 +130,7 @@ export interface StatusSnapshot {
   captureCyclesTotal: number;
   captureCyclesWithErrors: number;
   captureLastCycleAt: string | null;
+  drainLastCycleAt: string | null;
   drainCyclesTotal: number;
   drainCyclesTotalDurationMs: number;
   totalBatchesShipped: number;

@@ -36,6 +36,7 @@ function sampleSnapshot(overrides: Partial<StatusSnapshot> = {}): StatusSnapshot
     captureCyclesTotal: 10,
     captureCyclesWithErrors: 1,
     captureLastCycleAt: '2026-05-25T12:30:00Z',
+    drainLastCycleAt: '2026-05-25T12:30:30Z',
     drainCyclesTotal: 5,
     drainCyclesTotalDurationMs: 0,
     totalBatchesShipped: 100,

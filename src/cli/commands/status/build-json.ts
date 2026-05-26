@@ -1,5 +1,6 @@
 import { daysSince } from 'core/utils';
 
+import { inferDaemonAlive } from 'cli/commands/status/index.ts';
 import type { StatusJsonOutput, StatusSnapshot } from 'cli/commands/status/status.types.ts';
 
 export function buildEmptyStatusJson(): StatusJsonOutput {
@@ -45,6 +46,7 @@ export function buildEmptyStatusJson(): StatusJsonOutput {
       captureCyclesTotal: 0,
       captureCyclesWithErrors: 0,
       captureLastCycleAt: null,
+      drainLastCycleAt: null,
       drainCyclesTotal: 0,
       drainCyclesTotalDurationMs: 0,
       lastSuccessAt: null,
@@ -53,7 +55,7 @@ export function buildEmptyStatusJson(): StatusJsonOutput {
       shippedBySource: {},
     },
     system: {
-      daemon: { isRunning: false, pid: null, startedAt: null },
+      daemon: { isRunning: false, pid: null, startedAt: null, inferredAlive: false },
       autoUpgrade: { lastCheckAt: null, latestKnownVersion: null },
       binaryAge: { installedAt: null, days: null },
     },
@@ -111,6 +113,7 @@ export function buildStatusJson(snapshot: StatusSnapshot): StatusJsonOutput {
       captureCyclesTotal: snapshot.captureCyclesTotal,
       captureCyclesWithErrors: snapshot.captureCyclesWithErrors,
       captureLastCycleAt: snapshot.captureLastCycleAt,
+      drainLastCycleAt: snapshot.drainLastCycleAt,
       drainCyclesTotal: snapshot.drainCyclesTotal,
       drainCyclesTotalDurationMs: snapshot.drainCyclesTotalDurationMs,
       lastSuccessAt: snapshot.lastSuccessAt,
@@ -124,6 +127,11 @@ export function buildStatusJson(snapshot: StatusSnapshot): StatusJsonOutput {
         pid: snapshot.runtime.pid,
         startedAt:
           snapshot.runtime.startedAt === null ? null : snapshot.runtime.startedAt.toISOString(),
+        inferredAlive: inferDaemonAlive(
+          snapshot.drainLastCycleAt,
+          snapshot.captureLastCycleAt,
+          snapshot.now,
+        ),
       },
       autoUpgrade: {
         lastCheckAt: snapshot.lastVersionCheckAt,

@@ -5,6 +5,26 @@ import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
 import { formatBytes } from 'core/utils';
 
+const DAEMON_INFER_FROM_DRAIN_MS = 90_000;
+const DAEMON_INFER_FROM_CAPTURE_MS = 360_000;
+
+export function inferDaemonAlive(
+  drainLastCycleAt: string | null,
+  captureLastCycleAt: string | null,
+  now: Date,
+): boolean {
+  const nowMs = now.getTime();
+  if (drainLastCycleAt !== null) {
+    const t = Date.parse(drainLastCycleAt);
+    if (Number.isFinite(t) && nowMs - t < DAEMON_INFER_FROM_DRAIN_MS) return true;
+  }
+  if (captureLastCycleAt !== null) {
+    const t = Date.parse(captureLastCycleAt);
+    if (Number.isFinite(t) && nowMs - t < DAEMON_INFER_FROM_CAPTURE_MS) return true;
+  }
+  return false;
+}
+
 import { buildEmptyStatusJson, buildStatusJson } from 'cli/commands/status/build-json.ts';
 import { gatherStatusSnapshot } from 'cli/commands/status/gather-snapshot.ts';
 import { renderBasic } from 'cli/commands/status/render/render-basic.ts';
@@ -87,6 +107,8 @@ async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
       summary: deriveUnifiedSummary({
         configured: false,
         daemonRunning: false,
+        daemonInferredAlive: false,
+        daemonLastCycleAt: null,
         authFailed: false,
         paused: false,
         pausedReason: '',
@@ -108,6 +130,8 @@ async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
       summary: deriveUnifiedSummary({
         configured: true,
         daemonRunning: false,
+        daemonInferredAlive: false,
+        daemonLastCycleAt: null,
         authFailed: false,
         paused: false,
         pausedReason: '',
@@ -125,9 +149,16 @@ async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
   }
 
   const snapshot = await gatherStatusSnapshot(deps, deps.buffer);
+  const daemonInferredAlive = inferDaemonAlive(
+    snapshot.drainLastCycleAt,
+    snapshot.captureLastCycleAt,
+    snapshot.now,
+  );
   const summary = deriveUnifiedSummary({
     configured: true,
     daemonRunning: snapshot.runtime.isRunning,
+    daemonInferredAlive,
+    daemonLastCycleAt: snapshot.drainLastCycleAt ?? snapshot.captureLastCycleAt,
     authFailed: snapshot.authFailed,
     paused: snapshot.paused,
     pausedReason: snapshot.pausedReason,

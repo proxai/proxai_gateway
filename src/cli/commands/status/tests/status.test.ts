@@ -6,7 +6,11 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runStatus as runStatusImpl, formatBytes } from 'cli/commands/status/index.ts';
+import {
+  inferDaemonAlive,
+  runStatus as runStatusImpl,
+  formatBytes,
+} from 'cli/commands/status/index.ts';
 import type { ReadableInputStream } from 'cli/commands/status/key-handler.types.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
 import { makeTestGatewayConfig, TEST_ACCOUNT_CONFIG } from 'services/config/tests/test-config.ts';
@@ -473,4 +477,31 @@ test('getMetadataWithFallback: primary present uses primary, no legacy lookup', 
   const out = captureOutput();
   const result = await runStatus(makeDeps({ output: out }), { json: true });
   expect(result.exitCode).toBe(0);
+});
+
+test('inferDaemonAlive: recent drain cycle within 90s returns true', () => {
+  const now = new Date('2026-05-26T11:00:00.000Z');
+  const recent = new Date('2026-05-26T10:59:30.000Z').toISOString();
+  expect(inferDaemonAlive(recent, null, now)).toBe(true);
+});
+
+test('inferDaemonAlive: drain cycle older than 90s falls through to capture', () => {
+  const now = new Date('2026-05-26T11:00:00.000Z');
+  const oldDrain = new Date('2026-05-26T10:55:00.000Z').toISOString();
+  const recentCapture = new Date('2026-05-26T10:58:00.000Z').toISOString();
+  expect(inferDaemonAlive(oldDrain, recentCapture, now)).toBe(true);
+});
+
+test('inferDaemonAlive: both cycles stale returns false', () => {
+  const now = new Date('2026-05-26T11:00:00.000Z');
+  const stale = new Date('2026-05-26T10:50:00.000Z').toISOString();
+  expect(inferDaemonAlive(stale, stale, now)).toBe(false);
+});
+
+test('inferDaemonAlive: both nulls returns false', () => {
+  expect(inferDaemonAlive(null, null, new Date())).toBe(false);
+});
+
+test('inferDaemonAlive: malformed iso strings return false', () => {
+  expect(inferDaemonAlive('not-a-date', 'also-bad', new Date())).toBe(false);
 });
