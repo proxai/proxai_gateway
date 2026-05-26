@@ -11,6 +11,7 @@ export interface SetupCommandDeps {
   bufferDbPath: string;
   logDir: string;
   authFailedSentinelPath: string;
+  pauseSentinelPath?: string;
   serviceUnitPath: string | null;
   sessionStoppedSentinelPath?: string;
   consentSentinelPath?: string;

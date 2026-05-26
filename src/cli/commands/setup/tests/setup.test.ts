@@ -160,7 +160,7 @@ function newControl(overrides: Partial<MockHttpControl> = {}): MockHttpControl {
 function deps(control: MockHttpControl): Parameters<typeof runSetup>[0] {
   return {
     output: captureOutput(),
-    prompts: scriptedPrompts({}),
+    prompts: scriptedPrompts({ replace: true }),
     configPath,
     bufferDbPath,
     logDir,
@@ -764,4 +764,100 @@ test('clears session-stopped sentinel before starting (when sentinel path suppli
   };
   await runSetup(d, { apiKey: VALID_KEY });
   expect(await Bun.file(sentinelPath).exists()).toBe(false);
+});
+
+test('setup with existing config and no args auto-starts when daemon is down', async () => {
+  await writeExistingConfig();
+  const control = newControl();
+  const sm = fakeServiceManager();
+  sm.isRunning = async () => false;
+  const out = captureOutput();
+  const d = { ...deps(control), output: out, serviceManager: sm };
+  const result = await runSetup(d, {});
+  expect(result.exitCode).toBe(0);
+  expect(sm.calls.start).toBe(1);
+  expect(out.lines.some((l) => l.msg.includes('Daemon is not running — starting it now'))).toBe(
+    true,
+  );
+});
+
+test('setup with existing config and no args reports running when daemon is up', async () => {
+  await writeExistingConfig();
+  const control = newControl();
+  const sm = fakeServiceManager();
+  sm.isRunning = async () => true;
+  const out = captureOutput();
+  const d = { ...deps(control), output: out, serviceManager: sm };
+  const result = await runSetup(d, {});
+  expect(result.exitCode).toBe(5);
+  expect(sm.calls.start).toBe(0);
+  expect(out.lines.some((l) => l.msg.includes('Daemon is running'))).toBe(true);
+});
+
+test('setup with existing config respects PAUSED sentinel and does not auto-start', async () => {
+  await writeExistingConfig();
+  const pausedPath = join(dir, 'PAUSED');
+  await Bun.write(pausedPath, JSON.stringify({ reason: 'manual', set_at: '2026-05-26T00:00:00Z' }));
+  const control = newControl();
+  const sm = fakeServiceManager();
+  sm.isRunning = async () => false;
+  const out = captureOutput();
+  const d = { ...deps(control), output: out, serviceManager: sm, pauseSentinelPath: pausedPath };
+  const result = await runSetup(d, {});
+  expect(result.exitCode).toBe(5);
+  expect(sm.calls.start).toBe(0);
+  expect(out.lines.some((l) => l.msg.includes('daemon is paused'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('proxai-gateway resume'))).toBe(true);
+});
+
+test('setup with same api-key as existing config skips replace flow and auto-starts', async () => {
+  await writeExistingConfig();
+  const control = newControl();
+  const sm = fakeServiceManager();
+  sm.isRunning = async () => false;
+  const out = captureOutput();
+  const d = { ...deps(control), output: out, serviceManager: sm };
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(sm.calls.start).toBe(1);
+  expect(control.verifyCalls).toBe(0);
+  expect(control.registerCalls).toBe(0);
+});
+
+test('setup with different api-key and user declining replace keeps existing config', async () => {
+  await writeExistingConfig();
+  const control = newControl();
+  const sm = fakeServiceManager();
+  sm.isRunning = async () => true;
+  const out = captureOutput();
+  const d = {
+    ...deps(control),
+    output: out,
+    serviceManager: sm,
+    prompts: scriptedPrompts({ replace: false }),
+  };
+  const result = await runSetup(d, { apiKey: NEW_KEY });
+  expect(result.exitCode).toBe(5);
+  expect(control.verifyCalls).toBe(0);
+  const existing = await loadConfigFromFile(configPath);
+  expect(existing.account.apiKey).toBe(VALID_KEY);
+  expect(out.lines.some((l) => l.msg.includes('aborted'))).toBe(true);
+});
+
+test('setup with different api-key and user accepting replace runs full replace flow', async () => {
+  await writeExistingConfig();
+  const control = newControl();
+  const sm = fakeServiceManager();
+  const out = captureOutput();
+  const d = {
+    ...deps(control),
+    output: out,
+    serviceManager: sm,
+    prompts: scriptedPrompts({ replace: true }),
+  };
+  const result = await runSetup(d, { apiKey: NEW_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(control.verifyCalls).toBe(1);
+  const updated = await loadConfigFromFile(configPath);
+  expect(updated.account.apiKey).toBe(NEW_KEY);
 });

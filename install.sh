@@ -145,7 +145,14 @@ EOF
 
   info ""
   info "ProxAI Gateway installed."
-  info "Restart your shell, then run: ${BINARY_NAME} setup"
+
+  local cfg="${HOME}/.proxai/proxai-gateway/config.toml"
+  if [ -f "${cfg}" ]; then
+    info "Existing configuration detected; reconciling daemon state..."
+    "${dest}" setup || info "Run '${BINARY_NAME} status' for details."
+  else
+    info "Restart your shell, then run: ${BINARY_NAME} setup"
+  fi
 }
 
 main "$@"

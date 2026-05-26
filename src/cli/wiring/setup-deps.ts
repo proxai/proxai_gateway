@@ -11,6 +11,7 @@ import {
   configFilePath,
   consentSentinelPath,
   logDir,
+  pausedSentinelPath,
   sessionStoppedSentinelPath,
 } from 'core/io/fs';
 import { readMachineUuid } from 'core/system';
@@ -42,6 +43,7 @@ export function buildSetupDeps(inputs: BuildSetupDepsInputs): SetupCommandDeps {
     bufferDbPath: bufferDbPath(),
     logDir: logDir(),
     authFailedSentinelPath: authFailedSentinelPath(),
+    pauseSentinelPath: pausedSentinelPath(),
     sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
     consentSentinelPath: consentSentinelPath(),
     serviceUnitPath: inputs.serviceUnitPath,

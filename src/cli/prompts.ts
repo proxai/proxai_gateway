@@ -6,6 +6,7 @@ export interface PromptSink {
   askApiKey(message?: string): Promise<string>;
   confirmPhrase(message: string, requiredPhrase: string): Promise<boolean>;
   confirmUpgrade(message: string): Promise<boolean>;
+  confirmReplace(message: string): Promise<boolean>;
 }
 
 const ABORT_ERROR_NAMES = new Set(['ExitPromptError', 'AbortPromptError', 'CancelPromptError']);
@@ -48,6 +49,7 @@ export function inquirerPrompts(): PromptSink {
         return answer.trim() === requiredPhrase;
       }),
     confirmUpgrade: (message) => rethrowAborts(() => confirm({ message, default: true })),
+    confirmReplace: (message) => rethrowAborts(() => confirm({ message, default: false })),
   };
 }
 
@@ -56,6 +58,7 @@ export function scriptedPrompts(answers: {
   apiKeys?: string[];
   phrase?: string | boolean;
   upgrade?: boolean;
+  replace?: boolean;
 }): PromptSink {
   const queue: string[] = [
     ...(answers.apiKeys ?? []),
@@ -79,6 +82,12 @@ export function scriptedPrompts(answers: {
         throw new Error('scripted prompt: no upgrade answer provided');
       }
       return answers.upgrade;
+    },
+    confirmReplace: async () => {
+      if (answers.replace === undefined) {
+        throw new Error('scripted prompt: no replace answer provided');
+      }
+      return answers.replace;
     },
   };
 }

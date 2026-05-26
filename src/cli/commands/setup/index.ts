@@ -6,8 +6,9 @@ import { nowIsoUtc } from 'core/utils';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
 import { loadConfigFromFile } from 'services/config';
-import type { InstallSource } from 'services/config';
+import type { GatewayConfig, InstallSource } from 'services/config';
 import { clearAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
+import { isPaused } from 'services/polling/pause-sentinel.ts';
 import { setupMachine } from 'services/state-machines/setup';
 
 import { buildGatewayConfig, writeConfigArtifacts } from 'cli/commands/setup/build-config.ts';
@@ -32,10 +33,25 @@ export async function runSetup(
   machine.send({ type: 'CONSENT_ACCEPTED' });
 
   const isReplace = await deps.configExists();
+  const providedKey = options.apiKey?.trim();
+  const hasProvidedKey = providedKey !== undefined && providedKey.length > 0;
 
-  if (isReplace && options.apiKey === undefined && options.force !== true) {
-    machine.stop();
-    return reportAlreadyConfigured(deps);
+  if (isReplace && options.force !== true) {
+    const existing = await tryLoadExistingConfig(deps);
+    if (hasProvidedKey && existing !== null && existing.account.apiKey !== providedKey) {
+      const wantsReplace = await deps.prompts.confirmReplace(
+        `This machine is already configured with ingestion key ${chalk.cyan(maskKey(existing.account.apiKey))}. Replace it with the new key ${chalk.cyan(maskKey(providedKey))}?`,
+      );
+      if (!wantsReplace) {
+        deps.output.info('aborted — keeping existing configuration');
+        machine.stop();
+        return reportAlreadyConfiguredAndMaybeStart(deps, options, existing);
+      }
+      // user confirmed override → fall through to the full setup flow below
+    } else {
+      machine.stop();
+      return reportAlreadyConfiguredAndMaybeStart(deps, options, existing);
+    }
   }
 
   const keyResult = await acquireApiKey(deps, options, isReplace);
@@ -113,20 +129,63 @@ async function maybeWriteConsentSentinel(deps: SetupCommandDeps): Promise<void> 
   } catch {}
 }
 
-async function reportAlreadyConfigured(deps: SetupCommandDeps): Promise<CommandResult> {
+async function tryLoadExistingConfig(deps: SetupCommandDeps): Promise<GatewayConfig | null> {
   try {
-    const existing = await loadConfigFromFile(deps.configPath);
+    return await loadConfigFromFile(deps.configPath);
+  } catch {
+    return null;
+  }
+}
+
+async function reportAlreadyConfiguredAndMaybeStart(
+  deps: SetupCommandDeps,
+  options: SetupCommandOptions,
+  existing: GatewayConfig | null,
+): Promise<CommandResult> {
+  if (existing !== null) {
     deps.output.info(`already configured (host_id: ${existing.account.hostId})`);
     deps.output.info(`  installed at  ${existing.account.installedAt}`);
     deps.output.info(`  install src   ${existing.account.installSource}`);
-    deps.output.info('');
+  } else {
+    deps.output.info('already configured (could not read existing config)');
+  }
+  deps.output.info('');
+
+  if (options.noStart === true) {
     deps.output.info(
       `Run ${chalk.cyan('proxai-gateway setup --force')} to re-enter your ingestion key, or ${chalk.cyan('proxai-gateway uninstall --reset')} to wipe and start fresh.`,
     );
-  } catch {
-    deps.output.info(
-      `already configured. Run ${chalk.cyan('proxai-gateway setup --force')} to re-enter your ingestion key, or ${chalk.cyan('proxai-gateway uninstall --reset')} to wipe and start fresh.`,
-    );
+    return { exitCode: EXIT_CODE.alreadyInstalled };
   }
-  return { exitCode: EXIT_CODE.alreadyInstalled };
+
+  const paused = deps.pauseSentinelPath !== undefined && (await isPaused(deps.pauseSentinelPath));
+  if (paused) {
+    deps.output.warn('daemon is paused; not starting');
+    deps.output.info(`Run ${chalk.cyan('proxai-gateway resume')} to resume capture cycles.`);
+    return { exitCode: EXIT_CODE.alreadyInstalled };
+  }
+
+  if (deps.serviceManager === undefined) {
+    deps.output.info(
+      `Run ${chalk.cyan('proxai-gateway setup --force')} to re-enter your ingestion key, or ${chalk.cyan('proxai-gateway uninstall --reset')} to wipe and start fresh.`,
+    );
+    return { exitCode: EXIT_CODE.alreadyInstalled };
+  }
+
+  let running = false;
+  try {
+    running = await deps.serviceManager.isRunning();
+  } catch {
+    running = false;
+  }
+  if (running) {
+    deps.output.info(
+      `Daemon is running. View live status with ${chalk.cyan('proxai-gateway status')}.`,
+    );
+    return { exitCode: EXIT_CODE.alreadyInstalled };
+  }
+
+  deps.output.info('Daemon is not running — starting it now.');
+  await writeServiceUnitIfNeeded(deps);
+  return autoStartDaemon(deps, options);
 }

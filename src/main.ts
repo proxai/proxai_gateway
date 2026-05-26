@@ -73,7 +73,11 @@ program
   .command('setup')
   .alias('init')
   .description(
-    'Configure the gateway with your ingestion key. Verifies the key, writes ~/.proxai/proxai-gateway/config.toml, installs the platform service unit, and starts the daemon.',
+    'Configure the gateway with your ingestion key. Verifies the key, writes ~/.proxai/proxai-gateway/config.toml, installs the platform service unit, and starts the daemon. If the machine is already configured, starts the daemon when it is not running and not intentionally paused.',
+  )
+  .argument(
+    '[api-key]',
+    'ingestion key to verify and store; equivalent to --api-key. If a different key is already configured, you will be prompted to replace it.',
   )
   .option(
     '--api-key <key>',
@@ -94,7 +98,10 @@ program
     false,
   )
   .action(
-    async (opts: { apiKey?: string; installSource: string; start?: boolean; force?: boolean }) => {
+    async (
+      positionalApiKey: string | undefined,
+      opts: { apiKey?: string; installSource: string; start?: boolean; force?: boolean },
+    ) => {
       const ctx = buildPlatformServiceContext(process.platform, process.execPath);
       const setupInputs = {
         platform: process.platform,
@@ -103,7 +110,10 @@ program
         serviceManager: ctx?.serviceManager ?? null,
         env: process.env,
       };
-      const result = await runSetup(buildSetupDeps(setupInputs), buildSetupOptions(opts));
+      const effectiveKey = positionalApiKey ?? opts.apiKey;
+      const optionsForRun: typeof opts =
+        effectiveKey === undefined ? opts : { ...opts, apiKey: effectiveKey };
+      const result = await runSetup(buildSetupDeps(setupInputs), buildSetupOptions(optionsForRun));
       process.exit(result.exitCode);
     },
   );

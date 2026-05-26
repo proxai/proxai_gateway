@@ -95,7 +95,18 @@ try {
 
     Write-Host ''
     Write-Host 'ProxAI Gateway installed.'
-    Write-Host 'Open a new PowerShell window, then run: proxai-gateway setup'
+
+    $cfg = Join-Path $HOME '.proxai\proxai-gateway\config.toml'
+    if (Test-Path $cfg) {
+        Write-Host 'Existing configuration detected; reconciling daemon state...'
+        try {
+            & $dest setup
+        } catch {
+            Write-Host "Run 'proxai-gateway status' for details."
+        }
+    } else {
+        Write-Host 'Open a new PowerShell window, then run: proxai-gateway setup'
+    }
     exit 0
 } catch {
     Write-Error $_.Exception.Message
