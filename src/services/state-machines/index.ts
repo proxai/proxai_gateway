@@ -23,3 +23,7 @@ export * from 'services/state-machines/sentinel-registry/index.ts';
 export * from 'services/state-machines/capture-loop/index.ts';
 export * from 'services/state-machines/drain-loop/index.ts';
 export * from 'services/state-machines/heartbeat-loop/index.ts';
+export * from 'services/state-machines/service-manager/index.ts';
+export * from 'services/state-machines/setup/index.ts';
+export * from 'services/state-machines/uninstall/index.ts';
+export * from 'services/state-machines/daemon-root/index.ts';
