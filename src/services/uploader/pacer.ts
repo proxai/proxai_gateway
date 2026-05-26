@@ -1,3 +1,6 @@
+import { createActor } from 'xstate';
+import { pacerMachine } from 'services/state-machines/pacer';
+
 const DEFAULT_NOW = (): number => Date.now();
 const DEFAULT_SLEEP = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -89,8 +92,17 @@ export function createPacer(options: PacerOptions): Pacer {
   let pendingServiceUnavailable = false;
   let pendingServiceUnavailableFloorMs = 0;
 
+  const machine = createActor(pacerMachine, {
+    input: {
+      maxBatchesPerSec: options.maxBatchesPerSec,
+      maxBytesPerMinute: options.maxBytesPerMinute,
+    },
+  });
+  machine.start();
+
   async function acquire(payloadBytes: number): Promise<void> {
     if (payloadBytes < 0) throw new Error('payloadBytes must be >= 0');
+    machine.send({ type: 'ACQUIRE_STARTED', payloadBytes });
 
     if (pendingNotify429) {
       backoffSteps = Math.min(backoffSteps + 1, 16);
@@ -119,6 +131,7 @@ export function createPacer(options: PacerOptions): Pacer {
       retryAfterUntil = 0;
     }
 
+    machine.send({ type: 'ENTER_429_BACKOFF' });
     if (backoffSteps > 0) {
       const slotMs = RATE_WINDOW_MS / rateBucket.capacity;
       const backoffBase = slotMs * (backoffMultiplier ** backoffSteps - 1);
@@ -126,6 +139,7 @@ export function createPacer(options: PacerOptions): Pacer {
       if (backoff > 0) await sleep(backoff);
     }
 
+    machine.send({ type: 'ENTER_5XX_BACKOFF' });
     if (serviceUnavailableSteps > 0) {
       const computed = SERVICE_UNAVAILABLE_INITIAL_DELAY_MS * 2 ** (serviceUnavailableSteps - 1);
       const capped = Math.min(SERVICE_UNAVAILABLE_MAX_DELAY_MS, computed);
@@ -133,6 +147,7 @@ export function createPacer(options: PacerOptions): Pacer {
       if (wait > 0) await sleep(wait);
     }
 
+    machine.send({ type: 'ENTER_TOKEN_BUCKET' });
     while (true) {
       const t = now();
       const needBytes = Math.min(payloadBytes, bytesBucket.capacity);
@@ -140,8 +155,15 @@ export function createPacer(options: PacerOptions): Pacer {
       const waitBytes = needBytes > 0 ? timeUntil(bytesBucket, needBytes, t) : 0;
       const wait = Math.max(waitRate, waitBytes);
       if (wait <= 0) {
+        machine.send({ type: 'ENTER_DEBITING' });
         debit(rateBucket, 1, t);
         if (needBytes > 0) debit(bytesBucket, needBytes, t);
+        machine.send({
+          type: 'ACQUIRE_COMPLETE',
+          rateTokens: rateBucket.tokens,
+          bytesTokens: bytesBucket.tokens,
+          debitedAtMs: t,
+        });
         break;
       }
       await sleep(wait);
@@ -152,10 +174,12 @@ export function createPacer(options: PacerOptions): Pacer {
     if (!Number.isFinite(retryAfterMs) || retryAfterMs <= 0) return;
     const target = now() + retryAfterMs;
     if (target > retryAfterUntil) retryAfterUntil = target;
+    machine.send({ type: 'NOTIFY_RETRY_AFTER', untilMs: target });
   }
 
   function notify429(): void {
     pendingNotify429 = true;
+    machine.send({ type: 'NOTIFY_429' });
   }
 
   function notifyServiceUnavailable(retryAfterMs?: number): void {
@@ -167,6 +191,10 @@ export function createPacer(options: PacerOptions): Pacer {
     ) {
       pendingServiceUnavailableFloorMs = retryAfterMs;
     }
+    machine.send({
+      type: 'NOTIFY_5XX',
+      floorMs: retryAfterMs !== undefined && Number.isFinite(retryAfterMs) ? retryAfterMs : 0,
+    });
   }
 
   return { acquire, notifyRetryAfter, notify429, notifyServiceUnavailable };
