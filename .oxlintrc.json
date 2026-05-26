@@ -20,7 +20,19 @@
     "no-underscore-dangle": "off",
     "typescript/no-explicit-any": "error",
     "unicorn/prefer-add-event-listener": "off",
-    "unicorn/require-post-message-target-origin": "off"
+    "unicorn/require-post-message-target-origin": "off",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "bun:sqlite",
+            "message": "Only services/buffer/, core/io/sqlite/, and source-side sqlite readers may import bun:sqlite directly. Other modules go through services/buffer.",
+            "allowTypeImports": true
+          }
+        ]
+      }
+    ]
   },
   "overrides": [
     {
@@ -57,9 +69,23 @@
       }
     },
     {
-      "files": ["scripts/arch-lint/**/*.ts", "scripts/export-diagrams/**/*.ts"],
+      "files": ["scripts/export-diagrams/**/*.ts"],
       "rules": {
         "no-await-in-loop": "off"
+      }
+    },
+    {
+      "files": [
+        "src/services/buffer/**/*.ts",
+        "src/core/io/sqlite/**/*.ts",
+        "src/sources/cursor/**/*.ts",
+        "src/sources/codex/**/*.ts",
+        "**/*.test.ts",
+        "**/*.spec.ts",
+        "**/tests/**/*.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
       }
     }
   ],
