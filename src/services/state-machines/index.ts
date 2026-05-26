@@ -20,3 +20,6 @@ export * from 'services/state-machines/auto-upgrade/index.ts';
 export * from 'services/state-machines/worker/index.ts';
 export * from 'services/state-machines/source-poll/index.ts';
 export * from 'services/state-machines/sentinel-registry/index.ts';
+export * from 'services/state-machines/capture-loop/index.ts';
+export * from 'services/state-machines/drain-loop/index.ts';
+export * from 'services/state-machines/heartbeat-loop/index.ts';
