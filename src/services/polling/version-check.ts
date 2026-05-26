@@ -1,6 +1,7 @@
+import type { FetchFn } from 'core/utils';
 export interface VersionCheckDeps {
   currentVersion: string;
-  fetch?: typeof globalThis.fetch;
+  fetch?: FetchFn;
   now?: () => Date;
   platform?: NodeJS.Platform;
   arch?: string;

@@ -540,7 +540,7 @@ test('logs quarantine.write_failed when quarantine insert throws on cursor', asy
   const baseCtx = ctx(buffer);
   const fakeCtx = {
     ...baseCtx,
-    logger: fakeLogger as unknown as NonNullable<CursorCollectorContext['logger']>,
+    logger: fakeLogger,
   };
   const result = await collectCursorFile(file, fakeCtx);
   expect(result.errors.some((e) => /quarantined/.test(e.reason))).toBe(true);

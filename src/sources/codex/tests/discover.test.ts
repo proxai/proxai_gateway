@@ -30,12 +30,14 @@ interface FakeStatement<T> {
 }
 
 function fakeDb<T>(rows: T[]): Database {
-  return {
+  const db: unknown = {
     query<R>(_sql: string): FakeStatement<R> {
-      return { all: () => rows as unknown as R[] };
+      const widenedRows: unknown = rows;
+      return { all: () => widenedRows as R[] };
     },
     close(): void {},
-  } as unknown as Database;
+  };
+  return db as Database;
 }
 
 test('discoverCodexRolloutFiles returns empty list when the codex home does not exist', async () => {
@@ -210,12 +212,13 @@ test('readChildRolloutPaths success path through DI: open returns fake, hasTable
   const db = fakeDb([{ rollout_path: '/abs/p.jsonl' }]);
   let closed = false;
   const fakeOpen = (_path: string): Database => {
-    return {
+    const wrapped: unknown = {
       ...db,
       close: () => {
         closed = true;
       },
-    } as unknown as Database;
+    };
+    return wrapped as Database;
   };
   const set = readChildRolloutPaths('/any/path.sqlite', {
     openDb: fakeOpen,

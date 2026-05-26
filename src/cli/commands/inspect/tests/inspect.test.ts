@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
+import { asWorkerCtor } from 'core/utils';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -79,7 +80,7 @@ test('runInspect: succeeds with empty directories', async () => {
 test('runInspect: renders worker results and highlights', async () => {
   const out = captureOutput();
   const originalWorker = globalThis.Worker;
-  globalThis.Worker = SuccessWorker as unknown as typeof Worker;
+  globalThis.Worker = asWorkerCtor(SuccessWorker);
   try {
     const result = await runInspect({
       output: out,
@@ -108,7 +109,7 @@ test('runInspect: surfaces a worker that returns success:false', async () => {
     }
     terminate(): void {}
   }
-  globalThis.Worker = FailWorker as unknown as typeof Worker;
+  globalThis.Worker = asWorkerCtor(FailWorker);
   try {
     const result = await runInspect({
       output: out,
@@ -135,7 +136,7 @@ test('runInspect: handles a worker error event', async () => {
     }
     terminate(): void {}
   }
-  globalThis.Worker = ErrorWorker as unknown as typeof Worker;
+  globalThis.Worker = asWorkerCtor(ErrorWorker);
   try {
     const result = await runInspect({
       output: out,
@@ -158,7 +159,7 @@ test('runInspect: handles a worker constructor throw', async () => {
     postMessage(): void {}
     terminate(): void {}
   }
-  globalThis.Worker = ThrowingWorker as unknown as typeof Worker;
+  globalThis.Worker = asWorkerCtor(ThrowingWorker);
   try {
     const result = await runInspect({
       output: out,
@@ -185,7 +186,7 @@ test('runInspect: reports a markdown save failure gracefully', async () => {
 test('runInspect: fails gracefully on an unexpected error', async () => {
   const out = captureOutput();
   const originalWorker = globalThis.Worker;
-  globalThis.Worker = SuccessWorker as unknown as typeof Worker;
+  globalThis.Worker = asWorkerCtor(SuccessWorker);
   const originalParse = Date.parse;
   Date.parse = (): number => {
     throw new Error('Simulated Date.parse error');

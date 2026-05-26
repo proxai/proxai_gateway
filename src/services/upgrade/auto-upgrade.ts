@@ -1,4 +1,5 @@
-import type { Logger } from 'core/log';
+import type { FetchFn } from 'core/utils';
+import type { MinimalLogger } from 'core/log';
 import type { InstallSource } from 'services/config';
 import { checkLatestVersion } from 'services/polling/version-check.ts';
 import { downloadAsset, expectedAssetName, replaceBinary } from 'services/upgrade/release-fetch.ts';
@@ -7,8 +8,8 @@ export interface AutoUpgradeDeps {
   currentVersion: string;
   devMode?: boolean;
   installSource?: InstallSource;
-  fetch?: typeof globalThis.fetch;
-  logger?: Logger;
+  fetch?: FetchFn;
+  logger?: MinimalLogger;
   exitProcess?: () => void;
   platform?: NodeJS.Platform;
   arch?: string;

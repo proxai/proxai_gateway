@@ -1,13 +1,13 @@
 import type { Database } from 'bun:sqlite';
 
-import type { Logger } from 'core/log';
+import type { MinimalLogger } from 'core/log';
 import { setCursor } from 'services/buffer';
 import type { HttpClient, ServerWatermark } from 'services/http';
 
 export interface SyncWatermarksDeps {
   buffer: Database;
   http: HttpClient;
-  logger?: Logger;
+  logger?: MinimalLogger;
 }
 
 export interface SyncWatermarksResult {

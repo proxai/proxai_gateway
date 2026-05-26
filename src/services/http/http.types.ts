@@ -1,3 +1,4 @@
+import type { FetchFn } from 'core/utils';
 export interface HttpEndpoints {
   ingest: string;
   verifyKey: string;
@@ -11,7 +12,7 @@ export interface HttpClientOptions {
   endpoints: HttpEndpoints;
   gatewayVersion?: string;
   timeoutMs?: number;
-  fetch?: typeof globalThis.fetch;
+  fetch?: FetchFn;
 }
 
 export interface RequestOptions {

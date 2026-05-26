@@ -1,4 +1,5 @@
 import { NetworkError, RetriableError } from 'core/utils';
+import type { FetchFn } from 'core/utils';
 import { validateRawRecordDTO } from 'services/contract';
 import type { RawRecordDTO } from 'services/contract';
 
@@ -31,7 +32,7 @@ export class HttpClient {
   private readonly endpoints: HttpEndpoints;
   private readonly timeoutMs: number;
   private readonly userAgent: string;
-  private readonly fetchFn: typeof globalThis.fetch;
+  private readonly fetchFn: FetchFn;
 
   constructor(options: HttpClientOptions) {
     this.apiKey = options.apiKey;

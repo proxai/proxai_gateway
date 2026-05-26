@@ -82,7 +82,8 @@ export async function scanViaDirect(
 
 function createInspectWorker(): InspectWorkerLike {
   const workerUrl = new URL('../../../services/polling/poll-worker.ts', import.meta.url).href;
-  return new Worker(workerUrl, { type: 'module' }) as unknown as InspectWorkerLike;
+  const worker: unknown = new Worker(workerUrl, { type: 'module' });
+  return worker as InspectWorkerLike;
 }
 
 export function scanViaWorker(

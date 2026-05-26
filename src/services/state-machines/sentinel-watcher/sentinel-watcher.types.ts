@@ -1,4 +1,4 @@
-import type { Logger } from 'core/log';
+import type { MinimalLogger } from 'core/log';
 import type { SentinelRegistryEvent } from 'services/state-machines/sentinel-registry/sentinel-registry.types.ts';
 
 export type SentinelKind =
@@ -24,7 +24,7 @@ export interface SentinelEventTarget {
 export interface SentinelWatcherDeps {
   readonly paths: SentinelWatcherPaths;
   readonly target: SentinelEventTarget;
-  readonly logger?: Logger;
+  readonly logger?: MinimalLogger;
   readonly debounceMs?: number;
 }
 

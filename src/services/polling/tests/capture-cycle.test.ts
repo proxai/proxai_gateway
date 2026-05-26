@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import type { Logger } from 'core/log';
+
 import type { Database } from 'bun:sqlite';
 import { rmRecursive } from 'core/io/fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { generateUuidV7, zstdCompressSync } from 'core/utils';
+import { asMessageEvent, asWorkerCtor, generateUuidV7, zstdCompressSync } from 'core/utils';
 import {
   getDaemonState,
   getMetadata,
@@ -28,14 +28,6 @@ import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.typ
 
 type WorkerMessageHandler = ((event: MessageEvent<WorkerOutput>) => void) | null;
 type WorkerErrorHandler = ((event: ErrorEvent) => void) | null;
-
-// Bridge from a hand-rolled mock class to the global `Worker` constructor
-// signature. The mocks below only need a subset of the Worker interface; the
-// `unknown` hop is the canonical single-cast pattern (see ai/rules/_always.md)
-// for forcing a structurally-narrower stub into a wider DOM type.
-function asWorkerCtor(MockClass: new (...args: unknown[]) => unknown): typeof Worker {
-  return MockClass as unknown as typeof Worker;
-}
 
 // SourcePoller stub for tests that exercise the in-worker code path — the
 // captured `poll` callback is never actually invoked (the worker mock takes
@@ -218,7 +210,7 @@ test('logs source.poll.error at error level for each source error', async () => 
         }),
       },
     ],
-    { logger: fakeLogger as unknown as Logger },
+    { logger: fakeLogger },
   );
   await runCaptureCycle(ctx);
   expect(entries.some((e) => e.level === 'error' && e.msg.includes('source poll captured'))).toBe(
@@ -278,7 +270,7 @@ test('logs warn when daemon-state persist fails in capture', async () => {
   const entries: Entry[] = [];
   const fakeLogger = makeFakeLogger(entries);
   buffer.exec('DROP TABLE daemon_state');
-  const ctx = makeContext([noopSource('s')], { logger: fakeLogger as unknown as Logger });
+  const ctx = makeContext([noopSource('s')], { logger: fakeLogger });
   await runCaptureCycle(ctx);
   expect(
     entries.some((e) => e.level === 'warn' && e.msg.includes('failed to persist daemon')),
@@ -305,7 +297,7 @@ test('logs warn when pressure check throws', async () => {
   type Entry = { level: string; msg: string };
   const entries: Entry[] = [];
   const fakeLogger = makeFakeLogger(entries);
-  const ctx = makeContext([noopSource('s')], { logger: fakeLogger as unknown as Logger });
+  const ctx = makeContext([noopSource('s')], { logger: fakeLogger });
   buffer.exec('DROP TABLE upload_batches');
   await runCaptureCycle(ctx);
   expect(entries.some((e) => e.level === 'warn' && e.msg.includes('pressure check failed'))).toBe(
@@ -318,7 +310,7 @@ test('logs warn when capture metrics persist fails', async () => {
   const entries: Entry[] = [];
   const fakeLogger = makeFakeLogger(entries);
   setMetadata(buffer, METADATA_KEYS.captureCyclesTotal, 'not-a-number');
-  const ctx = makeContext([noopSource('s')], { logger: fakeLogger as unknown as Logger });
+  const ctx = makeContext([noopSource('s')], { logger: fakeLogger });
   await runCaptureCycle(ctx);
   expect(getMetadata(buffer, METADATA_KEYS.captureCyclesTotal)).toBe('1');
 });
@@ -328,7 +320,7 @@ test('logs warn when capture setMetadata throws (table dropped)', async () => {
   const entries: Entry[] = [];
   const fakeLogger = makeFakeLogger(entries);
   buffer.exec('DROP TABLE buffer_metadata');
-  const ctx = makeContext([noopSource('s')], { logger: fakeLogger as unknown as Logger });
+  const ctx = makeContext([noopSource('s')], { logger: fakeLogger });
   await runCaptureCycle(ctx);
   expect(
     entries.some((e) => e.level === 'warn' && e.msg.includes('failed to persist capture')),
@@ -366,6 +358,8 @@ interface FakeLogger {
   warn: (...args: unknown[]) => void;
   error: (...args: unknown[]) => void;
   debug: (...args: unknown[]) => void;
+  fatal: (...args: unknown[]) => void;
+  trace: (...args: unknown[]) => void;
   child: (bindings: Record<string, unknown>) => FakeLogger;
 }
 
@@ -382,6 +376,8 @@ function makeFakeLogger(entries: { level: string; msg: string }[]): FakeLogger {
     warn: record('warn'),
     error: record('error'),
     debug: record('debug'),
+    fatal: record('fatal'),
+    trace: record('trace'),
     child: () => logger,
   };
   return logger;
@@ -396,63 +392,65 @@ test('capture-cycle runs worker successfully with cursors, batches, quarantine',
       postMessage(_message: WorkerInput): void {
         setTimeout(() => {
           if (this.onmessage) {
-            this.onmessage({
-              data: {
-                sourceName: 'cursor',
-                success: true,
-                captureResult: {
-                  filesProcessed: 3,
-                  capturedBytes: 150,
-                  batches: [
-                    {
-                      captureId: generateUuidV7(),
-                      sourceApp: 'cursor',
-                      sourceKind: 'sqlite_diff',
-                      sourcePath: '/tmp/c.db',
-                      sourcePathHash: 'b'.repeat(64),
-                      sourceInode: 2,
-                      watermarkKind: 'rowid',
-                      watermarkStart: 1,
-                      watermarkEnd: 10,
-                      watermarkTable: 'workspace_tabs',
-                      agentSchemaVersion: '1.0',
-                      gatewayVersion: 'gw-0.1',
-                      capturedAtUtc: '2026-05-08T00:00:00Z',
-                      bodyFormat: 'jsonl',
-                      bodyCompression: 'zstd',
-                      body: zstdCompressSync('[]'),
-                    },
-                  ],
-                  quarantine: [
-                    {
-                      sourceApp: 'cursor',
-                      sourcePath: '/tmp/c.db',
-                      sourcePathHash: 'b'.repeat(64),
-                      sourceInode: 2,
-                      watermarkTable: 'workspace_tabs',
-                      watermarkPosition: 15,
-                      rowPk: 'pk1',
-                      redactedSizeBytes: 1000,
-                      reason: 'too big',
-                      quarantinedAtUtc: '2026-05-08T00:00:00Z',
-                      gatewayVersion: 'gw-0.1',
-                    },
-                  ],
-                  cursors: [
-                    {
-                      sourcePathHash: 'b'.repeat(64),
-                      sourcePath: '/tmp/c.db',
-                      sourceInode: 2,
-                      watermarkTable: 'workspace_tabs',
-                      watermarkEnd: 15,
-                      lastSeenSizeBytes: 2000,
-                      lastSeenPageCount: 1,
-                      consecutiveErrors: 0,
-                    },
-                  ],
+            this.onmessage(
+              asMessageEvent({
+                data: {
+                  sourceName: 'cursor',
+                  success: true,
+                  captureResult: {
+                    filesProcessed: 3,
+                    capturedBytes: 150,
+                    batches: [
+                      {
+                        captureId: generateUuidV7(),
+                        sourceApp: 'cursor',
+                        sourceKind: 'sqlite_kv_snapshot',
+                        sourcePath: '/tmp/c.db',
+                        sourcePathHash: 'b'.repeat(64),
+                        sourceInode: 2,
+                        watermarkKind: 'rowid_range',
+                        watermarkStart: 1,
+                        watermarkEnd: 10,
+                        watermarkTable: 'workspace_tabs',
+                        agentSchemaVersion: '1.0',
+                        gatewayVersion: 'gw-0.1',
+                        capturedAtUtc: '2026-05-08T00:00:00Z',
+                        bodyFormat: 'jsonl',
+                        bodyCompression: 'zstd',
+                        body: zstdCompressSync('[]'),
+                      },
+                    ],
+                    quarantine: [
+                      {
+                        sourceApp: 'cursor',
+                        sourcePath: '/tmp/c.db',
+                        sourcePathHash: 'b'.repeat(64),
+                        sourceInode: 2,
+                        watermarkTable: 'workspace_tabs',
+                        watermarkPosition: 15,
+                        rowPk: 'pk1',
+                        redactedSizeBytes: 1000,
+                        reason: 'too big',
+                        quarantinedAtUtc: '2026-05-08T00:00:00Z',
+                        gatewayVersion: 'gw-0.1',
+                      },
+                    ],
+                    cursors: [
+                      {
+                        sourcePathHash: 'b'.repeat(64),
+                        sourcePath: '/tmp/c.db',
+                        sourceInode: 2,
+                        watermarkTable: 'workspace_tabs',
+                        watermarkEnd: 15,
+                        lastSeenSizeBytes: 2000,
+                        lastSeenPageCount: 1,
+                        consecutiveErrors: 0,
+                      },
+                    ],
+                  },
                 },
-              },
-            } as unknown as MessageEvent<WorkerOutput>);
+              }),
+            );
           }
         }, 0);
       }
@@ -499,13 +497,15 @@ test('capture-cycle handles worker success: false', async () => {
       postMessage(_message: WorkerInput): void {
         setTimeout(() => {
           if (this.onmessage) {
-            this.onmessage({
-              data: {
-                sourceName: 'cursor',
-                success: false,
-                error: 'Worker error message',
-              },
-            } as unknown as MessageEvent<WorkerOutput>);
+            this.onmessage(
+              asMessageEvent({
+                data: {
+                  sourceName: 'cursor',
+                  success: false,
+                  error: 'Worker error message',
+                },
+              }),
+            );
           }
         }, 0);
       }
@@ -531,9 +531,11 @@ test('capture-cycle handles worker missing captureResult', async () => {
       postMessage(_message: WorkerInput): void {
         setTimeout(() => {
           if (this.onmessage) {
-            this.onmessage({
-              data: { sourceName: 'cursor', success: true },
-            } as unknown as MessageEvent<WorkerOutput>);
+            this.onmessage(
+              asMessageEvent({
+                data: { sourceName: 'cursor', success: true },
+              }),
+            );
           }
         }, 0);
       }
@@ -559,18 +561,14 @@ test('capture-cycle handles worker db transaction failure', async () => {
       postMessage(_message: WorkerInput): void {
         setTimeout(() => {
           if (this.onmessage) {
-            // Intentionally feed `body: null` to trigger a NOT NULL constraint
-            // violation in insertBatch — exercises the db-transaction error
-            // recovery path. The cast bridges the deliberately-invalid shape
-            // through WorkerOutput's typed `body: Uint8Array` field.
-            const invalidBatch = {
+            const invalidShape: unknown = {
               captureId: 'invalid-uuid-violating-db',
               sourceApp: 'cursor',
-              sourceKind: 'sqlite_diff',
+              sourceKind: 'sqlite_kv_snapshot',
               sourcePath: '/tmp/c.db',
               sourcePathHash: 'b'.repeat(64),
               sourceInode: 2,
-              watermarkKind: 'rowid',
+              watermarkKind: 'rowid_range',
               watermarkStart: 1,
               watermarkEnd: 10,
               watermarkTable: 'workspace_tabs',
@@ -580,20 +578,24 @@ test('capture-cycle handles worker db transaction failure', async () => {
               bodyFormat: 'jsonl',
               bodyCompression: 'zstd',
               body: null,
-            } as unknown as Required<WorkerOutput>['captureResult']['batches'][number];
-            this.onmessage({
-              data: {
-                sourceName: 'cursor',
-                success: true,
-                captureResult: {
-                  filesProcessed: 1,
-                  capturedBytes: 10,
-                  batches: [invalidBatch],
-                  quarantine: [],
-                  cursors: [],
+            };
+            const invalidBatch =
+              invalidShape as Required<WorkerOutput>['captureResult']['batches'][number];
+            this.onmessage(
+              asMessageEvent({
+                data: {
+                  sourceName: 'cursor',
+                  success: true,
+                  captureResult: {
+                    filesProcessed: 1,
+                    capturedBytes: 10,
+                    batches: [invalidBatch],
+                    quarantine: [],
+                    cursors: [],
+                  },
                 },
-              },
-            } as unknown as MessageEvent<WorkerOutput>);
+              }),
+            );
           }
         }, 0);
       }

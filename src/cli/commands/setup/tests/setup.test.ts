@@ -78,7 +78,7 @@ function mockFactory(control: MockHttpControl): (apiKey: string, hostId: string)
         watermarks: 'https://api.example.com/v1/watermarks',
         registerHostId: 'https://api.example.com/v1/host-ids/register',
       },
-      fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+      fetch: async (input: string | URL | Request, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input.toString();
         if (url.includes('/ingestion/verify-key')) {
           control.verifyCalls++;
@@ -141,7 +141,7 @@ function mockFactory(control: MockHttpControl): (apiKey: string, hostId: string)
           throw new Error('boom-register');
         }
         return new Response('', { status: 404 });
-      }) as unknown as typeof globalThis.fetch,
+      },
     });
 }
 
@@ -386,12 +386,13 @@ test('formatError falls back to String(err) when verify-key throws a non-Error v
   const control = newControl();
   const baseDeps = deps(control);
   const output = captureOutput();
-  const httpClientFactory = (() =>
-    ({
-      verifyKey: async () => {
-        throw 'plain-string-failure';
-      },
-    }) as unknown as HttpClient) as unknown as (apiKey: string, hostId: string) => HttpClient;
+  const partialClient: unknown = {
+    verifyKey: async () => {
+      throw 'plain-string-failure';
+    },
+  };
+  const httpClient = partialClient as HttpClient;
+  const httpClientFactory: (apiKey: string, hostId: string) => HttpClient = () => httpClient;
   const result = await runSetup({ ...baseDeps, output, httpClientFactory }, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(1);
   const errorLine = output.lines.find((l) => l.level === 'error');
@@ -420,10 +421,12 @@ test('reports generic message when key is rejected without reason', async () => 
   };
   const baseDeps: Parameters<typeof runSetup>[0] = {
     ...deps(control),
-    httpClientFactory: () =>
-      ({
+    httpClientFactory: () => {
+      const partial: unknown = {
         verifyKey: async () => ({ success: false, message: '', userId: null, keyName: null }),
-      }) as unknown as HttpClient,
+      };
+      return partial as HttpClient;
+    },
   };
   const output = captureOutput();
   const result = await runSetup({ ...baseDeps, output }, { apiKey: VALID_KEY });
@@ -435,15 +438,17 @@ test('reports generic message when key is rejected without reason', async () => 
 test('returns authError when verify-key omits userId on success', async () => {
   const baseDeps: Parameters<typeof runSetup>[0] = {
     ...deps(newControl()),
-    httpClientFactory: () =>
-      ({
+    httpClientFactory: () => {
+      const partial: unknown = {
         verifyKey: async () => ({
           success: true,
           message: 'ok',
           userId: null,
           keyName: 'my-key',
         }),
-      }) as unknown as HttpClient,
+      };
+      return partial as HttpClient;
+    },
   };
   const output = captureOutput();
   const result = await runSetup({ ...baseDeps, output }, { apiKey: VALID_KEY });

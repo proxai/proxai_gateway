@@ -1,4 +1,5 @@
 import { generateUuidV7, zstdCompressSync } from 'core/utils';
+import type { FetchFn } from 'core/utils';
 import type { NewBatch } from 'services/buffer';
 import { HttpClient } from 'services/http';
 import type { HttpEndpoints } from 'services/http';
@@ -22,7 +23,7 @@ export interface MockCall {
 export function mockFetch(
   responder: (call: MockCall) => Response | Promise<Response> | Error,
   log?: MockCall[],
-): typeof globalThis.fetch {
+): FetchFn {
   return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     const call: MockCall = { url, init: init ?? {} };
@@ -30,7 +31,7 @@ export function mockFetch(
     const result = await responder(call);
     if (result instanceof Error) throw result;
     return result;
-  }) as typeof globalThis.fetch;
+  }) as FetchFn;
 }
 
 export function jsonResponse(
@@ -49,7 +50,7 @@ export function emptyResponse(status: number, extraHeaders?: Record<string, stri
   return new Response('', { status, headers });
 }
 
-export function createTestHttpClient(fetchFn: typeof globalThis.fetch): HttpClient {
+export function createTestHttpClient(fetchFn: FetchFn): HttpClient {
   return new HttpClient({
     apiKey: TEST_API_KEY,
     hostId: TEST_HOST_ID,

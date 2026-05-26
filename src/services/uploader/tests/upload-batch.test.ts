@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { OversizedDecompressedSliceError, requireDefined } from 'core/utils';
+import type { FetchFn } from 'core/utils';
 import {
   getBatch,
   getCursor,
@@ -35,7 +36,7 @@ afterEach(() => {
   db.close();
 });
 
-function ctxWith(fetchFn: typeof globalThis.fetch): UploaderContext {
+function ctxWith(fetchFn: FetchFn): UploaderContext {
   return { db, http: createTestHttpClient(fetchFn), hostId: TEST_HOST_ID };
 }
 
@@ -557,7 +558,7 @@ test('AuthError + verify-key throws non-Error → retriable, log uses typeof and
       http,
       hostId: TEST_HOST_ID,
       authFailedSentinelPath: sentinelPath,
-      logger: fakeLogger as unknown as NonNullable<UploaderContext['logger']>,
+      logger: fakeLogger,
     };
     const outcome = await uploadBatch(ctx, stored);
 
@@ -610,7 +611,7 @@ test('AuthError + verify-key returns success: false → fatal even when sentinel
       http,
       hostId: TEST_HOST_ID,
       authFailedSentinelPath: sentinelPath,
-      logger: fakeLogger as unknown as NonNullable<UploaderContext['logger']>,
+      logger: fakeLogger,
     };
     const outcome = await uploadBatch(ctx, stored);
 
@@ -654,14 +655,15 @@ test('OversizedDecompressedSliceError thrown by http surfaces raw_bytes/cap/slic
     cap: 10 * 1024 * 1024,
   });
 
-  const fakeHttp = {
+  const partialHttp: unknown = {
     uploadRawRecord: async () => {
       throw oversize;
     },
     verifyKey: async () => ({ success: true, message: '' }),
     fetchWatermarks: async () => [],
     registerHostId: async () => undefined,
-  } as unknown as HttpClient;
+  };
+  const fakeHttp = partialHttp as HttpClient;
 
   const loggedErrors: Array<{ obj: Record<string, unknown>; msg: string }> = [];
   const fakeLogger = {
@@ -680,7 +682,7 @@ test('OversizedDecompressedSliceError thrown by http surfaces raw_bytes/cap/slic
     db,
     http: fakeHttp,
     hostId: TEST_HOST_ID,
-    logger: fakeLogger as unknown as NonNullable<UploaderContext['logger']>,
+    logger: fakeLogger,
   };
   const outcome = await uploadBatch(ctx, stored);
 

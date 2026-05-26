@@ -769,7 +769,7 @@ test('logs quarantine.write_failed when quarantine insert throws', async () => {
   const baseCtx = ctx(buffer);
   const fakeCtx = {
     ...baseCtx,
-    logger: fakeLogger as unknown as NonNullable<CodexCollectorContext['logger']>,
+    logger: fakeLogger,
   };
   const { result } = await collectCodexState(file, fakeCtx);
   expect(result.errors.some((e) => /quarantined/.test(e.reason))).toBe(true);

@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 
-import type { Logger } from 'core/log';
+import type { MinimalLogger } from 'core/log';
 import type { SourceApp } from 'services/contract';
 import type { HttpClient } from 'services/http';
 import type { Pacer } from 'services/uploader/pacer.ts';
@@ -10,7 +10,7 @@ export interface UploaderContext {
   http: HttpClient;
   hostId: string;
   authFailedSentinelPath?: string;
-  logger?: Logger;
+  logger?: MinimalLogger;
   pacer?: Pacer;
 }
 

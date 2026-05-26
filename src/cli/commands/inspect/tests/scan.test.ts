@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { asMessageEvent, asWorkerCtor } from 'core/utils';
 import { captureOutput } from 'cli/output.ts';
 import type { WorkerOutput } from 'services/polling/poll-worker.types.ts';
 
@@ -104,9 +105,11 @@ test('scanViaDirect: captures a non-Error failure', async () => {
 test('scanViaWorker: resolves a successful worker message', async () => {
   const result = await scanViaWorker('codex', buildScanOptions('gw', undefined), () =>
     fakeWorker((worker) => {
-      worker.onmessage?.({
-        data: { sourceName: 'codex', success: true, inspectResult: sampleInspectResult },
-      } as unknown as MessageEvent<WorkerOutput>);
+      worker.onmessage?.(
+        asMessageEvent({
+          data: { sourceName: 'codex', success: true, inspectResult: sampleInspectResult },
+        }),
+      );
     }),
   );
   expect(result.recordCount).toBe(3);
@@ -115,9 +118,11 @@ test('scanViaWorker: resolves a successful worker message', async () => {
 test('scanViaWorker: handles success:false with an error message', async () => {
   const result = await scanViaWorker('codex', buildScanOptions('gw', undefined), () =>
     fakeWorker((worker) => {
-      worker.onmessage?.({
-        data: { sourceName: 'codex', success: false, error: 'worker said no' },
-      } as unknown as MessageEvent<WorkerOutput>);
+      worker.onmessage?.(
+        asMessageEvent({
+          data: { sourceName: 'codex', success: false, error: 'worker said no' },
+        }),
+      );
     }),
   );
   expect(result.errors).toEqual(['worker said no']);
@@ -126,9 +131,11 @@ test('scanViaWorker: handles success:false with an error message', async () => {
 test('scanViaWorker: handles success:false without an error message', async () => {
   const result = await scanViaWorker('codex', buildScanOptions('gw', undefined), () =>
     fakeWorker((worker) => {
-      worker.onmessage?.({
-        data: { sourceName: 'codex', success: false },
-      } as unknown as MessageEvent<WorkerOutput>);
+      worker.onmessage?.(
+        asMessageEvent({
+          data: { sourceName: 'codex', success: false },
+        }),
+      );
     }),
   );
   expect(result.errors).toEqual(['inspect worker returned no result']);
@@ -181,7 +188,7 @@ test('scanSingleSource: worker path uses the default worker factory', async () =
     }
     terminate(): void {}
   }
-  globalThis.Worker = StubWorker as unknown as typeof Worker;
+  globalThis.Worker = asWorkerCtor(StubWorker);
   try {
     const result = await scanSingleSource('codex', deps, {}, false);
     expect(result.sourceName).toBe('codex');

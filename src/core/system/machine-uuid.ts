@@ -105,7 +105,10 @@ function stripQuotes(value: string): string {
 }
 
 export function defaultSpawn(): MachineUuidSpawnFn {
-  return (argv, options) => Bun.spawn(argv, options) as unknown as MachineUuidSpawnResult;
+  return (argv, options) => {
+    const proc: unknown = Bun.spawn(argv, options);
+    return proc as MachineUuidSpawnResult;
+  };
 }
 
 export function defaultReadFile(path: string): MachineUuidFileReader {

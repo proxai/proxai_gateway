@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import type { Logger } from 'core/log';
+
 import type { Database } from 'bun:sqlite';
 import { rmRecursive } from 'core/io/fs';
 import { mkdtemp } from 'node:fs/promises';
@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { generateUuidV7, zstdCompressSync } from 'core/utils';
+import type { FetchFn } from 'core/utils';
 import {
   getDaemonState,
   getMetadata,
@@ -40,12 +41,12 @@ afterEach(async () => {
   await rmRecursive(dir);
 });
 
-function fakeFetch(): typeof globalThis.fetch {
-  return (async () =>
+function fakeFetch(): FetchFn {
+  return async () =>
     new Response(JSON.stringify({ capture_id: 'irrelevant', accepted: true, idempotent: false }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
-    })) as unknown as typeof globalThis.fetch;
+    });
 }
 
 function makeContext(overrides: Partial<DrainCycleContext> = {}): DrainCycleContext {
@@ -218,7 +219,7 @@ test('logs warn when prune throws', async () => {
   type Entry = { level: string; msg: string };
   const entries: Entry[] = [];
   const fakeLogger = makeFakeLogger(entries);
-  const ctx = makeContext({ logger: fakeLogger as unknown as Logger });
+  const ctx = makeContext({ logger: fakeLogger });
   buffer.exec('DROP TABLE upload_receipts');
   await runDrainCycle(ctx);
   expect(entries.some((e) => e.level === 'warn' && e.msg.includes('prune failed'))).toBe(true);
@@ -229,7 +230,7 @@ test('logs warn when daemon-state persist fails', async () => {
   const entries: Entry[] = [];
   const fakeLogger = makeFakeLogger(entries);
   buffer.exec('DROP TABLE daemon_state');
-  const ctx = makeContext({ logger: fakeLogger as unknown as Logger });
+  const ctx = makeContext({ logger: fakeLogger });
   await runDrainCycle(ctx);
   expect(
     entries.some((e) => e.level === 'warn' && e.msg.includes('failed to persist daemon')),
@@ -242,7 +243,7 @@ test('logs warn when drain metrics persist fails', async () => {
   const fakeLogger = makeFakeLogger(entries);
   setMetadata(buffer, METADATA_KEYS.drainCyclesTotal, 'not-a-number');
   insertBatch(buffer, batchWith('p'));
-  const ctx = makeContext({ logger: fakeLogger as unknown as Logger });
+  const ctx = makeContext({ logger: fakeLogger });
   await runDrainCycle(ctx);
   expect(getMetadata(buffer, METADATA_KEYS.drainCyclesTotal)).toBe('1');
 });
@@ -253,7 +254,7 @@ test('logs warn when drain setMetadata throws (table dropped)', async () => {
   const fakeLogger = makeFakeLogger(entries);
   insertBatch(buffer, batchWith('p'));
   buffer.exec('DROP TABLE buffer_metadata');
-  const ctx = makeContext({ logger: fakeLogger as unknown as Logger });
+  const ctx = makeContext({ logger: fakeLogger });
   await runDrainCycle(ctx);
   expect(entries.some((e) => e.level === 'warn' && e.msg.includes('failed to persist drain'))).toBe(
     true,
@@ -280,10 +281,10 @@ test('counts retriable / fatal in drain.cycles_with_errors', async () => {
         watermarks: 'https://api.example.com/v1/watermarks',
         registerHostId: 'https://api.example.com/v1/host-ids/register',
       },
-      fetch: (async () => {
+      fetch: async () => {
         calls++;
         return new Response(null, { status: 503 });
-      }) as unknown as typeof globalThis.fetch,
+      },
     }),
   });
   await runDrainCycle(ctx);
@@ -296,6 +297,8 @@ interface FakeLogger {
   warn: (...args: unknown[]) => void;
   error: (...args: unknown[]) => void;
   debug: (...args: unknown[]) => void;
+  fatal: (...args: unknown[]) => void;
+  trace: (...args: unknown[]) => void;
   child: (bindings: Record<string, unknown>) => FakeLogger;
 }
 
@@ -312,6 +315,8 @@ function makeFakeLogger(entries: { level: string; msg: string }[]): FakeLogger {
     warn: record('warn'),
     error: record('error'),
     debug: record('debug'),
+    fatal: record('fatal'),
+    trace: record('trace'),
     child: () => logger,
   };
   return logger;

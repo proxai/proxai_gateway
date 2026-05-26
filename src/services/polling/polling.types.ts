@@ -1,6 +1,7 @@
+import type { FetchFn } from 'core/utils';
 import type { Database } from 'bun:sqlite';
 
-import type { Logger } from 'core/log';
+import type { MinimalLogger } from 'core/log';
 import type { PendingPressureResult, PruneResult } from 'services/buffer';
 import type { InstallSource } from 'services/config';
 import type { HttpClient } from 'services/http';
@@ -10,7 +11,7 @@ export interface SourcePollerContext {
   buffer: Database;
   gatewayVersion: string;
   maxDecompressedBytes: number;
-  logger?: Logger;
+  logger?: MinimalLogger;
 
   minimumMtimeOverride?: Date | null;
 }
@@ -61,7 +62,7 @@ export interface CaptureCycleContext {
   bufferFullSentinelPath: string;
   bufferPolicy: BufferRetentionPolicy;
   capturePolicy: CapturePolicy;
-  logger?: Logger;
+  logger?: MinimalLogger;
   minimumMtimeOverride?: Date | null;
 }
 
@@ -85,7 +86,7 @@ export interface DrainCycleContext {
   bufferFullSentinelPath: string;
   bufferPolicy: BufferRetentionPolicy;
   pacer?: Pacer;
-  logger?: Logger;
+  logger?: MinimalLogger;
 }
 
 export interface DrainCycleResult {
@@ -106,9 +107,9 @@ export interface HeartbeatCycleContext {
   installedAt: string;
   staleBinary: StaleBinaryThresholds;
   updateAvailableSentinelPath?: string;
-  logger?: Logger;
+  logger?: MinimalLogger;
 
-  versionCheckFetch?: typeof globalThis.fetch;
+  versionCheckFetch?: FetchFn;
   versionCheckIntervalMs?: number;
 
   devMode?: boolean;
@@ -141,9 +142,9 @@ export interface PollCycleContext {
   bufferPolicy: BufferRetentionPolicy;
   capturePolicy: CapturePolicy;
   pacer?: Pacer;
-  logger?: Logger;
+  logger?: MinimalLogger;
 
-  versionCheckFetch?: typeof globalThis.fetch;
+  versionCheckFetch?: FetchFn;
   versionCheckIntervalMs?: number;
 
   devMode?: boolean;

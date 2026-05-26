@@ -103,7 +103,10 @@ function sha256Hex(value: string): string {
 }
 
 export function defaultBootIdSpawn(): BootIdSpawnFn {
-  return (argv, options) => Bun.spawn(argv, options) as unknown as BootIdSpawnResult;
+  return (argv, options) => {
+    const proc: unknown = Bun.spawn(argv, options);
+    return proc as BootIdSpawnResult;
+  };
 }
 
 export function defaultBootIdReadFile(path: string): BootIdFileReader {

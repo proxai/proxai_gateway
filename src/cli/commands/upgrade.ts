@@ -1,3 +1,4 @@
+import type { FetchFn } from 'core/utils';
 import { basename } from 'node:path';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
@@ -16,7 +17,7 @@ export interface UpgradeCommandDeps {
   currentVersion: string;
   binaryPath: string;
   prompts?: PromptSink;
-  fetch?: typeof globalThis.fetch;
+  fetch?: FetchFn;
   platform?: NodeJS.Platform;
   isTty?: () => boolean;
 }

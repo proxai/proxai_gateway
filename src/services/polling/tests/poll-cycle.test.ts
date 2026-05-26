@@ -6,10 +6,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { generateUuidV7, zstdCompressSync } from 'core/utils';
+import type { FetchFn } from 'core/utils';
+import type { MinimalLogger } from 'core/log';
 import { insertBatch, openInMemoryBufferDb } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import { HttpClient } from 'services/http';
-import type { Logger } from 'core/log';
+
 import { pausePolling, runPollCycle } from 'services/polling';
 import type { PollCycleContext, RegisteredSource } from 'services/polling';
 import type { Pacer } from 'services/uploader';
@@ -27,12 +29,12 @@ afterEach(async () => {
   await rmRecursive(dir);
 });
 
-function fakeFetch(): typeof globalThis.fetch {
-  return (async () =>
+function fakeFetch(): FetchFn {
+  return async () =>
     new Response(JSON.stringify({ capture_id: 'irrelevant', accepted: true, idempotent: false }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
-    })) as unknown as typeof globalThis.fetch;
+    });
 }
 
 function makeContext(sources: RegisteredSource[]): PollCycleContext {
@@ -174,29 +176,23 @@ test('compat: aggregates per-source results', async () => {
 
 test('compat: covers optional cycle params', async () => {
   const ctx = makeContext([noopSource('s')]);
-  // Why: the smoke test only verifies optional fields pass through without
-  // crashing — neither the logger nor the pacer is exercised. The single
-  // `as unknown as` hop bridges narrow no-op stubs to the wider pino/Pacer
-  // surface area without dragging in real implementations.
-  const mockLogger: unknown = {
-    info: () => {},
-    debug: () => {},
-    warn: () => {},
-    error: () => {},
-    // pino-style child loggers usually return a new pre-bound logger; the
-    // smoke test just needs the call to be a no-op-friendly self-reference.
-    child(this: unknown) {
-      return this;
-    },
+  const noop = (..._args: unknown[]): void => {};
+  const mockLogger: MinimalLogger = {
+    info: noop,
+    debug: noop,
+    warn: noop,
+    error: noop,
+    fatal: noop,
+    trace: noop,
+    child: () => mockLogger,
   };
-  const typedLogger = mockLogger as Logger;
   const mockPacer = {
     acquire: async () => {},
     notifyRetryAfter: () => {},
     notify429: () => {},
     notifyServiceUnavailable: () => {},
   } satisfies Pacer;
-  ctx.logger = typedLogger;
+  ctx.logger = mockLogger;
   ctx.minimumMtimeOverride = new Date('2026-05-08T00:00:00Z');
   ctx.pacer = mockPacer;
   const result = await runPollCycle(ctx);

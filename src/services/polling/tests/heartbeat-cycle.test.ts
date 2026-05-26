@@ -1,3 +1,4 @@
+import type { FetchFn } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 import { rmRecursive } from 'core/io/fs';
@@ -6,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { getMetadata, METADATA_KEYS, openInMemoryBufferDb, setMetadata } from 'services/buffer';
-import type { Logger } from 'core/log';
+
 import {
   isPaused,
   pausePolling,
@@ -40,8 +41,8 @@ function makeContext(overrides: Partial<HeartbeatCycleContext> = {}): HeartbeatC
   return { ...base, ...overrides };
 }
 
-function fakeFetchOk(latestVersion: string, hasUpdate = false): typeof globalThis.fetch {
-  return (async () => {
+function fakeFetchOk(latestVersion: string, hasUpdate = false): FetchFn {
+  return async () => {
     const tag = hasUpdate ? `v${latestVersion}` : `v${latestVersion}`;
     const body = JSON.stringify({
       tag_name: tag,
@@ -53,11 +54,11 @@ function fakeFetchOk(latestVersion: string, hasUpdate = false): typeof globalThi
       ],
     });
     return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
-  }) as unknown as typeof globalThis.fetch;
+  };
 }
 
-function fakeFetchStatus(status: number): typeof globalThis.fetch {
-  return (async () => new Response(null, { status })) as unknown as typeof globalThis.fetch;
+function fakeFetchStatus(status: number): FetchFn {
+  return async () => new Response(null, { status });
 }
 
 test('paused sentinel skips heartbeat', async () => {
@@ -146,10 +147,10 @@ test('version check fires once per interval, skips inside the window', async () 
     installSource: 'brew',
     updateAvailableSentinelPath: join(dir, 'UPDATE_AVAILABLE'),
     currentVersion: '0.0.1',
-    versionCheckFetch: (async () => {
+    versionCheckFetch: async () => {
       calls++;
       return new Response(JSON.stringify({ tag_name: 'v1.0.0', assets: [] }), { status: 200 });
-    }) as unknown as typeof globalThis.fetch,
+    },
     versionCheckIntervalMs: 60_000,
   });
   await runHeartbeatCycle(ctx);
@@ -165,7 +166,7 @@ test('brew: 503 logs warn version_check.unavailable', async () => {
     updateAvailableSentinelPath: join(dir, 'UPDATE_AVAILABLE'),
     currentVersion: '0.0.1',
     versionCheckFetch: fakeFetchStatus(503),
-    logger: fakeLogger as unknown as Logger,
+    logger: fakeLogger,
   });
   await runHeartbeatCycle(ctx);
   expect(entries.some((e) => e.level === 'warn' && e.msg.includes('version check failed'))).toBe(
@@ -182,7 +183,7 @@ test('brew: 404 (no releases) is silent at warn level', async () => {
     updateAvailableSentinelPath: join(dir, 'UPDATE_AVAILABLE'),
     currentVersion: '0.0.1',
     versionCheckFetch: fakeFetchStatus(404),
-    logger: fakeLogger as unknown as Logger,
+    logger: fakeLogger,
   });
   await runHeartbeatCycle(ctx);
   expect(entries.some((e) => e.level === 'warn' && e.msg.includes('version check failed'))).toBe(
@@ -204,10 +205,10 @@ test('brew: falls back to gatewayVersion when currentVersion is omitted', async 
   const ctx = makeContext({
     installSource: 'brew',
     updateAvailableSentinelPath: join(dir, 'UPDATE_AVAILABLE'),
-    versionCheckFetch: (async () => {
+    versionCheckFetch: async () => {
       capturedVersion = 'see-tag';
       return new Response(JSON.stringify({ tag_name: 'vgw-0.1', assets: [] }), { status: 200 });
-    }) as unknown as typeof globalThis.fetch,
+    },
   });
   await runHeartbeatCycle(ctx);
   expect(capturedVersion).toBe('see-tag');
@@ -231,7 +232,7 @@ test('non-brew: runs auto-upgrade and writes lastVersionCheckAt', async () => {
     installSource: 'npm',
     binaryPath: '/tmp/proxai-bin-noop',
     currentVersion: '0.0.1',
-    versionCheckFetch: (async (_url: unknown) => {
+    versionCheckFetch: async (_url: unknown) => {
       downloadCalled = true;
       const platform = process.platform;
       const arch = process.arch;
@@ -248,7 +249,7 @@ test('non-brew: runs auto-upgrade and writes lastVersionCheckAt', async () => {
         }),
         { status: 200 },
       );
-    }) as unknown as typeof globalThis.fetch,
+    },
   });
   const result = await runHeartbeatCycle(ctx);
   expect(result.ranAutoUpgrade).toBe(true);
@@ -265,7 +266,7 @@ test('catch wrapping auto-upgrade swallows thrown errors via logger.warn', async
     updateAvailableSentinelPath: join(dir, 'UPDATE_AVAILABLE'),
     currentVersion: '0.0.1',
     versionCheckFetch: fakeFetchOk('0.0.1'),
-    logger: fakeLogger as unknown as Logger,
+    logger: fakeLogger,
   });
   buffer.exec('DROP TABLE buffer_metadata');
   await runHeartbeatCycle(ctx);
@@ -286,10 +287,10 @@ test('logs warn when version check throws', async () => {
     installSource: 'brew',
     updateAvailableSentinelPath: join(dir, 'UPDATE_AVAILABLE'),
     currentVersion: '0.0.1',
-    versionCheckFetch: (async () => {
+    versionCheckFetch: async () => {
       throw new Error('boom');
-    }) as unknown as typeof globalThis.fetch,
-    logger: fakeLogger as unknown as Logger,
+    },
+    logger: fakeLogger,
   });
   await runHeartbeatCycle(ctx);
   expect(
@@ -306,6 +307,8 @@ interface FakeLogger {
   warn: (...args: unknown[]) => void;
   error: (...args: unknown[]) => void;
   debug: (...args: unknown[]) => void;
+  fatal: (...args: unknown[]) => void;
+  trace: (...args: unknown[]) => void;
   child: (bindings: Record<string, unknown>) => FakeLogger;
 }
 
@@ -322,6 +325,8 @@ function makeFakeLogger(entries: { level: string; msg: string }[]): FakeLogger {
     warn: record('warn'),
     error: record('error'),
     debug: record('debug'),
+    fatal: record('fatal'),
+    trace: record('trace'),
     child: () => logger,
   };
   return logger;

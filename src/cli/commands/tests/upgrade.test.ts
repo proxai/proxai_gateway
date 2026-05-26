@@ -1,3 +1,5 @@
+import { asTimerSetter } from 'core/utils';
+import type { FetchFn } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -28,11 +30,8 @@ interface ReleaseResponse {
   assets: ReleaseAsset[];
 }
 
-function makeReleaseFetch(
-  response: ReleaseResponse,
-  binaryBytes?: Uint8Array,
-): typeof globalThis.fetch {
-  return (async (url: string | URL | Request) => {
+function makeReleaseFetch(response: ReleaseResponse, binaryBytes?: Uint8Array): FetchFn {
+  return async (url: string | URL | Request) => {
     const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
     if (u.includes('api.github.com')) {
       return new Response(JSON.stringify(response), {
@@ -47,7 +46,7 @@ function makeReleaseFetch(
       });
     }
     return new Response('not found', { status: 404 });
-  }) as unknown as typeof globalThis.fetch;
+  };
 }
 
 test('compareVersions handles CalVer-style strings', () => {
@@ -141,9 +140,9 @@ test('confirm accepted downloads, writes binary, and reports success', async () 
 
 test('network failure during version check returns error', async () => {
   const out = captureOutput();
-  const fetchFn: typeof globalThis.fetch = (async () => {
+  const fetchFn: FetchFn = async () => {
     throw new Error('boom: connection refused');
-  }) as unknown as typeof globalThis.fetch;
+  };
   const result = await runUpgrade({
     output: out,
     currentVersion: '2026.5.7',
@@ -203,13 +202,13 @@ test('release tag with no parseable version returns error', async () => {
 
 test('release HTTP non-200 surfaces an error', async () => {
   const out = captureOutput();
-  const fetchFn: typeof globalThis.fetch = (async (url: string | URL | Request) => {
+  const fetchFn: FetchFn = async (url: string | URL | Request) => {
     const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
     if (u.includes('api.github.com')) {
       return new Response('forbidden', { status: 403 });
     }
     return new Response('', { status: 404 });
-  }) as unknown as typeof globalThis.fetch;
+  };
   const result = await runUpgrade({
     output: out,
     currentVersion: '2026.5.7',
@@ -226,11 +225,11 @@ test('release HTTP non-200 surfaces an error', async () => {
 
 test('malformed release payload surfaces an error', async () => {
   const out = captureOutput();
-  const fetchFn: typeof globalThis.fetch = (async () =>
+  const fetchFn: FetchFn = async () =>
     new Response(JSON.stringify({ foo: 'bar' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
-    })) as unknown as typeof globalThis.fetch;
+    });
   const result = await runUpgrade({
     output: out,
     currentVersion: '2026.5.7',
@@ -245,7 +244,7 @@ test('malformed release payload surfaces an error', async () => {
 test('download HTTP non-200 surfaces an error', async () => {
   const out = captureOutput();
   const assetName = `proxai-gateway-linux-${process.arch}`;
-  const fetchFn: typeof globalThis.fetch = (async (url: string | URL | Request) => {
+  const fetchFn: FetchFn = async (url: string | URL | Request) => {
     const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
     if (u.includes('api.github.com')) {
       return new Response(
@@ -262,7 +261,7 @@ test('download HTTP non-200 surfaces an error', async () => {
       );
     }
     return new Response('not found', { status: 404 });
-  }) as unknown as typeof globalThis.fetch;
+  };
   const result = await runUpgrade(
     {
       output: out,
@@ -283,7 +282,7 @@ test('download HTTP non-200 surfaces an error', async () => {
 test('download throwing surfaces an error', async () => {
   const out = captureOutput();
   const assetName = `proxai-gateway-linux-${process.arch}`;
-  const fetchFn: typeof globalThis.fetch = (async (url: string | URL | Request) => {
+  const fetchFn: FetchFn = async (url: string | URL | Request) => {
     const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
     if (u.includes('api.github.com')) {
       return new Response(
@@ -300,7 +299,7 @@ test('download throwing surfaces an error', async () => {
       );
     }
     throw new Error('connection reset');
-  }) as unknown as typeof globalThis.fetch;
+  };
   const result = await runUpgrade(
     {
       output: out,
@@ -423,22 +422,16 @@ test('windows write failure to .new path surfaces an error', async () => {
 test('release fetch timeout aborts the request via setTimeout callback', async () => {
   const origSetTimeout = globalThis.setTimeout;
   let capturedAbort: (() => void) | null = null;
-  (globalThis as { setTimeout: typeof setTimeout }).setTimeout = ((
-    cb: () => void,
-    _ms?: number,
-  ) => {
+  globalThis.setTimeout = asTimerSetter((cb: () => void, _ms?: number) => {
     if (capturedAbort === null) {
       capturedAbort = cb;
-      return 0 as unknown as ReturnType<typeof setTimeout>;
+      return 0;
     }
     return origSetTimeout(cb, _ms);
-  }) as unknown as typeof setTimeout;
+  });
 
   const out = captureOutput();
-  const fetchFn: typeof globalThis.fetch = (async (
-    _url: string | URL | Request,
-    init?: RequestInit,
-  ) => {
+  const fetchFn: FetchFn = async (_url: string | URL | Request, init?: RequestInit) => {
     if (capturedAbort !== null) {
       capturedAbort();
     }
@@ -448,7 +441,7 @@ test('release fetch timeout aborts the request via setTimeout callback', async (
       throw err;
     }
     return new Response('{}', { status: 200 });
-  }) as unknown as typeof globalThis.fetch;
+  };
 
   try {
     const result = await runUpgrade({
@@ -473,24 +466,21 @@ test('download fetch timeout aborts the request via setTimeout callback', async 
   let capturedAbort: (() => void) | null = null;
   let releaseTimerInstalled = false;
 
-  (globalThis as { setTimeout: typeof setTimeout }).setTimeout = ((cb: () => void, ms?: number) => {
+  globalThis.setTimeout = asTimerSetter((cb: () => void, ms?: number) => {
     if (!releaseTimerInstalled) {
       releaseTimerInstalled = true;
       return origSetTimeout(cb, ms);
     }
     if (capturedAbort === null) {
       capturedAbort = cb;
-      return 0 as unknown as ReturnType<typeof setTimeout>;
+      return 0;
     }
     return origSetTimeout(cb, ms);
-  }) as unknown as typeof setTimeout;
+  });
 
   const out = captureOutput();
   const assetName = `proxai-gateway-linux-${process.arch}`;
-  const fetchFn: typeof globalThis.fetch = (async (
-    url: string | URL | Request,
-    init?: RequestInit,
-  ) => {
+  const fetchFn: FetchFn = async (url: string | URL | Request, init?: RequestInit) => {
     const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
     if (u.includes('api.github.com')) {
       return new Response(
@@ -515,7 +505,7 @@ test('download fetch timeout aborts the request via setTimeout callback', async 
       throw err;
     }
     return new Response('not reached', { status: 200 });
-  }) as unknown as typeof globalThis.fetch;
+  };
 
   try {
     const result = await runUpgrade(

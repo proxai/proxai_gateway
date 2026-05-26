@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 
-import type { Logger } from 'core/log';
+import type { MinimalLogger } from 'core/log';
 import type { CodexTable } from 'services/contract';
 
 export interface DiscoveredCodexRolloutFile {
@@ -23,7 +23,7 @@ export interface CodexCollectorContext {
   buffer: Database;
   gatewayVersion: string;
   maxDecompressedBytes: number;
-  logger?: Logger;
+  logger?: MinimalLogger;
   rolloutVersionReader?: (filePath: string) => Promise<string | null>;
 }
 

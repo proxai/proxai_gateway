@@ -7,6 +7,7 @@ import {
   ValidationError,
   requireDefined,
 } from 'core/utils';
+import type { FetchFn } from 'core/utils';
 import { HttpClient } from 'services/http';
 import type { HttpEndpoints } from 'services/http';
 
@@ -25,7 +26,7 @@ interface MockCall {
 function mockFetch(
   responder: (call: MockCall) => Response | Promise<Response> | Error,
   log?: MockCall[],
-): typeof globalThis.fetch {
+): FetchFn {
   return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     const call: MockCall = { url, init: init ?? {} };
@@ -33,10 +34,10 @@ function mockFetch(
     const result = await responder(call);
     if (result instanceof Error) throw result;
     return result;
-  }) as typeof globalThis.fetch;
+  }) as FetchFn;
 }
 
-function createClient(fetchFn: typeof globalThis.fetch, hostId = 'h_test'): HttpClient {
+function createClient(fetchFn: FetchFn, hostId = 'h_test'): HttpClient {
   return new HttpClient({
     apiKey: 'pxg-20260505-secret',
     hostId,

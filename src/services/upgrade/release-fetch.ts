@@ -1,3 +1,4 @@
+import type { FetchFn } from 'core/utils';
 import { setMode } from 'core/io/fs';
 
 export interface ReleaseAsset {
@@ -15,7 +16,7 @@ export const FETCH_TIMEOUT_MS = 5_000;
 export const DOWNLOAD_TIMEOUT_MS = 120_000;
 
 export interface FetchReleaseOptions {
-  fetch?: typeof globalThis.fetch;
+  fetch?: FetchFn;
   userAgent: string;
   timeoutMs?: number;
 }
@@ -61,7 +62,7 @@ export function findAssetForPlatform(
 }
 
 export interface DownloadAssetOptions {
-  fetch?: typeof globalThis.fetch;
+  fetch?: FetchFn;
   userAgent: string;
   timeoutMs?: number;
 }

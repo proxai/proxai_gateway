@@ -1,3 +1,4 @@
+import type { FetchFn } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { mkdtemp } from 'node:fs/promises';
@@ -83,7 +84,7 @@ function mockHttp(
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
-    }) as typeof globalThis.fetch,
+    }) as FetchFn,
   });
 }
 

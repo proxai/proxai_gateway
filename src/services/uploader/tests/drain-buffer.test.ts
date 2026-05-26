@@ -1,4 +1,5 @@
 import { requireDefined } from 'core/utils';
+import type { FetchFn } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
@@ -24,7 +25,7 @@ afterEach(() => {
   db.close();
 });
 
-function ctxWith(fetchFn: typeof globalThis.fetch): UploaderContext {
+function ctxWith(fetchFn: FetchFn): UploaderContext {
   return { db, http: createTestHttpClient(fetchFn), hostId: TEST_HOST_ID };
 }
 

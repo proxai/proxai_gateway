@@ -11,5 +11,9 @@ export async function runCommand(spawn: SpawnFn, argv: string[]): Promise<Comman
 }
 
 export function defaultSpawn(): SpawnFn {
-  return ((argv, options) => Bun.spawn(argv, options) as unknown as ReturnType<SpawnFn>) as SpawnFn;
+  const spawn: SpawnFn = (argv, options) => {
+    const proc: unknown = Bun.spawn(argv, options);
+    return proc as ReturnType<SpawnFn>;
+  };
+  return spawn;
 }

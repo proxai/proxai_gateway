@@ -1,3 +1,5 @@
+import { asTimerSetter } from 'core/utils';
+import type { FetchFn } from 'core/utils';
 import { expect, test } from 'bun:test';
 
 import { checkLatestVersion } from 'services/polling/version-check.ts';
@@ -12,10 +14,8 @@ interface ReleaseResponse {
   assets: ReleaseAsset[];
 }
 
-function makeFetch(
-  response: ReleaseResponse | { error: true } | { status: number },
-): typeof globalThis.fetch {
-  return (async () => {
+function makeFetch(response: ReleaseResponse | { error: true } | { status: number }): FetchFn {
+  return async () => {
     if ('error' in response && response.error) {
       throw new Error('boom');
     }
@@ -26,7 +26,7 @@ function makeFetch(
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-  }) as unknown as typeof globalThis.fetch;
+  };
 }
 
 test('returns ok with hasUpdate=true when remote tag is newer', async () => {
@@ -108,18 +108,15 @@ test('populates assetUrl when matching asset exists for current platform', async
 test('request timeout invokes ctrl.abort() and returns error', async () => {
   const origSetTimeout = globalThis.setTimeout;
   let capturedAbort: (() => void) | null = null;
-  (globalThis as { setTimeout: typeof setTimeout }).setTimeout = ((cb: () => void, ms?: number) => {
+  globalThis.setTimeout = asTimerSetter((cb: () => void, ms?: number) => {
     if (capturedAbort === null) {
       capturedAbort = cb;
-      return 0 as unknown as ReturnType<typeof setTimeout>;
+      return 0;
     }
     return origSetTimeout(cb, ms);
-  }) as unknown as typeof setTimeout;
+  });
 
-  const fetchFn: typeof globalThis.fetch = (async (
-    _url: string | URL | Request,
-    init?: RequestInit,
-  ) => {
+  const fetchFn: FetchFn = async (_url: string | URL | Request, init?: RequestInit) => {
     if (capturedAbort !== null) {
       capturedAbort();
     }
@@ -129,7 +126,7 @@ test('request timeout invokes ctrl.abort() and returns error', async () => {
       throw err;
     }
     return new Response('{}', { status: 200 });
-  }) as unknown as typeof globalThis.fetch;
+  };
 
   try {
     const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
@@ -140,9 +137,9 @@ test('request timeout invokes ctrl.abort() and returns error', async () => {
 });
 
 test('returns error when fetch rejects with a non-Error value', async () => {
-  const fetchFn: typeof globalThis.fetch = (async () => {
+  const fetchFn: FetchFn = async () => {
     throw 'string-thrown';
-  }) as unknown as typeof globalThis.fetch;
+  };
   const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
   expect(outcome.kind).toBe('error');
   if (outcome.kind === 'error') {
@@ -160,11 +157,11 @@ test('returns error when remote tag is empty after stripping v prefix', async ()
 });
 
 test('returns error on malformed payload (missing tag_name)', async () => {
-  const fetchFn = (async () =>
+  const fetchFn = async () =>
     new Response(JSON.stringify({ foo: 'bar' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
-    })) as unknown as typeof globalThis.fetch;
+    });
   const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
   expect(outcome.kind).toBe('error');
   if (outcome.kind === 'error') {

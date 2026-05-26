@@ -1,3 +1,5 @@
+import { asGlobalFetch } from 'core/utils';
+import type { FetchFn } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -44,14 +46,14 @@ function makeLogger(
     },
     trace: () => undefined,
   };
-  return logger as unknown as NonNullable<Parameters<typeof runAutoUpgrade>[0]['logger']>;
+  return logger;
 }
 
 function makeReleaseFetch(
   release: { tag_name: string; assets: Array<{ name: string; browser_download_url: string }> },
   binaryBytes?: Uint8Array,
-): typeof globalThis.fetch {
-  return (async (url: string | URL | Request) => {
+): FetchFn {
+  return async (url: string | URL | Request) => {
     const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
     if (u.includes('api.github.com')) {
       return new Response(JSON.stringify(release), {
@@ -66,7 +68,7 @@ function makeReleaseFetch(
       });
     }
     return new Response('', { status: 404 });
-  }) as unknown as typeof globalThis.fetch;
+  };
 }
 
 test('skips when devMode is true', async () => {
@@ -76,7 +78,7 @@ test('skips when devMode is true', async () => {
     devMode: true,
     binaryPath: join(dir, 'gw'),
     currentVersion: '2026.5.7',
-    fetch: (async () => new Response('', { status: 200 })) as unknown as typeof globalThis.fetch,
+    fetch: async () => new Response('', { status: 200 }),
     logger: makeLogger(entries),
     exitProcess: () => {
       exitCalls++;
@@ -93,7 +95,7 @@ test('skips when installSource is brew', async () => {
     installSource: 'brew',
     binaryPath: join(dir, 'gw'),
     currentVersion: '2026.5.7',
-    fetch: (async () => new Response('', { status: 200 })) as unknown as typeof globalThis.fetch,
+    fetch: async () => new Response('', { status: 200 }),
     logger: makeLogger(entries),
     exitProcess: () => {
       exitCalls++;
@@ -105,8 +107,7 @@ test('skips when installSource is brew', async () => {
 
 test('error outcome logs fatal auto_upgrade.check_failed and returns silently', async () => {
   const entries: LogEntry[] = [];
-  const fetchFn: typeof globalThis.fetch = (async () =>
-    new Response('upstream', { status: 503 })) as unknown as typeof globalThis.fetch;
+  const fetchFn: FetchFn = async () => new Response('upstream', { status: 503 });
   await runAutoUpgrade({
     binaryPath: join(dir, 'gw'),
     currentVersion: '2026.5.7',
@@ -122,8 +123,7 @@ test('error outcome logs fatal auto_upgrade.check_failed and returns silently', 
 
 test('no_release outcome (404) returns silently with no log entries', async () => {
   const entries: LogEntry[] = [];
-  const fetchFn: typeof globalThis.fetch = (async () =>
-    new Response('not found', { status: 404 })) as unknown as typeof globalThis.fetch;
+  const fetchFn: FetchFn = async () => new Response('not found', { status: 404 });
   await runAutoUpgrade({
     binaryPath: join(dir, 'gw'),
     currentVersion: '2026.5.7',
@@ -189,7 +189,7 @@ test('update available but no platform asset logs fatal auto_upgrade.no_asset', 
 test('download error logs fatal auto_upgrade.download_failed', async () => {
   const entries: LogEntry[] = [];
   const assetName = 'proxai-gateway-linux-x64';
-  const fetchFn: typeof globalThis.fetch = (async (url: string | URL | Request) => {
+  const fetchFn: FetchFn = async (url: string | URL | Request) => {
     const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
     if (u.includes('api.github.com')) {
       return new Response(
@@ -206,7 +206,7 @@ test('download error logs fatal auto_upgrade.download_failed', async () => {
       );
     }
     throw new Error('connection reset');
-  }) as unknown as typeof globalThis.fetch;
+  };
   await runAutoUpgrade({
     binaryPath: join(dir, 'gw'),
     currentVersion: '2026.5.7',
@@ -346,8 +346,7 @@ test('successful upgrade with exitProcess undefined does not throw', async () =>
 
 test('platform/arch defaults to process.platform/process.arch when omitted', async () => {
   const entries: LogEntry[] = [];
-  const fetchFn: typeof globalThis.fetch = (async () =>
-    new Response('not found', { status: 404 })) as unknown as typeof globalThis.fetch;
+  const fetchFn: FetchFn = async () => new Response('not found', { status: 404 });
   await runAutoUpgrade({
     binaryPath: join(dir, 'gw'),
     currentVersion: '2026.5.7',
@@ -358,8 +357,7 @@ test('platform/arch defaults to process.platform/process.arch when omitted', asy
 });
 
 test('logger and exitProcess undefined branches do not throw on error path', async () => {
-  const fetchFn: typeof globalThis.fetch = (async () =>
-    new Response('fail', { status: 500 })) as unknown as typeof globalThis.fetch;
+  const fetchFn: FetchFn = async () => new Response('fail', { status: 500 });
   await runAutoUpgrade({
     binaryPath: join(dir, 'gw'),
     currentVersion: '2026.5.7',
@@ -371,8 +369,7 @@ test('logger and exitProcess undefined branches do not throw on error path', asy
 
 test('fetch dep undefined falls through to globalThis.fetch and emits no_release on 404', async () => {
   const orig = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response('not found', { status: 404 })) as unknown as typeof globalThis.fetch;
+  globalThis.fetch = asGlobalFetch(async () => new Response('not found', { status: 404 }));
   const entries: LogEntry[] = [];
   try {
     await runAutoUpgrade({

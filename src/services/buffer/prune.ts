@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 
-import type { Logger } from 'core/log';
+import type { MinimalLogger } from 'core/log';
 import {
   BATCH_COLS,
   BATCH_STATUS,
@@ -44,7 +44,7 @@ export interface PruneInput {
   receiptRetentionDays: number;
   failedRetentionDays: number;
   now?: Date;
-  logger?: Logger;
+  logger?: MinimalLogger;
 }
 
 export interface PruneResult {

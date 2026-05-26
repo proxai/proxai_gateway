@@ -1,4 +1,4 @@
-import type { Logger } from 'core/log';
+import type { MinimalLogger } from 'core/log';
 import type { MachineName } from 'services/state-machines/state-machines.types.ts';
 
 export interface RoutedActor {
@@ -11,7 +11,7 @@ export interface RoutedActor {
 
 export interface EventRouterDeps {
   readonly actors: readonly RoutedActor[];
-  readonly logger?: Logger;
+  readonly logger?: MinimalLogger;
 }
 
 export interface EventRouterHandle {

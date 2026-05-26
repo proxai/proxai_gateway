@@ -1,5 +1,6 @@
+import type { FetchFn } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import type { Logger } from 'core/log';
+
 import type { Database } from 'bun:sqlite';
 import { rmRecursive } from 'core/io/fs';
 import { mkdtemp } from 'node:fs/promises';
@@ -29,12 +30,12 @@ afterEach(async () => {
   await rmRecursive(dir);
 });
 
-function fakeFetch(): typeof globalThis.fetch {
-  return (async () =>
+function fakeFetch(): FetchFn {
+  return async () =>
     new Response(JSON.stringify({ capture_id: 'irrelevant', accepted: true, idempotent: false }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
-    })) as unknown as typeof globalThis.fetch;
+    });
 }
 
 function noopSource(name: string): RegisteredSource {
@@ -168,9 +169,9 @@ test('callback errors are logged as warn but do not crash the loop', async () =>
   type Entry = { level: string; msg: string };
   const entries: Entry[] = [];
   const fakeLogger = makeFakeLogger(entries);
-  ctxs.capture.logger = fakeLogger as unknown as Logger;
-  ctxs.drain.logger = fakeLogger as unknown as Logger;
-  ctxs.heartbeat.logger = fakeLogger as unknown as Logger;
+  ctxs.capture.logger = fakeLogger;
+  ctxs.drain.logger = fakeLogger;
+  ctxs.heartbeat.logger = fakeLogger;
   const promise = runDaemonLoops(ctxs, {
     abortSignal: ctrl.signal,
     captureIntervalMs: 1,
@@ -200,7 +201,7 @@ test('drain-loop runtime error logs as error', async () => {
   type Entry = { level: string; msg: string };
   const entries: Entry[] = [];
   const fakeLogger = makeFakeLogger(entries);
-  ctxs.drain.logger = fakeLogger as unknown as Logger;
+  ctxs.drain.logger = fakeLogger;
   buffer.close();
   let cycles = 0;
   const promise = runDaemonLoops(ctxs, {
@@ -227,9 +228,9 @@ test('runtime errors in cycle functions are logged as error and loops continue',
   type Entry = { level: string; msg: string };
   const entries: Entry[] = [];
   const fakeLogger = makeFakeLogger(entries);
-  ctxs.capture.logger = fakeLogger as unknown as Logger;
-  ctxs.drain.logger = fakeLogger as unknown as Logger;
-  ctxs.heartbeat.logger = fakeLogger as unknown as Logger;
+  ctxs.capture.logger = fakeLogger;
+  ctxs.drain.logger = fakeLogger;
+  ctxs.heartbeat.logger = fakeLogger;
   ctxs.capture.sources = [
     {
       name: 'broken',
@@ -261,6 +262,8 @@ interface FakeLogger {
   warn: (...args: unknown[]) => void;
   error: (...args: unknown[]) => void;
   debug: (...args: unknown[]) => void;
+  fatal: (...args: unknown[]) => void;
+  trace: (...args: unknown[]) => void;
   child: (bindings: Record<string, unknown>) => FakeLogger;
 }
 
@@ -277,6 +280,8 @@ function makeFakeLogger(entries: { level: string; msg: string }[]): FakeLogger {
     warn: record('warn'),
     error: record('error'),
     debug: record('debug'),
+    fatal: record('fatal'),
+    trace: record('trace'),
     child: () => logger,
   };
   return logger;

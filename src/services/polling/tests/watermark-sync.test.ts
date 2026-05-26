@@ -28,11 +28,11 @@ function clientWith(body: unknown, status = 200): HttpClient {
     apiKey: 'k',
     hostId: 'h_test',
     endpoints,
-    fetch: (async () =>
+    fetch: async () =>
       new Response(JSON.stringify(body), {
         status,
         headers: { 'Content-Type': 'application/json' },
-      })) as unknown as typeof globalThis.fetch,
+      }),
   });
 }
 
@@ -188,7 +188,7 @@ test('propagates auth errors to the caller', async () => {
     apiKey: 'k',
     hostId: 'h_test',
     endpoints,
-    fetch: (async () => new Response('', { status: 401 })) as unknown as typeof globalThis.fetch,
+    fetch: async () => new Response('', { status: 401 }),
   });
   await expect(syncServerWatermarks({ buffer: db, http })).rejects.toThrow();
 });

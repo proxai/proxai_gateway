@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
+import { asGlobalFetch, asTimerSetter } from 'core/utils';
+import type { FetchFn } from 'core/utils';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -55,7 +57,7 @@ test('findAssetForPlatform returns undefined when nothing matches', () => {
 });
 
 test('fetchLatestRelease parses successful body', async () => {
-  const fetchFn: typeof globalThis.fetch = (async (url: string | URL | Request) => {
+  const fetchFn: FetchFn = async (url: string | URL | Request) => {
     expect(typeof url === 'string' ? url : url.toString()).toBe(RELEASE_API_URL);
     return new Response(
       JSON.stringify({
@@ -64,7 +66,7 @@ test('fetchLatestRelease parses successful body', async () => {
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     );
-  }) as unknown as typeof globalThis.fetch;
+  };
 
   const release = await fetchLatestRelease({ fetch: fetchFn, userAgent: 'ua' });
   expect(release.tag_name).toBe('v2026.5.10');
@@ -72,17 +74,16 @@ test('fetchLatestRelease parses successful body', async () => {
 });
 
 test('fetchLatestRelease throws on non-2xx', async () => {
-  const fetchFn: typeof globalThis.fetch = (async () =>
-    new Response('boom', { status: 500 })) as unknown as typeof globalThis.fetch;
+  const fetchFn: FetchFn = async () => new Response('boom', { status: 500 });
   await expect(fetchLatestRelease({ fetch: fetchFn, userAgent: 'ua' })).rejects.toThrow(/HTTP 500/);
 });
 
 test('fetchLatestRelease throws on malformed body', async () => {
-  const fetchFn: typeof globalThis.fetch = (async () =>
+  const fetchFn: FetchFn = async () =>
     new Response(JSON.stringify({ foo: 'bar' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
-    })) as unknown as typeof globalThis.fetch;
+    });
   await expect(fetchLatestRelease({ fetch: fetchFn, userAgent: 'ua' })).rejects.toThrow(
     /malformed/,
   );
@@ -91,18 +92,15 @@ test('fetchLatestRelease throws on malformed body', async () => {
 test('fetchLatestRelease honors custom timeoutMs and aborts', async () => {
   const origSetTimeout = globalThis.setTimeout;
   let captured: (() => void) | null = null;
-  (globalThis as { setTimeout: typeof setTimeout }).setTimeout = ((cb: () => void, ms?: number) => {
+  globalThis.setTimeout = asTimerSetter((cb: () => void, ms?: number) => {
     if (captured === null) {
       captured = cb;
-      return 0 as unknown as ReturnType<typeof setTimeout>;
+      return 0;
     }
     return origSetTimeout(cb, ms);
-  }) as unknown as typeof setTimeout;
+  });
   try {
-    const fetchFn: typeof globalThis.fetch = (async (
-      _url: string | URL | Request,
-      init?: RequestInit,
-    ) => {
+    const fetchFn: FetchFn = async (_url: string | URL | Request, init?: RequestInit) => {
       if (captured !== null) captured();
       if (init?.signal?.aborted === true) {
         const err = new Error('aborted');
@@ -110,7 +108,7 @@ test('fetchLatestRelease honors custom timeoutMs and aborts', async () => {
         throw err;
       }
       return new Response('{}', { status: 200 });
-    }) as unknown as typeof globalThis.fetch;
+    };
     await expect(
       fetchLatestRelease({ fetch: fetchFn, userAgent: 'ua', timeoutMs: 1 }),
     ).rejects.toThrow();
@@ -122,13 +120,13 @@ test('fetchLatestRelease honors custom timeoutMs and aborts', async () => {
 test('fetchLatestRelease falls back to globalThis.fetch when fetch dep is omitted', async () => {
   const orig = globalThis.fetch;
   let calls = 0;
-  globalThis.fetch = (async () => {
+  globalThis.fetch = asGlobalFetch(async () => {
     calls++;
     return new Response(JSON.stringify({ tag_name: 'v1', assets: [] }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-  }) as unknown as typeof globalThis.fetch;
+  });
   try {
     const r = await fetchLatestRelease({ userAgent: 'ua' });
     expect(r.tag_name).toBe('v1');
@@ -140,11 +138,11 @@ test('fetchLatestRelease falls back to globalThis.fetch when fetch dep is omitte
 
 test('downloadAsset returns bytes on 2xx', async () => {
   const payload = new TextEncoder().encode('hello-world');
-  const fetchFn: typeof globalThis.fetch = (async () =>
+  const fetchFn: FetchFn = async () =>
     new Response(payload, {
       status: 200,
       headers: { 'Content-Type': 'application/octet-stream' },
-    })) as unknown as typeof globalThis.fetch;
+    });
   const bytes = await downloadAsset('https://example.com/asset', {
     fetch: fetchFn,
     userAgent: 'ua',
@@ -153,8 +151,7 @@ test('downloadAsset returns bytes on 2xx', async () => {
 });
 
 test('downloadAsset throws on non-2xx', async () => {
-  const fetchFn: typeof globalThis.fetch = (async () =>
-    new Response('nope', { status: 404 })) as unknown as typeof globalThis.fetch;
+  const fetchFn: FetchFn = async () => new Response('nope', { status: 404 });
   await expect(
     downloadAsset('https://example.com/asset', { fetch: fetchFn, userAgent: 'ua' }),
   ).rejects.toThrow(/HTTP 404/);
@@ -163,18 +160,15 @@ test('downloadAsset throws on non-2xx', async () => {
 test('downloadAsset honors custom timeoutMs and aborts', async () => {
   const origSetTimeout = globalThis.setTimeout;
   let captured: (() => void) | null = null;
-  (globalThis as { setTimeout: typeof setTimeout }).setTimeout = ((cb: () => void, ms?: number) => {
+  globalThis.setTimeout = asTimerSetter((cb: () => void, ms?: number) => {
     if (captured === null) {
       captured = cb;
-      return 0 as unknown as ReturnType<typeof setTimeout>;
+      return 0;
     }
     return origSetTimeout(cb, ms);
-  }) as unknown as typeof setTimeout;
+  });
   try {
-    const fetchFn: typeof globalThis.fetch = (async (
-      _url: string | URL | Request,
-      init?: RequestInit,
-    ) => {
+    const fetchFn: FetchFn = async (_url: string | URL | Request, init?: RequestInit) => {
       if (captured !== null) captured();
       if (init?.signal?.aborted === true) {
         const err = new Error('aborted');
@@ -182,7 +176,7 @@ test('downloadAsset honors custom timeoutMs and aborts', async () => {
         throw err;
       }
       return new Response('x', { status: 200 });
-    }) as unknown as typeof globalThis.fetch;
+    };
     await expect(
       downloadAsset('https://example.com/asset', {
         fetch: fetchFn,
@@ -198,13 +192,13 @@ test('downloadAsset honors custom timeoutMs and aborts', async () => {
 test('downloadAsset falls back to globalThis.fetch when fetch dep is omitted', async () => {
   const orig = globalThis.fetch;
   let calls = 0;
-  globalThis.fetch = (async () => {
+  globalThis.fetch = asGlobalFetch(async () => {
     calls++;
     return new Response(new TextEncoder().encode('payload'), {
       status: 200,
       headers: { 'Content-Type': 'application/octet-stream' },
     });
-  }) as unknown as typeof globalThis.fetch;
+  });
   try {
     const bytes = await downloadAsset('https://example.com/asset', { userAgent: 'ua' });
     expect(bytes.byteLength).toBeGreaterThan(0);

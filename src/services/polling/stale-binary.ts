@@ -1,4 +1,4 @@
-import type { Logger } from 'core/log';
+import type { MinimalLogger } from 'core/log';
 import { pausePolling } from 'services/polling/pause-sentinel.ts';
 
 export type StaleBinaryStatus = 'fresh' | 'warning' | 'paused';
@@ -11,7 +11,7 @@ export interface CheckStaleBinaryDeps {
   pauseAfterDays: number;
   pauseSentinelPath: string;
   now?: () => number;
-  logger?: Logger;
+  logger?: MinimalLogger;
 }
 
 export async function checkStaleBinary(
