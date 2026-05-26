@@ -1,3 +1,4 @@
+import { createActor } from 'xstate';
 import { nowIsoUtc } from 'core/utils';
 import {
   checkPendingPressure,
@@ -22,6 +23,10 @@ import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 import { isBufferFull, writeBufferFullSentinel } from 'services/polling/buffer-full-sentinel.ts';
 import { isPaused } from 'services/polling/pause-sentinel.ts';
 import { handleCapture } from 'services/polling/poll-worker.ts';
+import {
+  captureLoopMachine,
+  type CaptureGateBlockReason,
+} from 'services/state-machines/capture-loop';
 
 import type {
   CaptureCycleContext,
@@ -62,29 +67,30 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
   const startMs = Date.now();
   const log = ctx.logger;
 
+  const cycleMachine = createActor(captureLoopMachine, { input: { intervalMs: 0 } });
+  cycleMachine.start();
+  cycleMachine.send({ type: 'TICK', startedAtUtc: startedAt });
+
   log?.info({ event: 'capture.cycle.start', started_at: startedAt }, 'capture cycle started');
 
-  if (await isAuthFailed(ctx.authFailedSentinelPath)) {
-    return finishSkip(startedAt, startMs, 'auth_failed', log, {
-      authFailed: true,
-      paused: false,
-      bufferFull: false,
+  const gateReason = await evaluateGateReason(ctx);
+  if (gateReason !== null) {
+    cycleMachine.send({ type: 'GATE_BLOCKED', reason: gateReason });
+    const result = finishSkip(startedAt, startMs, gateReasonToSkipKey(gateReason), log, {
+      authFailed: gateReason === 'auth',
+      paused: gateReason === 'paused',
+      bufferFull: gateReason === 'buffer_full',
     });
-  }
-  if (await isPaused(ctx.pauseSentinelPath)) {
-    return finishSkip(startedAt, startMs, 'paused', log, {
-      authFailed: false,
-      paused: true,
-      bufferFull: false,
+    cycleMachine.send({
+      type: 'METRICS_PERSISTED',
+      finishedAtUtc: result.completedAt,
+      durationMs: result.durationMs,
     });
+    cycleMachine.stop();
+    return result;
   }
-  if (await isBufferFull(ctx.bufferFullSentinelPath)) {
-    return finishSkip(startedAt, startMs, 'buffer_full', log, {
-      authFailed: false,
-      paused: false,
-      bufferFull: true,
-    });
-  }
+
+  cycleMachine.send({ type: 'GATE_CLEAR' });
 
   const sourceResults: Record<string, SourcePollerResult> = {};
   const promises = ctx.sources.map(async (source) => {
@@ -130,7 +136,21 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
 
   await Promise.all(promises);
 
+  const totalBatches = Object.values(sourceResults).reduce((sum, r) => sum + r.capturedBatches, 0);
+  const totalQuarantine = Object.values(sourceResults).reduce((sum, r) => sum + r.errors.length, 0);
+  cycleMachine.send({
+    type: 'POLL_COMPLETE',
+    batchesEmitted: totalBatches,
+    quarantineEmitted: totalQuarantine,
+  });
+  cycleMachine.send({ type: 'COMMITTED' });
+
   const pressureResult = await applyPressureSentinel(ctx, log);
+  cycleMachine.send({
+    type: 'PRESSURE_EVALUATED',
+    pendingBytes: pressureResult?.pendingBytes ?? 0,
+    shouldPause: pressureResult?.shouldPause ?? false,
+  });
 
   const completedAt = nowIsoUtc();
   const durationMs = Date.now() - startMs;
@@ -141,6 +161,12 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
 
   persistCaptureMetrics(ctx, completedAt, durationMs, sourceResults);
   persistSourceCaptures(ctx, sourceResults);
+  cycleMachine.send({
+    type: 'METRICS_PERSISTED',
+    finishedAtUtc: completedAt,
+    durationMs,
+  });
+  cycleMachine.stop();
 
   return {
     paused: false,
@@ -152,6 +178,22 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
     sourceResults,
     pressureResult,
   };
+}
+
+async function evaluateGateReason(
+  ctx: CaptureCycleContext,
+): Promise<CaptureGateBlockReason | null> {
+  if (await isAuthFailed(ctx.authFailedSentinelPath)) return 'auth';
+  if (await isPaused(ctx.pauseSentinelPath)) return 'paused';
+  if (await isBufferFull(ctx.bufferFullSentinelPath)) return 'buffer_full';
+  return null;
+}
+
+function gateReasonToSkipKey(
+  reason: CaptureGateBlockReason,
+): 'auth_failed' | 'paused' | 'buffer_full' {
+  if (reason === 'auth') return 'auth_failed';
+  return reason;
 }
 
 function toSourceCycleResult(result: SourcePollerResult): SourceCycleResult {

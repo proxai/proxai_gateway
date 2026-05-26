@@ -1,3 +1,5 @@
+import { createActor, type Actor } from 'xstate';
+import { nowIsoUtc } from 'core/utils';
 import {
   AuthError,
   GatewayError,
@@ -18,8 +20,24 @@ import {
 import type { StoredBatch } from 'services/buffer';
 import type { RawRecordDTO } from 'services/contract';
 import { writeAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
+import {
+  batchLifecycleMachine,
+  type BatchIdentity,
+  type BatchLifecycleMachine,
+} from 'services/state-machines/batch-lifecycle';
 import { buildRawRecordDTO } from 'services/uploader/build-dto.ts';
 import type { UploadOutcome, UploaderContext } from 'services/uploader/uploader.types.ts';
+
+function batchIdentity(batch: StoredBatch): BatchIdentity {
+  return {
+    captureId: batch.captureId,
+    sourceApp: batch.sourceApp,
+    sourcePathHash: batch.sourcePathHash,
+    watermarkStart: batch.watermarkStart,
+    watermarkEnd: batch.watermarkEnd,
+    compressedBytes: batch.body.byteLength,
+  };
+}
 
 export async function uploadBatch(
   ctx: UploaderContext,
@@ -31,11 +49,20 @@ export async function uploadBatch(
   });
 
   const dto: RawRecordDTO = buildRawRecordDTO(batch, ctx.hostId);
+  const lifecycle = createActor(batchLifecycleMachine, { input: { batch: batchIdentity(batch) } });
+  lifecycle.start();
+  lifecycle.send({ type: 'DRAIN_PICKS_UP' });
 
   log?.debug({ event: 'upload.start', attempts: batch.attempts }, 'upload started');
   try {
     const result = await ctx.http.uploadRawRecord(dto);
     markBatchDelivered(ctx.db, batch, { idempotentOnServer: result.idempotent });
+    lifecycle.send({
+      type: 'ACCEPTED',
+      idempotent: result.idempotent,
+      deliveredAtUtc: nowIsoUtc(),
+    });
+    lifecycle.stop();
     log?.info({ event: 'upload.accepted', idempotent: result.idempotent }, 'upload accepted');
     return {
       kind: 'accepted',
@@ -43,7 +70,9 @@ export async function uploadBatch(
       idempotent: result.idempotent,
     };
   } catch (err) {
-    return classifyAndPersist(ctx, batch, err);
+    const outcome = await classifyAndPersist(ctx, batch, err, lifecycle);
+    lifecycle.stop();
+    return outcome;
   }
 }
 
@@ -51,12 +80,17 @@ async function classifyAndPersist(
   ctx: UploaderContext,
   batch: StoredBatch,
   err: unknown,
+  lifecycle: Actor<BatchLifecycleMachine>,
 ): Promise<UploadOutcome> {
   const captureId = batch.captureId;
   const log = ctx.logger?.child({ capture_id: captureId });
   if (err instanceof WatermarkRegressionError) {
     setCursorFromRegression(ctx.db, batch, err.currentServerWatermarkEnd);
     deleteBatch(ctx.db, captureId);
+    lifecycle.send({
+      type: 'WATERMARK_REGRESSED',
+      serverWatermarkEnd: err.currentServerWatermarkEnd,
+    });
     log?.info(
       {
         event: 'upload.watermark_recovered',
@@ -69,6 +103,11 @@ async function classifyAndPersist(
   }
   if (err instanceof RateLimitError) {
     recordRetriableFailure(ctx.db, captureId, err.message);
+    lifecycle.send({
+      type: 'RATE_LIMITED',
+      error: err.message,
+      retryAfterMs: err.retryAfterMs,
+    });
     log?.error(
       {
         event: 'upload.rate_limited',
@@ -87,10 +126,16 @@ async function classifyAndPersist(
     };
   }
   if (err instanceof AuthError) {
-    return handleAuthError(ctx, batch, err);
+    lifecycle.send({ type: 'AUTH_ERROR', error: err.message });
+    return handleAuthError(ctx, batch, err, lifecycle);
   }
   if (err instanceof RetriableError) {
     recordRetriableFailure(ctx.db, captureId, err.message);
+    lifecycle.send({
+      type: 'SERVICE_UNAVAILABLE',
+      error: err.message,
+      retryAfterMs: err.retryAfterMs,
+    });
     log?.error(
       {
         event: 'upload.retriable',
@@ -111,6 +156,7 @@ async function classifyAndPersist(
   }
   if (err instanceof NetworkError) {
     recordRetriableFailure(ctx.db, captureId, err.message);
+    lifecycle.send({ type: 'NETWORK_ERROR', error: err.message });
     log?.error(
       {
         event: 'upload.retriable',
@@ -130,6 +176,12 @@ async function classifyAndPersist(
   }
   if (err instanceof ValidationError || err instanceof GatewayError) {
     markBatchFailed(ctx.db, captureId, err.message);
+    const failedAtUtc = nowIsoUtc();
+    if (err instanceof OversizedDecompressedSliceError) {
+      lifecycle.send({ type: 'OVERSIZED', error: err.message, failedAtUtc });
+    } else {
+      lifecycle.send({ type: 'VALIDATION_FAILED', error: err.message, failedAtUtc });
+    }
     const baseFields: Record<string, unknown> = {
       event: 'upload.fatal',
       kind: err.constructor.name,
@@ -150,6 +202,7 @@ async function classifyAndPersist(
   }
   const message = `unknown error: ${(err as Error).message ?? String(err)}`;
   markBatchFailed(ctx.db, captureId, message);
+  lifecycle.send({ type: 'UNKNOWN_ERROR', error: message, failedAtUtc: nowIsoUtc() });
   log?.error({ event: 'upload.unknown_error', error: message }, 'upload failed (unknown)');
   return { kind: 'fatal', captureId, error: message };
 }
@@ -158,6 +211,7 @@ async function handleAuthError(
   ctx: UploaderContext,
   batch: StoredBatch,
   authErr: AuthError,
+  lifecycle: Actor<BatchLifecycleMachine>,
 ): Promise<UploadOutcome> {
   const captureId = batch.captureId;
   const log = ctx.logger?.child({ capture_id: captureId });
@@ -167,10 +221,19 @@ async function handleAuthError(
     verification = await ctx.http.verifyKey();
   } catch (verifyErr) {
     if (verifyErr instanceof AuthError) {
+      lifecycle.send({
+        type: 'VERIFY_THREW_AUTH',
+        error: verifyErr.message,
+        failedAtUtc: nowIsoUtc(),
+      });
       return finalizeAuthFailure(ctx, batch, 'verify-key threw AuthError');
     }
 
     recordRetriableFailure(ctx.db, captureId, authErr.message);
+    lifecycle.send({
+      type: 'VERIFY_THREW_OTHER',
+      error: verifyErr instanceof Error ? verifyErr.message : String(verifyErr),
+    });
     log?.error(
       {
         event: 'upload.auth_unconfirmed',
@@ -192,10 +255,16 @@ async function handleAuthError(
 
   if (!verification.success) {
     const reason = verification.message.length > 0 ? verification.message : 'key not accepted';
+    lifecycle.send({
+      type: 'VERIFY_SUCCESS_FALSE',
+      error: reason,
+      failedAtUtc: nowIsoUtc(),
+    });
     return finalizeAuthFailure(ctx, batch, reason);
   }
 
   recordRetriableFailure(ctx.db, captureId, authErr.message);
+  lifecycle.send({ type: 'VERIFY_SUCCESS_TRUE', error: authErr.message });
   log?.error(
     { event: 'upload.auth_transient', error: authErr.message, ...httpFields(authErr) },
     'upload auth error; verify-key still success, treating as retriable',

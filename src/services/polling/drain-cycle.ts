@@ -1,3 +1,4 @@
+import { createActor } from 'xstate';
 import { nowIsoUtc } from 'core/utils';
 import {
   checkPendingPressure,
@@ -16,6 +17,7 @@ import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 import { clearBufferFullSentinel, isBufferFull } from 'services/polling/buffer-full-sentinel.ts';
 import { isPaused } from 'services/polling/pause-sentinel.ts';
 import type { DrainCycleContext, DrainCycleResult } from 'services/polling/polling.types.ts';
+import { drainLoopMachine, type DrainGateBlockReason } from 'services/state-machines/drain-loop';
 import { drainBuffer } from 'services/uploader';
 import type { DrainResult } from 'services/uploader';
 
@@ -24,17 +26,28 @@ export async function runDrainCycle(ctx: DrainCycleContext): Promise<DrainCycleR
   const startMs = Date.now();
   const log = ctx.logger;
 
+  const cycleMachine = createActor(drainLoopMachine, { input: { intervalMs: 0 } });
+  cycleMachine.start();
+  cycleMachine.send({ type: 'TICK', startedAtUtc: startedAt });
+
   log?.info({ event: 'drain.cycle.start', started_at: startedAt }, 'drain cycle started');
 
-  if (await isAuthFailed(ctx.authFailedSentinelPath)) {
-    return finishSkip(startedAt, startMs, 'auth_failed', log, {
-      authFailed: true,
-      paused: false,
+  const gateReason = await evaluateGateReason(ctx);
+  if (gateReason !== null) {
+    cycleMachine.send({ type: 'GATE_BLOCKED', reason: gateReason });
+    const skip = finishSkip(startedAt, startMs, gateReasonToSkipKey(gateReason), log, {
+      authFailed: gateReason === 'auth',
+      paused: gateReason === 'paused',
     });
+    cycleMachine.send({
+      type: 'METRICS_PERSISTED',
+      finishedAtUtc: skip.completedAt,
+      durationMs: skip.durationMs,
+    });
+    cycleMachine.stop();
+    return skip;
   }
-  if (await isPaused(ctx.pauseSentinelPath)) {
-    return finishSkip(startedAt, startMs, 'paused', log, { authFailed: false, paused: true });
-  }
+  cycleMachine.send({ type: 'GATE_CLEAR' });
 
   const uploaderCtx: Parameters<typeof drainBuffer>[0] = {
     db: ctx.buffer,
@@ -45,6 +58,15 @@ export async function runDrainCycle(ctx: DrainCycleContext): Promise<DrainCycleR
   if (log !== undefined) uploaderCtx.logger = log;
   if (ctx.pacer !== undefined) uploaderCtx.pacer = ctx.pacer;
   const drainResult = await drainBuffer(uploaderCtx);
+  cycleMachine.send({
+    type: 'DRAIN_COMPLETE',
+    accepted: drainResult.accepted,
+    retriable: drainResult.retriable,
+    fatal: drainResult.fatal,
+    recovered: drainResult.recovered,
+    acceptedBytes: drainResult.acceptedBytes,
+    consecutiveRetriableBreak: drainResult.consecutiveRetriableBreak,
+  });
   log?.info(
     {
       event: 'drain.complete',
@@ -73,8 +95,10 @@ export async function runDrainCycle(ctx: DrainCycleContext): Promise<DrainCycleR
       'buffer prune failed; continuing drain',
     );
   }
+  cycleMachine.send({ type: 'PRUNE_COMPLETE' });
 
-  const pressureResult = await applyResumeSentinel(ctx, log);
+  const { pressureResult, clearedBufferFull } = await applyResumeSentinel(ctx, log);
+  cycleMachine.send({ type: 'RESUME_EVALUATED', clearedBufferFull });
 
   const completedAt = nowIsoUtc();
   const durationMs = Date.now() - startMs;
@@ -85,6 +109,8 @@ export async function runDrainCycle(ctx: DrainCycleContext): Promise<DrainCycleR
 
   persistDaemonState(ctx, startedAt, completedAt, durationMs, drainResult);
   persistDrainMetrics(ctx, completedAt, durationMs, drainResult);
+  cycleMachine.send({ type: 'METRICS_PERSISTED', finishedAtUtc: completedAt, durationMs });
+  cycleMachine.stop();
 
   return {
     paused: false,
@@ -98,19 +124,32 @@ export async function runDrainCycle(ctx: DrainCycleContext): Promise<DrainCycleR
   };
 }
 
+async function evaluateGateReason(ctx: DrainCycleContext): Promise<DrainGateBlockReason | null> {
+  if (await isAuthFailed(ctx.authFailedSentinelPath)) return 'auth';
+  if (await isPaused(ctx.pauseSentinelPath)) return 'paused';
+  return null;
+}
+
+function gateReasonToSkipKey(reason: DrainGateBlockReason): 'auth_failed' | 'paused' {
+  if (reason === 'auth') return 'auth_failed';
+  return 'paused';
+}
+
 async function applyResumeSentinel(
   ctx: DrainCycleContext,
   log: DrainCycleContext['logger'],
-): Promise<PendingPressureResult> {
+): Promise<{ pressureResult: PendingPressureResult; clearedBufferFull: boolean }> {
   const result = checkPendingPressure({
     db: ctx.buffer,
     softPauseBytes: ctx.bufferPolicy.softPauseBytes,
     softResumeBytes: ctx.bufferPolicy.softResumeBytes,
   });
+  let clearedBufferFull = false;
   if (result.shouldResume) {
     const wasFull = await isBufferFull(ctx.bufferFullSentinelPath);
     if (wasFull) {
       await clearBufferFullSentinel(ctx.bufferFullSentinelPath);
+      clearedBufferFull = true;
       log?.info(
         {
           event: 'buffer.soft_resume',
@@ -121,7 +160,7 @@ async function applyResumeSentinel(
       );
     }
   }
-  return result;
+  return { pressureResult: result, clearedBufferFull };
 }
 
 function persistDaemonState(
