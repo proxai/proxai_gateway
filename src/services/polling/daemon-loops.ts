@@ -1,4 +1,7 @@
-import { abortableSleep } from 'core/utils';
+import { dirname, join } from 'node:path';
+import { abortableSleep, nowIsoUtc } from 'core/utils';
+import { startDaemonActors } from 'services/state-machines/daemon-actors';
+import type { DaemonActorsHandle } from 'services/state-machines/daemon-actors';
 import { runCaptureCycle } from 'services/polling/capture-cycle.ts';
 import { runDrainCycle } from 'services/polling/drain-cycle.ts';
 import { runHeartbeatCycle } from 'services/polling/heartbeat-cycle.ts';
@@ -33,11 +36,37 @@ export async function runDaemonLoops(
   const sleep = options.sleep ?? abortableSleep;
   const signal = options.abortSignal;
 
-  await Promise.all([
-    captureLoop(contexts.capture, captureMs, signal, sleep, options.onCaptureComplete),
-    drainLoop(contexts.drain, drainMs, signal, sleep, options.onDrainComplete),
-    heartbeatLoop(contexts.heartbeat, heartbeatMs, signal, sleep, options.onHeartbeatComplete),
-  ]);
+  const handle = await bootDaemonActors(contexts);
+
+  try {
+    handle.markReady(nowIsoUtc());
+    await Promise.all([
+      captureLoop(contexts.capture, captureMs, signal, sleep, options.onCaptureComplete),
+      drainLoop(contexts.drain, drainMs, signal, sleep, options.onDrainComplete),
+      heartbeatLoop(contexts.heartbeat, heartbeatMs, signal, sleep, options.onHeartbeatComplete),
+    ]);
+  } finally {
+    handle.requestShutdown('sigterm');
+    handle.markExited(nowIsoUtc());
+    await handle.stop();
+  }
+}
+
+async function bootDaemonActors(contexts: DaemonLoopContexts): Promise<DaemonActorsHandle> {
+  const configDir = dirname(contexts.capture.pauseSentinelPath);
+  return startDaemonActors({
+    buffer: contexts.capture.buffer,
+    paths: {
+      configDir,
+      authFailed: contexts.capture.authFailedSentinelPath,
+      paused: contexts.capture.pauseSentinelPath,
+      bufferFull: contexts.capture.bufferFullSentinelPath,
+      sessionStopped: join(configDir, 'SESSION_STOPPED'),
+      updateAvailable:
+        contexts.heartbeat.updateAvailableSentinelPath ?? join(configDir, 'UPDATE_AVAILABLE'),
+    },
+    ...(contexts.capture.logger !== undefined ? { logger: contexts.capture.logger } : {}),
+  });
 }
 
 async function captureLoop(

@@ -25,3 +25,4 @@ export * from 'services/state-machines/daemon-root/index.ts';
 export * from 'services/state-machines/snapshot/index.ts';
 export * from 'services/state-machines/sentinel-watcher/index.ts';
 export * from 'services/state-machines/event-router/index.ts';
+export * from 'services/state-machines/daemon-actors/index.ts';

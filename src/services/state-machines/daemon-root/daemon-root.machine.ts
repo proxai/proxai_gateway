@@ -48,11 +48,10 @@ export const daemonRootMachine = setup({
       },
     },
     running: {
-      entry: assign({
-        bootedAtUtc: ({ event }) =>
-          event.type === 'READY' ? event.bootedAtUtc : new Date().toISOString(),
-      }),
       on: {
+        READY: {
+          actions: assign({ bootedAtUtc: ({ event }) => event.bootedAtUtc }),
+        },
         SHUTDOWN: {
           target: 'draining_for_shutdown',
           actions: assign({ shutdownReason: ({ event }) => event.reason }),
