@@ -15,3 +15,4 @@ export * from 'services/state-machines/binary-freshness/index.ts';
 export * from 'services/state-machines/quarantine-lifecycle/index.ts';
 export * from 'services/state-machines/batch-lifecycle/index.ts';
 export * from 'services/state-machines/pacer/index.ts';
+export * from 'services/state-machines/cursor-lifecycle/index.ts';
