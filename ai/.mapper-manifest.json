@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-26T08:52:56.982Z",
-  "sourceHash": "2152884edb6d70633fe162f74416ecc9",
+  "generatedAt": "2026-05-26T23:13:35.608Z",
+  "sourceHash": "4274193af332b0c206e6f5695aef6da7",
   "files": [
     {
       "path": "CLAUDE.md",
@@ -221,23 +221,23 @@
     },
     {
       "path": ".claude/rules/services/daemon-loops.md",
-      "hash": "68d3bff06c9030d2"
+      "hash": "dccd95a98ae636d1"
     },
     {
       "path": ".cursor/rules/services/daemon-loops.mdc",
-      "hash": "8b85cd385ae03bf8"
+      "hash": "d0e48871f04e3288"
     },
     {
       "path": ".codex/rules/services/daemon-loops.md",
-      "hash": "68d3bff06c9030d2"
+      "hash": "dccd95a98ae636d1"
     },
     {
       "path": ".gemini/rules/services/daemon-loops.md",
-      "hash": "68d3bff06c9030d2"
+      "hash": "dccd95a98ae636d1"
     },
     {
       "path": ".agent/rules/services/daemon-loops.md",
-      "hash": "68d3bff06c9030d2"
+      "hash": "dccd95a98ae636d1"
     },
     {
       "path": ".claude/rules/services/no-direct-sqlite-outside-buffer.md",
@@ -421,23 +421,23 @@
     },
     {
       "path": ".claude/knowledge/cli/commands-overview.md",
-      "hash": "5a4b1bba3f42facf"
+      "hash": "06119784d1863cf0"
     },
     {
       "path": ".cursor/knowledge/cli/commands-overview.md",
-      "hash": "5a4b1bba3f42facf"
+      "hash": "06119784d1863cf0"
     },
     {
       "path": ".codex/knowledge/cli/commands-overview.md",
-      "hash": "5a4b1bba3f42facf"
+      "hash": "06119784d1863cf0"
     },
     {
       "path": ".gemini/knowledge/cli/commands-overview.md",
-      "hash": "5a4b1bba3f42facf"
+      "hash": "06119784d1863cf0"
     },
     {
       "path": ".agent/knowledge/cli/commands-overview.md",
-      "hash": "5a4b1bba3f42facf"
+      "hash": "06119784d1863cf0"
     },
     {
       "path": ".claude/knowledge/cli/service-unit.md",
@@ -461,23 +461,23 @@
     },
     {
       "path": ".claude/knowledge/cli/wiring.md",
-      "hash": "52eafe40d726d5fc"
+      "hash": "a26d1d78fcc9d774"
     },
     {
       "path": ".cursor/knowledge/cli/wiring.md",
-      "hash": "52eafe40d726d5fc"
+      "hash": "a26d1d78fcc9d774"
     },
     {
       "path": ".codex/knowledge/cli/wiring.md",
-      "hash": "52eafe40d726d5fc"
+      "hash": "a26d1d78fcc9d774"
     },
     {
       "path": ".gemini/knowledge/cli/wiring.md",
-      "hash": "52eafe40d726d5fc"
+      "hash": "a26d1d78fcc9d774"
     },
     {
       "path": ".agent/knowledge/cli/wiring.md",
-      "hash": "52eafe40d726d5fc"
+      "hash": "a26d1d78fcc9d774"
     },
     {
       "path": ".claude/knowledge/conventions.md",
@@ -581,23 +581,23 @@
     },
     {
       "path": ".claude/knowledge/cross-platform/file-paths-per-platform.md",
-      "hash": "a314c09ff2d07846"
+      "hash": "56f03caafad0a06f"
     },
     {
       "path": ".cursor/knowledge/cross-platform/file-paths-per-platform.md",
-      "hash": "a314c09ff2d07846"
+      "hash": "56f03caafad0a06f"
     },
     {
       "path": ".codex/knowledge/cross-platform/file-paths-per-platform.md",
-      "hash": "a314c09ff2d07846"
+      "hash": "56f03caafad0a06f"
     },
     {
       "path": ".gemini/knowledge/cross-platform/file-paths-per-platform.md",
-      "hash": "a314c09ff2d07846"
+      "hash": "56f03caafad0a06f"
     },
     {
       "path": ".agent/knowledge/cross-platform/file-paths-per-platform.md",
-      "hash": "a314c09ff2d07846"
+      "hash": "56f03caafad0a06f"
     },
     {
       "path": ".claude/knowledge/cross-platform/permissions-per-platform.md",
@@ -721,23 +721,23 @@
     },
     {
       "path": ".claude/knowledge/release/auto-update-flow.md",
-      "hash": "0bfdd4dac34a2c5c"
+      "hash": "a3c6c78688bcde53"
     },
     {
       "path": ".cursor/knowledge/release/auto-update-flow.md",
-      "hash": "0bfdd4dac34a2c5c"
+      "hash": "a3c6c78688bcde53"
     },
     {
       "path": ".codex/knowledge/release/auto-update-flow.md",
-      "hash": "0bfdd4dac34a2c5c"
+      "hash": "a3c6c78688bcde53"
     },
     {
       "path": ".gemini/knowledge/release/auto-update-flow.md",
-      "hash": "0bfdd4dac34a2c5c"
+      "hash": "a3c6c78688bcde53"
     },
     {
       "path": ".agent/knowledge/release/auto-update-flow.md",
-      "hash": "0bfdd4dac34a2c5c"
+      "hash": "a3c6c78688bcde53"
     },
     {
       "path": ".claude/knowledge/release/build-and-publish.md",
@@ -821,23 +821,23 @@
     },
     {
       "path": ".claude/knowledge/runbooks/buffer-grows-unbounded.md",
-      "hash": "f2b81792f6fb9112"
+      "hash": "f2a1652f9a49be8c"
     },
     {
       "path": ".cursor/knowledge/runbooks/buffer-grows-unbounded.md",
-      "hash": "f2b81792f6fb9112"
+      "hash": "f2a1652f9a49be8c"
     },
     {
       "path": ".codex/knowledge/runbooks/buffer-grows-unbounded.md",
-      "hash": "f2b81792f6fb9112"
+      "hash": "f2a1652f9a49be8c"
     },
     {
       "path": ".gemini/knowledge/runbooks/buffer-grows-unbounded.md",
-      "hash": "f2b81792f6fb9112"
+      "hash": "f2a1652f9a49be8c"
     },
     {
       "path": ".agent/knowledge/runbooks/buffer-grows-unbounded.md",
-      "hash": "f2b81792f6fb9112"
+      "hash": "f2a1652f9a49be8c"
     },
     {
       "path": ".claude/knowledge/runbooks/daemon-not-uploading.md",
@@ -861,23 +861,23 @@
     },
     {
       "path": ".claude/knowledge/runbooks/debug-stuck-daemon.md",
-      "hash": "bb38c8c3d6964f22"
+      "hash": "ab14258ae3cd7072"
     },
     {
       "path": ".cursor/knowledge/runbooks/debug-stuck-daemon.md",
-      "hash": "bb38c8c3d6964f22"
+      "hash": "ab14258ae3cd7072"
     },
     {
       "path": ".codex/knowledge/runbooks/debug-stuck-daemon.md",
-      "hash": "bb38c8c3d6964f22"
+      "hash": "ab14258ae3cd7072"
     },
     {
       "path": ".gemini/knowledge/runbooks/debug-stuck-daemon.md",
-      "hash": "bb38c8c3d6964f22"
+      "hash": "ab14258ae3cd7072"
     },
     {
       "path": ".agent/knowledge/runbooks/debug-stuck-daemon.md",
-      "hash": "bb38c8c3d6964f22"
+      "hash": "ab14258ae3cd7072"
     },
     {
       "path": ".claude/knowledge/runbooks/fix-coverage-gap.md",
@@ -941,43 +941,43 @@
     },
     {
       "path": ".claude/knowledge/runbooks/upgrade-failure.md",
-      "hash": "538798b26f7ce5b6"
+      "hash": "64fb3c509913d824"
     },
     {
       "path": ".cursor/knowledge/runbooks/upgrade-failure.md",
-      "hash": "538798b26f7ce5b6"
+      "hash": "64fb3c509913d824"
     },
     {
       "path": ".codex/knowledge/runbooks/upgrade-failure.md",
-      "hash": "538798b26f7ce5b6"
+      "hash": "64fb3c509913d824"
     },
     {
       "path": ".gemini/knowledge/runbooks/upgrade-failure.md",
-      "hash": "538798b26f7ce5b6"
+      "hash": "64fb3c509913d824"
     },
     {
       "path": ".agent/knowledge/runbooks/upgrade-failure.md",
-      "hash": "538798b26f7ce5b6"
+      "hash": "64fb3c509913d824"
     },
     {
       "path": ".claude/knowledge/services/_overview.md",
-      "hash": "83a8b35c76a9e119"
+      "hash": "aa5b47d0bc7c702a"
     },
     {
       "path": ".cursor/knowledge/services/_overview.md",
-      "hash": "83a8b35c76a9e119"
+      "hash": "aa5b47d0bc7c702a"
     },
     {
       "path": ".codex/knowledge/services/_overview.md",
-      "hash": "83a8b35c76a9e119"
+      "hash": "aa5b47d0bc7c702a"
     },
     {
       "path": ".gemini/knowledge/services/_overview.md",
-      "hash": "83a8b35c76a9e119"
+      "hash": "aa5b47d0bc7c702a"
     },
     {
       "path": ".agent/knowledge/services/_overview.md",
-      "hash": "83a8b35c76a9e119"
+      "hash": "aa5b47d0bc7c702a"
     },
     {
       "path": ".claude/knowledge/services/buffer.md",
@@ -1081,23 +1081,23 @@
     },
     {
       "path": ".claude/knowledge/services/polling.md",
-      "hash": "d01b5c1487584c36"
+      "hash": "7a413cb278a50cce"
     },
     {
       "path": ".cursor/knowledge/services/polling.md",
-      "hash": "d01b5c1487584c36"
+      "hash": "7a413cb278a50cce"
     },
     {
       "path": ".codex/knowledge/services/polling.md",
-      "hash": "d01b5c1487584c36"
+      "hash": "7a413cb278a50cce"
     },
     {
       "path": ".gemini/knowledge/services/polling.md",
-      "hash": "d01b5c1487584c36"
+      "hash": "7a413cb278a50cce"
     },
     {
       "path": ".agent/knowledge/services/polling.md",
-      "hash": "d01b5c1487584c36"
+      "hash": "7a413cb278a50cce"
     },
     {
       "path": ".claude/knowledge/services/redaction.md",
@@ -1121,43 +1121,43 @@
     },
     {
       "path": ".claude/knowledge/services/sentinels/dedup-stack.md",
-      "hash": "1d3b13311f8c5112"
+      "hash": "e2a96ed5d3aeec85"
     },
     {
       "path": ".cursor/knowledge/services/sentinels/dedup-stack.md",
-      "hash": "1d3b13311f8c5112"
+      "hash": "e2a96ed5d3aeec85"
     },
     {
       "path": ".codex/knowledge/services/sentinels/dedup-stack.md",
-      "hash": "1d3b13311f8c5112"
+      "hash": "e2a96ed5d3aeec85"
     },
     {
       "path": ".gemini/knowledge/services/sentinels/dedup-stack.md",
-      "hash": "1d3b13311f8c5112"
+      "hash": "e2a96ed5d3aeec85"
     },
     {
       "path": ".agent/knowledge/services/sentinels/dedup-stack.md",
-      "hash": "1d3b13311f8c5112"
+      "hash": "e2a96ed5d3aeec85"
     },
     {
       "path": ".claude/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "742eb3b19ba961ec"
+      "hash": "0b01a3d9d7afb2a1"
     },
     {
       "path": ".cursor/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "742eb3b19ba961ec"
+      "hash": "0b01a3d9d7afb2a1"
     },
     {
       "path": ".codex/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "742eb3b19ba961ec"
+      "hash": "0b01a3d9d7afb2a1"
     },
     {
       "path": ".gemini/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "742eb3b19ba961ec"
+      "hash": "0b01a3d9d7afb2a1"
     },
     {
       "path": ".agent/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "742eb3b19ba961ec"
+      "hash": "0b01a3d9d7afb2a1"
     },
     {
       "path": ".claude/knowledge/services/sentinels/watermark-pattern.md",
@@ -1181,63 +1181,63 @@
     },
     {
       "path": ".claude/knowledge/services/state-machines.md",
-      "hash": "a6dfcc2c9b85e85e"
+      "hash": "bdc4d8847e01bd61"
     },
     {
       "path": ".cursor/knowledge/services/state-machines.md",
-      "hash": "a6dfcc2c9b85e85e"
+      "hash": "bdc4d8847e01bd61"
     },
     {
       "path": ".codex/knowledge/services/state-machines.md",
-      "hash": "a6dfcc2c9b85e85e"
+      "hash": "bdc4d8847e01bd61"
     },
     {
       "path": ".gemini/knowledge/services/state-machines.md",
-      "hash": "a6dfcc2c9b85e85e"
+      "hash": "bdc4d8847e01bd61"
     },
     {
       "path": ".agent/knowledge/services/state-machines.md",
-      "hash": "a6dfcc2c9b85e85e"
+      "hash": "bdc4d8847e01bd61"
     },
     {
       "path": ".claude/knowledge/services/uninstall.md",
-      "hash": "5728da925ee6c456"
+      "hash": "6197cb17cfd5acd6"
     },
     {
       "path": ".cursor/knowledge/services/uninstall.md",
-      "hash": "5728da925ee6c456"
+      "hash": "6197cb17cfd5acd6"
     },
     {
       "path": ".codex/knowledge/services/uninstall.md",
-      "hash": "5728da925ee6c456"
+      "hash": "6197cb17cfd5acd6"
     },
     {
       "path": ".gemini/knowledge/services/uninstall.md",
-      "hash": "5728da925ee6c456"
+      "hash": "6197cb17cfd5acd6"
     },
     {
       "path": ".agent/knowledge/services/uninstall.md",
-      "hash": "5728da925ee6c456"
+      "hash": "6197cb17cfd5acd6"
     },
     {
       "path": ".claude/knowledge/services/upgrade.md",
-      "hash": "be2f9f92cb98ea8c"
+      "hash": "41262440e5d9ed03"
     },
     {
       "path": ".cursor/knowledge/services/upgrade.md",
-      "hash": "be2f9f92cb98ea8c"
+      "hash": "41262440e5d9ed03"
     },
     {
       "path": ".codex/knowledge/services/upgrade.md",
-      "hash": "be2f9f92cb98ea8c"
+      "hash": "41262440e5d9ed03"
     },
     {
       "path": ".gemini/knowledge/services/upgrade.md",
-      "hash": "be2f9f92cb98ea8c"
+      "hash": "41262440e5d9ed03"
     },
     {
       "path": ".agent/knowledge/services/upgrade.md",
-      "hash": "be2f9f92cb98ea8c"
+      "hash": "41262440e5d9ed03"
     },
     {
       "path": ".claude/knowledge/services/uploader.md",

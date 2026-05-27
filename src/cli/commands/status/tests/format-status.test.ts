@@ -290,7 +290,6 @@ test('renderHealthSection covers running daemon, no sentinels, current=latest, f
   const lines = renderHealthSection({
     daemon: { isRunning: true, pid: 78321, startedAt, now: NOW, installSource: 'npm' },
     sentinels: {
-      paused: false,
       authFailed: false,
       bufferFull: false,
       sessionStopped: false,
@@ -324,11 +323,10 @@ test('renderHealthSection covers running daemon, no sentinels, current=latest, f
   expect(joined).toContain('14 days');
 });
 
-test('renderHealthSection covers paused-and-update sentinels, missing pid, and stale binary', () => {
+test('renderHealthSection covers update sentinel, missing pid, and stale binary', () => {
   const lines = renderHealthSection({
     daemon: { isRunning: true, pid: null, startedAt: null, now: NOW, installSource: null },
     sentinels: {
-      paused: true,
       authFailed: false,
       bufferFull: false,
       sessionStopped: false,
@@ -350,7 +348,6 @@ test('renderHealthSection covers paused-and-update sentinels, missing pid, and s
     },
   });
   const joined = lines.join('\n');
-  expect(joined).toContain('paused');
   expect(joined).toContain('update-available');
   expect(joined).toContain('update pending');
   expect(joined).toContain('200 days');
@@ -361,7 +358,6 @@ test('renderHealthSection covers warning binary age and queued-update branch', (
   const lines = renderHealthSection({
     daemon: { isRunning: false, pid: null, startedAt: null, now: NOW, installSource: null },
     sentinels: {
-      paused: false,
       authFailed: true,
       bufferFull: true,
       sessionStopped: true,
@@ -395,7 +391,6 @@ test('renderHealthSection handles unknown installedAt and invalid timestamps', (
   const a = renderHealthSection({
     daemon: { isRunning: true, pid: 1, startedAt: NOW, now: NOW, installSource: null },
     sentinels: {
-      paused: false,
       authFailed: false,
       bufferFull: false,
       sessionStopped: false,
@@ -421,7 +416,6 @@ test('renderHealthSection handles unknown installedAt and invalid timestamps', (
   const b = renderHealthSection({
     daemon: { isRunning: true, pid: 1, startedAt: NOW, now: NOW, installSource: null },
     sentinels: {
-      paused: false,
       authFailed: false,
       bufferFull: false,
       sessionStopped: false,
@@ -449,7 +443,6 @@ test('renderHealthSection: future-installed binary clamps to 0 days', () => {
   const lines = renderHealthSection({
     daemon: { isRunning: true, pid: 1, startedAt: NOW, now: NOW, installSource: null },
     sentinels: {
-      paused: false,
       authFailed: false,
       bufferFull: false,
       sessionStopped: false,
@@ -496,7 +489,6 @@ test('renderHealthSection shows configured stale-binary thresholds via constants
   const lines = renderHealthSection({
     daemon: { isRunning: true, pid: 1, startedAt: NOW, now: NOW, installSource: null },
     sentinels: {
-      paused: false,
       authFailed: false,
       bufferFull: false,
       sessionStopped: false,

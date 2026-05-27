@@ -4,7 +4,6 @@ export {
 } from 'services/state-machines/sentinel-registry/sentinel-registry.machine.ts';
 export type {
   AuthFailedPayload,
-  PausePayload,
   BufferFullPayload,
   SessionStoppedPayload,
   BrewUpdatePayload,

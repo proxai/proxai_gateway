@@ -8,7 +8,6 @@ import type { CommandResult } from 'cli/cli.types.ts';
 import { loadConfigFromFile } from 'services/config';
 import type { GatewayConfig, InstallSource } from 'services/config';
 import { clearAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
-import { isPaused } from 'services/polling/pause-sentinel.ts';
 import { setupMachine } from 'services/state-machines/setup';
 
 import { buildGatewayConfig, writeConfigArtifacts } from 'cli/commands/setup/build-config.ts';
@@ -155,13 +154,6 @@ async function reportAlreadyConfiguredAndMaybeStart(
     deps.output.info(
       `Run ${chalk.cyan('proxai-gateway setup --force')} to re-enter your ingestion key, or ${chalk.cyan('proxai-gateway uninstall --reset')} to wipe and start fresh.`,
     );
-    return { exitCode: EXIT_CODE.alreadyInstalled };
-  }
-
-  const paused = deps.pauseSentinelPath !== undefined && (await isPaused(deps.pauseSentinelPath));
-  if (paused) {
-    deps.output.warn('daemon is paused; not starting');
-    deps.output.info(`Run ${chalk.cyan('proxai-gateway resume')} to resume capture cycles.`);
     return { exitCode: EXIT_CODE.alreadyInstalled };
   }
 

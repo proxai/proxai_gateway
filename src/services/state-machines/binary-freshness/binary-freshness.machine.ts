@@ -1,5 +1,4 @@
 import { assign, fromPromise, setup } from 'xstate';
-import { pausePolling } from 'services/polling/pause-sentinel.ts';
 import type {
   BinaryFreshnessCheckEvent,
   BinaryFreshnessContext,
@@ -7,14 +6,10 @@ import type {
   BinaryFreshnessEvent,
   BinaryFreshnessInput,
 } from 'services/state-machines/binary-freshness/binary-freshness.types.ts';
-import {
-  buildStalePauseReason,
-  evaluateBinaryFreshness,
-} from 'services/state-machines/binary-freshness/binary-freshness.utils.ts';
+import { evaluateBinaryFreshness } from 'services/state-machines/binary-freshness/binary-freshness.utils.ts';
 
 interface EvaluateActorInput {
   readonly event: BinaryFreshnessCheckEvent;
-  readonly pauseSentinelPath: string;
 }
 
 export const binaryFreshnessMachine = setup({
@@ -24,22 +19,14 @@ export const binaryFreshnessMachine = setup({
     input: {} as BinaryFreshnessInput,
   },
   actors: {
-    evaluate: fromPromise<BinaryFreshnessEvaluation, EvaluateActorInput>(async ({ input }) => {
-      const result = evaluateBinaryFreshness(input.event);
-      if (result.status === 'stale_paused' && result.daysSinceInstall !== null) {
-        await pausePolling(
-          input.pauseSentinelPath,
-          buildStalePauseReason(result.daysSinceInstall, input.event.pauseAfterDays),
-        );
-      }
-      return result;
-    }),
+    evaluate: fromPromise<BinaryFreshnessEvaluation, EvaluateActorInput>(async ({ input }) =>
+      evaluateBinaryFreshness(input.event),
+    ),
   },
 }).createMachine({
   id: 'binary-freshness',
   initial: 'unchecked',
-  context: ({ input }) => ({
-    pauseSentinelPath: input.pauseSentinelPath,
+  context: () => ({
     lastEvaluatedAt: null,
     lastDaysSinceInstall: null,
   }),
@@ -53,14 +40,13 @@ export const binaryFreshnessMachine = setup({
       invoke: {
         id: 'evaluate',
         src: 'evaluate',
-        input: ({ context, event }) => ({
+        input: ({ event }) => ({
           event: event as BinaryFreshnessCheckEvent,
-          pauseSentinelPath: context.pauseSentinelPath,
         }),
         onDone: [
           {
-            guard: ({ event }) => event.output.status === 'stale_paused',
-            target: 'stale_paused',
+            guard: ({ event }) => event.output.status === 'stale',
+            target: 'stale',
             actions: assign({
               lastEvaluatedAt: ({ event }) => event.output.evaluatedAtMs,
               lastDaysSinceInstall: ({ event }) => event.output.daysSinceInstall,
@@ -95,7 +81,7 @@ export const binaryFreshnessMachine = setup({
         CHECK: { target: 'checking' },
       },
     },
-    stale_paused: {
+    stale: {
       on: {
         CHECK: { target: 'checking' },
       },

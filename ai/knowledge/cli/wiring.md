@@ -14,9 +14,7 @@ For every CLI command there is a paired wiring file. `main.ts` calls `buildXxxDe
 | `restart-deps.ts` | `runRestart` | no | mirror of start-deps minus auto-upgrade |
 | `run-deps.ts` | `runDaemon` | no | resolved `GatewayConfig`, `abortSignal`, `binaryPath`, `exitProcess` |
 | `dev-deps.ts` | `runDev` | no | `DEV_MODE` sentinel path |
-| `pause-deps.ts` | `runPause` | yes | `PAUSED` sentinel path; reason from CLI |
-| `resume-deps.ts` | `runResume` | no | `PAUSED` sentinel path |
-| `status-deps.ts` | `runStatus` | yes | opens `buffer.db` (or skips when no config), all six sentinel paths |
+| `status-deps.ts` | `runStatus` | yes | opens `buffer.db` (or skips when no config), all five sentinel paths |
 | `tail-deps.ts` | `runTail` | yes | `logDir`, `abortSignal`, `emit` (defaults to `console.log`) |
 | `uninstall-deps.ts` | `runUninstall` | yes | `serviceUnitPath`, `serviceManager`, `sweep`, `binaryRemover`, `pathCleaner`, `installDir` |
 | `upgrade-deps.ts` | `runUpgrade` | yes | `binaryPath`, prompts, package version |
@@ -61,4 +59,4 @@ The split (`commands/` = pure logic, `wiring/` = side-effectful glue, `main.ts` 
 - Adding a new CLI command is mechanical: add `cli/commands/<name>.ts`, add `cli/wiring/<name>-deps.ts`, register in `main.ts`.
 - Changing a path (e.g. moving `buffer.db`) updates `core/io/fs/paths.ts` once; every wiring file picks it up.
 
-[source: src/cli/wiring/setup-deps.ts:36,90,112; src/cli/wiring/start-deps.ts:15; src/cli/wiring/stop-deps.ts:6; src/cli/wiring/restart-deps.ts:14; src/cli/wiring/run-deps.ts:20; src/cli/wiring/dev-deps.ts:5; src/cli/wiring/pause-deps.ts:5,12; src/cli/wiring/resume-deps.ts:5; src/cli/wiring/status-deps.ts:34; src/cli/wiring/tail-deps.ts:10,19; src/cli/wiring/uninstall-deps.ts:20,38; src/cli/wiring/upgrade-deps.ts:10,19; src/cli/wiring/redaction-deps.ts:9,16; src/cli/wiring/auto-upgrade.ts:15; src/cli/wiring/platform.ts:8,15,25,31,41; src/cli/wiring/version-string.ts:12; src/main.ts:97,117,177,233,297]
+[source: src/cli/wiring/setup-deps.ts:36,90,112; src/cli/wiring/start-deps.ts:15; src/cli/wiring/stop-deps.ts:6; src/cli/wiring/restart-deps.ts:14; src/cli/wiring/run-deps.ts:20; src/cli/wiring/dev-deps.ts:5; src/cli/wiring/status-deps.ts:34; src/cli/wiring/tail-deps.ts:10,19; src/cli/wiring/uninstall-deps.ts:20,38; src/cli/wiring/upgrade-deps.ts:10,19; src/cli/wiring/redaction-deps.ts:9,16; src/cli/wiring/auto-upgrade.ts:15; src/cli/wiring/platform.ts:8,15,25,31,41; src/cli/wiring/version-string.ts:12; src/main.ts:97,117,177,233,297]

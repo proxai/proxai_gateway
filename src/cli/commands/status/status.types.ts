@@ -14,7 +14,6 @@ export interface StatusCommandDeps {
   buffer?: Database;
   configPath: string;
   configExists: () => Promise<boolean>;
-  pauseSentinelPath: string;
   bufferFullSentinelPath: string;
   authFailedSentinelPath: string;
   sessionStoppedSentinelPath: string;
@@ -41,8 +40,6 @@ export interface StatusJsonOutput {
   isDevMode: boolean;
   health: string;
   sentinels: {
-    paused: boolean;
-    pausedReason: string | null;
     authFailed: boolean;
     authFailedReason: string | null;
     bufferFull: boolean;
@@ -108,8 +105,6 @@ export interface StatusJsonOutput {
 export interface StatusSnapshot {
   health: StatusHealth;
   isDevMode: boolean;
-  paused: boolean;
-  pausedReason: string;
   authFailed: boolean;
   authFailedReason: string;
   authFailedDetectedAt: string;

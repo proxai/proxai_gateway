@@ -17,7 +17,6 @@ export interface HealthDaemonInput {
 }
 
 export interface ActiveSentinels {
-  paused: boolean;
   authFailed: boolean;
   bufferFull: boolean;
   sessionStopped: boolean;
@@ -74,7 +73,6 @@ function renderDaemonLine(d: HealthDaemonInput): string {
 
 function renderSentinelsLine(s: ActiveSentinels): string {
   const active: string[] = [];
-  if (s.paused) active.push('paused');
   if (s.authFailed) active.push('auth-failed');
   if (s.bufferFull) active.push('buffer-full');
   if (s.sessionStopped) active.push('session-stopped');

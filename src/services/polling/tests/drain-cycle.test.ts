@@ -21,7 +21,6 @@ import type { NewBatch } from 'services/buffer';
 import { HttpClient } from 'services/http';
 import {
   isBufferFull,
-  pausePolling,
   runDrainCycle,
   writeAuthFailedSentinel,
   writeBufferFullSentinel,
@@ -64,7 +63,6 @@ function makeContext(overrides: Partial<DrainCycleContext> = {}): DrainCycleCont
       fetch: fakeFetch(),
     }),
     hostId: 'h_test',
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     bufferPolicy: {
@@ -97,15 +95,6 @@ function batchWith(text: string): NewBatch {
     body: zstdCompressSync(text),
   };
 }
-
-test('paused sentinel skips drain', async () => {
-  await pausePolling(join(dir, 'PAUSED'), 'manual');
-  insertBatch(buffer, batchWith('payload'));
-  const ctx = makeContext();
-  const result = await runDrainCycle(ctx);
-  expect(result.paused).toBe(true);
-  expect(result.drainResult).toBeNull();
-});
 
 test('AUTH_FAILED sentinel skips drain', async () => {
   await writeAuthFailedSentinel(join(dir, 'AUTH_FAILED'), 'halt');
@@ -259,13 +248,6 @@ test('logs warn when drain setMetadata throws (table dropped)', async () => {
   expect(entries.some((e) => e.level === 'warn' && e.msg.includes('failed to persist drain'))).toBe(
     true,
   );
-});
-
-test('paused cycle without logger returns gracefully', async () => {
-  await pausePolling(join(dir, 'PAUSED'), 'manual');
-  const ctx = makeContext();
-  const result = await runDrainCycle(ctx);
-  expect(result.paused).toBe(true);
 });
 
 test('counts retriable / fatal in drain.cycles_with_errors', async () => {

@@ -1,11 +1,8 @@
-export type BinaryFreshnessStatus = 'unchecked' | 'fresh' | 'warning' | 'stale_paused';
+export type BinaryFreshnessStatus = 'unchecked' | 'fresh' | 'warning' | 'stale';
 
-export interface BinaryFreshnessInput {
-  readonly pauseSentinelPath: string;
-}
+export type BinaryFreshnessInput = Record<string, never>;
 
 export interface BinaryFreshnessContext {
-  readonly pauseSentinelPath: string;
   lastEvaluatedAt: number | null;
   lastDaysSinceInstall: number | null;
 }

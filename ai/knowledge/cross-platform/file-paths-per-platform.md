@@ -18,7 +18,6 @@ macOS and Linux share `configDir()` (both use a dotted `~/.proxai/...`). Windows
 | --- | --- | --- |
 | `config.toml` | TOML config written at `setup` | `configFilePath()` |
 | `buffer.db` | bun:sqlite buffer DB (+ `-wal`, `-shm`) | `bufferDbPath()` |
-| `PAUSED` | sentinel | `pausedSentinelPath()` |
 | `AUTH_FAILED` | sentinel | `authFailedSentinelPath()` |
 | `BUFFER_FULL` | sentinel | `bufferFullSentinelPath()` |
 | `SESSION_STOPPED` | sentinel (boot-id-aware) | `sessionStoppedSentinelPath()` |
@@ -27,7 +26,7 @@ macOS and Linux share `configDir()` (both use a dotted `~/.proxai/...`). Windows
 | `DEV_MODE` | sentinel (forces localhost endpoint) | `devModeSentinelPath()` |
 | `scheduled-task.xml` | Windows service-unit XML | `defaultScheduledTaskXmlPath()` (win32 only) |
 
-All sentinel files (the six listed in CLAUDE.md plus `DEV_MODE`) live under `configDir()` — never elsewhere. The Windows scheduled-task XML is the only platform-specific artifact that lives in `configDir()`; macOS and Linux unit files live under the OS service-manager directory.
+All sentinel files (the five core sentinels plus `DEV_MODE`) live under `configDir()` — never elsewhere. The Windows scheduled-task XML is the only platform-specific artifact that lives in `configDir()`; macOS and Linux unit files live under the OS service-manager directory.
 
 ## Service-unit files
 

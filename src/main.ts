@@ -5,10 +5,8 @@ import { Command } from 'commander';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 
 import { runDev } from 'cli/commands/dev.ts';
-import { runPause } from 'cli/commands/pause.ts';
 import { runRedactionList, runRedactionTest } from 'cli/commands/redaction.ts';
 import { runRestart } from 'cli/commands/restart.ts';
-import { runResume } from 'cli/commands/resume.ts';
 import { runDaemon } from 'cli/commands/run';
 import { runSetup } from 'cli/commands/setup';
 import { runStart } from 'cli/commands/start.ts';
@@ -23,7 +21,6 @@ import { autoUpgradeFromConfig } from 'cli/wiring/auto-upgrade.ts';
 
 import { consoleOutput } from 'cli/output.ts';
 import { buildDevDeps } from 'cli/wiring/dev-deps.ts';
-import { buildPauseDeps, buildPauseOptions } from 'cli/wiring/pause-deps.ts';
 import {
   buildPlatformServiceContext,
   buildServiceUnitRecreate,
@@ -36,7 +33,6 @@ import {
   buildRedactionTestOptions,
 } from 'cli/wiring/redaction-deps.ts';
 import { buildRestartDeps } from 'cli/wiring/restart-deps.ts';
-import { buildResumeDeps } from 'cli/wiring/resume-deps.ts';
 import { buildRunDeps } from 'cli/wiring/run-deps.ts';
 import {
   buildSetupDeps,
@@ -73,7 +69,7 @@ program
   .command('setup')
   .alias('init')
   .description(
-    'Configure the gateway with your ingestion key. Verifies the key, writes ~/.proxai/proxai-gateway/config.toml, installs the platform service unit, and starts the daemon. If the machine is already configured, starts the daemon when it is not running and not intentionally paused.',
+    'Configure the gateway with your ingestion key. Verifies the key, writes ~/.proxai/proxai-gateway/config.toml, installs the platform service unit, and starts the daemon. If the machine is already configured, starts the daemon when it is not running.',
   )
   .argument(
     '[api-key]',
@@ -275,25 +271,6 @@ program
       configExists: () => Bun.file(configFilePath()).exists(),
       gatewayVersion: PACKAGE_VERSION,
     });
-    process.exit(result.exitCode);
-  });
-
-program
-  .command('pause')
-  .description(
-    'Pause polling indefinitely by writing a PAUSED sentinel. The daemon keeps running but skips capture cycles. Persists across reboots until cleared with `resume`.',
-  )
-  .option('--reason <reason>', 'free-form reason recorded in the sentinel file (shown by `status`)')
-  .action(async (opts: { reason?: string }) => {
-    const result = await runPause(buildPauseDeps(), buildPauseOptions(opts));
-    process.exit(result.exitCode);
-  });
-
-program
-  .command('resume')
-  .description('Clear the PAUSED sentinel and resume capture cycles on the next polling tick.')
-  .action(async () => {
-    const result = await runResume(buildResumeDeps());
     process.exit(result.exitCode);
   });
 

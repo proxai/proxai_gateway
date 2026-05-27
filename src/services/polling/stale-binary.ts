@@ -1,7 +1,6 @@
 import type { MinimalLogger } from 'core/log';
-import { pausePolling } from 'services/polling/pause-sentinel.ts';
 
-export type StaleBinaryStatus = 'fresh' | 'warning' | 'paused';
+export type StaleBinaryStatus = 'fresh' | 'warning' | 'stale';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -9,7 +8,6 @@ export interface CheckStaleBinaryDeps {
   installedAt: string;
   warnAfterDays: number;
   pauseAfterDays: number;
-  pauseSentinelPath: string;
   now?: () => number;
   logger?: MinimalLogger;
 }
@@ -29,19 +27,15 @@ export async function checkStaleBinary(
   const nowMs = (deps.now ?? Date.now)();
   const daysSinceInstall = Math.max(0, Math.floor((nowMs - installedAtMs) / MS_PER_DAY));
   if (deps.pauseAfterDays > 0 && daysSinceInstall >= deps.pauseAfterDays) {
-    await pausePolling(
-      deps.pauseSentinelPath,
-      `stale_binary: ${daysSinceInstall.toString()} days since install (>= ${deps.pauseAfterDays.toString()})`,
-    );
     log?.warn(
       {
-        event: 'stale_binary.paused',
+        event: 'stale_binary.stale',
         days_since_install: daysSinceInstall,
         pause_after_days: deps.pauseAfterDays,
       },
-      'stale binary: paused polling until upgrade',
+      'stale binary: capture continues; auto-upgrade will replace the binary on the next heartbeat',
     );
-    return { status: 'paused' };
+    return { status: 'stale' };
   }
   if (deps.warnAfterDays > 0 && daysSinceInstall >= deps.warnAfterDays) {
     log?.warn(

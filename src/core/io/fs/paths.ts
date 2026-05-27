@@ -45,10 +45,6 @@ export function configFilePath(): string {
   return join(configDir(), 'config.toml');
 }
 
-export function pausedSentinelPath(): string {
-  return join(configDir(), 'PAUSED');
-}
-
 export function authFailedSentinelPath(): string {
   return join(configDir(), 'AUTH_FAILED');
 }

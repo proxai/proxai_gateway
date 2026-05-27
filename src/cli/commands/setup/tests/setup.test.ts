@@ -794,22 +794,6 @@ test('setup with existing config and no args reports running when daemon is up',
   expect(out.lines.some((l) => l.msg.includes('Daemon is running'))).toBe(true);
 });
 
-test('setup with existing config respects PAUSED sentinel and does not auto-start', async () => {
-  await writeExistingConfig();
-  const pausedPath = join(dir, 'PAUSED');
-  await Bun.write(pausedPath, JSON.stringify({ reason: 'manual', set_at: '2026-05-26T00:00:00Z' }));
-  const control = newControl();
-  const sm = fakeServiceManager();
-  sm.isRunning = async () => false;
-  const out = captureOutput();
-  const d = { ...deps(control), output: out, serviceManager: sm, pauseSentinelPath: pausedPath };
-  const result = await runSetup(d, {});
-  expect(result.exitCode).toBe(5);
-  expect(sm.calls.start).toBe(0);
-  expect(out.lines.some((l) => l.msg.includes('daemon is paused'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('proxai-gateway resume'))).toBe(true);
-});
-
 test('setup with same api-key as existing config skips replace flow and auto-starts', async () => {
   await writeExistingConfig();
   const control = newControl();

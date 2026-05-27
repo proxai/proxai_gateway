@@ -110,6 +110,6 @@ Default `interval = ctx.versionCheckIntervalMs ?? DEFAULT_VERSION_CHECK_INTERVAL
 
 All FATAL-level logs (`auto_upgrade.check_failed`, `auto_upgrade.no_asset`, `auto_upgrade.download_failed`, `auto_upgrade.write_failed`) **do not** write any sentinel. The daemon keeps running on the old binary; the next heartbeat tick after the throttle expires re-tries. There is no exponential backoff on failed upgrade attempts — the throttle (4 h) is the only rate limit.
 
-The `PAUSED` sentinel that the stale-binary policy writes at 60 days is NOT auto-cleared by a successful upgrade — the user must run `proxai-gateway resume` after upgrading. This is intentional: if a binary made it to 60 days stale, an automated resume could silently re-engage a daemon the user had decided to leave paused.
+The stale-binary policy at 60 days logs a warning but does **not** write any sentinel — captures and drains keep running. The next heartbeat's auto-upgrade replaces the binary; if the upgrade succeeds the daemon exits with code 75 (`EXIT_CODE.upgradeRespawn`) and the service manager (launchd / systemd / Task Scheduler) immediately respawns it on the new binary.
 
-[source: src/services/upgrade/auto-upgrade.ts:17-87; src/services/upgrade/release-fetch.ts:13-112; src/services/polling/version-check.ts:28-101; src/services/polling/heartbeat-cycle.ts:79-155]
+[source: src/services/upgrade/auto-upgrade.ts; src/services/upgrade/release-fetch.ts; src/services/polling/version-check.ts; src/services/polling/heartbeat-cycle.ts; src/services/polling/stale-binary.ts]

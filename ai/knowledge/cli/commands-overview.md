@@ -14,8 +14,6 @@ The CLI is a single `commander` program registered in `src/main.ts`. Each subcom
 | `dev [action]` | `d` | no | `dev.ts` | `ok`, `error` |
 | `status` | `i` | no | `status/index.ts` + 8 sibling renderers | `ok`, `notInstalled`, `error` |
 | `inspect` | `ins` | no | `inspect/index.ts` + scan/report/layout/spinner/summary | `ok`, `error` |
-| `pause` | — | no | `pause.ts` | `ok` |
-| `resume` | — | no | `resume.ts` | `ok` |
 | `uninstall` | `rm` | no | `uninstall/index.ts` + 4 helpers | `ok`, `alreadyInstalled` |
 | `upgrade` | — | no | `upgrade.ts` | `ok`, `error` |
 | `tail` | `t` | no | `tail/index.ts` + filter/format/log-path/read | `ok`, `validationError` |
@@ -36,8 +34,6 @@ Aliases come from `cli/command-aliases.ts` and are also wired via `.alias(...)` 
 | `dev` | Toggle the `DEV_MODE` sentinel which forces ingest endpoints to `http://localhost:3001`. |
 | `status` | Snapshot health, per-source captures, buffer pressure, sentinel state, last cycle results. Supports `--json`. |
 | `inspect` | Dry-run scan of every source. Writes a markdown report and prints summary tables. Never touches the buffer. |
-| `pause` | Write `PAUSED` sentinel (with optional reason). Daemon keeps running, skips capture cycles. |
-| `resume` | Remove `PAUSED` sentinel. |
 | `uninstall` | Stop + unregister + delete service-unit file. With `--reset` also wipes `configDir` and `logDir` via `rmRecursive`. |
 | `upgrade` | Fetch latest GitHub Release asset for current platform/arch, swap binary (in-place POSIX, `.new` on Windows). |
 | `tail` | Stream the active structured log file with filters (`--level`, `--source`, `--since`, `--lines`, `--follow`, `--raw`). |
@@ -74,4 +70,4 @@ Every command has a paired `cli/wiring/<name>-deps.ts` file (see `wiring.md`). `
 | `inquirerPrompts()` | `cli/prompts.ts:29` | `askApiKey`, `confirmPhrase`, `confirmUpgrade` with abort detection that maps to `UserAbortedError` |
 | `scriptedPrompts(answers)` | `cli/prompts.ts:54` | test sink with pre-recorded answers |
 
-[source: src/main.ts:1,56,423; src/cli/cli.constants.ts:1; src/cli/command-aliases.ts:1; src/cli/commands/index.ts:1; src/cli/commands/setup/index.ts:1; src/cli/commands/start.ts:23; src/cli/commands/stop.ts:16; src/cli/commands/restart.ts:22; src/cli/commands/run/index.ts:29; src/cli/commands/dev.ts:10; src/cli/commands/status/index.ts:24; src/cli/commands/inspect/index.ts:36; src/cli/commands/pause.ts:17; src/cli/commands/resume.ts:10; src/cli/commands/uninstall/index.ts:21; src/cli/commands/upgrade.ts:31; src/cli/commands/tail/index.ts:20; src/cli/commands/redaction.ts:18,68; src/cli/output.ts:5; src/cli/prompts.ts:29]
+[source: src/main.ts:1,56,423; src/cli/cli.constants.ts:1; src/cli/command-aliases.ts:1; src/cli/commands/index.ts:1; src/cli/commands/setup/index.ts:1; src/cli/commands/start.ts:23; src/cli/commands/stop.ts:16; src/cli/commands/restart.ts:22; src/cli/commands/run/index.ts:29; src/cli/commands/dev.ts:10; src/cli/commands/status/index.ts:24; src/cli/commands/inspect/index.ts:36; src/cli/commands/uninstall/index.ts:21; src/cli/commands/upgrade.ts:31; src/cli/commands/tail/index.ts:20; src/cli/commands/redaction.ts:18,68; src/cli/output.ts:5; src/cli/prompts.ts:29]

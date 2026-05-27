@@ -32,11 +32,12 @@ uploader is just behind — Phase 3.
 ```
 ls -la ~/.proxai/proxai-gateway/BUFFER_FULL
 ls -la ~/.proxai/proxai-gateway/AUTH_FAILED
-ls -la ~/.proxai/proxai-gateway/PAUSED
+ls -la ~/.proxai/proxai-gateway/SESSION_STOPPED
 ```
 
-If `AUTH_FAILED` or `PAUSED` is set, drain isn't running. Resolve the
-sentinel first, drain will catch up.
+If `AUTH_FAILED` is set, drain isn't running — re-run `setup --force`
+to clear it. If `SESSION_STOPPED` is set the daemon process is stopped
+for this boot; run `proxai-gateway start` or reboot.
 
 If only `BUFFER_FULL` is set and capture is gated but drain is running
 (check `drain_cycles_total` advancing), this is the recovery flow
@@ -134,8 +135,10 @@ add a per-source `vacuum_cooldown` to the source's options.
 
 If the disk is dangerously full and the user needs space *now*:
 
-1. `proxai-gateway pause` — stops capture.
-2. Wait for drain to ship as much as it can.
+1. `proxai-gateway stop` — halts the daemon process for this boot so
+   capture stops. Drain stops too, but the buffer no longer grows.
+2. If you also need drain to keep running, start the daemon again and
+   wait — drain ships as much as it can each 30 s cycle.
 3. If still full, the only safe knob is dropping the oldest pending
    batches via `dropOldestPending` (one-shot SQL). This is data loss
    for those batches.

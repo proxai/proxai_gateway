@@ -8,13 +8,7 @@ import { join } from 'node:path';
 
 import { getMetadata, METADATA_KEYS, openInMemoryBufferDb, setMetadata } from 'services/buffer';
 
-import {
-  isPaused,
-  pausePolling,
-  runHeartbeatCycle,
-  shouldRunAutoUpgrade,
-  writeAuthFailedSentinel,
-} from 'services/polling';
+import { runHeartbeatCycle, shouldRunAutoUpgrade, writeAuthFailedSentinel } from 'services/polling';
 import type { HeartbeatCycleContext } from 'services/polling';
 
 let dir: string;
@@ -34,7 +28,6 @@ function makeContext(overrides: Partial<HeartbeatCycleContext> = {}): HeartbeatC
   const base: HeartbeatCycleContext = {
     buffer,
     gatewayVersion: 'gw-0.1',
-    pauseSentinelPath: join(dir, 'PAUSED'),
     installedAt: new Date().toISOString(),
     staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
   };
@@ -61,14 +54,6 @@ function fakeFetchStatus(status: number): FetchFn {
   return async () => new Response(null, { status });
 }
 
-test('paused sentinel skips heartbeat', async () => {
-  await pausePolling(join(dir, 'PAUSED'), 'manual');
-  const ctx = makeContext({ versionCheckFetch: fakeFetchOk('1.0.0') });
-  const result = await runHeartbeatCycle(ctx);
-  expect(result.paused).toBe(true);
-  expect(result.ranAutoUpgrade).toBe(false);
-});
-
 test('AUTH_FAILED does NOT gate heartbeat — auto-upgrade still runs', async () => {
   await writeAuthFailedSentinel(join(dir, 'AUTH_FAILED'), 'halt');
   const ctx = makeContext({
@@ -78,17 +63,7 @@ test('AUTH_FAILED does NOT gate heartbeat — auto-upgrade still runs', async ()
     versionCheckFetch: fakeFetchOk('2.0.0'),
   });
   const result = await runHeartbeatCycle(ctx);
-  expect(result.paused).toBe(false);
-});
-
-test('stale binary past pause threshold writes PAUSED sentinel', async () => {
-  const DAY_MS = 86_400_000;
-  const ctx = makeContext({
-    installedAt: new Date(Date.now() - 200 * DAY_MS).toISOString(),
-    staleBinary: { warnAfterDays: 30, pauseAfterDays: 60 },
-  });
-  await runHeartbeatCycle(ctx);
-  expect(await isPaused(join(dir, 'PAUSED'))).toBe(true);
+  expect(result.ranAutoUpgrade).toBe(true);
 });
 
 test('shouldRunAutoUpgrade: brew install requires sentinel path', () => {

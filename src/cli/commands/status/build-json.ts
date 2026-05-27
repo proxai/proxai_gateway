@@ -9,8 +9,6 @@ export function buildEmptyStatusJson(): StatusJsonOutput {
     isDevMode: false,
     health: 'inactive',
     sentinels: {
-      paused: false,
-      pausedReason: null,
       authFailed: false,
       authFailedReason: null,
       bufferFull: false,
@@ -70,8 +68,6 @@ export function buildStatusJson(snapshot: StatusSnapshot): StatusJsonOutput {
     isDevMode: snapshot.isDevMode,
     health: snapshot.health,
     sentinels: {
-      paused: snapshot.paused,
-      pausedReason: snapshot.pausedReason.length > 0 ? snapshot.pausedReason : null,
       authFailed: snapshot.authFailed,
       authFailedReason: snapshot.authFailedReason.length > 0 ? snapshot.authFailedReason : null,
       bufferFull: snapshot.bufferFull,

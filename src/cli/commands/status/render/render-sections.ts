@@ -271,7 +271,6 @@ function renderDaemonLine(s: StatusSnapshot, inferredAlive: boolean, isDevLike: 
 
 function renderSentinelsLine(s: StatusSnapshot): string {
   const active: string[] = [];
-  if (s.paused) active.push('paused');
   if (s.authFailed) active.push('auth-failed');
   if (s.bufferFull) active.push('buffer-full');
   if (s.sessionStopped) active.push('session-stopped');

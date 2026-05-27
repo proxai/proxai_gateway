@@ -21,7 +21,6 @@ beforeEach(async () => {
   paths = {
     configDir: dir,
     authFailed: join(dir, 'AUTH_FAILED'),
-    paused: join(dir, 'PAUSED'),
     bufferFull: join(dir, 'BUFFER_FULL'),
     sessionStopped: join(dir, 'SESSION_STOPPED'),
     updateAvailable: join(dir, 'UPDATE_AVAILABLE'),
@@ -53,7 +52,6 @@ async function waitUntil(check: () => boolean, timeoutMs = 5_000, stepMs = 25): 
 
 test('classifySentinel returns the right kind for known sentinel filenames', () => {
   expect(classifySentinel('AUTH_FAILED', paths)).toBe('auth-failed');
-  expect(classifySentinel('PAUSED', paths)).toBe('paused');
   expect(classifySentinel('BUFFER_FULL', paths)).toBe('buffer-full');
   expect(classifySentinel('SESSION_STOPPED', paths)).toBe('session-stopped');
   expect(classifySentinel('UPDATE_AVAILABLE', paths)).toBe('update-available');
@@ -64,7 +62,6 @@ test('initial sweep reports absent state for every sentinel when none exist', as
   watcher = await startSentinelWatcher({ paths, target: registry });
   const s = registry.getSnapshot();
   expect(s.matches({ auth: 'absent' })).toBe(true);
-  expect(s.matches({ pause: 'absent' })).toBe(true);
   expect(s.matches({ bufferPressure: 'ok' })).toBe(true);
   expect(s.matches({ session: 'live' })).toBe(true);
 });
@@ -81,20 +78,26 @@ test('initial sweep reports present state for a sentinel that exists on disk', a
 
 test('writing a sentinel file triggers a present transition via fs.watch (debounced)', async () => {
   watcher = await startSentinelWatcher({ paths, target: registry, debounceMs: 20 });
-  expect(registry.getSnapshot().matches({ pause: 'absent' })).toBe(true);
-  await writeFile(paths.paused, 'maintenance');
-  await waitUntil(() => registry.getSnapshot().matches({ pause: 'present' }));
-  expect(registry.getSnapshot().matches({ pause: 'present' })).toBe(true);
-  expect(registry.getSnapshot().context.pausePayload?.reason).toBe('maintenance');
+  expect(registry.getSnapshot().matches({ auth: 'absent' })).toBe(true);
+  await writeFile(
+    paths.authFailed,
+    JSON.stringify({ reason: 'maintenance', detected_at: '2026-05-25T12:00:00.000Z' }),
+  );
+  await waitUntil(() => registry.getSnapshot().matches({ auth: 'present' }));
+  expect(registry.getSnapshot().matches({ auth: 'present' })).toBe(true);
+  expect(registry.getSnapshot().context.authPayload?.reason).toBe('maintenance');
 });
 
 test('removing a sentinel file triggers an absent transition', async () => {
-  await writeFile(paths.paused, 'maintenance');
+  await writeFile(
+    paths.authFailed,
+    JSON.stringify({ reason: 'maintenance', detected_at: '2026-05-25T12:00:00.000Z' }),
+  );
   watcher = await startSentinelWatcher({ paths, target: registry, debounceMs: 20 });
-  expect(registry.getSnapshot().matches({ pause: 'present' })).toBe(true);
-  await unlink(paths.paused);
-  await waitUntil(() => registry.getSnapshot().matches({ pause: 'absent' }));
-  expect(registry.getSnapshot().matches({ pause: 'absent' })).toBe(true);
+  expect(registry.getSnapshot().matches({ auth: 'present' })).toBe(true);
+  await unlink(paths.authFailed);
+  await waitUntil(() => registry.getSnapshot().matches({ auth: 'absent' }));
+  expect(registry.getSnapshot().matches({ auth: 'absent' })).toBe(true);
 });
 
 test('stop() releases the fs.watch loop without errors', async () => {
@@ -135,7 +138,10 @@ test('dispatch failure is logged via deps.logger.warn without crashing the watch
     logger: fakeLogger as never,
   });
   throwOnSend = true;
-  await writeFile(paths.paused, 'reason');
+  await writeFile(
+    paths.authFailed,
+    JSON.stringify({ reason: 'maintenance', detected_at: '2026-05-25T12:00:00.000Z' }),
+  );
   await waitUntil(() => warnCalls.some((c) => c['event'] === 'sentinel_watcher.dispatch_failed'));
   await local.stop();
   expect(warnCalls.some((c) => c['event'] === 'sentinel_watcher.dispatch_failed')).toBe(true);

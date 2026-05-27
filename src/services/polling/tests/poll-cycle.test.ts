@@ -12,7 +12,7 @@ import { insertBatch, openInMemoryBufferDb } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import { HttpClient } from 'services/http';
 
-import { pausePolling, runPollCycle } from 'services/polling';
+import { runPollCycle } from 'services/polling';
 import type { PollCycleContext, RegisteredSource } from 'services/polling';
 import type { Pacer } from 'services/uploader';
 
@@ -54,7 +54,6 @@ function makeContext(sources: RegisteredSource[]): PollCycleContext {
     hostId: 'h_test',
     gatewayVersion: 'gw-0.1',
     sources,
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     installedAt: new Date().toISOString(),
@@ -102,15 +101,6 @@ function batchWith(text: string): NewBatch {
   };
 }
 
-test('compat: paused sentinel short-circuits the cycle and skips drain', async () => {
-  await pausePolling(join(dir, 'PAUSED'), 'manual');
-  const ctx = makeContext([noopSource('s1')]);
-  const result = await runPollCycle(ctx);
-  expect(result.paused).toBe(true);
-  expect(result.sourceResults).toEqual({});
-  expect(result.drainResult).toBeNull();
-});
-
 test('compat: runs sources then drains pending batches', async () => {
   insertBatch(buffer, batchWith('payload-1'));
   insertBatch(buffer, batchWith('payload-2'));
@@ -125,7 +115,6 @@ test('compat: runs sources then drains pending batches', async () => {
     },
   ]);
   const result = await runPollCycle(ctx);
-  expect(result.paused).toBe(false);
   expect(calledA).toBe(1);
   expect(result.sourceResults['s-a']?.filesProcessed).toBe(1);
   expect(result.drainResult).not.toBeNull();
@@ -196,6 +185,5 @@ test('compat: covers optional cycle params', async () => {
   ctx.logger = mockLogger;
   ctx.minimumMtimeOverride = new Date('2026-05-08T00:00:00Z');
   ctx.pacer = mockPacer;
-  const result = await runPollCycle(ctx);
-  expect(result.paused).toBe(false);
+  await runPollCycle(ctx);
 });

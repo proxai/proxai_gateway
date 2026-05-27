@@ -16,7 +16,7 @@ export function evaluateBinaryFreshness(
   }
   const daysSinceInstall = Math.max(0, Math.floor((event.nowMs - installedAtMs) / MS_PER_DAY));
   if (event.pauseAfterDays > 0 && daysSinceInstall >= event.pauseAfterDays) {
-    return { status: 'stale_paused', daysSinceInstall, evaluatedAtMs: event.nowMs };
+    return { status: 'stale', daysSinceInstall, evaluatedAtMs: event.nowMs };
   }
   if (event.warnAfterDays > 0 && daysSinceInstall >= event.warnAfterDays) {
     return { status: 'warning', daysSinceInstall, evaluatedAtMs: event.nowMs };

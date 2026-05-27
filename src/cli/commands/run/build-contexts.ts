@@ -26,7 +26,6 @@ export function buildCaptureContext(input: {
     buffer,
     gatewayVersion: deps.gatewayVersion,
     sources,
-    pauseSentinelPath: deps.pauseSentinelPath,
     authFailedSentinelPath: deps.authFailedSentinelPath,
     bufferFullSentinelPath: deps.bufferFullSentinelPath,
     bufferPolicy: {
@@ -54,7 +53,6 @@ export function buildDrainContext(input: {
     buffer,
     http,
     hostId: deps.config.account.hostId,
-    pauseSentinelPath: deps.pauseSentinelPath,
     authFailedSentinelPath: deps.authFailedSentinelPath,
     bufferFullSentinelPath: deps.bufferFullSentinelPath,
     bufferPolicy: {
@@ -77,7 +75,6 @@ export function buildHeartbeatContext(input: {
   const heartbeatCtx: HeartbeatCycleContext = {
     buffer,
     gatewayVersion: deps.gatewayVersion,
-    pauseSentinelPath: deps.pauseSentinelPath,
     installedAt: deps.config.account.installedAt,
     staleBinary: {
       warnAfterDays: deps.config.staleBinary.warnAfterDays,

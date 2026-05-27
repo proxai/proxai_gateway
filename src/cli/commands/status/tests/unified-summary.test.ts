@@ -9,8 +9,6 @@ const BASE: UnifiedSummaryInputs = {
   daemonInferredAlive: false,
   daemonLastCycleAt: null,
   authFailed: false,
-  paused: false,
-  pausedReason: '',
   bufferFull: false,
   bufferFullPendingBytes: null,
   bufferFullThreshold: null,
@@ -34,18 +32,10 @@ test('auth failure dominates other conditions', () => {
   const s = deriveUnifiedSummary({
     ...BASE,
     authFailed: true,
-    paused: true,
     bufferFull: true,
   });
   expect(s.level).toBe('error');
   expect(s.headline).toContain('authentication');
-});
-
-test('paused state reports reason and resume hint', () => {
-  const s = deriveUnifiedSummary({ ...BASE, paused: true, pausedReason: 'maintenance' });
-  expect(s.level).toBe('warning');
-  expect(s.headline).toContain('maintenance');
-  expect(s.hint).toContain('resume');
 });
 
 test('buffer full state computes pressure percentage', () => {
@@ -79,11 +69,10 @@ test('daemon not service-managed but recently cycled reports ok with registratio
   expect(s.hint).toContain('start');
 });
 
-test('session stopped state is below auth failure but above paused', () => {
+test('session stopped state is below auth failure', () => {
   const s = deriveUnifiedSummary({
     ...BASE,
     sessionStopped: true,
-    paused: true,
   });
   expect(s.level).toBe('warning');
   expect(s.headline).toContain('stopped');

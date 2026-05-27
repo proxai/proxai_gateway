@@ -56,10 +56,10 @@ Source: `buffer/cursors.ts`, `src/sources/<agent>/collect.ts`.
 
 ## Layer 4: sentinel files (process-level gates)
 
-`AUTH_FAILED`, `PAUSED`, `BUFFER_FULL` short-circuit the capture and
-drain cycles entirely. While these are not literally "dedup", they
-prevent the daemon from re-attempting work it knows will fail (and
-potentially producing duplicate side-effects in logs and metrics).
+`AUTH_FAILED` and `BUFFER_FULL` short-circuit the capture and drain
+cycles entirely. While these are not literally "dedup", they prevent
+the daemon from re-attempting work it knows will fail (and potentially
+producing duplicate side-effects in logs and metrics).
 
 **Catches**: pathological retry loops. An expired key would otherwise
 produce a tight loop of `capture → upload → 401 → mark failed →

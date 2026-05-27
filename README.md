@@ -47,15 +47,14 @@ Shows whether the gateway is active and how capture and uploads are doing. Refre
 ## Manage the service
 
 ```sh
-proxai-gateway pause       # keep the daemon process alive but skip capture/upload cycles (persists across reboots; resume with `resume`)
-proxai-gateway resume      # clear PAUSED and let cycles run again
 proxai-gateway stop        # stop the daemon process for this session; the service stays registered and respawns on next reboot
+proxai-gateway start       # start (or resume after stop) the daemon
 proxai-gateway restart     # stop, then start
 proxai-gateway update      # fetch and install the latest release (alias: upgrade)
 proxai-gateway uninstall   # remove the service — add --reset to also wipe local data
 ```
 
-`pause` vs `stop`: pause keeps the daemon process running but tells it to do nothing (capture and drain cycles short-circuit on the PAUSED sentinel). Stop actually halts the process. Pause survives reboots; stop does not.
+`stop` only lasts the current session: rebooting, running `start`, re-running `setup`, or an auto-upgrade all bring the daemon back. The goal is to keep the application always running; `stop` is primarily a developer escape hatch for debugging.
 
 Run `proxai-gateway --help` to see every command.
 

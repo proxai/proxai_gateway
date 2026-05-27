@@ -53,13 +53,12 @@ export async function runDaemonLoops(
 }
 
 async function bootDaemonActors(contexts: DaemonLoopContexts): Promise<DaemonActorsHandle> {
-  const configDir = dirname(contexts.capture.pauseSentinelPath);
+  const configDir = dirname(contexts.capture.authFailedSentinelPath);
   return startDaemonActors({
     buffer: contexts.capture.buffer,
     paths: {
       configDir,
       authFailed: contexts.capture.authFailedSentinelPath,
-      paused: contexts.capture.pauseSentinelPath,
       bufferFull: contexts.capture.bufferFullSentinelPath,
       sessionStopped: join(configDir, 'SESSION_STOPPED'),
       updateAvailable:

@@ -22,7 +22,6 @@ beforeEach(async () => {
   paths = {
     configDir: dir,
     authFailed: join(dir, 'AUTH_FAILED'),
-    paused: join(dir, 'PAUSED'),
     bufferFull: join(dir, 'BUFFER_FULL'),
     sessionStopped: join(dir, 'SESSION_STOPPED'),
     updateAvailable: join(dir, 'UPDATE_AVAILABLE'),
@@ -41,7 +40,6 @@ test('classifySentinel returns null for unrelated filenames', () => {
 test('classifySentinel maps each known filename to its kind', () => {
   const cases: [string, SentinelKind][] = [
     ['AUTH_FAILED', 'auth-failed'],
-    ['PAUSED', 'paused'],
     ['BUFFER_FULL', 'buffer-full'],
     ['SESSION_STOPPED', 'session-stopped'],
     ['UPDATE_AVAILABLE', 'update-available'],
@@ -52,9 +50,9 @@ test('classifySentinel maps each known filename to its kind', () => {
 });
 
 test('fileExists returns true for an existing file and false otherwise', async () => {
-  await writeFile(paths.paused, 'maintenance');
-  expect(await fileExists(paths.paused)).toBe(true);
-  expect(await fileExists(paths.authFailed)).toBe(false);
+  await writeFile(paths.authFailed, '{"reason":"x","detected_at":"x"}');
+  expect(await fileExists(paths.authFailed)).toBe(true);
+  expect(await fileExists(paths.bufferFull)).toBe(false);
 });
 
 test('buildPresentEvent for auth-failed reads the JSON payload', async () => {
@@ -83,15 +81,6 @@ test('buildPresentEvent for auth-failed returns null when sentinel body is missi
   await writeFile(paths.authFailed, '');
   const event = await buildPresentEvent('auth-failed', paths);
   expect(event).toBeNull();
-});
-
-test('buildPresentEvent for paused reads the reason text', async () => {
-  await writeFile(paths.paused, 'manual reason');
-  const event = await buildPresentEvent('paused', paths);
-  expect(event?.type).toBe('PAUSE_REQUESTED');
-  if (event?.type === 'PAUSE_REQUESTED') {
-    expect(event.payload.reason).toBe('manual reason');
-  }
 });
 
 test('buildPresentEvent for buffer-full reads JSON pendingBytes and threshold', async () => {
@@ -178,9 +167,8 @@ test('buildPresentEvent for update-available returns null when version fields ar
   expect(event).toBeNull();
 });
 
-test('buildAbsentEvent returns matching cleared/resume/resume events for each kind', () => {
+test('buildAbsentEvent returns matching cleared/resume events for each kind', () => {
   expect(buildAbsentEvent('auth-failed').type).toBe('AUTH_FAILED_CLEARED');
-  expect(buildAbsentEvent('paused').type).toBe('RESUME_REQUESTED');
   expect(buildAbsentEvent('buffer-full').type).toBe('PRESSURE_CROSSED_RESUME');
   expect(buildAbsentEvent('session-stopped').type).toBe('BOOT_ID_MISMATCH');
   const brew = buildAbsentEvent('update-available');

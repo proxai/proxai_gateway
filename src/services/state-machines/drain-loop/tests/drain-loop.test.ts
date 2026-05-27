@@ -17,11 +17,11 @@ test('initial state is waiting', () => {
 test('GATE_BLOCKED transitions to skipped and increments cyclesSkipped', () => {
   const actor = startLoop();
   actor.send({ type: 'TICK', startedAtUtc: '2026-05-25T12:00:00.000Z' });
-  actor.send({ type: 'GATE_BLOCKED', reason: 'paused' });
+  actor.send({ type: 'GATE_BLOCKED', reason: 'auth' });
   const s = actor.getSnapshot();
   expect(s.value).toBe('skipped');
   expect(s.context.cyclesSkipped).toBe(1);
-  expect(s.context.lastSkipReason).toBe('paused');
+  expect(s.context.lastSkipReason).toBe('auth');
   actor.stop();
 });
 

@@ -21,7 +21,6 @@ import { VALID_SOURCE_APPS } from 'services/contract';
 import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.types.ts';
 import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 import { isBufferFull, writeBufferFullSentinel } from 'services/polling/buffer-full-sentinel.ts';
-import { isPaused } from 'services/polling/pause-sentinel.ts';
 import { handleCapture } from 'services/polling/poll-worker.ts';
 import {
   captureLoopMachine,
@@ -122,7 +121,6 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
     cycleMachine.send({ type: 'GATE_BLOCKED', reason: gateReason });
     const result = finishSkip(startedAt, startMs, gateReasonToSkipKey(gateReason), log, {
       authFailed: gateReason === 'auth',
-      paused: gateReason === 'paused',
       bufferFull: gateReason === 'buffer_full',
     });
     cycleMachine.send({
@@ -239,7 +237,6 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
   cycleMachine.stop();
 
   return {
-    paused: false,
     authFailed: false,
     bufferFull: false,
     startedAt,
@@ -254,14 +251,11 @@ async function evaluateGateReason(
   ctx: CaptureCycleContext,
 ): Promise<CaptureGateBlockReason | null> {
   if (await isAuthFailed(ctx.authFailedSentinelPath)) return 'auth';
-  if (await isPaused(ctx.pauseSentinelPath)) return 'paused';
   if (await isBufferFull(ctx.bufferFullSentinelPath)) return 'buffer_full';
   return null;
 }
 
-function gateReasonToSkipKey(
-  reason: CaptureGateBlockReason,
-): 'auth_failed' | 'paused' | 'buffer_full' {
+function gateReasonToSkipKey(reason: CaptureGateBlockReason): 'auth_failed' | 'buffer_full' {
   if (reason === 'auth') return 'auth_failed';
   return reason;
 }
@@ -377,9 +371,9 @@ function readNumberMetadata(buffer: CaptureCycleContext['buffer'], key: string):
 function finishSkip(
   startedAt: string,
   startMs: number,
-  reason: 'auth_failed' | 'paused' | 'buffer_full',
+  reason: 'auth_failed' | 'buffer_full',
   log: CaptureCycleContext['logger'],
-  flags: { paused: boolean; authFailed: boolean; bufferFull: boolean },
+  flags: { authFailed: boolean; bufferFull: boolean },
 ): CaptureCycleResult {
   const completedAt = nowIsoUtc();
   log?.info(
@@ -387,7 +381,6 @@ function finishSkip(
     `capture cycle skipped: ${reason} sentinel present`,
   );
   return {
-    paused: flags.paused,
     authFailed: flags.authFailed,
     bufferFull: flags.bufferFull,
     startedAt,

@@ -10,11 +10,11 @@ strict modularization: `<name>.machine.ts`, `<name>.types.ts`, optional
 | Name | Scope | Notes |
 | --- | --- | --- |
 | `daemon-root` | Daemon process lifecycle | `boot.{loading_config,opening_buffer,sync_decision,ready} → running → draining_for_shutdown → exited`. |
-| `sentinel-registry` | Cross-process bus mirror | Parallel regions: `auth`, `pause`, `bufferPressure`, `session`, `brewUpdate`. Fed by `sentinel-watcher`. |
+| `sentinel-registry` | Cross-process bus mirror | Parallel regions: `auth`, `bufferPressure`, `session`, `brewUpdate`. Fed by `sentinel-watcher`. |
 | `capture-loop` | Per-tick capture orchestration | `waiting → evaluating_gate → running_cycle → committing → checking_pressure → persisting_metrics → waiting`. |
 | `drain-loop` | Per-tick drain orchestration | `waiting → evaluating_gate → draining → pruning → checking_resume → persisting_metrics → waiting`. |
 | `heartbeat-loop` | Per-tick heartbeat orchestration | `waiting → evaluating_gate → checking_freshness → throttle_check → version_check_branch → persisting_metrics → waiting`. |
-| `binary-freshness` | Staleness ladder | `unchecked → checking → {fresh, warning, stale_paused}`. Writes PAUSED sentinel on stale entry. |
+| `binary-freshness` | Staleness ladder | `unchecked → checking → {fresh, warning, stale}`. Stale is informational; auto-upgrade replaces the binary on the next heartbeat. |
 | `auto-upgrade` | Upgrade flow | brew vs non-brew fork. Terminal states for each. |
 | `source-poll` | Per-source poll cycle | `idle → discovering → processing → emitting_results → {done, errored}`. |
 | `cursor-lifecycle` | Per-cursor state | `unseeded → healthy ↔ {vacuumed, regressed}`. |

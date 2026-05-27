@@ -12,7 +12,6 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     buffer: ctx.buffer,
     gatewayVersion: ctx.gatewayVersion,
     sources: ctx.sources,
-    pauseSentinelPath: ctx.pauseSentinelPath,
     authFailedSentinelPath: ctx.authFailedSentinelPath,
     bufferFullSentinelPath: ctx.bufferFullSentinelPath,
     bufferPolicy: ctx.bufferPolicy,
@@ -24,9 +23,8 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
   }
   const captureResult = await runCaptureCycle(captureCtx);
 
-  if (captureResult.paused || captureResult.authFailed || captureResult.bufferFull) {
+  if (captureResult.authFailed || captureResult.bufferFull) {
     return {
-      paused: captureResult.paused,
       authFailed: captureResult.authFailed,
       bufferFull: captureResult.bufferFull,
       startedAt: captureResult.startedAt,
@@ -43,7 +41,6 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
     buffer: ctx.buffer,
     http: ctx.http,
     hostId: ctx.hostId,
-    pauseSentinelPath: ctx.pauseSentinelPath,
     authFailedSentinelPath: ctx.authFailedSentinelPath,
     bufferFullSentinelPath: ctx.bufferFullSentinelPath,
     bufferPolicy: ctx.bufferPolicy,
@@ -53,7 +50,6 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
   const drainResult = await runDrainCycle(drainCtx);
 
   return {
-    paused: drainResult.paused,
     authFailed: drainResult.authFailed,
     bufferFull: false,
     startedAt: captureResult.startedAt,

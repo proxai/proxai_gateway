@@ -77,7 +77,6 @@ function makeDeps(
     buffer,
     configPath,
     configExists: () => Promise.resolve(true),
-    pauseSentinelPath: join(dir, 'PAUSED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
@@ -320,7 +319,6 @@ test('sectionHeader includes label between hyphens', () => {
 
 test('deriveHealth returns error for any blocking sentinel', () => {
   const base = {
-    paused: false,
     authFailed: false,
     bufferFull: false,
     sessionStopped: false,
@@ -328,7 +326,6 @@ test('deriveHealth returns error for any blocking sentinel', () => {
     drain: null,
   };
   expect(deriveHealth({ ...base, authFailed: true })).toBe('error');
-  expect(deriveHealth({ ...base, paused: true })).toBe('error');
   expect(deriveHealth({ ...base, bufferFull: true })).toBe('error');
   expect(deriveHealth({ ...base, sessionStopped: true })).toBe('error');
 });
@@ -336,7 +333,6 @@ test('deriveHealth returns error for any blocking sentinel', () => {
 test('deriveHealth returns inactive when no recent activity', () => {
   expect(
     deriveHealth({
-      paused: false,
       authFailed: false,
       bufferFull: false,
       sessionStopped: false,
@@ -349,7 +345,6 @@ test('deriveHealth returns inactive when no recent activity', () => {
 test('deriveHealth returns warning when drain had retriable failures', () => {
   expect(
     deriveHealth({
-      paused: false,
       authFailed: false,
       bufferFull: false,
       sessionStopped: false,
@@ -374,7 +369,6 @@ test('deriveHealth returns warning when drain had retriable failures', () => {
 test('deriveHealth returns healthy when drain is clean', () => {
   expect(
     deriveHealth({
-      paused: false,
       authFailed: false,
       bufferFull: false,
       sessionStopped: false,

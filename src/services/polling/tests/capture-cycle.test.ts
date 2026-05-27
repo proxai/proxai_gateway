@@ -18,7 +18,6 @@ import {
 import type { NewBatch } from 'services/buffer';
 import {
   isBufferFull,
-  pausePolling,
   runCaptureCycle,
   writeAuthFailedSentinel,
   writeBufferFullSentinel,
@@ -60,7 +59,6 @@ function makeContext(
     buffer,
     gatewayVersion: 'gw-0.1',
     sources,
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     bufferPolicy: {
@@ -109,24 +107,6 @@ function bigBatch(byteLen: number): NewBatch {
     body: zstdCompressSync(text),
   };
 }
-
-test('paused sentinel skips capture', async () => {
-  await pausePolling(join(dir, 'PAUSED'), 'manual');
-  let calls = 0;
-  const ctx = makeContext([
-    {
-      name: 's',
-      poll: async () => {
-        calls++;
-        return { filesProcessed: 0, capturedBatches: 0, capturedBytes: 0, errors: [] };
-      },
-    },
-  ]);
-  const result = await runCaptureCycle(ctx);
-  expect(result.paused).toBe(true);
-  expect(calls).toBe(0);
-  expect(result.sourceResults).toEqual({});
-});
 
 test('AUTH_FAILED sentinel skips capture', async () => {
   await writeAuthFailedSentinel(join(dir, 'AUTH_FAILED'), 'halt');
@@ -325,13 +305,6 @@ test('logs warn when capture setMetadata throws (table dropped)', async () => {
   expect(
     entries.some((e) => e.level === 'warn' && e.msg.includes('failed to persist capture')),
   ).toBe(true);
-});
-
-test('paused cycle without logger returns gracefully', async () => {
-  await pausePolling(join(dir, 'PAUSED'), 'manual');
-  const ctx = makeContext([noopSource('s')]);
-  const result = await runCaptureCycle(ctx);
-  expect(result.paused).toBe(true);
 });
 
 test('uses minimumMtimeOverride when provided to source poll context', async () => {

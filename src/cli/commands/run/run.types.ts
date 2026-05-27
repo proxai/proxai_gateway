@@ -13,7 +13,6 @@ import type {
 export interface RunCommandDeps {
   output: OutputSink;
   config: GatewayConfig;
-  pauseSentinelPath: string;
   authFailedSentinelPath: string;
   bufferFullSentinelPath: string;
   sessionStoppedSentinelPath: string;

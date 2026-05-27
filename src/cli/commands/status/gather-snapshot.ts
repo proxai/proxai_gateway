@@ -24,10 +24,8 @@ import { loadConfigFromFile } from 'services/config';
 import {
   isAuthFailed,
   isBufferFull,
-  isPaused,
   readAuthFailedSentinel,
   readBufferFullSentinel,
-  readPauseReason,
   readSessionStoppedSentinel,
   readUpdateAvailableSentinel,
 } from 'services/polling';
@@ -103,8 +101,6 @@ export async function gatherStatusSnapshot(
   const lastVersionCheckAt = getMetadata(buffer, METADATA_KEYS.lastVersionCheckAt);
   const latestKnownVersion = getMetadata(buffer, METADATA_KEYS.latestKnownVersion);
 
-  const paused = await isPaused(deps.pauseSentinelPath);
-  const pausedReason = paused ? (await readPauseReason(deps.pauseSentinelPath)).trim() : '';
   const authFailed = await isAuthFailed(deps.authFailedSentinelPath);
   const authFailedPayload = authFailed
     ? await readAuthFailedSentinel(deps.authFailedSentinelPath)
@@ -150,7 +146,6 @@ export async function gatherStatusSnapshot(
 
   const hasRecentActivity = daemonState !== null && daemonState.lastCycleCompletedAt !== null;
   const health = deriveHealth({
-    paused,
     authFailed,
     bufferFull: bufferFullFlag,
     sessionStopped,
@@ -163,8 +158,6 @@ export async function gatherStatusSnapshot(
   return {
     health,
     isDevMode,
-    paused,
-    pausedReason,
     authFailed,
     authFailedReason: authFailedPayload?.reason ?? '',
     authFailedDetectedAt: authFailedPayload?.detectedAt ?? '',

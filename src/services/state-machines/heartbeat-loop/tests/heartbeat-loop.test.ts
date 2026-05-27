@@ -94,11 +94,11 @@ test('METRICS_PERSISTED from skipped returns to waiting without bumping cyclesCo
   actor.stop();
 });
 
-test('FRESHNESS_CHECKED with stale_paused status is recorded in context', () => {
+test('FRESHNESS_CHECKED with stale status is recorded in context', () => {
   const actor = startLoop();
   actor.send({ type: 'TICK', startedAtUtc: '2026-05-25T12:00:00.000Z' });
   actor.send({ type: 'GATE_CLEAR' });
-  actor.send({ type: 'FRESHNESS_CHECKED', status: 'stale_paused' });
-  expect(actor.getSnapshot().context.lastFreshness).toBe('stale_paused');
+  actor.send({ type: 'FRESHNESS_CHECKED', status: 'stale' });
+  expect(actor.getSnapshot().context.lastFreshness).toBe('stale');
   actor.stop();
 });

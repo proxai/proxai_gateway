@@ -131,20 +131,14 @@ proxai-gateway status   # shows update info
 
 This is working as designed. Tell the user to run `brew upgrade`.
 
-## Stage 6: stale-binary `PAUSED` after upgrade
+## Stage 6: stale binary
 
-If a binary is ≥ 60 days old, `checkStaleBinary` writes `PAUSED`. The
-`PAUSED` sentinel is **not** auto-cleared by upgrade. The recovery
-sequence is:
-
-```
-proxai-gateway upgrade     # downloads + restarts on new binary
-proxai-gateway resume      # clears PAUSED
-```
-
-Without the second command, the daemon will start on the new binary
-but immediately skip every cycle on `PAUSED`. This catches users who
-assume "upgrade" is one operation.
+If a binary is ≥ 60 days old, `checkStaleBinary` logs `stale_binary.stale`
+but does not pause the daemon. The next heartbeat's auto-upgrade
+replaces the binary in place; on success the daemon exits with code 75
+and the service manager respawns it on the new binary. If the upgrade
+keeps failing, see stages 2–4 of this runbook; the daemon stays usable
+on the old binary in the meantime.
 
 For a full reset (e.g. recovering from corrupt buffer.db at the same
 time):

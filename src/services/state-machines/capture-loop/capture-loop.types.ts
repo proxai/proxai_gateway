@@ -7,7 +7,7 @@ export type CaptureLoopPhase =
   | 'persisting_metrics'
   | 'skipped';
 
-export type CaptureGateBlockReason = 'auth' | 'paused' | 'buffer_full';
+export type CaptureGateBlockReason = 'auth' | 'buffer_full';
 
 export interface CaptureLoopInput {
   readonly intervalMs: number;

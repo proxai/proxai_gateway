@@ -17,7 +17,7 @@
 
 - `config.toml` (under `configDir()`)
 - `buffer.db` (under `configDir()`)
-- Sentinel files (`AUTH_FAILED`, `PAUSED`, etc. — under `configDir()`)
+- Sentinel files (`AUTH_FAILED`, `BUFFER_FULL`, etc. — under `configDir()`)
 - Log files (under `logDir()`)
 - Any `quarantined_records` metadata still in `buffer.db`
 

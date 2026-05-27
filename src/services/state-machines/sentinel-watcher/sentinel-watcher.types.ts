@@ -1,17 +1,11 @@
 import type { MinimalLogger } from 'core/log';
 import type { SentinelRegistryEvent } from 'services/state-machines/sentinel-registry/sentinel-registry.types.ts';
 
-export type SentinelKind =
-  | 'auth-failed'
-  | 'paused'
-  | 'buffer-full'
-  | 'session-stopped'
-  | 'update-available';
+export type SentinelKind = 'auth-failed' | 'buffer-full' | 'session-stopped' | 'update-available';
 
 export interface SentinelWatcherPaths {
   readonly configDir: string;
   readonly authFailed: string;
-  readonly paused: string;
   readonly bufferFull: string;
   readonly sessionStopped: string;
   readonly updateAvailable: string;

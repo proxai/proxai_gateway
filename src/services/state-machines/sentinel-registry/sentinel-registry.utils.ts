@@ -7,9 +7,6 @@ export function gateDecision(context: SentinelRegistryContext): SentinelGateDeci
   if (context.authPayload !== null) {
     return { skipCapture: true, skipDrain: true, skipHeartbeat: false, reason: 'auth' };
   }
-  if (context.pausePayload !== null) {
-    return { skipCapture: true, skipDrain: true, skipHeartbeat: true, reason: 'paused' };
-  }
   if (context.bufferFullPayload !== null) {
     return { skipCapture: true, skipDrain: false, skipHeartbeat: false, reason: 'buffer_full' };
   }

@@ -9,7 +9,6 @@ import {
   bufferFullSentinelPath,
   configFilePath,
   devModeSentinelPath,
-  pausedSentinelPath,
   sessionStoppedSentinelPath,
   updateAvailableSentinelPath,
 } from 'core/io/fs';
@@ -45,7 +44,6 @@ export async function buildStatusContext(inputs: BuildStatusContextInputs): Prom
       output: consoleOutput(),
       configPath: cfgPath,
       configExists: () => Promise.resolve(false),
-      pauseSentinelPath: pausedSentinelPath(),
       bufferFullSentinelPath: bufferFullSentinelPath(),
       authFailedSentinelPath: authFailedSentinelPath(),
       sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
@@ -68,7 +66,6 @@ export async function buildStatusContext(inputs: BuildStatusContextInputs): Prom
     buffer,
     configPath: cfgPath,
     configExists: () => Promise.resolve(true),
-    pauseSentinelPath: pausedSentinelPath(),
     bufferFullSentinelPath: bufferFullSentinelPath(),
     authFailedSentinelPath: authFailedSentinelPath(),
     sessionStoppedSentinelPath: sessionStoppedSentinelPath(),

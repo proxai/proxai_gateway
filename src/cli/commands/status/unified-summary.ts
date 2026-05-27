@@ -27,14 +27,6 @@ export function deriveUnifiedSummary(inputs: UnifiedSummaryInputs): UnifiedStatu
         : 'Reboot your machine or run `proxai-gateway start` to resume.',
     };
   }
-  if (inputs.paused) {
-    const reason = inputs.pausedReason.length > 0 ? ` (${inputs.pausedReason})` : '';
-    return {
-      level: 'warning',
-      headline: `Account configured. Daemon paused${reason}.`,
-      hint: 'Run `proxai-gateway resume` to resume capturing.',
-    };
-  }
   if (inputs.bufferFull) {
     const pct = formatPressurePercent(inputs.bufferFullPendingBytes, inputs.bufferFullThreshold);
     return {

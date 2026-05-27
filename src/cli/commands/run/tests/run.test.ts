@@ -103,7 +103,6 @@ test('starts the loop, runs at least one cycle, and exits cleanly on abort', asy
   const promise = runDaemon({
     output: out,
     config,
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
@@ -154,7 +153,6 @@ test('exits immediately when abort signal is already aborted', async () => {
   const result = await runDaemon({
     output: out,
     config,
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
@@ -197,7 +195,6 @@ test('empty cursor table triggers a watermark sync; populated cursors are seeded
   const promise = runDaemon({
     output: out,
     config,
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
@@ -241,7 +238,6 @@ test('non-empty cursor table skips the pre-flight sync', async () => {
   const result = await runDaemon({
     output: out,
     config,
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
@@ -269,7 +265,6 @@ test('exits cleanly with EXIT_CODE.ok when SESSION_STOPPED matches current boot_
   const result = await runDaemon({
     output: out,
     config,
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     sessionStoppedSentinelPath: sentinelPath,
@@ -311,7 +306,6 @@ test('deletes stale SESSION_STOPPED sentinel and proceeds when boot_id mismatche
   const result = await runDaemon({
     output: out,
     config,
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     sessionStoppedSentinelPath: sentinelPath,
@@ -350,7 +344,6 @@ test('proceeds normally when the SESSION_STOPPED sentinel does not exist', async
   const result = await runDaemon({
     output: out,
     config,
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     sessionStoppedSentinelPath: sentinelPath,
@@ -385,7 +378,6 @@ test('readBootId failure is logged as warn and does not abort the daemon', async
   const result = await runDaemon({
     output: out,
     config,
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
@@ -409,7 +401,6 @@ test('watermark sync failure logs warn and does not abort the daemon', async () 
   const result = await runDaemon({
     output: out,
     config,
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),

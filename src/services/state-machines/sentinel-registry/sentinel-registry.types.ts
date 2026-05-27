@@ -3,10 +3,6 @@ export interface AuthFailedPayload {
   readonly detectedAtUtc: string;
 }
 
-export interface PausePayload {
-  readonly reason: string;
-}
-
 export interface BufferFullPayload {
   readonly pendingBytes: number;
   readonly thresholdBytes: number;
@@ -27,7 +23,6 @@ export interface BrewUpdatePayload {
 
 export interface SentinelRegistryContext {
   authPayload: AuthFailedPayload | null;
-  pausePayload: PausePayload | null;
   bufferFullPayload: BufferFullPayload | null;
   sessionStoppedPayload: SessionStoppedPayload | null;
   brewUpdatePayload: BrewUpdatePayload | null;
@@ -37,8 +32,6 @@ export interface SentinelRegistryContext {
 export type SentinelRegistryEvent =
   | { type: 'AUTH_FAILED_WRITTEN'; payload: AuthFailedPayload }
   | { type: 'AUTH_FAILED_CLEARED' }
-  | { type: 'PAUSE_REQUESTED'; payload: PausePayload }
-  | { type: 'RESUME_REQUESTED' }
   | { type: 'PRESSURE_CROSSED_PAUSE'; payload: BufferFullPayload }
   | { type: 'PRESSURE_CROSSED_RESUME' }
   | { type: 'STOP_REQUESTED'; payload: SessionStoppedPayload }
@@ -51,5 +44,5 @@ export interface SentinelGateDecision {
   readonly skipCapture: boolean;
   readonly skipDrain: boolean;
   readonly skipHeartbeat: boolean;
-  readonly reason: 'auth' | 'paused' | 'buffer_full' | null;
+  readonly reason: 'auth' | 'buffer_full' | null;
 }

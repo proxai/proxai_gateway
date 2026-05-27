@@ -16,7 +16,7 @@ afterAll(async () => {
 });
 
 test('write / read / exists / remove cycle', async () => {
-  const h = sentinelHandle(join(dir, 'PAUSED'));
+  const h = sentinelHandle(join(dir, 'AUTH_FAILED'));
   expect(await h.exists()).toBe(false);
   expect(await h.read()).toBe('');
   await h.write('reason: test');

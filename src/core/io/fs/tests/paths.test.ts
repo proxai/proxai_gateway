@@ -12,7 +12,6 @@ import {
   controlSocketPath,
   expandHome,
   logDir,
-  pausedSentinelPath,
   sessionStoppedSentinelPath,
   updateAvailableSentinelPath,
 } from 'core/io/fs';
@@ -32,7 +31,6 @@ test('derived paths live under configDir', () => {
   const root = configDir();
   expect(bufferDbPath().startsWith(root)).toBe(true);
   expect(configFilePath().startsWith(root)).toBe(true);
-  expect(pausedSentinelPath().startsWith(root)).toBe(true);
   expect(consentSentinelPath().startsWith(root)).toBe(true);
   expect(authFailedSentinelPath().startsWith(root)).toBe(true);
   expect(bufferFullSentinelPath().startsWith(root)).toBe(true);

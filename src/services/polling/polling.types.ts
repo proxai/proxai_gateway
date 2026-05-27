@@ -57,7 +57,6 @@ export interface CaptureCycleContext {
   buffer: Database;
   gatewayVersion: string;
   sources: readonly RegisteredSource[];
-  pauseSentinelPath: string;
   authFailedSentinelPath: string;
   bufferFullSentinelPath: string;
   bufferPolicy: BufferRetentionPolicy;
@@ -67,7 +66,6 @@ export interface CaptureCycleContext {
 }
 
 export interface CaptureCycleResult {
-  paused: boolean;
   authFailed: boolean;
   bufferFull: boolean;
   startedAt: string;
@@ -81,7 +79,6 @@ export interface DrainCycleContext {
   buffer: Database;
   http: HttpClient;
   hostId: string;
-  pauseSentinelPath: string;
   authFailedSentinelPath: string;
   bufferFullSentinelPath: string;
   bufferPolicy: BufferRetentionPolicy;
@@ -90,7 +87,6 @@ export interface DrainCycleContext {
 }
 
 export interface DrainCycleResult {
-  paused: boolean;
   authFailed: boolean;
   startedAt: string;
   completedAt: string;
@@ -103,7 +99,6 @@ export interface DrainCycleResult {
 export interface HeartbeatCycleContext {
   buffer: Database;
   gatewayVersion: string;
-  pauseSentinelPath: string;
   installedAt: string;
   staleBinary: StaleBinaryThresholds;
   updateAvailableSentinelPath?: string;
@@ -120,7 +115,6 @@ export interface HeartbeatCycleContext {
 }
 
 export interface HeartbeatCycleResult {
-  paused: boolean;
   startedAt: string;
   completedAt: string;
   durationMs: number;
@@ -133,7 +127,6 @@ export interface PollCycleContext {
   hostId: string;
   gatewayVersion: string;
   sources: readonly RegisteredSource[];
-  pauseSentinelPath: string;
   authFailedSentinelPath: string;
   bufferFullSentinelPath: string;
   updateAvailableSentinelPath?: string;
@@ -157,7 +150,6 @@ export interface PollCycleContext {
 }
 
 export interface PollCycleResult {
-  paused: boolean;
   authFailed: boolean;
   bufferFull: boolean;
   startedAt: string;

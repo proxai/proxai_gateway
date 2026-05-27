@@ -17,7 +17,6 @@ beforeEach(async () => {
   paths = {
     configDir: dir,
     authFailed: join(dir, 'AUTH_FAILED'),
-    paused: join(dir, 'PAUSED'),
     bufferFull: join(dir, 'BUFFER_FULL'),
     sessionStopped: join(dir, 'SESSION_STOPPED'),
     updateAvailable: join(dir, 'UPDATE_AVAILABLE'),
@@ -38,15 +37,14 @@ test('startDaemonActors boots a registry actor in absent state for every sentine
   const handle = await startDaemonActors({ buffer, paths });
   const snapshot = handle.registry.getSnapshot();
   expect(snapshot.matches({ auth: 'absent' })).toBe(true);
-  expect(snapshot.matches({ pause: 'absent' })).toBe(true);
   expect(snapshot.matches({ bufferPressure: 'ok' })).toBe(true);
   await handle.stop();
 });
 
-test('startDaemonActors reflects pre-existing PAUSED file via initial sentinel sweep', async () => {
-  await writeFile(paths.paused, 'maintenance');
+test('startDaemonActors reflects pre-existing AUTH_FAILED file via initial sentinel sweep', async () => {
+  await writeFile(paths.authFailed, '{"reason":"halt","detected_at":"x"}');
   const handle = await startDaemonActors({ buffer, paths });
-  expect(handle.registry.getSnapshot().matches({ pause: 'present' })).toBe(true);
+  expect(handle.registry.getSnapshot().matches({ auth: 'present' })).toBe(true);
   await handle.stop();
 });
 
@@ -98,10 +96,10 @@ test('stop() releases the sentinel watcher and snapshot timer without throwing',
 
 test('writing a sentinel file after boot updates the registry via fs.watch', async () => {
   const handle = await startDaemonActors({ buffer, paths });
-  expect(handle.registry.getSnapshot().matches({ pause: 'absent' })).toBe(true);
-  await writeFile(paths.paused, 'manual');
-  await waitUntilTrue(() => handle.registry.getSnapshot().matches({ pause: 'present' }));
-  expect(handle.registry.getSnapshot().matches({ pause: 'present' })).toBe(true);
+  expect(handle.registry.getSnapshot().matches({ auth: 'absent' })).toBe(true);
+  await writeFile(paths.authFailed, '{"reason":"halt","detected_at":"x"}');
+  await waitUntilTrue(() => handle.registry.getSnapshot().matches({ auth: 'present' }));
+  expect(handle.registry.getSnapshot().matches({ auth: 'present' })).toBe(true);
   await handle.stop();
 });
 

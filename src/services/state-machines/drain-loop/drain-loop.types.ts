@@ -7,7 +7,7 @@ export type DrainLoopPhase =
   | 'persisting_metrics'
   | 'skipped';
 
-export type DrainGateBlockReason = 'auth' | 'paused';
+export type DrainGateBlockReason = 'auth';
 
 export interface DrainLoopInput {
   readonly intervalMs: number;

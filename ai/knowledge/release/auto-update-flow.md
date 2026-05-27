@@ -8,21 +8,20 @@ working with the heartbeat loop (`src/services/polling/heartbeat-cycle.ts`).
 
 Auto-upgrade is invoked **only from the heartbeat cycle**, which runs every
 `HEARTBEAT_INTERVAL_MS = 60 * 60_000` (= 1 hour) per
-`polling.constants.ts:9`. The cycle is gated on `PAUSED` sentinel only —
-**not** on `AUTH_FAILED`. This is deliberate: a daemon with bad auth must
-still be able to upgrade itself out of a broken state.
+`polling.constants.ts`. The cycle has no sentinel gate — it must run even
+with `AUTH_FAILED` or `BUFFER_FULL` present so the daemon can upgrade
+itself out of a broken state.
 
 Inside heartbeat:
 
 1. `checkStaleBinary` runs first — if the binary is ≥
-   `pauseAfterDays` (60 by default) old, it writes `PAUSED` itself before
-   the upgrade check even happens (`stale-binary.ts:31-44`). Effect: a
-   sufficiently stale daemon pauses *itself*, then the user must run
-   `upgrade` + `resume` manually.
-2. `maybeRunAutoUpgrade` (`heartbeat-cycle.ts:79`) checks the
-   `last_version_check_at` metadata key. If less than
-   `DEFAULT_VERSION_CHECK_INTERVAL_MS = 4 hours` has passed, skip. This is
-   a second guard layer on top of the 1-hour heartbeat tick.
+   `pauseAfterDays` (60 by default) old, it logs `stale_binary.stale` so
+   the warning surfaces in `status` and logs. It does **not** pause the
+   daemon; auto-upgrade will replace the binary on this same heartbeat.
+2. `maybeRunAutoUpgrade` checks the `last_version_check_at` metadata
+   key. If less than `DEFAULT_VERSION_CHECK_INTERVAL_MS = 4 hours` has
+   passed, skip. This is a second guard layer on top of the 1-hour
+   heartbeat tick.
 
 ## Branch: brew vs everything else
 

@@ -1,28 +1,11 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { rmRecursive } from 'core/io/fs';
-import { mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { expect, test } from 'bun:test';
 import { createActor, waitFor } from 'xstate';
-import { isPaused } from 'services/polling/pause-sentinel.ts';
 import { binaryFreshnessMachine } from 'services/state-machines/binary-freshness/binary-freshness.machine.ts';
 import {
   buildStalePauseReason,
   evaluateBinaryFreshness,
 } from 'services/state-machines/binary-freshness/binary-freshness.utils.ts';
 import { MS_PER_DAY } from 'services/state-machines/binary-freshness/binary-freshness.constants.ts';
-
-let dir: string;
-let sentinelPath: string;
-
-beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'proxai-binary-freshness-'));
-  sentinelPath = join(dir, 'PAUSED');
-});
-
-afterEach(async () => {
-  await rmRecursive(dir);
-});
 
 function installedAtDaysAgo(days: number, nowMs: number): string {
   return new Date(nowMs - days * MS_PER_DAY).toISOString();
@@ -67,7 +50,7 @@ test('evaluateBinaryFreshness returns warning at boundary', () => {
   expect(result.status).toBe('warning');
 });
 
-test('evaluateBinaryFreshness returns stale_paused at pause threshold', () => {
+test('evaluateBinaryFreshness returns stale at pause threshold', () => {
   const nowMs = Date.parse('2026-05-06T00:00:00.000Z');
   const result = evaluateBinaryFreshness({
     type: 'CHECK',
@@ -76,7 +59,7 @@ test('evaluateBinaryFreshness returns stale_paused at pause threshold', () => {
     pauseAfterDays: 60,
     nowMs,
   });
-  expect(result.status).toBe('stale_paused');
+  expect(result.status).toBe('stale');
   expect(result.daysSinceInstall).toBe(60);
 });
 
@@ -122,14 +105,14 @@ test('buildStalePauseReason formats the day count and threshold', () => {
 });
 
 test('machine starts in unchecked state', () => {
-  const actor = createActor(binaryFreshnessMachine, { input: { pauseSentinelPath: sentinelPath } });
+  const actor = createActor(binaryFreshnessMachine, { input: {} });
   actor.start();
   expect(actor.getSnapshot().value).toBe('unchecked');
   actor.stop();
 });
 
 test('machine transitions unchecked -> fresh below warn threshold', async () => {
-  const actor = createActor(binaryFreshnessMachine, { input: { pauseSentinelPath: sentinelPath } });
+  const actor = createActor(binaryFreshnessMachine, { input: {} });
   actor.start();
   const nowMs = Date.parse('2026-05-06T00:00:00.000Z');
   const finalState = await sendCheckAndSettle(actor, {
@@ -139,12 +122,11 @@ test('machine transitions unchecked -> fresh below warn threshold', async () => 
     nowMs,
   });
   expect(finalState).toBe('fresh');
-  expect(await isPaused(sentinelPath)).toBe(false);
   actor.stop();
 });
 
 test('machine transitions to warning at warn threshold', async () => {
-  const actor = createActor(binaryFreshnessMachine, { input: { pauseSentinelPath: sentinelPath } });
+  const actor = createActor(binaryFreshnessMachine, { input: {} });
   actor.start();
   const nowMs = Date.parse('2026-05-06T00:00:00.000Z');
   const finalState = await sendCheckAndSettle(actor, {
@@ -154,12 +136,11 @@ test('machine transitions to warning at warn threshold', async () => {
     nowMs,
   });
   expect(finalState).toBe('warning');
-  expect(await isPaused(sentinelPath)).toBe(false);
   actor.stop();
 });
 
-test('machine transitions to stale_paused and writes sentinel', async () => {
-  const actor = createActor(binaryFreshnessMachine, { input: { pauseSentinelPath: sentinelPath } });
+test('machine transitions to stale at pause threshold', async () => {
+  const actor = createActor(binaryFreshnessMachine, { input: {} });
   actor.start();
   const nowMs = Date.parse('2026-05-06T00:00:00.000Z');
   const finalState = await sendCheckAndSettle(actor, {
@@ -168,16 +149,12 @@ test('machine transitions to stale_paused and writes sentinel', async () => {
     pauseAfterDays: 60,
     nowMs,
   });
-  expect(finalState).toBe('stale_paused');
-  expect(await isPaused(sentinelPath)).toBe(true);
-  const text = await Bun.file(sentinelPath).text();
-  expect(text).toContain('stale_binary');
-  expect(text).toContain('75');
+  expect(finalState).toBe('stale');
   actor.stop();
 });
 
 test('machine records last evaluation in context', async () => {
-  const actor = createActor(binaryFreshnessMachine, { input: { pauseSentinelPath: sentinelPath } });
+  const actor = createActor(binaryFreshnessMachine, { input: {} });
   actor.start();
   const nowMs = Date.parse('2026-05-06T00:00:00.000Z');
   await sendCheckAndSettle(actor, {
@@ -193,7 +170,7 @@ test('machine records last evaluation in context', async () => {
 });
 
 test('machine re-evaluates on subsequent CHECK events', async () => {
-  const actor = createActor(binaryFreshnessMachine, { input: { pauseSentinelPath: sentinelPath } });
+  const actor = createActor(binaryFreshnessMachine, { input: {} });
   actor.start();
   const nowMs = Date.parse('2026-05-06T00:00:00.000Z');
   const first = await sendCheckAndSettle(actor, {
@@ -209,6 +186,6 @@ test('machine re-evaluates on subsequent CHECK events', async () => {
     pauseAfterDays: 60,
     nowMs,
   });
-  expect(second).toBe('stale_paused');
+  expect(second).toBe('stale');
   actor.stop();
 });

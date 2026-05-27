@@ -6,7 +6,6 @@ import {
   authFailedSentinelPath,
   bufferFullSentinelPath,
   devModeSentinelPath,
-  pausedSentinelPath,
   sessionStoppedSentinelPath,
   updateAvailableSentinelPath,
 } from 'core/io/fs';
@@ -24,7 +23,6 @@ export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
   return {
     output: consoleOutput(),
     config: inputs.config,
-    pauseSentinelPath: pausedSentinelPath(),
     authFailedSentinelPath: authFailedSentinelPath(),
     bufferFullSentinelPath: bufferFullSentinelPath(),
     sessionStoppedSentinelPath: sessionStoppedSentinelPath(),

@@ -3,7 +3,7 @@ import { isDirectBinary } from 'services/uninstall';
 import type { UninstallCommandDeps } from 'cli/commands/uninstall/uninstall.types.ts';
 
 const SENTINEL_LIST =
-  'PAUSED, AUTH_FAILED, BUFFER_FULL, SESSION_STOPPED, UPDATE_AVAILABLE, CONSENT_ACCEPTED';
+  'AUTH_FAILED, BUFFER_FULL, SESSION_STOPPED, UPDATE_AVAILABLE, CONSENT_ACCEPTED';
 
 export function buildConfirmationMessage(deps: UninstallCommandDeps, reset: boolean): string {
   const execPath = deps.currentExecPath ?? process.execPath;

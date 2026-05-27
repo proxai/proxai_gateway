@@ -59,7 +59,6 @@ function makeContexts(): {
     buffer,
     gatewayVersion: 'gw-0.1',
     sources: [noopSource('s')],
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     bufferPolicy: {
@@ -84,7 +83,6 @@ function makeContexts(): {
       fetch: fakeFetch(),
     }),
     hostId: 'h_test',
-    pauseSentinelPath: join(dir, 'PAUSED'),
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     bufferFullSentinelPath: join(dir, 'BUFFER_FULL'),
     bufferPolicy: {
@@ -97,7 +95,6 @@ function makeContexts(): {
   const heartbeatCtx: HeartbeatCycleContext = {
     buffer,
     gatewayVersion: 'gw-0.1',
-    pauseSentinelPath: join(dir, 'PAUSED'),
     installedAt: new Date().toISOString(),
     staleBinary: { warnAfterDays: 90, pauseAfterDays: 180 },
   };

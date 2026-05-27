@@ -9,11 +9,10 @@ function startRegistry() {
   return actor;
 }
 
-test('initial parallel state has all five regions in their absent/ok variants', () => {
+test('initial parallel state has all regions in their absent/ok variants', () => {
   const actor = startRegistry();
   const s = actor.getSnapshot();
   expect(s.matches({ auth: 'absent' })).toBe(true);
-  expect(s.matches({ pause: 'absent' })).toBe(true);
   expect(s.matches({ bufferPressure: 'ok' })).toBe(true);
   expect(s.matches({ session: 'live' })).toBe(true);
   expect(s.matches({ brewUpdate: 'unknown' })).toBe(true);
@@ -42,17 +41,6 @@ test('AUTH_FAILED_CLEARED returns auth region to absent and clears payload', () 
   const s = actor.getSnapshot();
   expect(s.matches({ auth: 'absent' })).toBe(true);
   expect(s.context.authPayload).toBeNull();
-  actor.stop();
-});
-
-test('PAUSE_REQUESTED and RESUME_REQUESTED toggle the pause region', () => {
-  const actor = startRegistry();
-  actor.send({ type: 'PAUSE_REQUESTED', payload: { reason: 'manual' } });
-  expect(actor.getSnapshot().matches({ pause: 'present' })).toBe(true);
-  expect(actor.getSnapshot().context.pausePayload?.reason).toBe('manual');
-  actor.send({ type: 'RESUME_REQUESTED' });
-  expect(actor.getSnapshot().matches({ pause: 'absent' })).toBe(true);
-  expect(actor.getSnapshot().context.pausePayload).toBeNull();
   actor.stop();
 });
 
@@ -105,15 +93,22 @@ test('BREW_UPDATE_AVAILABLE then BREW_UP_TO_DATE moves brewUpdate region', () =>
 
 test('regions transition independently of each other', () => {
   const actor = startRegistry();
-  actor.send({ type: 'PAUSE_REQUESTED', payload: { reason: 'manual' } });
   actor.send({
     type: 'AUTH_FAILED_WRITTEN',
     payload: { reason: 'invalid_key', detectedAtUtc: '2026-05-25T12:00:00.000Z' },
   });
+  actor.send({
+    type: 'PRESSURE_CROSSED_PAUSE',
+    payload: {
+      pendingBytes: 60_000_000_000,
+      thresholdBytes: 50_000_000_000,
+      setAtUtc: '2026-05-25T12:00:00.000Z',
+    },
+  });
   const s = actor.getSnapshot();
-  expect(s.matches({ pause: 'present' })).toBe(true);
   expect(s.matches({ auth: 'present' })).toBe(true);
-  expect(s.matches({ bufferPressure: 'ok' })).toBe(true);
+  expect(s.matches({ bufferPressure: 'full' })).toBe(true);
+  expect(s.matches({ session: 'live' })).toBe(true);
   actor.stop();
 });
 
@@ -123,21 +118,19 @@ test('gateDecision returns auth reason when auth payload present (highest priori
     type: 'AUTH_FAILED_WRITTEN',
     payload: { reason: 'invalid_key', detectedAtUtc: '2026-05-25T12:00:00.000Z' },
   });
-  actor.send({ type: 'PAUSE_REQUESTED', payload: { reason: 'manual' } });
+  actor.send({
+    type: 'PRESSURE_CROSSED_PAUSE',
+    payload: {
+      pendingBytes: 60_000_000_000,
+      thresholdBytes: 50_000_000_000,
+      setAtUtc: '2026-05-25T12:00:00.000Z',
+    },
+  });
   const decision = gateDecision(actor.getSnapshot().context);
   expect(decision.reason).toBe('auth');
   expect(decision.skipCapture).toBe(true);
   expect(decision.skipDrain).toBe(true);
   expect(decision.skipHeartbeat).toBe(false);
-  actor.stop();
-});
-
-test('gateDecision returns paused reason when only pause is present', () => {
-  const actor = startRegistry();
-  actor.send({ type: 'PAUSE_REQUESTED', payload: { reason: 'manual' } });
-  const decision = gateDecision(actor.getSnapshot().context);
-  expect(decision.reason).toBe('paused');
-  expect(decision.skipHeartbeat).toBe(true);
   actor.stop();
 });
 

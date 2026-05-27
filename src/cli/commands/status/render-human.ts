@@ -123,7 +123,6 @@ export function renderHumanStatus(
       installSource,
     },
     sentinels: {
-      paused: snapshot.paused,
       authFailed: snapshot.authFailed,
       bufferFull: snapshot.bufferFull,
       sessionStopped: snapshot.sessionStopped,
@@ -182,7 +181,6 @@ export function renderHumanStatus(
 
 function renderHealthLabel(snapshot: StatusSnapshot): string {
   if (snapshot.authFailed) return chalk.red('auth failed');
-  if (snapshot.paused) return chalk.red('paused');
   if (snapshot.bufferFull) return chalk.red('buffer full');
   if (snapshot.sessionStopped) return chalk.red('stopped (session)');
   if (!snapshot.hasRecentActivity) return chalk.dim('starting');
@@ -205,12 +203,6 @@ function renderSentinelLines(out: OutputSink, snapshot: StatusSnapshot): void {
     }
     out.info(
       `  ${chalk.red('AUTH_FAILED')}: ${reason}${when} — re-run ${chalk.cyan('proxai-gateway setup')}`,
-    );
-  }
-  if (snapshot.paused) {
-    const reason = snapshot.pausedReason.length > 0 ? `: ${snapshot.pausedReason}` : '';
-    out.info(
-      `  ${chalk.red('PAUSED')}${reason} — run ${chalk.cyan('proxai-gateway resume')} to continue`,
     );
   }
   if (snapshot.bufferFull) {

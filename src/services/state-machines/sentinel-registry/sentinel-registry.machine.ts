@@ -14,7 +14,6 @@ export const sentinelRegistryMachine = setup({
   type: 'parallel',
   context: {
     authPayload: null,
-    pausePayload: null,
     bufferFullPayload: null,
     sessionStoppedPayload: null,
     brewUpdatePayload: null,
@@ -37,27 +36,6 @@ export const sentinelRegistryMachine = setup({
             AUTH_FAILED_CLEARED: {
               target: 'absent',
               actions: assign({ authPayload: () => null }),
-            },
-          },
-        },
-      },
-    },
-    pause: {
-      initial: 'absent',
-      states: {
-        absent: {
-          on: {
-            PAUSE_REQUESTED: {
-              target: 'present',
-              actions: assign({ pausePayload: ({ event }) => event.payload }),
-            },
-          },
-        },
-        present: {
-          on: {
-            RESUME_REQUESTED: {
-              target: 'absent',
-              actions: assign({ pausePayload: () => null }),
             },
           },
         },

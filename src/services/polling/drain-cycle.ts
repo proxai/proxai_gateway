@@ -15,7 +15,6 @@ import type { DaemonStateSnapshot, PruneResult } from 'services/buffer';
 import type { PendingPressureResult } from 'services/buffer';
 import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 import { clearBufferFullSentinel, isBufferFull } from 'services/polling/buffer-full-sentinel.ts';
-import { isPaused } from 'services/polling/pause-sentinel.ts';
 import type { DrainCycleContext, DrainCycleResult } from 'services/polling/polling.types.ts';
 import { drainLoopMachine, type DrainGateBlockReason } from 'services/state-machines/drain-loop';
 import { drainBuffer } from 'services/uploader';
@@ -37,7 +36,6 @@ export async function runDrainCycle(ctx: DrainCycleContext): Promise<DrainCycleR
     cycleMachine.send({ type: 'GATE_BLOCKED', reason: gateReason });
     const skip = finishSkip(startedAt, startMs, gateReasonToSkipKey(gateReason), log, {
       authFailed: gateReason === 'auth',
-      paused: gateReason === 'paused',
     });
     cycleMachine.send({
       type: 'METRICS_PERSISTED',
@@ -113,7 +111,6 @@ export async function runDrainCycle(ctx: DrainCycleContext): Promise<DrainCycleR
   cycleMachine.stop();
 
   return {
-    paused: false,
     authFailed: false,
     startedAt,
     completedAt,
@@ -126,13 +123,11 @@ export async function runDrainCycle(ctx: DrainCycleContext): Promise<DrainCycleR
 
 async function evaluateGateReason(ctx: DrainCycleContext): Promise<DrainGateBlockReason | null> {
   if (await isAuthFailed(ctx.authFailedSentinelPath)) return 'auth';
-  if (await isPaused(ctx.pauseSentinelPath)) return 'paused';
   return null;
 }
 
-function gateReasonToSkipKey(reason: DrainGateBlockReason): 'auth_failed' | 'paused' {
-  if (reason === 'auth') return 'auth_failed';
-  return 'paused';
+function gateReasonToSkipKey(_reason: DrainGateBlockReason): 'auth_failed' {
+  return 'auth_failed';
 }
 
 async function applyResumeSentinel(
@@ -270,9 +265,9 @@ function readNumberMetadata(buffer: DrainCycleContext['buffer'], key: string): n
 function finishSkip(
   startedAt: string,
   startMs: number,
-  reason: 'auth_failed' | 'paused',
+  reason: 'auth_failed',
   log: DrainCycleContext['logger'],
-  flags: { paused: boolean; authFailed: boolean },
+  flags: { authFailed: boolean },
 ): DrainCycleResult {
   const completedAt = nowIsoUtc();
   log?.info(
@@ -280,7 +275,6 @@ function finishSkip(
     `drain cycle skipped: ${reason} sentinel present`,
   );
   return {
-    paused: flags.paused,
     authFailed: flags.authFailed,
     startedAt,
     completedAt,

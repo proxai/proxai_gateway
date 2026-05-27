@@ -2,7 +2,6 @@ import { createActor } from 'xstate';
 import { nowIsoUtc } from 'core/utils';
 import { getMetadata, setMetadata } from 'services/buffer';
 import { METADATA_KEYS } from 'services/buffer';
-import { isPaused } from 'services/polling/pause-sentinel.ts';
 import type {
   HeartbeatCycleContext,
   HeartbeatCycleResult,
@@ -20,7 +19,6 @@ import { runAutoUpgrade } from 'services/upgrade';
 const DEFAULT_VERSION_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
 function toFreshnessStatus(status: StaleBinaryStatus): BinaryFreshnessStatus {
-  if (status === 'paused') return 'stale_paused';
   return status;
 }
 
@@ -40,31 +38,12 @@ export async function runHeartbeatCycle(ctx: HeartbeatCycleContext): Promise<Hea
 
   log?.info({ event: 'heartbeat.cycle.start', started_at: startedAt }, 'heartbeat cycle started');
 
-  if (await isPaused(ctx.pauseSentinelPath)) {
-    cycleMachine.send({ type: 'GATE_BLOCKED' });
-    const completedAt = nowIsoUtc();
-    const durationMs = Date.now() - startMs;
-    log?.info(
-      { event: 'heartbeat.cycle.skipped', reason: 'paused' },
-      'heartbeat cycle skipped: paused sentinel present',
-    );
-    cycleMachine.send({ type: 'METRICS_PERSISTED', finishedAtUtc: completedAt, durationMs });
-    cycleMachine.stop();
-    return {
-      paused: true,
-      startedAt,
-      completedAt,
-      durationMs,
-      ranAutoUpgrade: false,
-    };
-  }
   cycleMachine.send({ type: 'GATE_CLEAR' });
 
   const staleDeps: Parameters<typeof checkStaleBinary>[0] = {
     installedAt: ctx.installedAt,
     warnAfterDays: ctx.staleBinary.warnAfterDays,
     pauseAfterDays: ctx.staleBinary.pauseAfterDays,
-    pauseSentinelPath: ctx.pauseSentinelPath,
   };
   if (log !== undefined) staleDeps.logger = log;
   const freshness = await checkStaleBinary(staleDeps);
@@ -110,7 +89,7 @@ export async function runHeartbeatCycle(ctx: HeartbeatCycleContext): Promise<Hea
   cycleMachine.send({ type: 'METRICS_PERSISTED', finishedAtUtc: completedAt, durationMs });
   cycleMachine.stop();
 
-  return { paused: false, startedAt, completedAt, durationMs, ranAutoUpgrade };
+  return { startedAt, completedAt, durationMs, ranAutoUpgrade };
 }
 
 export function shouldRunAutoUpgrade(ctx: HeartbeatCycleContext): boolean {

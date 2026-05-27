@@ -13,8 +13,6 @@ export interface UnifiedSummaryInputs {
   readonly daemonInferredAlive: boolean;
   readonly daemonLastCycleAt: string | null;
   readonly authFailed: boolean;
-  readonly paused: boolean;
-  readonly pausedReason: string;
   readonly bufferFull: boolean;
   readonly bufferFullPendingBytes: number | null;
   readonly bufferFullThreshold: number | null;

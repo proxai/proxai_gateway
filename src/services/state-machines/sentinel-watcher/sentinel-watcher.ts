@@ -14,7 +14,6 @@ import {
 
 const ALL_SENTINEL_KINDS: readonly SentinelKind[] = [
   'auth-failed',
-  'paused',
   'buffer-full',
   'session-stopped',
   'update-available',
@@ -93,8 +92,6 @@ function pickPath(kind: SentinelKind, deps: SentinelWatcherDeps): string {
   switch (kind) {
     case 'auth-failed':
       return deps.paths.authFailed;
-    case 'paused':
-      return deps.paths.paused;
     case 'buffer-full':
       return deps.paths.bufferFull;
     case 'session-stopped':

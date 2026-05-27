@@ -1,7 +1,7 @@
 # Debug a Stuck Daemon
 
-1. Run `proxai-gateway status` and check the Sentinels section. If `AUTH_FAILED` is shown: re-run `proxai-gateway setup --force` with a valid key. If `PAUSED` is shown: check the reason field — if `stale_binary`, upgrade then `proxai-gateway resume`; if manual pause, just `proxai-gateway resume`. If `BUFFER_FULL` is shown: wait for drain to catch up or temporarily lower `buffer_soft_pause_bytes` in `config.toml`.
-2. Check the Health section for binary age. If ≥30 days, the daemon is warning; if ≥60 days, it has written `PAUSED`.
+1. Run `proxai-gateway status` and check the Sentinels section. If `AUTH_FAILED` is shown: re-run `proxai-gateway setup --force` with a valid key. If `BUFFER_FULL` is shown: wait for drain to catch up or temporarily lower `buffer_soft_pause_bytes` in `config.toml`. If `SESSION_STOPPED` is shown: run `proxai-gateway start` (or reboot — the sentinel self-clears on the next boot).
+2. Check the Health section for binary age. If ≥30 days the daemon logs a warning; if ≥60 days it logs `stale_binary.stale` and the next heartbeat's auto-upgrade replaces the binary.
 3. Run `proxai-gateway tail --level warn --since 2h` to see recent problems. Look for `upload.rate_limited`, `upload.retriable`, `upload.fatal`, or `auth.invalid`.
 4. For persistent retriable failures: check `http_status` and `http_body` in the log event. `http_status: null` = network problem. 429 with a long `retry_after_ms` = server rate limit.
 5. For `upload.fatal`: examine `kind` and `error`. `ValidationError` means the DTO was rejected (shouldn't happen on well-formed input); `OversizedDecompressedSliceError` means a single row exceeded 10 MiB — check `quarantined_records` via `status` for a count.
