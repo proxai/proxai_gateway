@@ -68,7 +68,7 @@ function configOf(machine: AnyStateMachine): MachineConfigLike {
 }
 
 async function main(): Promise<void> {
-  const outDir = join(process.cwd(), 'docs', 'architecture', 'diagrams');
+  const outDir = join(process.cwd(), 'docs', 'architecture', 'diagrams', 'xstate');
   await mkdir(outDir, { recursive: true });
   const specs: DiagramMachineSpec[] = MACHINES.map((m) => ({
     name: m.name,

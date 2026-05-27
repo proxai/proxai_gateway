@@ -2,6 +2,8 @@
 
 # Codex — capture decisions and product selections
 
+*Last Updated: 2026-05-27*
+
 > Two artifacts per Codex install: JSONL rollouts under `~/.codex/sessions/` and a numbered SQLite state file at `~/.codex/state_<N>.sqlite`. The gateway captures both. It parses each rollout line and keeps only the dialogue records (`session_meta`, turn-control `event_msg`, `response_item` messages), allow-lists two tables out of the state file, and ignores the rest of `~/.codex/`.
 
 Codex is the only source that registers **two** entries in `SOURCE_VARIANTS` — one for jsonl rollouts, one for the sqlite state file — and that asymmetry shapes everything: rollouts use byte-range watermarks, then parse-filter-trim each line so the body carries only conversation-relevant records; state captures use rowid-range watermarks per table and only ship rows from an allow-list.
@@ -27,10 +29,12 @@ This is a deliberate trade-off: the older files are immutable, so we know nothin
 
 Because both the Codex Desktop and Codex CLI apps can run concurrently and perform frequent write transactions to `state_<N>.sqlite`, read attempts by the gateway are prone to database locks, triggering `SQLITE_CANTOPEN` ("unable to open database file") errors.
 
-To guarantee conflict-free, point-in-time capture, the gateway's database reader implements a robust double-attempt rescue flow:
-1. **Initial Open**: The gateway attempts to establish a standard read-only connection to the state file using `openReadOnly`.
-2. **Rescue Retry (`immutable: true`)**: If the initial open is rejected due to active write locks or pending journal/WAL logs, the reader immediately retries the connection with the `immutable: true` option (setting the `immutable=1` URI search parameter). This tells SQLite that the database is on read-only media and can be safely read while ignoring any active WAL, locks, or journal writes.
+To guarantee conflict-free, point-in-time capture, the gateway's database reader creates a transactionally consistent copy of the active state database using SQLite's native `VACUUM INTO` command via `snapshotSqlite`. During this snapshot generation, the database engine handles active database writing locks gracefully using a robust double-attempt open fallback flow:
+1. **Initial Attempt**: The gateway attempts to establish a standard read-only connection to the original state file.
+2. **Rescue Fallback (`immutable: true`)**: If the initial open is rejected due to active write locks or pending journal/WAL logs, the reader immediately retries the connection with the `immutable: true` option (which appends `immutable=1` to the SQLite URI). This tells SQLite that the database can be safely read while ignoring active WAL, locks, or journal writes.
 3. **Fail-Safe Propagation**: If both attempts fail, the original error is thrown, ensuring genuine file or permission problems are not masked.
+
+Once the isolated database snapshot is successfully created at a temporary path, the state collector opens this temp file to query and extract changes cleanly without any locking conflicts.
 
 This double-attempt retry strategy ensures telemetry capture never locks up the active Codex apps and prevents gateway polling errors.
 

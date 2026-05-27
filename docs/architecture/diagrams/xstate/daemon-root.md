@@ -12,7 +12,6 @@ stateDiagram-v2
     sync_decision --> ready: WATERMARKS_SKIPPED
     ready --> [*]
   }
-  syncing_watermarks --> running: WATERMARKS_SYNCED
   running --> draining_for_shutdown: SHUTDOWN
   draining_for_shutdown --> exited: DRAIN_FOR_SHUTDOWN_COMPLETE
   draining_for_shutdown --> exited: EXIT

@@ -2,6 +2,8 @@
 
 # Capture (02)
 
+*Last Updated: 2026-05-27*
+
 How agent session data gets discovered, parsed, sliced, redacted, and packaged into batches that the buffer can hold. Each doc covers one stage of that pipeline; together they describe the entire pre-buffer code path that runs every capture cycle.
 
 ## Docs in this section

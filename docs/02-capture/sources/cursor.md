@@ -2,6 +2,8 @@
 
 # Cursor — capture decisions and product selections
 
+*Last Updated: 2026-05-27*
+
 > The gateway snapshots Cursor's `cursorDiskKV` sqlite table and ships rows from three key prefixes: `composerData:` (chat headers), `bubbleId:` (per-message envelopes), and `agentKv:blob:` (API-canonical message bodies). Bubble and blob rows are filtered to drop empty / non-conversation records, and every shipped row's value is trimmed before it goes on the wire. The file-snapshot, checkpoint, and inline-diff prefixes are not captured. This page explains what each captured prefix carries, how the filter and trim work, and what the still-skipped prefixes hold.
 
 Cursor's on-disk content is split across many KV prefixes inside a single sqlite database. The gateway captures the three prefixes that together reconstruct a conversation — the chat manifest, the rendered bubbles, and the API-shaped message bodies — and skips the prefixes that only hold file-edit snapshots and inline-diff UI state.
@@ -170,7 +172,7 @@ The gateway ships `agentKv:blob:` rows into nest's durable storage, but nest doe
 - **No native sub-agent concept.** `agent_id` is always `null` for Cursor rows. Cursor's "Background Agents" feature appears to run server-side; on this laptop it leaves no observable local KV namespace.
 - **Composer-level group counter caps batch fan-out.** `CursorExtractChatsService` emits an `agent_gateway_parser_composers_per_batch_total` metric (observed ~33 composers per batch on cold-boot scans) for downstream observability.
 - **Workspace dbs are snapshotted but produce no rows.** Discovery still touches them so a future Cursor version that starts storing chats per-workspace would surface as new captured rows automatically.
-- **Schema-version detection reads from the kv rows themselves.** `extractAgentSchemaVersion` walks the captured rows looking for a version-bearing field; falls back to `unknown` if none is present.
+- **Schema-version detection reads from the kv rows themselves.** `extractAgentSchemaVersion` walks the captured rows, inspecting the internal `_v` version field of both the `composerData:` and `bubbleId:` rows in the slice, and formats them as `composerVersion:bubbleVersion` (e.g., `10:5`). If either component is not found in the current slice, it falls back to the default `unknown` placeholder (resulting in hybrid shapes like `10:unknown` or the fallback `unknown:unknown`).
 - **VACUUM gen-suffix is the cursor's primary defence.** Cursor's table grows monotonically until a VACUUM compacts it; without the gen-suffix logic, a post-VACUUM read would re-emit every row already shipped.
 
 ## Skipped-content reality check

@@ -1,23 +1,23 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-26T23:13:35.608Z",
-  "sourceHash": "4274193af332b0c206e6f5695aef6da7",
+  "generatedAt": "2026-05-27T23:31:52.546Z",
+  "sourceHash": "0217d1a1c7f7e2260b5a9ee6bbdae5ae",
   "files": [
     {
       "path": "CLAUDE.md",
-      "hash": "448d85da2b963bbb"
+      "hash": "a842de745a041ffe"
     },
     {
       "path": "AGENTS.md",
-      "hash": "e28400dac77560fb"
+      "hash": "484a459989c3095e"
     },
     {
       "path": "GEMINI.md",
-      "hash": "6e2805b62c02c3f7"
+      "hash": "954153a8c4f967af"
     },
     {
       "path": ".agent/AGENTS.md",
-      "hash": "3a8630bcda7253e0"
+      "hash": "0bcded1d30a2d155"
     },
     {
       "path": ".claude/rules/_always.md",
@@ -118,6 +118,26 @@
     {
       "path": ".agent/rules/process/calver-version-only-via-script.md",
       "hash": "95ee70562b53097f"
+    },
+    {
+      "path": ".claude/rules/process/diagrams.md",
+      "hash": "9cf60f9e4b3bd393"
+    },
+    {
+      "path": ".cursor/rules/process/diagrams.mdc",
+      "hash": "60e820c3f40c922a"
+    },
+    {
+      "path": ".codex/rules/process/diagrams.md",
+      "hash": "9cf60f9e4b3bd393"
+    },
+    {
+      "path": ".gemini/rules/process/diagrams.md",
+      "hash": "9cf60f9e4b3bd393"
+    },
+    {
+      "path": ".agent/rules/process/diagrams.md",
+      "hash": "9cf60f9e4b3bd393"
     },
     {
       "path": ".claude/rules/process/tests.md",
@@ -678,6 +698,26 @@
     {
       "path": ".agent/knowledge/process/agent-rationale.md",
       "hash": "c0d65a63f0cee64e"
+    },
+    {
+      "path": ".claude/knowledge/process/diagram-agentic-and-validation-guide.md",
+      "hash": "b1c2319b8be4ab1c"
+    },
+    {
+      "path": ".cursor/knowledge/process/diagram-agentic-and-validation-guide.md",
+      "hash": "b1c2319b8be4ab1c"
+    },
+    {
+      "path": ".codex/knowledge/process/diagram-agentic-and-validation-guide.md",
+      "hash": "b1c2319b8be4ab1c"
+    },
+    {
+      "path": ".gemini/knowledge/process/diagram-agentic-and-validation-guide.md",
+      "hash": "b1c2319b8be4ab1c"
+    },
+    {
+      "path": ".agent/knowledge/process/diagram-agentic-and-validation-guide.md",
+      "hash": "b1c2319b8be4ab1c"
     },
     {
       "path": ".claude/knowledge/process/skill-rationale.md",

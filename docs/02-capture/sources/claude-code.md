@@ -2,6 +2,8 @@
 
 # Claude Code — capture decisions and product selections
 
+*Last Updated: 2026-05-27*
+
 > What the gateway watches under `~/.claude/projects/`, which lines it keeps, which it drops before upload, and how the receiver turns the kept lines into records.
 
 Claude Code writes its transcripts as append-only JSONL files under `~/.claude/projects/`. Each project gets its own directory; each chat gets its own file; each sub-agent spawn gets its own file inside a `subagents/` subdirectory of its parent session. The gateway parses every JSONL line in a session file, keeps only the lines that pass the `isDialogueRecord` filter (user and assistant dialogue turns that carry real text), and ships those kept lines verbatim — each as its full original JSONL line, after redaction. Tool-call, tool-result, meta, synthetic, and non-dialogue envelope lines are dropped before upload.
@@ -78,7 +80,7 @@ Files the discovery globs never match:
 | Files at the projects root (e.g., `~/.claude/projects/foo.jsonl`) | Glob requires at least one directory level; Claude Code never writes here. |
 | Files deeper than the two supported shapes (`<project>/<session>/foo.jsonl`, `<project>/x/y/z/foo.jsonl`) | Not part of Claude Code's known layout. Pinned-depth design — see test `rejects deeper-nested jsonl files outside the two pinned-depth shapes`. |
 | Non-`.jsonl` files in project dirs | Glob requires the `.jsonl` extension. |
-| Files older than `initial_scan_window_days` (default 30) | mtime filter at discovery time; user-overridable via config. |
+| Files older than the mtime threshold (if specified) | mtime filter at discovery time (passed via `minimumMtime` / `minimumMtimeOverride`). |
 | Other `~/.claude/` content (`history.jsonl`, settings, statsig payloads, todos cache, etc.) | Outside the projects subpath. Not transcript content. |
 
 ## What's inside a captured JSONL line

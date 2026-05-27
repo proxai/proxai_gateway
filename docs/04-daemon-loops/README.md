@@ -2,6 +2,8 @@
 
 # Daemon Loops (04)
 
+*Last Updated: 2026-05-27*
+
 The three concurrent loops that drive the daemon — capture, drain, heartbeat — plus the sentinels that gate them. They run under one process via `Promise.all` and never share memory; coordination happens through SQLite rows and on-disk sentinel files.
 
 ## Docs in this section

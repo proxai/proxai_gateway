@@ -2,6 +2,8 @@
 
 # Backend (05)
 
+*Last Updated: 2026-05-27*
+
 The contract with the ingest service — endpoints, payload shape, response classification, idempotency, Retry-After handling — and the identity model that ties a host to an account.
 
 ## Docs in this section

@@ -2,6 +2,8 @@
 
 # 2.1 Sources — per-source deep-dives
 
+*Last Updated: 2026-05-27*
+
 This folder is the per-source companion to [2.1 Sources](../2.1-sources.md). The parent doc is the comparison overview: what a "source" is, the `(sourceApp, sourceKind, bodyFormat, watermarkKind)` taxonomy, and the cross-source quirks. Each file in here picks one agent and answers four questions about it:
 
 1. Where does its data live on disk and what does the gateway discover?

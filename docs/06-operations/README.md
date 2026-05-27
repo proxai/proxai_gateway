@@ -2,6 +2,8 @@
 
 # Operations (06)
 
+*Last Updated: 2026-05-27*
+
 How to run, configure, and observe a running gateway. The three docs cover the persistent `config.toml`, the per-platform daemon and service-unit lifecycle, and the CLI surface plus its observability outputs (`status`, `tail`, the structured log file).
 
 ## Docs in this section

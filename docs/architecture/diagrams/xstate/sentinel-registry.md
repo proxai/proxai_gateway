@@ -8,11 +8,6 @@ stateDiagram-v2
     absent --> present: AUTH_FAILED_WRITTEN
     present --> absent: AUTH_FAILED_CLEARED
   }
-  state pause {
-    [*] --> absent
-    absent --> present: PAUSE_REQUESTED
-    present --> absent: RESUME_REQUESTED
-  }
   state bufferPressure {
     [*] --> ok
     ok --> full: PRESSURE_CROSSED_PAUSE

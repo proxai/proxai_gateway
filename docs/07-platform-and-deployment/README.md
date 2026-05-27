@@ -2,6 +2,8 @@
 
 # Platform & Deployment (07)
 
+*Last Updated: 2026-05-27*
+
 What differs across platforms, and how the gateway is built, released, installed, and tested. This is the section to consult when working on anything that touches platform-specific code, the build pipeline, the install scripts, or the CI workflows.
 
 ## Docs in this section

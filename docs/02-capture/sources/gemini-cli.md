@@ -2,6 +2,8 @@
 
 # Gemini CLI — capture decisions and product selections
 
+*Last Updated: 2026-05-27*
+
 > Gemini CLI writes one JSONL per chat under `~/.gemini/tmp/<project>/chats/`. The first line of each file is a session-meta header that the gateway skips on a fresh cursor; everything after is event records. The gateway parses each event line, keeps only the user↔assistant dialogue records, trims each assistant record, and ships the result. The recursive `**` glob catches every chat depth Gemini might use in the future.
 
 Of the four supported agents, Gemini CLI has the simplest on-disk shape: one append-only JSONL per chat, no sub-agent concept, no SQLite. Capture is not a raw byte passthrough — the collector parses every event line, applies a dialogue filter (`isGeminiCliDialogueRecord`), and runs each surviving assistant record through `trimGeminiCliRecord` before redaction and shipping. The interesting parts are that dialogue filter/trim pass, the header-skip dance on fresh cursors, and the version-detection path (which spawns the `gemini` binary).

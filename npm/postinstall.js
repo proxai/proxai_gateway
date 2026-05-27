@@ -92,6 +92,19 @@ function manualInstructions(version, platform, arch, ext) {
 async function main() {
   const version = readVersion();
   const { platform, arch, ext } = platformAndArch();
+
+  if (platform === 'darwin' && arch === 'x64') {
+    console.error(
+      `error: Intel Mac (darwin-x64) is not supported by the prebuilt binary distribution.`,
+    );
+    console.error(`       Apple Silicon (arm64) Macs only.`);
+    console.error(``);
+    console.error(`To build a darwin-x64 binary manually:`);
+    console.error(`  git clone https://github.com/proxai/proxai_gateway`);
+    console.error(`  cd proxai_gateway && bun install && bun run build:darwin-x64`);
+    process.exit(1);
+  }
+
   const binDir = path.resolve(__dirname, 'bin');
   const target = path.join(binDir, `proxai-gateway${ext}`);
 

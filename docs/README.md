@@ -1,5 +1,7 @@
 # ProxAI Gateway — Internal Documentation
 
+*Last Updated: 2026-05-27*
+
 These are the internal, FAQ-shaped docs for `proxai_gateway`. The source repository intentionally hosts no docs of its own; everything lives here. Reading order is linear from section 01 to section 07 — each section builds on the previous one, and every numbered doc inside a section carries top-of-file and bottom-of-file navigation rows that chain the docs together.
 
 ## Sections
