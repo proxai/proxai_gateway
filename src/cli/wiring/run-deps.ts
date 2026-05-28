@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import type { RunCommandDeps } from 'cli/commands/run';
 import { consoleOutput } from 'cli/output.ts';
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
-import { profileRootDir } from 'core/io/fs/profile.ts';
 import { GATEWAY_USER_AGENT, PACKAGE_VERSION } from 'core/utils';
 import type { GatewayConfig } from 'services/config';
 
@@ -31,7 +30,7 @@ export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
     currentVersion: PACKAGE_VERSION,
     binaryPath: inputs.binaryPath,
     installSource: inputs.config.account.installSource,
-    devMode: existsSync(join(profileRootDir(), 'DEV_MODE')),
+    devMode: existsSync(join(inputs.profileCtx.configDir, 'DEV_MODE')),
     exitProcess: inputs.exitProcess,
   };
   if (inputs.xstateInspect !== undefined) {
