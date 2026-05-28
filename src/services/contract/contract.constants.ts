@@ -13,6 +13,7 @@ export const VALID_SOURCE_APPS: readonly SourceApp[] = [
   'cursor',
   'codex',
   'gemini-cli',
+  'claude-desktop',
 ];
 
 export const VALID_SOURCE_KINDS: readonly SourceKind[] = [
@@ -68,6 +69,13 @@ export const SOURCE_VARIANTS: readonly SourceVariantSpec[] = [
   },
   {
     sourceApp: 'gemini-cli',
+    sourceKind: 'jsonl_append',
+    bodyFormat: 'jsonl',
+    watermarkKind: 'byte_range',
+    watermarkTableRequired: false,
+  },
+  {
+    sourceApp: 'claude-desktop',
     sourceKind: 'jsonl_append',
     bodyFormat: 'jsonl',
     watermarkKind: 'byte_range',

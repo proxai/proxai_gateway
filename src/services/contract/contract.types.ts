@@ -1,4 +1,4 @@
-export type SourceApp = 'claude-code' | 'cursor' | 'codex' | 'gemini-cli';
+export type SourceApp = 'claude-code' | 'cursor' | 'codex' | 'gemini-cli' | 'claude-desktop';
 
 export type SourceKind = 'jsonl_append' | 'sqlite_kv_snapshot' | 'sqlite_table_snapshot';
 

@@ -1,19 +1,19 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-28T14:02:52.252Z",
-  "sourceHash": "f8a414b25f5e302a0a078ba4fdb9218d",
+  "generatedAt": "2026-05-28T15:58:54.209Z",
+  "sourceHash": "1cefc8a91330eec1b978d29bcdf62f22",
   "files": [
     {
       "path": "CLAUDE.md",
-      "hash": "4dde015814bb303b"
+      "hash": "53590c1de36067de"
     },
     {
       "path": "AGENTS.md",
-      "hash": "76ac3a40cae6cd12"
+      "hash": "71f4be6b41aaf376"
     },
     {
       "path": ".agents/AGENTS.md",
-      "hash": "a5395ffbb287b3e5"
+      "hash": "58eff41539c514af"
     },
     {
       "path": ".claude/rules/_always.md",
@@ -1262,6 +1262,22 @@
     {
       "path": ".agents/knowledge/sources/source-formats.md",
       "hash": "a267df234659f45c"
+    },
+    {
+      "path": ".claude/knowledge/sources/source-platform-conventions.md",
+      "hash": "b3507aa7d516eace"
+    },
+    {
+      "path": ".cursor/knowledge/sources/source-platform-conventions.md",
+      "hash": "b3507aa7d516eace"
+    },
+    {
+      "path": ".codex/knowledge/sources/source-platform-conventions.md",
+      "hash": "b3507aa7d516eace"
+    },
+    {
+      "path": ".agents/knowledge/sources/source-platform-conventions.md",
+      "hash": "b3507aa7d516eace"
     },
     {
       "path": ".claude/skills/add-source-parser/SKILL.md",

@@ -172,6 +172,7 @@ export function countsBySource(db: Database): CountsBySource {
     cursor: emptySourceCounts(),
     codex: emptySourceCounts(),
     'gemini-cli': emptySourceCounts(),
+    'claude-desktop': emptySourceCounts(),
   };
   const batchRows = db
     .query<

@@ -1,7 +1,13 @@
 export const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const;
 export const SPINNER_INTERVAL_MS = 80;
 
-export const INSPECT_SOURCES = ['claude-code', 'cursor', 'codex', 'gemini-cli'] as const;
+export const INSPECT_SOURCES = [
+  'claude-code',
+  'cursor',
+  'codex',
+  'gemini-cli',
+  'claude-desktop',
+] as const;
 
 export const INSPECT_MAX_DECOMPRESSED_BYTES = 10 * 1024 * 1024;
 

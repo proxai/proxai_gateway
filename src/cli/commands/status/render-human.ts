@@ -24,11 +24,12 @@ import {
   keyCol,
 } from 'cli/commands/status/layout.ts';
 
-const SOURCE_ORDER: ('claude-code' | 'cursor' | 'codex' | 'gemini-cli')[] = [
+const SOURCE_ORDER: ('claude-code' | 'cursor' | 'codex' | 'gemini-cli' | 'claude-desktop')[] = [
   'claude-code',
   'cursor',
   'codex',
   'gemini-cli',
+  'claude-desktop',
 ];
 
 export interface RenderHumanStatusOptions {

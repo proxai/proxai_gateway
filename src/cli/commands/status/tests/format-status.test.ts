@@ -132,6 +132,7 @@ test('renderBufferSection prints per-source pending sub-rows with bytes when any
       cursor: { pending: 2, pendingBytes: 324, failed: 0, failedBytes: 0, delivered: 0 },
       codex: { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
       'gemini-cli': { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
+      'claude-desktop': { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
     },
     now: NOW,
   });
@@ -165,6 +166,7 @@ test('renderBufferSection prints per-source failed sub-rows when failed count > 
       cursor: { pending: 0, pendingBytes: 0, failed: 1, failedBytes: 1024, delivered: 0 },
       codex: { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
       'gemini-cli': { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
+      'claude-desktop': { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
     },
     now: NOW,
   });
@@ -184,6 +186,7 @@ test('renderUploadSection writes all-time, avg, last cycle, last success when po
       cursor: { batches: 14, bytes: 2 * 1024 * 1024 },
       codex: { batches: 2, bytes: 512 * 1024 },
       'gemini-cli': { batches: 0, bytes: 0 },
+      'claude-desktop': { batches: 0, bytes: 0 },
     },
     lastCycleCompletedAt: '2026-05-08T13:28:50Z',
     lastCycleAttempted: 0,
@@ -244,6 +247,7 @@ test('renderUploadSection colors retriable and fatal when nonzero, omits zero pe
       cursor: { batches: 0, bytes: 0 },
       codex: { batches: 0, bytes: 0 },
       'gemini-cli': { batches: 0, bytes: 0 },
+      'claude-desktop': { batches: 0, bytes: 0 },
     },
     lastCycleCompletedAt: '2026-05-08T13:28:50Z',
     lastCycleAttempted: 5,

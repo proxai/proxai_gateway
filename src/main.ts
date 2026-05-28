@@ -471,7 +471,7 @@ program
   )
   .option(
     '--source <name>',
-    'show only entries from one collector. One of: claude-code, cursor, codex, gemini-cli.',
+    'show only entries from one collector. One of: claude-code, cursor, codex, gemini-cli, claude-desktop.',
   )
   .option(
     '--level <level>',
@@ -580,7 +580,10 @@ program
   .option('--static', 'one-shot output, no live refresh', false)
   .option('--json', 'emit JSON; implies --static', false)
   .option('--error', 'show only failed, quarantined, and looping-resync records', false)
-  .option('--source <app>', 'filter by coding agent (claude-code, cursor, codex, gemini-cli)')
+  .option(
+    '--source <app>',
+    'filter by coding agent (claude-code, cursor, codex, gemini-cli, claude-desktop)',
+  )
   .option('--since <dur>', 'show records from the last duration (e.g. 24h, 7d)')
   .option('--pending', 'show queued records not yet uploaded', false)
   .option('--lines <n>', 'number of records to display', '20')

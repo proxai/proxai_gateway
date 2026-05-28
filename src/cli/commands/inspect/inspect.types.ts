@@ -5,6 +5,7 @@ export interface InspectBaseDirs {
   cursor?: string;
   geminiCli?: string;
   codex?: string;
+  claudeDesktop?: string;
 }
 
 export interface InspectCommandDeps {

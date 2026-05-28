@@ -19,6 +19,10 @@ import {
   isDialogueRecord,
 } from 'sources/claude-code';
 import {
+  discoverClaudeDesktopFiles,
+  defaultClaudeDesktopSessionsRoot,
+} from 'sources/claude-desktop';
+import {
   discoverCodexRolloutFiles,
   discoverCodexStateSqlite,
   defaultCodexHome,
@@ -72,7 +76,7 @@ function createCompressedSizer(): { add: (text: string) => void; finish: () => n
 
 function isPromptRecord(
   parsed: unknown,
-  sourceApp: 'claude-code' | 'gemini-cli' | 'codex',
+  sourceApp: 'claude-code' | 'gemini-cli' | 'codex' | 'claude-desktop',
 ): boolean {
   if (parsed === null || typeof parsed !== 'object') {
     return false;
@@ -117,7 +121,7 @@ function isCursorPromptRow(key: string, value: string | null): boolean {
 
 async function analyzeJsonlLogFile(
   filePath: string,
-  sourceApp: 'claude-code' | 'gemini-cli' | 'codex',
+  sourceApp: 'claude-code' | 'gemini-cli' | 'codex' | 'claude-desktop',
 ): Promise<{
   totalLines: number;
   oldestDate: string | null;
@@ -168,7 +172,7 @@ async function analyzeJsonlLogFile(
       let match = false;
       let capturedText = line;
       let lineBytes = Buffer.byteLength(line, 'utf8') + 1;
-      if (sourceApp === 'claude-code') {
+      if (sourceApp === 'claude-code' || sourceApp === 'claude-desktop') {
         match = isDialogueRecord(parsed);
       } else if (sourceApp === 'gemini-cli') {
         match = isGeminiCliDialogueRecord(parsed);
@@ -267,6 +271,36 @@ export async function handleInspect(
         promptCount: telPrompts,
         error,
       } = await analyzeJsonlLogFile(f.sourcePath, 'claude-code');
+      recordCount += totalLines;
+      updateChronological(oldestDate, f.lastModifiedMs);
+      updateChronological(newestDate, f.lastModifiedMs);
+
+      telemetryRawBytes += telBytes;
+      telemetryCompressedBytes += telComp;
+      telemetryRecordCount += telCount;
+      promptCount += telPrompts;
+      if (error !== null) {
+        errors.push(`${f.sourcePath}: ${error}`);
+      }
+    }
+  } else if (sourceName === 'claude-desktop') {
+    const baseDir = options.baseDir ?? defaultClaudeDesktopSessionsRoot();
+    const files = await discoverClaudeDesktopFiles(baseDir, {
+      minimumMtime: null,
+    });
+    for (const f of files) {
+      filesProcessed++;
+      totalBytes += f.sizeBytes;
+      const {
+        totalLines,
+        oldestDate,
+        newestDate,
+        telemetryRecordCount: telCount,
+        telemetryRawBytes: telBytes,
+        telemetryCompressedBytes: telComp,
+        promptCount: telPrompts,
+        error,
+      } = await analyzeJsonlLogFile(f.sourcePath, 'claude-desktop');
       recordCount += totalLines;
       updateChronological(oldestDate, f.lastModifiedMs);
       updateChronological(newestDate, f.lastModifiedMs);

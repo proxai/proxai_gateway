@@ -21,15 +21,22 @@ afterEach(async () => {
   await rmRecursive(dir);
 });
 
-test('builds four sources named claude-code, cursor, codex, gemini-cli', () => {
+test('builds five sources named claude-code, cursor, codex, gemini-cli, claude-desktop', () => {
   const sources = buildDefaultSources({
     claudeCodeBaseDir: join(dir, 'cc'),
     cursorBaseDir: join(dir, 'cur'),
     codexBaseDir: join(dir, 'cx'),
     geminiCliBaseDir: join(dir, 'gc'),
+    claudeDesktopBaseDir: join(dir, 'cd'),
   });
-  expect(sources).toHaveLength(4);
-  expect(sources.map((s) => s.name)).toEqual(['claude-code', 'cursor', 'codex', 'gemini-cli']);
+  expect(sources).toHaveLength(5);
+  expect(sources.map((s) => s.name)).toEqual([
+    'claude-code',
+    'cursor',
+    'codex',
+    'gemini-cli',
+    'claude-desktop',
+  ]);
 });
 
 test('each source poll returns no-op result for empty base dirs', async () => {
@@ -38,6 +45,7 @@ test('each source poll returns no-op result for empty base dirs', async () => {
     cursorBaseDir: join(dir, 'cur'),
     codexBaseDir: join(dir, 'cx'),
     geminiCliBaseDir: join(dir, 'gc'),
+    claudeDesktopBaseDir: join(dir, 'cd'),
   });
   for (const s of sources) {
     const result = await s.poll({
@@ -53,12 +61,13 @@ test('each source poll returns no-op result for empty base dirs', async () => {
 
 test('builds with default home paths when no overrides given', () => {
   const sources = buildDefaultSources();
-  expect(sources).toHaveLength(4);
+  expect(sources).toHaveLength(5);
   expect(sources.map((s) => s.name)).toContain('claude-code');
   expect(sources.map((s) => s.name)).toContain('gemini-cli');
+  expect(sources.map((s) => s.name)).toContain('claude-desktop');
 });
 
 test('partial overrides leave the other sources at default paths', () => {
   const sources = buildDefaultSources({ codexBaseDir: join(dir, 'codex-only') });
-  expect(sources).toHaveLength(4);
+  expect(sources).toHaveLength(5);
 });
