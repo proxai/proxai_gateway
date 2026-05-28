@@ -1,4 +1,13 @@
+---
+name: "Watermark Monotonicity Enforcement"
+description: "Monotonic forward-only movement rules for watermark cursors to prevent regression errors."
+activation: "contextual"
+scenarios: ["Writing watermark updates to database source cursors", "Handling server-issued watermark correction handshakes", "Debugging watermark regression errors on upload cycle"]
+globs: ["src/**/*.ts", "**/*.ts"]
+---
+
 # Watermark Monotonicity Rule
+
 
 **`watermark_end` for a given `(source_app, source_path_hash, source_inode,
 watermark_table)` key must only move forward. Any code path that writes

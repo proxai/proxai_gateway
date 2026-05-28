@@ -1,4 +1,13 @@
+---
+name: "Cross-Platform Compatibility Guidelines"
+description: "Command spawning, chmod gating, path separators, file deletion, and ANSI stripping rules for cross-platform support."
+activation: "contextual"
+scenarios: ["Spawning subprocesses with Bun.spawn", "Deleting SQLite databases or testing directory permissions", "Writing path assertions and regexes in unit tests"]
+globs: ["src/**/*.ts", "**/*.ts"]
+---
+
 # Cross-Platform Rules
+
 
 - Always resolve tool names via `Bun.which(name)` before `Bun.spawn`. If `Bun.which` returns `null`, treat the tool as absent and return an error result — never let spawn fail. Canonical reference: `src/services/uninstall/sweep.ts`.
 - Never use `/bin/sh` in production code or tests. Use `bun -e '<script>'` for portable subprocess tests.

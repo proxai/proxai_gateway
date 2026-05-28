@@ -15,9 +15,7 @@ export function hashOf(input: string): string {
 }
 
 /**
- * Recursively copy `src` to `dst`. Returns list of relative file paths copied,
- * always with forward-slash separators (these are logical manifest paths, not
- * OS filesystem paths, so they stay portable across macOS/Linux/Windows).
+ * Recursively copy `src` to `dst`. Returns list of relative file paths copied.
  */
 export async function copyDirRecursive(src: string, dst: string): Promise<string[]> {
   const out: string[] = [];
@@ -28,7 +26,7 @@ export async function copyDirRecursive(src: string, dst: string): Promise<string
     const dp = join(dst, e.name);
     if (e.isDirectory()) {
       const sub = await copyDirRecursive(sp, dp);
-      out.push(...sub.map((s) => `${e.name}/${s}`));
+      out.push(...sub.map((s) => join(e.name, s)));
     } else if (e.isFile()) {
       await mkdir(dirname(dp), { recursive: true });
       await copyFile(sp, dp);

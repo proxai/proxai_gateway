@@ -44,12 +44,6 @@ export async function emitKnowledge(
       mani.recordEmit(rel, hashOf(content));
     }
 
-    if (cfg.tools.gemini) {
-      const rel = join(cfg.paths.geminiDir, 'knowledge', `${k.subpath}.md`);
-      await writeFileAtomic(join(repoRoot, rel), content);
-      mani.recordEmit(rel, hashOf(content));
-    }
-
     if (cfg.tools.antigravity) {
       const rel = join(cfg.paths.antigravityDir, 'knowledge', `${k.subpath}.md`);
       await writeFileAtomic(join(repoRoot, rel), content);

@@ -1,4 +1,13 @@
+---
+name: "Parser Version Bump Enforcement"
+description: "Enforces bumping agentSchemaVersion whenever a source parser's emitted record shape changes."
+activation: "contextual"
+scenarios: ["Adding or removing a property in emitted record JSON", "Changing a property value type in a parser", "Modifying parser record interpretation or filter logic"]
+globs: ["src/**/*.ts", "**/*.ts"]
+---
+
 # Parser Version Bump Rule
+
 
 **Any change to a source parser's emitted record shape — adding a field,
 removing a field, renaming, changing a value type, or changing a

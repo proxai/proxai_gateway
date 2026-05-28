@@ -1,4 +1,12 @@
+---
+name: "Version Bumping with CalVer"
+description: "Release tag computation, CalVer format rules, same-day retries, and banning manual package.json bumps."
+activation: "global"
+scenarios: ["Preparing a new release tag or package version", "Deploying custom gateway binaries to NPM or Github Releases", "Handling failed release retries or responding to SemVer-style requests"]
+---
+
 # Version Bumping Rule
+
 
 **Never hand-edit the version field in `package.json` for a release.
 Always use `bun run release` (which invokes

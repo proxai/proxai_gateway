@@ -42,7 +42,7 @@ async function generateFileTree(repoRoot: string, maxDepth = 3): Promise<string>
   for (const d of sorted) {
     const depth = d.split('/').length;
     const parts = d.split('/');
-    const name = parts[parts.length - 1] ?? d;
+    const name = parts[parts.length - 1] ?? '';
     lines.push(`${'  '.repeat(depth)}${name}/`);
   }
   return lines.join('\n');
@@ -98,6 +98,58 @@ function buildKnowledgeIndex(tree: AiTree, toolDir: string): string {
   ].join('\n');
 }
 
+function buildRulesIndex(tree: AiTree, toolDir: string): string {
+  if (tree.rules.length === 0) return '';
+  const rows = tree.rules.map((r) => {
+    const name = (typeof r.frontmatter?.name === 'string' && r.frontmatter.name) || r.basename;
+    const desc =
+      (typeof r.frontmatter?.description === 'string' && r.frontmatter.description) ||
+      firstNonEmptyLine(r.body) ||
+      'No description provided.';
+    const rawActivation =
+      (typeof r.frontmatter?.activation === 'string' && r.frontmatter.activation) || 'global';
+
+    let activationType = 'Always-Applied';
+    if (rawActivation === 'contextual' || r.frontmatter?.globs) {
+      activationType = 'Path-Scoped';
+    } else if (rawActivation === 'lazy-load') {
+      activationType = 'On-Demand';
+    }
+
+    let scenarios = '';
+    const rawScenarios = r.frontmatter?.scenarios;
+    if (Array.isArray(rawScenarios)) {
+      scenarios = rawScenarios.map((s) => `• ${s}`).join('<br>');
+    } else if (typeof rawScenarios === 'string') {
+      scenarios = rawScenarios;
+    } else {
+      scenarios = 'Manual reference / Always-applied invariant';
+    }
+
+    let relPath = '';
+    if (toolDir === '.cursor') {
+      const flatName = r.subpath.replace(/\//g, '-');
+      relPath = `.cursor/rules/${flatName}.mdc`;
+    } else if (toolDir === '.agents') {
+      relPath = `rules/${r.subpath}.md`; // inside .agents/ already
+    } else {
+      relPath = `${toolDir}/rules/${r.subpath}.md`;
+    }
+
+    return `| [\`${name}\`](${relPath}) | ${desc} | ${scenarios} | \`${activationType}\` |`;
+  });
+
+  return [
+    '## 📜 Project Rules Index',
+    '',
+    'Below is the directory of context-aware rules. The AI will automatically load these files based on file globs, or you can request them explicitly in your prompt.',
+    '',
+    '| Rule | Description | Trigger Scenarios (When to Apply) | Activation Type |',
+    '| --- | --- | --- | --- |',
+    ...rows,
+  ].join('\n');
+}
+
 function buildDocsSection(hasDocs: boolean): string {
   if (!hasDocs) return '';
   return `## Project documentation
@@ -138,7 +190,12 @@ This repo uses an \`ai/\` folder as the single source of truth for AI artifacts.
 
 See \`ai/mapper/README.md\` for full mapping details.`;
 
-  const parts: string[] = [buildPreamble(tree), buildRepoStructureSection(fileTree)];
+  const parts: string[] = [buildPreamble(tree)];
+
+  const rulesIndex = buildRulesIndex(tree, '.claude');
+  if (rulesIndex) parts.push(rulesIndex);
+
+  parts.push(buildRepoStructureSection(fileTree));
 
   const docsSection = buildDocsSection(hasDocs);
   if (docsSection) parts.push(docsSection);
@@ -164,7 +221,7 @@ This file (\`AGENTS.md\`) is read by both Codex CLI and Cursor. Each has its own
 
 ### Codex CLI
 
-- **Rules:** \`.codex/rules/*.md\` — one file per rule topic. **Codex does not auto-load this folder**; read each file via the Read tool to load project rules into context.
+- **Rules:** \`.codex/rules/*.md\` — one file per rule topic. **Codex does not auto-loads this folder**; read each file via the Read tool to load project rules into context.
 - **Knowledge:** \`.codex/knowledge/*.md\` — see **Domain knowledge index** below; use the Read tool to load only the topics relevant to your current task.
 - **Skills:** \`.agents/skills/<name>/SKILL.md\` ⚠️ Note: PLURAL \`.agents/\` at repo root (not \`.codex/skills/\`). This is Codex's special path.
 - **Subagents:** \`.codex/agents/<name>.toml\`
@@ -181,39 +238,14 @@ This file (\`AGENTS.md\`) is read by both Codex CLI and Cursor. Each has its own
 
 See \`ai/mapper/README.md\` for full mapping details.`;
 
-  const parts: string[] = [buildPreamble(tree), buildRepoStructureSection(fileTree)];
+  const parts: string[] = [buildPreamble(tree)];
 
-  const docsSection = buildDocsSection(hasDocs);
-  if (docsSection) parts.push(docsSection);
-
-  parts.push(orchestrationSection);
-  parts.push(buildExtendingMemorySection());
-
-  // AGENTS.md is shared by Codex + Cursor. Index uses the canonical Codex path
-  // when Codex is enabled; otherwise falls back to Cursor. Cursor users can
-  // also read the same files at `.cursor/knowledge/` (emitter writes to both).
   const indexToolDir = cfg.tools.codex ? '.codex' : cfg.tools.cursor ? '.cursor' : '.codex';
-  const knowledge = buildKnowledgeIndex(tree, indexToolDir);
-  if (knowledge) parts.push(knowledge);
 
-  return parts.join('\n\n') + '\n';
-}
+  const rulesIndex = buildRulesIndex(tree, indexToolDir);
+  if (rulesIndex) parts.push(rulesIndex);
 
-async function composeForGemini(fileTree: string, tree: AiTree, hasDocs: boolean): Promise<string> {
-  const orchestrationSection = `## Your orchestration (Gemini CLI)
-
-This repo uses an \`ai/\` folder as the single source of truth for AI artifacts. The mapper generates Gemini-specific files into \`.gemini/\`:
-
-- **Rules:** \`.gemini/rules/*.md\` — one file per rule topic. **Gemini does not auto-load this folder**; read each file via the Read tool to load project rules into context.
-- **Knowledge:** \`.gemini/knowledge/*.md\` — see **Domain knowledge index** below; use the Read tool to load only the topics relevant to your current task.
-- **Skills:** \`.gemini/skills/<name>/SKILL.md\`
-- **Subagents:** \`.gemini/agents/<name>.md\`
-- **Slash commands:** \`.gemini/commands/<name>.toml\` (TOML format — same template, different syntax)
-- **Helper scripts:** \`.gemini/tools/*\`
-
-See \`ai/mapper/README.md\` for full mapping details.`;
-
-  const parts: string[] = [buildPreamble(tree), buildRepoStructureSection(fileTree)];
+  parts.push(buildRepoStructureSection(fileTree));
 
   const docsSection = buildDocsSection(hasDocs);
   if (docsSection) parts.push(docsSection);
@@ -221,7 +253,7 @@ See \`ai/mapper/README.md\` for full mapping details.`;
   parts.push(orchestrationSection);
   parts.push(buildExtendingMemorySection());
 
-  const knowledge = buildKnowledgeIndex(tree, '.gemini');
+  const knowledge = buildKnowledgeIndex(tree, indexToolDir);
   if (knowledge) parts.push(knowledge);
 
   return parts.join('\n\n') + '\n';
@@ -231,20 +263,27 @@ async function composeForAntigravity(
   fileTree: string,
   tree: AiTree,
   hasDocs: boolean,
+  cfg: MapperConfig,
 ): Promise<string> {
+  const dir = cfg.paths.antigravityDir;
   const orchestrationSection = `## Your orchestration (Antigravity)
 
-This repo uses an \`ai/\` folder as the single source of truth for AI artifacts. The mapper generates Antigravity-specific files into \`.agent/\`:
+This repo uses an \`ai/\` folder as the single source of truth for AI artifacts. The mapper generates Antigravity-specific files into \`${dir}/\`:
 
-- **Rules:** \`.agent/rules/*.md\` — one file per rule topic; Antigravity auto-loads all \`.md\` files in this folder
-- **Knowledge:** \`.agent/knowledge/*.md\` — niche project facts indexed in the **Domain knowledge index** below; **NOT auto-loaded** — use the Read tool to load only the topics your current task needs
-- **Skills:** \`.agent/skills/<name>/SKILL.md\`
-- **Workflows:** \`.agent/workflows/<name>.md\` (slash-triggered prompt templates, invoked via \`/<workflow-name>\`)
-- **Helper scripts:** \`.agent/tools/*\`
+- **Rules:** \`${dir}/rules/*.md\` — one file per rule topic; Antigravity auto-loads all \`.md\` files in this folder
+- **Knowledge:** \`${dir}/knowledge/*.md\` — niche project facts indexed in the **Domain knowledge index** below; **NOT auto-loaded** — use the Read tool to load only the topics your current task needs
+- **Skills:** \`${dir}/skills/<name>/SKILL.md\` — nested skill packages for IDE orchestration
+- **Workflows:** \`${dir}/skills/<name>.md\` — flat slash-triggered prompt templates (invoked via \`/<workflow-name>\`)
+- **Helper scripts:** \`${dir}/tools/*\` — shared utility scripts
 
 See \`ai/mapper/README.md\` for full mapping details.`;
 
-  const parts: string[] = [buildPreamble(tree), buildRepoStructureSection(fileTree)];
+  const parts: string[] = [buildPreamble(tree)];
+
+  const rulesIndex = buildRulesIndex(tree, dir);
+  if (rulesIndex) parts.push(rulesIndex);
+
+  parts.push(buildRepoStructureSection(fileTree));
 
   const docsSection = buildDocsSection(hasDocs);
   if (docsSection) parts.push(docsSection);
@@ -252,7 +291,7 @@ See \`ai/mapper/README.md\` for full mapping details.`;
   parts.push(orchestrationSection);
   parts.push(buildExtendingMemorySection());
 
-  const knowledge = buildKnowledgeIndex(tree, '.agent');
+  const knowledge = buildKnowledgeIndex(tree, dir);
   if (knowledge) parts.push(knowledge);
 
   return parts.join('\n\n') + '\n';
@@ -292,15 +331,8 @@ export async function emitRoot(
     mani.recordEmit('AGENTS.md', h);
   }
 
-  if (cfg.tools.gemini) {
-    const doc = await composeForGemini(fileTree, tree, hasDocs);
-    const h = hashOf(doc);
-    await writeFileAtomic(join(repoRoot, 'GEMINI.md'), doc);
-    mani.recordEmit('GEMINI.md', h);
-  }
-
   if (cfg.tools.antigravity) {
-    const doc = await composeForAntigravity(fileTree, tree, hasDocs);
+    const doc = await composeForAntigravity(fileTree, tree, hasDocs, cfg);
     const h = hashOf(doc);
     const rel = join(cfg.paths.antigravityDir, 'AGENTS.md');
     await writeFileAtomic(join(repoRoot, rel), doc);

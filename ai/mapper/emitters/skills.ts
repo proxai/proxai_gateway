@@ -5,7 +5,7 @@ import type { AiTree } from '../loader';
 import type { MapperConfig } from '../config';
 import type { Manifest } from '../manifest';
 
-const TOOLS = ['claude', 'cursor', 'codex', 'gemini', 'antigravity'] as const;
+const TOOLS = ['claude', 'cursor', 'codex', 'antigravity'] as const;
 type Tool = (typeof TOOLS)[number];
 
 function skillsBaseDir(repoRoot: string, cfg: MapperConfig, tool: Tool): string {
@@ -15,7 +15,6 @@ function skillsBaseDir(repoRoot: string, cfg: MapperConfig, tool: Tool): string 
   const dirs: Record<Exclude<Tool, 'codex'>, string> = {
     claude: cfg.paths.claudeDir,
     cursor: cfg.paths.cursorDir,
-    gemini: cfg.paths.geminiDir,
     antigravity: cfg.paths.antigravityDir,
   };
   return join(repoRoot, dirs[tool], 'skills');
@@ -26,7 +25,6 @@ function manifestPrefix(cfg: MapperConfig, tool: Tool): string {
   const dirs: Record<Exclude<Tool, 'codex'>, string> = {
     claude: cfg.paths.claudeDir,
     cursor: cfg.paths.cursorDir,
-    gemini: cfg.paths.geminiDir,
     antigravity: cfg.paths.antigravityDir,
   };
   return dirs[tool];

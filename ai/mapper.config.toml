@@ -4,12 +4,10 @@ schema_version = 2
 claude = true
 codex = true
 cursor = true
-gemini = true
 antigravity = true
 
 [paths]
 claude_dir = ".claude"
 cursor_dir = ".cursor"
 codex_dir = ".codex"
-gemini_dir = ".gemini"
-antigravity_dir = ".agent"
+antigravity_dir = ".agents"

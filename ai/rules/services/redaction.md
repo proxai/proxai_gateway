@@ -1,4 +1,13 @@
+---
+name: "Text Redaction and PII Masking"
+description: "Single-pass redaction, literal string replacements, rule ordering, preserved tokens, and unredacted source path rule."
+activation: "contextual"
+scenarios: ["Adding a new PII or secret redaction rule", "Modifying redaction categories or preserved tokens", "Debugging data leaks in uploaded logs and record structures"]
+globs: ["src/**/*.ts", "**/*.ts"]
+---
+
 # Redaction Rules
+
 
 - `applyRedaction` must remain a single-pass design (walk `ALL_RULES` once, replace sequentially). Multi-pass or tree-based accumulation breaks the constant-memory guarantee and the splitter's size budget assumption.
 - All rule `replacement` values must be literal strings only — no callback variant. The `RedactionRule` interface in `redaction.types.ts` enforces this; do not change it.

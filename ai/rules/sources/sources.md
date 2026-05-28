@@ -1,4 +1,13 @@
+---
+name: "Source Parser Layout and Behavior"
+description: "Directory structures, file glob depths, sqlite cursor snapshots, and error tracking for source parsers."
+activation: "contextual"
+scenarios: ["Creating a new source parser", "Modifying discover.ts or collect.ts in source apps", "Implementing custom file scanners or cursor persistence"]
+globs: ["src/**/*.ts", "**/*.ts"]
+---
+
 # Source Parser Rules
+
 
 - Each source lives in `src/sources/<app>/` with exactly `discover.ts`, `collect.ts`, `index.ts` (+ `<app>.constants.ts`, `<app>.types.ts`). Match this layout for new sources.
 - Never use `**/*.jsonl` globs — all source globs are pinned-depth (e.g., `*/*.jsonl`, `*/*/subagents/*.jsonl`). Changing glob depth risks silently capturing unknown content.

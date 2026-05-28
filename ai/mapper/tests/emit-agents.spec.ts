@@ -20,7 +20,7 @@ afterEach(async () => {
 });
 
 describe('emitAgents', () => {
-  test('passes through to Claude/Cursor/Gemini and translates for Codex; skips Antigravity', async () => {
+  test('passes through to Claude/Cursor and translates for Codex; skips Antigravity', async () => {
     const tree = await loadTree(join(repo, 'ai'));
     const cfg = await loadConfig(join(repo, 'ai'));
     const mani = new Manifest(repo);
@@ -40,9 +40,8 @@ describe('emitAgents', () => {
     expect(paths).toContain('.claude/agents/reviewer.md');
     expect(paths).toContain('.codex/agents/reviewer.toml');
     expect(paths).toContain('.cursor/agents/reviewer.md');
-    expect(paths).toContain('.gemini/agents/reviewer.md');
 
-    const antigravityExists = await lstat(join(repo, '.agent/agents/reviewer.md'))
+    const antigravityExists = await lstat(join(repo, '.agents/agents/reviewer.md'))
       .then(() => true)
       .catch(() => false);
     expect(antigravityExists).toBe(false);

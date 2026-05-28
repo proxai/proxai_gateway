@@ -1,7 +1,6 @@
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { writeFileAtomic, hashOf } from '../safe-fs';
-import { commandToGeminiToml } from '../translators/gemini-toml';
 import type { AiTree, WorkflowFile } from '../loader';
 import type { MapperConfig } from '../config';
 import type { Manifest } from '../manifest';
@@ -24,31 +23,38 @@ export async function emitWorkflows(
   for (const wf of tree.workflows) {
     const passthrough = await originalText(wf, aiRoot);
     const passHash = hashOf(passthrough);
+    const desc = asString(wf.frontmatter.description);
+
+    // Formulate modern Skill content with YAML frontmatter
+    const skillContent = `---
+name: ${wf.basename}
+description: ${desc}
+---
+
+${wf.body}`;
+
+    const skillHash = hashOf(skillContent);
 
     if (cfg.tools.claude) {
-      const rel = join(cfg.paths.claudeDir, 'commands', `${wf.basename}.md`);
-      await writeFileAtomic(join(repoRoot, rel), passthrough);
-      mani.recordEmit(rel, passHash);
+      const rel = join(cfg.paths.claudeDir, 'skills', wf.basename, 'SKILL.md');
+      await writeFileAtomic(join(repoRoot, rel), skillContent);
+      mani.recordEmit(rel, skillHash);
     }
     if (cfg.tools.cursor) {
       const rel = join(cfg.paths.cursorDir, 'commands', `${wf.basename}.md`);
       await writeFileAtomic(join(repoRoot, rel), passthrough);
       mani.recordEmit(rel, passHash);
     }
-    if (cfg.tools.gemini) {
-      const toml = commandToGeminiToml({
-        name: wf.basename,
-        description: asString(wf.frontmatter.description),
-        body: wf.body,
-      });
-      const rel = join(cfg.paths.geminiDir, 'commands', `${wf.basename}.toml`);
-      await writeFileAtomic(join(repoRoot, rel), toml);
-      mani.recordEmit(rel, hashOf(toml));
-    }
     if (cfg.tools.antigravity) {
-      const rel = join(cfg.paths.antigravityDir, 'workflows', `${wf.basename}.md`);
-      await writeFileAtomic(join(repoRoot, rel), passthrough);
-      mani.recordEmit(rel, passHash);
+      // 1. Antigravity IDE Skill (nested SKILL.md)
+      const relSkill = join(cfg.paths.antigravityDir, 'skills', wf.basename, 'SKILL.md');
+      await writeFileAtomic(join(repoRoot, relSkill), skillContent);
+      mani.recordEmit(relSkill, skillHash);
+
+      // 2. Antigravity CLI Command (flat local skill)
+      const relCommand = join(cfg.paths.antigravityDir, 'skills', `${wf.basename}.md`);
+      await writeFileAtomic(join(repoRoot, relCommand), passthrough);
+      mani.recordEmit(relCommand, passHash);
     }
     // Codex: project-scoped prompts deprecated; skip.
   }

@@ -1,4 +1,13 @@
+---
+name: "Daemon Loop Architecture"
+description: "Concurrency rules, independent intervals, capture/drain coordination, and error propagation inside daemon threads."
+activation: "contextual"
+scenarios: ["Modifying capture, drain, or heartbeat background cycles", "Adjusting daemon sleep intervals or error handling behaviors", "Writing thread concurrency controls or parallel Bun worker flows"]
+globs: ["src/**/*.ts", "**/*.ts"]
+---
+
 # Daemon Loop Rules
+
 
 - The three loops (capture, drain, heartbeat) run under `Promise.all` in `runDaemonLoops`. They never coordinate in memory — only through SQLite rows and sentinel files.
 - Loop intervals (`CAPTURE_INTERVAL_MS = 120_000`, `DRAIN_INTERVAL_MS = 30_000`, `HEARTBEAT_INTERVAL_MS = 3_600_000`) are constants in `polling.constants.ts` and are deliberately NOT in `config.toml`. Never expose them via config; only override via `DaemonLoopOptions` for tests.

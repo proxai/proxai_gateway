@@ -24,13 +24,11 @@ schema_version = 2
 claude = true
 codex = true
 cursor = false
-gemini = true
 antigravity = false
 [paths]
 claude_dir = ".claude"
 cursor_dir = ".cursor"
 codex_dir = ".codex"
-gemini_dir = ".gemini"
 antigravity_dir = ".agent"
 `,
     );
@@ -40,10 +38,12 @@ antigravity_dir = ".agent"
       claude: true,
       codex: true,
       cursor: false,
-      gemini: true,
       antigravity: false,
     });
     expect(cfg.paths.claudeDir).toBe('.claude');
+    expect(cfg.paths.cursorDir).toBe('.cursor');
+    expect(cfg.paths.codexDir).toBe('.codex');
+    expect(cfg.paths.antigravityDir).toBe('.agent');
     expect(cfg.emitTools.excludeSubdirs).toEqual([]);
   });
 
@@ -56,13 +56,11 @@ schema_version = 2
 claude = true
 codex = true
 cursor = true
-gemini = true
 antigravity = true
 [paths]
 claude_dir = ".claude"
 cursor_dir = ".cursor"
 codex_dir = ".codex"
-gemini_dir = ".gemini"
 antigravity_dir = ".agent"
 [emit_tools]
 exclude_subdirs = ["coverage-orchestrator", "huge-helper"]
@@ -81,7 +79,6 @@ schema_version = 2
 claude = true
 codex = true
 cursor = true
-gemini = true
 antigravity = true
 [paths]
 claude_dir = ".claude"
@@ -91,6 +88,7 @@ exclude_subdirs = ["ok", 7, true]
     );
     const cfg = await loadConfig(tmp);
     expect(cfg.emitTools.excludeSubdirs).toEqual(['ok']);
+    expect(cfg.paths.antigravityDir).toBe('.agents');
   });
 
   test('throws on missing file', async () => {

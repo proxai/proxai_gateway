@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
-import { join, dirname, sep } from 'node:path';
+import { join, dirname } from 'node:path';
 
 interface ManifestEntry {
   path: string;
@@ -7,15 +7,6 @@ interface ManifestEntry {
 }
 
 const MANIFEST_FILE = 'ai/.mapper-manifest.json';
-
-function normalizeRelPath(relPath: string): string {
-  // Always strip backslashes (Windows path.sep) → forward slash. Backslash
-  // is not a legal segment character in mapper-emitted logical paths, so
-  // this is safe to apply on every platform and keeps the manifest file
-  // byte-identical between macOS / Linux / Windows builds.
-  if (sep !== '/') return relPath.split(sep).join('/');
-  return relPath.includes('\\') ? relPath.split('\\').join('/') : relPath;
-}
 
 export class Manifest {
   private entries: ManifestEntry[] = [];
@@ -30,7 +21,7 @@ export class Manifest {
   constructor(private readonly repoRoot: string) {}
 
   recordEmit(relPath: string, hash: string): void {
-    this.entries.push({ path: normalizeRelPath(relPath), hash });
+    this.entries.push({ path: relPath, hash });
   }
 
   files(): readonly ManifestEntry[] {

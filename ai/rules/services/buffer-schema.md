@@ -1,4 +1,13 @@
+---
+name: "Buffer Database Schema and Operations"
+description: "Additive-only schema rules, WAL settings, delivery/prune transactions, Soft Pause thresholds, and permissions."
+activation: "contextual"
+scenarios: ["Modifying buffer.db database schema", "Updating soft-pause or soft-resume threshold behaviors", "Implementing metadata, quarantine, or transaction operations"]
+globs: ["src/**/*.ts", "**/*.ts"]
+---
+
 # Buffer Schema Rules
+
 
 - All schema DDL is `CREATE TABLE IF NOT EXISTS`. Schema changes must be additive (new columns via `ALTER TABLE … ADD COLUMN`, guarded by `columnExists`). There is no migration framework and no down-migration path.
 - Buffer open settings are fixed: `WAL` + `synchronous = NORMAL` + `foreign_keys = ON`. Do not alter these pragmas.

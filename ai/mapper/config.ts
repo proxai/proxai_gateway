@@ -7,14 +7,12 @@ export interface MapperConfig {
     claude: boolean;
     codex: boolean;
     cursor: boolean;
-    gemini: boolean;
     antigravity: boolean;
   };
   paths: {
     claudeDir: string;
     cursorDir: string;
     codexDir: string;
-    geminiDir: string;
     antigravityDir: string;
   };
   emitTools: {
@@ -48,15 +46,13 @@ export async function loadConfig(aiRoot: string): Promise<MapperConfig> {
       claude: !!tools.claude,
       codex: !!tools.codex,
       cursor: !!tools.cursor,
-      gemini: !!tools.gemini,
       antigravity: !!tools.antigravity,
     },
     paths: {
       claudeDir: paths.claude_dir ?? '.claude',
       cursorDir: paths.cursor_dir ?? '.cursor',
       codexDir: paths.codex_dir ?? '.codex',
-      geminiDir: paths.gemini_dir ?? '.gemini',
-      antigravityDir: paths.antigravity_dir ?? '.agent',
+      antigravityDir: paths.antigravity_dir ?? '.agents',
     },
     emitTools: { excludeSubdirs },
   };

@@ -29,8 +29,7 @@ describe('emitKnowledge', () => {
       '.claude/knowledge',
       '.codex/knowledge',
       '.cursor/knowledge',
-      '.gemini/knowledge',
-      '.agent/knowledge',
+      '.agents/knowledge',
     ]) {
       const k1 = await readFile(join(repo, dir, 'k1.md'), 'utf8');
       expect(k1).toContain('# k1');
@@ -49,8 +48,7 @@ describe('emitKnowledge', () => {
       '.claude/knowledge',
       '.codex/knowledge',
       '.cursor/knowledge',
-      '.gemini/knowledge',
-      '.agent/knowledge',
+      '.agents/knowledge',
     ]) {
       const nested = await readFile(join(repo, dir, 'area/nested-knowledge.md'), 'utf8');
       expect(nested).toContain('# Nested Knowledge');
@@ -65,7 +63,7 @@ describe('emitKnowledge', () => {
     await emitKnowledge(repo, tree, cfg, mani);
 
     const paths = mani.files().map((f) => f.path);
-    // Two files × five tools = 10 entries (k1, arch, area/nested-knowledge per tool).
+    // Two files × four tools = 8 entries (k1, arch, area/nested-knowledge per tool).
     expect(paths).toContain('.claude/knowledge/k1.md');
     expect(paths).toContain('.claude/knowledge/arch.md');
     expect(paths).toContain('.claude/knowledge/area/nested-knowledge.md');
@@ -73,10 +71,8 @@ describe('emitKnowledge', () => {
     expect(paths).toContain('.codex/knowledge/area/nested-knowledge.md');
     expect(paths).toContain('.cursor/knowledge/k1.md');
     expect(paths).toContain('.cursor/knowledge/area/nested-knowledge.md');
-    expect(paths).toContain('.gemini/knowledge/k1.md');
-    expect(paths).toContain('.gemini/knowledge/area/nested-knowledge.md');
-    expect(paths).toContain('.agent/knowledge/k1.md');
-    expect(paths).toContain('.agent/knowledge/area/nested-knowledge.md');
+    expect(paths).toContain('.agents/knowledge/k1.md');
+    expect(paths).toContain('.agents/knowledge/area/nested-knowledge.md');
   });
 
   test('disabled tools are skipped entirely', async () => {
@@ -84,7 +80,6 @@ describe('emitKnowledge', () => {
     const cfg = await loadConfig(FIXTURE);
     cfg.tools.cursor = false;
     cfg.tools.codex = false;
-    cfg.tools.gemini = false;
     cfg.tools.antigravity = false;
     const mani = new Manifest(repo);
     await emitKnowledge(repo, tree, cfg, mani);
@@ -92,12 +87,7 @@ describe('emitKnowledge', () => {
     const paths = mani.files().map((f) => f.path);
     expect(paths.every((p) => p.startsWith('.claude/knowledge/'))).toBe(true);
 
-    for (const dir of [
-      '.cursor/knowledge',
-      '.codex/knowledge',
-      '.gemini/knowledge',
-      '.agent/knowledge',
-    ]) {
+    for (const dir of ['.cursor/knowledge', '.codex/knowledge', '.agents/knowledge']) {
       expect(
         await lstat(join(repo, dir))
           .then(() => true)

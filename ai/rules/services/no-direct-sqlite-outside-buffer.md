@@ -1,4 +1,13 @@
+---
+name: "Buffer DB Access Restrictions"
+description: "Restricts bun:sqlite imports and direct SQL operations on buffer.db to code under src/services/buffer/."
+activation: "contextual"
+scenarios: ["Executing SQL updates against buffer tables", "Performing migrations or changing table schema", "Initializing SQLite instances or typing buffer parameters"]
+globs: ["src/**/*.ts", "**/*.ts"]
+---
+
 # Buffer DB Access Rule
+
 
 **Only code under `src/services/buffer/` may import `bun:sqlite` to
 touch `buffer.db`. Every other module goes through the buffer API

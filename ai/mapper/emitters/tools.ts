@@ -5,7 +5,7 @@ import type { AiTree } from '../loader';
 import type { MapperConfig } from '../config';
 import type { Manifest } from '../manifest';
 
-const TOOL_DIRS = ['claude', 'codex', 'cursor', 'gemini', 'antigravity'] as const;
+const TOOL_DIRS = ['claude', 'codex', 'cursor', 'antigravity'] as const;
 type ToolKey = (typeof TOOL_DIRS)[number];
 
 function toolDir(cfg: MapperConfig, tool: ToolKey): string {
@@ -13,7 +13,6 @@ function toolDir(cfg: MapperConfig, tool: ToolKey): string {
     claude: cfg.paths.claudeDir,
     cursor: cfg.paths.cursorDir,
     codex: cfg.paths.codexDir,
-    gemini: cfg.paths.geminiDir,
     antigravity: cfg.paths.antigravityDir,
   }[tool];
 }

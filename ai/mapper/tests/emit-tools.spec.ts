@@ -25,7 +25,7 @@ describe('emitTools', () => {
     const mani = new Manifest(repo);
     await emitTools(repo, tree, cfg, mani);
 
-    for (const dir of ['.claude', '.cursor', '.codex', '.gemini', '.agent']) {
+    for (const dir of ['.claude', '.cursor', '.codex', '.agents']) {
       const sh = await readFile(join(repo, dir, 'tools/helper.sh'), 'utf8');
       expect(sh).toContain('helper tool');
     }
@@ -34,19 +34,19 @@ describe('emitTools', () => {
     expect(paths).toContain('.claude/tools/helper.sh');
     expect(paths).toContain('.cursor/tools/helper.sh');
     expect(paths).toContain('.codex/tools/helper.sh');
-    expect(paths).toContain('.gemini/tools/helper.sh');
-    expect(paths).toContain('.agent/tools/helper.sh');
+    expect(paths).toContain('.agents/tools/helper.sh');
   });
 
   test('disabled tools are skipped', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
-    cfg.tools.gemini = false;
+    cfg.tools.antigravity = false;
+    cfg.tools.codex = false;
     const mani = new Manifest(repo);
     await emitTools(repo, tree, cfg, mani);
 
     const paths = mani.files().map((f) => f.path);
-    expect(paths.some((p) => p.startsWith('.gemini/'))).toBe(false);
+    expect(paths.some((p) => p.startsWith('.agents/'))).toBe(false);
     expect(paths.some((p) => p.startsWith('.claude/'))).toBe(true);
   });
 
@@ -69,10 +69,10 @@ describe('emitTools', () => {
     const paths = mani.files().map((f) => f.path);
     // top-level files (helper.sh) still copy
     expect(paths).toContain('.claude/tools/helper.sh');
-    expect(paths).toContain('.agent/tools/helper.sh');
+    expect(paths).toContain('.agents/tools/helper.sh');
     // excluded subdir is absent from every tool
     expect(paths.some((p) => p.includes('big-thing'))).toBe(false);
-    for (const dir of ['.claude', '.cursor', '.codex', '.gemini', '.agent']) {
+    for (const dir of ['.claude', '.cursor', '.codex', '.agents']) {
       const big = join(repo, dir, 'tools/big-thing/main.ts');
       expect(
         await readFile(big, 'utf8').then(
@@ -90,7 +90,7 @@ describe('emitTools', () => {
     const mani = new Manifest(repo);
     await emitTools(repo, tree, cfg, mani);
 
-    for (const dir of ['.claude', '.cursor', '.codex', '.gemini', '.agent']) {
+    for (const dir of ['.claude', '.cursor', '.codex', '.agents']) {
       const main = await readFile(join(repo, dir, 'tools/big-thing/main.ts'), 'utf8');
       expect(main).toContain('noop');
       const inner = await readFile(join(repo, dir, 'tools/big-thing/sub/inner.ts'), 'utf8');

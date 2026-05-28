@@ -48,10 +48,6 @@ export async function emitAgents(
       const rel = join(cfg.paths.cursorDir, 'agents', `${agent.basename}.md`);
       targets.push({ rel, content: passthrough, hash: passHash });
     }
-    if (cfg.tools.gemini) {
-      const rel = join(cfg.paths.geminiDir, 'agents', `${agent.basename}.md`);
-      targets.push({ rel, content: passthrough, hash: passHash });
-    }
     if (cfg.tools.codex) {
       const modelStr = asString(agent.frontmatter.model);
       const toml = subagentToCodexToml({

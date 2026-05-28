@@ -20,18 +20,41 @@ afterEach(async () => {
 });
 
 describe('emitWorkflows', () => {
-  test('Claude/Cursor get .md commands, Gemini gets .toml, Antigravity gets .md workflows, Codex skipped', async () => {
+  test('emits modern skills and flat commands to Claude, Cursor, and Antigravity while skipping Gemini', async () => {
     const tree = await loadTree(join(repo, 'ai'));
     const cfg = await loadConfig(join(repo, 'ai'));
+    cfg.paths.antigravityDir = '.agents';
     const mani = new Manifest(repo);
     await emitWorkflows(repo, tree, cfg, mani);
 
-    expect(await readFile(join(repo, '.claude/commands/audit.md'), 'utf8')).toContain('Audit');
-    expect(await readFile(join(repo, '.cursor/commands/audit.md'), 'utf8')).toContain('Audit');
-    expect(await readFile(join(repo, '.gemini/commands/audit.toml'), 'utf8')).toContain(
-      'prompt = ',
+    // Claude Skills
+    expect(await readFile(join(repo, '.claude/skills/audit/SKILL.md'), 'utf8')).toContain(
+      'description: Run an audit',
     );
-    expect(await readFile(join(repo, '.agent/workflows/audit.md'), 'utf8')).toContain('Audit');
+    expect(await readFile(join(repo, '.claude/skills/audit/SKILL.md'), 'utf8')).toContain(
+      'name: audit',
+    );
+
+    // Cursor Command
+    expect(await readFile(join(repo, '.cursor/commands/audit.md'), 'utf8')).toContain(
+      'Audit the codebase',
+    );
+
+    // Antigravity skills & slash commands
+    expect(await readFile(join(repo, '.agents/skills/audit/SKILL.md'), 'utf8')).toContain(
+      'name: audit',
+    );
+    expect(await readFile(join(repo, '.agents/skills/audit.md'), 'utf8')).toContain(
+      'Audit the codebase',
+    );
+
+    // Gemini CLI is completely wiped
+    const geminiPath = join(repo, '.gemini/commands/audit.toml');
+    expect(
+      await readFile(geminiPath, 'utf8')
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(false);
 
     const codexPath = join(repo, '.codex/commands/audit.md');
     expect(

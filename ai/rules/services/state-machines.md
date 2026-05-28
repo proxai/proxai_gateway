@@ -1,4 +1,13 @@
+---
+name: "State Machine Structure and Integrations"
+description: "XState v5 structure, separate types files, buffer access rules, sentinel writes, and snapshot restores."
+activation: "contextual"
+scenarios: ["Creating or refactoring a state machine", "Forwarding cross-machine events or updating active machines list", "Configuring state machine snapshot restoration or platform input branches"]
+globs: ["src/**/*.ts", "**/*.ts"]
+---
+
 # State Machine Rules
+
 
 - Every machine lives under `src/services/state-machines/<name>/` with at minimum `<name>.machine.ts`, `<name>.types.ts`, `index.ts`, and `tests/<name>.test.ts`. Add `<name>.constants.ts` / `<name>.utils.ts` when the machine has shared constants or pure helper functions; do not stuff them into the machine file.
 - Use xstate v5's `setup({ types, actors, guards, actions }).createMachine({ ... })` idiom for every machine. The xstate-vscode extension and the diagram exporter both rely on this shape.

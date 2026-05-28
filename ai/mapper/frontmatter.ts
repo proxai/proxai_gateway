@@ -32,16 +32,32 @@ export function parseFrontmatter(src: string): ParsedFrontmatter {
   const rest = afterOpening.slice(closingIdx).replace(/^\r?\n---\r?\n?/, '');
 
   const data: FrontmatterData = {};
+  let currentKey: string | null = null;
+  let currentRaw = '';
+
   for (const rawLine of fmBody.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) continue;
-    const colon = line.indexOf(':');
-    if (colon === -1) {
-      throw new Error(`Malformed frontmatter line (no colon): ${rawLine}`);
+
+    // Check if the line starts a new key: value
+    const match = line.match(/^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:(.*)$/);
+    if (match) {
+      if (currentKey !== null) {
+        data[currentKey] = parseValue(currentRaw);
+      }
+      currentKey = match[1];
+      currentRaw = match[2].trim();
+    } else {
+      if (currentKey === null) {
+        throw new Error(`Malformed frontmatter line (no colon and no active key): ${rawLine}`);
+      }
+      currentRaw += ' ' + line;
+      currentRaw = currentRaw.trim();
     }
-    const key = line.slice(0, colon).trim();
-    const raw = line.slice(colon + 1).trim();
-    data[key] = parseValue(raw);
+  }
+
+  if (currentKey !== null) {
+    data[currentKey] = parseValue(currentRaw);
   }
 
   return { data, body: rest };
@@ -52,14 +68,16 @@ function parseValue(raw: string): FrontmatterValue {
   if (raw === 'true') return true;
   if (raw === 'false') return false;
   if (raw.startsWith('[') && raw.endsWith(']')) {
+    // Strip trailing commas from array strings to make them valid JSON
+    const cleanedRaw = raw.replace(/,\s*\]$/, ']');
     let arr: unknown;
     try {
-      arr = JSON.parse(raw);
+      arr = JSON.parse(cleanedRaw);
     } catch {
       // Tolerate single-quoted entries (prettier rewrites "x" → 'x' in markdown
       // frontmatter under singleQuote: true). Swap quote style and retry.
       try {
-        arr = JSON.parse(raw.replace(/'/g, '"'));
+        arr = JSON.parse(cleanedRaw.replace(/'/g, '"'));
       } catch {
         throw new Error(`Invalid inline array: ${raw}`);
       }

@@ -34,7 +34,7 @@ Every cell in this table was verified against:
 - Binary string dumps (`strings /opt/homebrew/Caskroom/codex/.../codex-aarch64-apple-darwin`, `strings ~/.local/bin/agy`)
 - Filesystem inspection on a working install (e.g., `ls ~/.claude/skills/`, `ls ~/.cursor/skills-cursor/`)
 
-The full cross-tool research with citations is at `~/memory-sync/ai-folder-research/` (per-tool reports) and `/tmp/cross-tool-mappings.md` (cross-tool comparison). **Do not change the mapping table without re-verifying the affected tool's docs/binary** — empirically these are the correct paths as of May 2026.
+**Do not change the mapping table without re-verifying the affected tool's docs/binary** — empirically these are the correct paths as of May 2026.
 
 ### Things the mapper deliberately skips
 

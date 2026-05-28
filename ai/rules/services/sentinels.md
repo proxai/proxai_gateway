@@ -1,4 +1,13 @@
+---
+name: "Sentinel File Management"
+description: "Atomic writes, self-clearing mechanisms, and existence checking rules for file-system gate sentinels."
+activation: "contextual"
+scenarios: ["Writing state flags to sentinel files", "Adding gates inside background task execution cycles", "Parsing sentinel bodies and handling corrupt sentinel data"]
+globs: ["src/**/*.ts", "**/*.ts"]
+---
+
 # Sentinel Rules
+
 
 Applies to `src/core/io/fs/sentinel.ts` and `src/services/polling/*-sentinel.ts`.
 

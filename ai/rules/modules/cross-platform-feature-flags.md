@@ -1,4 +1,13 @@
+---
+name: "Cross-Platform Feature Branching"
+description: "Requires platform-dependent logic to branch through central wiring instead of scattered process.platform checks."
+activation: "contextual"
+scenarios: ["Adding operating system-dependent logic", "Handling Windows binary locking or permissions", "Mocking platform parameters in tests"]
+globs: ["src/**/*.ts", "**/*.ts"]
+---
+
 # Cross-Platform Feature Branching Rule
+
 
 **When adding code whose behavior differs by OS, branch via the central
 platform-detection wiring (`src/cli/wiring/platform.ts` and the

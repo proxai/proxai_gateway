@@ -44,4 +44,16 @@ describe('loadTree', () => {
     const tree = await loadTree(FIXTURE);
     expect(Array.isArray(tree.rules)).toBe(true);
   });
+
+  test('loadTree parses frontmatter from rules files', async () => {
+    const tree = await loadTree(FIXTURE);
+    const scoped = tree.rules.find((r) => r.basename === 'scoped');
+    expect(scoped).toBeDefined();
+    expect(scoped?.frontmatter).toEqual({
+      name: 'Test Rule',
+      activation: 'contextual',
+      globs: ['src/**/*.ts'],
+    });
+    expect(scoped?.body.trim()).toBe('- Scoped rule.');
+  });
 });

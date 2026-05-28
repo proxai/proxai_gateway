@@ -1,4 +1,12 @@
+---
+name: "Global Invariants"
+description: "Core types rules, Conventional Commits, and processes for proxai_gateway."
+activation: "global"
+scenarios: ["Every task execution", "Writing code and tests", "Creating git commits"]
+---
+
 # proxai_gateway — Always-applied rules
+
 
 - TypeScript `any` is prohibited in source and tests; no `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, `eslint-disable`, `oxlint-disable`, or `v8 ignore` suppressions.
 - The non-null assertion operator (`x!`) is prohibited; the lint rule `typescript/no-non-null-assertion` enforces it. Use `requireDefined(x)` from `core/utils` for runtime narrowing of `T | null | undefined`, or refactor the surrounding code so the optionality is impossible.

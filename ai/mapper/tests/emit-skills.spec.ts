@@ -25,7 +25,7 @@ describe('emitSkills', () => {
     const mani = new Manifest(repo);
     await emitSkills(repo, tree, cfg, mani);
 
-    for (const dir of ['.claude', '.cursor', '.gemini', '.agent']) {
+    for (const dir of ['.claude', '.cursor', '.agents']) {
       const md = await readFile(join(repo, dir, 'skills/sample-skill/SKILL.md'), 'utf8');
       expect(md).toContain('sample-skill');
     }
@@ -43,6 +43,7 @@ describe('emitSkills', () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
     cfg.tools.codex = false;
+    cfg.tools.antigravity = false;
     const mani = new Manifest(repo);
     await emitSkills(repo, tree, cfg, mani);
     const paths = mani.files().map((f) => f.path);

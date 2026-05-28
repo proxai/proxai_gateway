@@ -1,4 +1,13 @@
+---
+name: "Configuration Management"
+description: "Rule for config defaults, in-memory longevity, auto-upgrade signals, nest endpoints overrides, and cross-field configuration validation."
+activation: "contextual"
+scenarios: ["Adding new settings to config.toml", "Modifying daemon environment variables or endpoint overrides", "Implementing config validations or coercions"]
+globs: ["src/**/*.ts", "**/*.ts"]
+---
+
 # Config Rules
+
 
 - Default values live in `config.constants.ts`, not in the TOML file. `validateAndCoerce` fills them when fields are absent.
 - Daemon-loop intervals (`CAPTURE_INTERVAL_MS`, `DRAIN_INTERVAL_MS`, `HEARTBEAT_INTERVAL_MS`) are not in `config.toml` and must not be added there.

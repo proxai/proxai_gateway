@@ -1,4 +1,12 @@
+---
+name: "Mermaid Diagrams Syntax and Styling"
+description: "Mermaid rendering guidelines, styling headers, node sizing rules, and class assignments for clean Markdown documentation."
+activation: "global"
+scenarios: ["Creating or editing system architecture diagrams", "Updating flowcharts or cheatsheets in the codebase documentation", "Applying CSS class definitions and themes to documentation visuals"]
+---
+
 # Rules for Mermaid Diagrams & Markdown Documentation
+
 
 These rules are mandatory for all AI-generated or developer-updated architecture diagrams, cheatsheets, and markdown documentation within the repository.
 

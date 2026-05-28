@@ -19,7 +19,7 @@ afterEach(async () => {
 });
 
 describe('emitRoot', () => {
-  test('writes CLAUDE.md, AGENTS.md, GEMINI.md, and .agent/AGENTS.md', async () => {
+  test('writes CLAUDE.md, AGENTS.md, and .agents/AGENTS.md', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
     const mani = new Manifest(repo);
@@ -27,12 +27,10 @@ describe('emitRoot', () => {
 
     const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
     const agents = await readFile(join(repo, 'AGENTS.md'), 'utf8');
-    const gemini = await readFile(join(repo, 'GEMINI.md'), 'utf8');
-    const agentAgents = await readFile(join(repo, '.agent/AGENTS.md'), 'utf8');
+    const agentAgents = await readFile(join(repo, '.agents/AGENTS.md'), 'utf8');
 
     expect(claude).toContain('fixture-repo');
     expect(agents).toContain('fixture-repo');
-    expect(gemini).toContain('fixture-repo');
     expect(agentAgents).toContain('fixture-repo');
 
     const paths = mani
@@ -41,8 +39,7 @@ describe('emitRoot', () => {
       .toSorted();
     expect(paths).toContain('AGENTS.md');
     expect(paths).toContain('CLAUDE.md');
-    expect(paths).toContain('GEMINI.md');
-    expect(paths).toContain('.agent/AGENTS.md');
+    expect(paths).toContain('.agents/AGENTS.md');
   });
 
   test('CLAUDE.md has Claude Code orchestration section and file tree but no Project rules', async () => {
@@ -56,7 +53,7 @@ describe('emitRoot', () => {
     expect(claude).toContain('Your orchestration (Claude Code)');
     expect(claude).toContain('Repository structure');
     expect(claude).toContain('Domain knowledge index');
-    expect(claude).not.toContain('Project rules');
+    expect(claude).not.toContain('## Project rules');
     expect(claude).toContain('.claude/rules/*.md');
     expect(claude).toContain('.claude/knowledge/*.md');
     expect(claude).toContain('auto-loads');
@@ -74,50 +71,33 @@ describe('emitRoot', () => {
     expect(agents).toContain('Cursor');
     expect(agents).toContain('Repository structure');
     expect(agents).toContain('Domain knowledge index');
-    expect(agents).not.toContain('Project rules');
-    expect(agents).not.toContain('Rule 1');
+    expect(agents).not.toContain('## Project rules');
+    expect(agents).not.toContain('Rule 2');
     expect(agents).toContain('.codex/rules/*.md');
     expect(agents).toContain('.cursor/rules/*.mdc');
     expect(agents).toContain('.codex/knowledge/*.md');
     expect(agents).toContain('.cursor/knowledge/*.md');
   });
 
-  test('GEMINI.md has Gemini CLI orchestration section, knowledge, and no Project rules', async () => {
+  test('.agents/AGENTS.md has Antigravity orchestration section and no Project rules', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
     const mani = new Manifest(repo);
     await emitRoot(repo, tree, cfg, mani);
 
-    const gemini = await readFile(join(repo, 'GEMINI.md'), 'utf8');
-
-    expect(gemini).toContain('Your orchestration (Gemini CLI)');
-    expect(gemini).toContain('Repository structure');
-    expect(gemini).toContain('Domain knowledge index');
-    expect(gemini).not.toContain('Project rules');
-    expect(gemini).not.toContain('Rule 1');
-    expect(gemini).toContain('.gemini/rules/*.md');
-    expect(gemini).toContain('.gemini/knowledge/*.md');
-  });
-
-  test('.agent/AGENTS.md has Antigravity orchestration section and no Project rules', async () => {
-    const tree = await loadTree(FIXTURE);
-    const cfg = await loadConfig(FIXTURE);
-    const mani = new Manifest(repo);
-    await emitRoot(repo, tree, cfg, mani);
-
-    const agentAgents = await readFile(join(repo, '.agent/AGENTS.md'), 'utf8');
+    const agentAgents = await readFile(join(repo, '.agents/AGENTS.md'), 'utf8');
 
     expect(agentAgents).toContain('Your orchestration (Antigravity)');
     expect(agentAgents).toContain('Repository structure');
     expect(agentAgents).toContain('Domain knowledge index');
-    expect(agentAgents).not.toContain('Project rules');
-    expect(agentAgents).not.toContain('Rule 1');
-    expect(agentAgents).toContain('.agent/rules/*.md');
-    expect(agentAgents).toContain('.agent/knowledge/*.md');
+    expect(agentAgents).not.toContain('## Project rules');
+    expect(agentAgents).not.toContain('Rule 2');
+    expect(agentAgents).toContain('.agents/rules/*.md');
+    expect(agentAgents).toContain('.agents/knowledge/*.md');
     expect(agentAgents).toContain('auto-loads');
   });
 
-  test('all 4 files have the file tree section', async () => {
+  test('all 3 files have the file tree section', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
     const mani = new Manifest(repo);
@@ -125,15 +105,14 @@ describe('emitRoot', () => {
 
     const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
     const agents = await readFile(join(repo, 'AGENTS.md'), 'utf8');
-    const gemini = await readFile(join(repo, 'GEMINI.md'), 'utf8');
-    const agentAgents = await readFile(join(repo, '.agent/AGENTS.md'), 'utf8');
+    const agentAgents = await readFile(join(repo, '.agents/AGENTS.md'), 'utf8');
 
-    for (const doc of [claude, agents, gemini, agentAgents]) {
+    for (const doc of [claude, agents, agentAgents]) {
       expect(doc).toContain('## Repository structure');
     }
   });
 
-  test('all 4 files start with the project preamble', async () => {
+  test('all 3 files start with the project preamble', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
     const mani = new Manifest(repo);
@@ -141,10 +120,9 @@ describe('emitRoot', () => {
 
     const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
     const agents = await readFile(join(repo, 'AGENTS.md'), 'utf8');
-    const gemini = await readFile(join(repo, 'GEMINI.md'), 'utf8');
-    const agentAgents = await readFile(join(repo, '.agent/AGENTS.md'), 'utf8');
+    const agentAgents = await readFile(join(repo, '.agents/AGENTS.md'), 'utf8');
 
-    for (const doc of [claude, agents, gemini, agentAgents]) {
+    for (const doc of [claude, agents, agentAgents]) {
       expect(doc.startsWith('# fixture-repo')).toBe(true);
     }
   });
@@ -164,7 +142,6 @@ describe('emitRoot', () => {
   test('skips tools that are disabled', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
-    cfg.tools.gemini = false;
     cfg.tools.antigravity = false;
     const mani = new Manifest(repo);
     await emitRoot(repo, tree, cfg, mani);
@@ -175,18 +152,13 @@ describe('emitRoot', () => {
         .catch(() => false),
     ).toBe(true);
     expect(
-      await lstat(join(repo, 'GEMINI.md'))
-        .then(() => true)
-        .catch(() => false),
-    ).toBe(false);
-    expect(
-      await lstat(join(repo, '.agent/AGENTS.md'))
+      await lstat(join(repo, '.agents/AGENTS.md'))
         .then(() => true)
         .catch(() => false),
     ).toBe(false);
   });
 
-  test('none of the 4 docs contain inline rule content', async () => {
+  test('none of the 3 docs contain inline rule content', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
     const mani = new Manifest(repo);
@@ -194,15 +166,14 @@ describe('emitRoot', () => {
 
     const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
     const agents = await readFile(join(repo, 'AGENTS.md'), 'utf8');
-    const gemini = await readFile(join(repo, 'GEMINI.md'), 'utf8');
-    const agentAgents = await readFile(join(repo, '.agent/AGENTS.md'), 'utf8');
+    const agentAgents = await readFile(join(repo, '.agents/AGENTS.md'), 'utf8');
 
-    for (const doc of [claude, agents, gemini, agentAgents]) {
+    for (const doc of [claude, agents, agentAgents]) {
       expect(doc).not.toContain('## Project rules');
     }
   });
 
-  test('none of the 4 docs inline the knowledge bodies (lean root contract)', async () => {
+  test('none of the 3 docs inline the knowledge bodies (lean root contract)', async () => {
     // The fixture's knowledge files contain known body strings that MUST NOT
     // appear in the root docs anymore — root docs only carry the index, not
     // the bodies.
@@ -213,16 +184,15 @@ describe('emitRoot', () => {
 
     const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
     const agents = await readFile(join(repo, 'AGENTS.md'), 'utf8');
-    const gemini = await readFile(join(repo, 'GEMINI.md'), 'utf8');
-    const agentAgents = await readFile(join(repo, '.agent/AGENTS.md'), 'utf8');
+    const agentAgents = await readFile(join(repo, '.agents/AGENTS.md'), 'utf8');
 
-    for (const doc of [claude, agents, gemini, agentAgents]) {
+    for (const doc of [claude, agents, agentAgents]) {
       expect(doc).not.toContain('Key fact from k1.');
       expect(doc).not.toContain('Demonstrates that the mapper picks up');
     }
   });
 
-  test('all 4 docs contain the Extending the AI memory section', async () => {
+  test('all 3 docs contain the Extending the AI memory section', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
     const mani = new Manifest(repo);
@@ -230,10 +200,9 @@ describe('emitRoot', () => {
 
     const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
     const agents = await readFile(join(repo, 'AGENTS.md'), 'utf8');
-    const gemini = await readFile(join(repo, 'GEMINI.md'), 'utf8');
-    const agentAgents = await readFile(join(repo, '.agent/AGENTS.md'), 'utf8');
+    const agentAgents = await readFile(join(repo, '.agents/AGENTS.md'), 'utf8');
 
-    for (const doc of [claude, agents, gemini, agentAgents]) {
+    for (const doc of [claude, agents, agentAgents]) {
       expect(doc).toContain('## Extending the AI memory');
       expect(doc).toContain('enhance the `ai/` source folder');
       expect(doc).toContain('bun run ai/mapper/index.ts');
@@ -241,7 +210,7 @@ describe('emitRoot', () => {
     }
   });
 
-  test('all 4 docs include a knowledge index pointing at on-disk paths', async () => {
+  test('all 3 docs include a knowledge index pointing at on-disk paths', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
     const mani = new Manifest(repo);
@@ -249,8 +218,7 @@ describe('emitRoot', () => {
 
     const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
     const agents = await readFile(join(repo, 'AGENTS.md'), 'utf8');
-    const gemini = await readFile(join(repo, 'GEMINI.md'), 'utf8');
-    const agentAgents = await readFile(join(repo, '.agent/AGENTS.md'), 'utf8');
+    const agentAgents = await readFile(join(repo, '.agents/AGENTS.md'), 'utf8');
 
     // Each doc's index uses its own tool dir as the path prefix.
     expect(claude).toContain('## Domain knowledge index');
@@ -262,8 +230,7 @@ describe('emitRoot', () => {
     // AGENTS.md uses .codex/ as the canonical (mirrored to .cursor/).
     expect(agents).toContain('`.codex/knowledge/k1.md`');
 
-    expect(gemini).toContain('`.gemini/knowledge/k1.md`');
-    expect(agentAgents).toContain('`.agent/knowledge/k1.md`');
+    expect(agentAgents).toContain('`.agents/knowledge/k1.md`');
   });
 
   test('index extracts the H1 as the topic description, falling back to basename', async () => {
@@ -274,7 +241,7 @@ describe('emitRoot', () => {
 
     const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
     // k1.md starts with `# k1`, arch.md with `# Arch`. The H1 marker is stripped.
-    expect(claude).toMatch(/`\.claude\/knowledge\/k1\.md`\s+\|\s+k1\s/);
+    expect(claude).toMatch(/`\.claude\/knowledge\/k1\.md`\s+|\s+k1\s/);
     expect(claude).toMatch(/`\.claude\/knowledge\/arch\.md`\s+\|\s+Arch\s/);
   });
 
@@ -290,7 +257,7 @@ describe('emitRoot', () => {
     expect(agents).not.toContain('`.codex/knowledge/k1.md`');
   });
 
-  test('when docs/ does not exist, none of the 4 docs contain Project documentation section', async () => {
+  test('when docs/ does not exist, none of the 3 docs contain Project documentation section', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
     const mani = new Manifest(repo);
@@ -298,15 +265,14 @@ describe('emitRoot', () => {
 
     const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
     const agents = await readFile(join(repo, 'AGENTS.md'), 'utf8');
-    const gemini = await readFile(join(repo, 'GEMINI.md'), 'utf8');
-    const agentAgents = await readFile(join(repo, '.agent/AGENTS.md'), 'utf8');
+    const agentAgents = await readFile(join(repo, '.agents/AGENTS.md'), 'utf8');
 
-    for (const doc of [claude, agents, gemini, agentAgents]) {
+    for (const doc of [claude, agents, agentAgents]) {
       expect(doc).not.toContain('## Project documentation');
     }
   });
 
-  test('when docs/ exists at repo root, all 4 docs contain Project documentation section', async () => {
+  test('when docs/ exists at repo root, all 3 docs contain Project documentation section', async () => {
     await mkdir(join(repo, 'docs'), { recursive: true });
     await writeFile(join(repo, 'docs', 'README.md'), '# Docs placeholder\n');
 
@@ -317,12 +283,68 @@ describe('emitRoot', () => {
 
     const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
     const agents = await readFile(join(repo, 'AGENTS.md'), 'utf8');
-    const gemini = await readFile(join(repo, 'GEMINI.md'), 'utf8');
-    const agentAgents = await readFile(join(repo, '.agent/AGENTS.md'), 'utf8');
+    const agentAgents = await readFile(join(repo, '.agents/AGENTS.md'), 'utf8');
 
-    for (const doc of [claude, agents, gemini, agentAgents]) {
+    for (const doc of [claude, agents, agentAgents]) {
       expect(doc).toContain('## Project documentation');
       expect(doc).toContain('Read `docs/` at the repo root');
     }
+  });
+
+  test('all 3 files contain the new rendered verbose Rules Index Table pointing to relative paths with metadata', async () => {
+    const tree = await loadTree(FIXTURE);
+    const cfg = await loadConfig(FIXTURE);
+    const mani = new Manifest(repo);
+    await emitRoot(repo, tree, cfg, mani);
+
+    const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
+    const agents = await readFile(join(repo, 'AGENTS.md'), 'utf8');
+    const agentAgents = await readFile(join(repo, '.agents/AGENTS.md'), 'utf8');
+
+    // 1. Check CLAUDE.md rules index table
+    expect(claude).toContain('## 📜 Project Rules Index');
+    expect(claude).toContain(
+      '| Rule | Description | Trigger Scenarios (When to Apply) | Activation Type |',
+    );
+    expect(claude).toContain(
+      '| [`Test Rule`](.claude/rules/scoped.md) | - Scoped rule. | Manual reference / Always-applied invariant | `Path-Scoped` |',
+    );
+    expect(claude).toContain(
+      '| [`_always`](.claude/rules/_always.md) | - Rule 1. | Manual reference / Always-applied invariant | `Always-Applied` |',
+    );
+    expect(claude).toContain(
+      '| [`nested-rule`](.claude/rules/auth/nested-rule.md) | Nested Rule | Manual reference / Always-applied invariant | `Always-Applied` |',
+    );
+
+    // 2. Check AGENTS.md rules index table (since Codex is enabled by default in minimal-ai mapper.config.toml)
+    expect(agents).toContain('## 📜 Project Rules Index');
+    expect(agents).toContain(
+      '| [`Test Rule`](.codex/rules/scoped.md) | - Scoped rule. | Manual reference / Always-applied invariant | `Path-Scoped` |',
+    );
+    expect(agents).toContain('| [`nested-rule`](.codex/rules/auth/nested-rule.md) | Nested Rule |');
+
+    // 3. Check .agents/AGENTS.md rules index table (Antigravity index uses relative rules/)
+    expect(agentAgents).toContain('## 📜 Project Rules Index');
+    expect(agentAgents).toContain(
+      '| [`Test Rule`](rules/scoped.md) | - Scoped rule. | Manual reference / Always-applied invariant | `Path-Scoped` |',
+    );
+    expect(agentAgents).toContain('| [`nested-rule`](rules/auth/nested-rule.md) | Nested Rule |');
+  });
+
+  test('AGENTS.md rules index table uses .cursor relative paths if codex is disabled', async () => {
+    const tree = await loadTree(FIXTURE);
+    const cfg = await loadConfig(FIXTURE);
+    cfg.tools.codex = false;
+    const mani = new Manifest(repo);
+    await emitRoot(repo, tree, cfg, mani);
+
+    const agents = await readFile(join(repo, 'AGENTS.md'), 'utf8');
+    expect(agents).toContain('## 📜 Project Rules Index');
+    expect(agents).toContain(
+      '| [`Test Rule`](.cursor/rules/scoped.mdc) | - Scoped rule. | Manual reference / Always-applied invariant | `Path-Scoped` |',
+    );
+    expect(agents).toContain(
+      '| [`nested-rule`](.cursor/rules/auth-nested-rule.mdc) | Nested Rule |',
+    );
   });
 });

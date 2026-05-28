@@ -26,13 +26,10 @@ describe('end-to-end sync', () => {
 
     expect((await stat(join(repo, 'AGENTS.md'))).isFile()).toBe(true);
     expect((await stat(join(repo, 'CLAUDE.md'))).isFile()).toBe(true);
-    expect((await stat(join(repo, 'GEMINI.md'))).isFile()).toBe(true);
 
-    for (const dir of ['.claude', '.cursor', '.codex', '.gemini', '.agent']) {
+    for (const dir of ['.claude', '.cursor', '.codex', '.agents']) {
       expect((await stat(join(repo, dir))).isDirectory()).toBe(true);
     }
-
-    expect((await stat(join(repo, '.agents'))).isDirectory()).toBe(true);
 
     expect((await stat(join(repo, '.claude/skills/sample-skill/SKILL.md'))).isFile()).toBe(true);
     expect((await stat(join(repo, '.agents/skills/sample-skill/SKILL.md'))).isFile()).toBe(true);
@@ -42,8 +39,7 @@ describe('end-to-end sync', () => {
     expect((await stat(join(repo, '.claude/rules/_always.md'))).isFile()).toBe(true);
     expect((await stat(join(repo, '.cursor/rules/_always.mdc'))).isFile()).toBe(true);
     expect((await stat(join(repo, '.codex/rules/_always.md'))).isFile()).toBe(true);
-    expect((await stat(join(repo, '.gemini/rules/_always.md'))).isFile()).toBe(true);
-    expect((await stat(join(repo, '.agent/rules/_always.md'))).isFile()).toBe(true);
+    expect((await stat(join(repo, '.agents/rules/_always.md'))).isFile()).toBe(true);
 
     expect((await stat(join(repo, '.claude/tools/helper.sh'))).isFile()).toBe(true);
 
@@ -54,10 +50,10 @@ describe('end-to-end sync', () => {
     const proc = await $`bun run ${join(repo, 'ai/mapper/index.ts')}`.cwd(repo).quiet().nothrow();
     expect(proc.exitCode).toBe(0);
 
-    for (const docPath of ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', '.agent/AGENTS.md']) {
+    for (const docPath of ['AGENTS.md', 'CLAUDE.md', '.agents/AGENTS.md']) {
       const content = await readFile(join(repo, docPath), 'utf8');
       expect(content).not.toContain('## Project rules');
-      expect(content).not.toContain('Rule 1');
+      expect(content).not.toContain('Rule 2');
     }
   });
 
@@ -65,18 +61,18 @@ describe('end-to-end sync', () => {
     const proc = await $`bun run ${join(repo, 'ai/mapper/index.ts')}`.cwd(repo).quiet().nothrow();
     expect(proc.exitCode).toBe(0);
 
-    for (const docPath of ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', '.agent/AGENTS.md']) {
+    for (const docPath of ['AGENTS.md', 'CLAUDE.md', '.agents/AGENTS.md']) {
       const content = await readFile(join(repo, docPath), 'utf8');
       expect(content).toContain('## Extending the AI memory');
       expect(content).toContain('enhance the `ai/` source folder');
     }
   });
 
-  test('codex and gemini rules files contain verbatim body without cursor frontmatter', async () => {
+  test('codex and agent rules files contain verbatim body without cursor frontmatter', async () => {
     const proc = await $`bun run ${join(repo, 'ai/mapper/index.ts')}`.cwd(repo).quiet().nothrow();
     expect(proc.exitCode).toBe(0);
 
-    for (const dir of ['.codex/rules', '.gemini/rules', '.agent/rules']) {
+    for (const dir of ['.codex/rules', '.agents/rules']) {
       const content = await readFile(join(repo, dir, '_always.md'), 'utf8');
       expect(content).toContain('Rule 1');
       expect(content).not.toContain('alwaysApply');

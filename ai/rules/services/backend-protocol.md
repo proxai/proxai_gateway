@@ -1,4 +1,13 @@
+---
+name: "Backend Protocol and DTO Validation"
+description: "DTO schemas, zstd compression, capture UUIDv7, upload outcomes, request timeouts, backoff signals, and error mappings."
+activation: "contextual"
+scenarios: ["Modifying API endpoints or payload compression", "Handling upload errors, timeouts, or authentication failures", "Configuring retry pace, backoff caps, or server status codes mapping"]
+globs: ["src/**/*.ts", "**/*.ts"]
+---
+
 # Backend Protocol Rules
+
 
 Applies to `src/services/http/**/*.ts`, `src/services/uploader/**/*.ts`, and `src/services/contract/**/*.ts`.
 

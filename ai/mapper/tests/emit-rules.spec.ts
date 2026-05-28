@@ -65,74 +65,62 @@ describe('emitRules', () => {
     expect(paths).toContain('.codex/rules/scoped.md');
   });
 
-  test('emits .md files to .gemini/rules/ verbatim', async () => {
+  test('emits .md files to .agents/rules/ verbatim', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
+    cfg.paths.antigravityDir = '.agents';
     const mani = new Manifest(repo);
     await emitRules(repo, tree, cfg, mani);
 
-    const always = await readFile(join(repo, '.gemini/rules/_always.md'), 'utf8');
+    const always = await readFile(join(repo, '.agents/rules/_always.md'), 'utf8');
     expect(always).toContain('Rule 1');
     expect(always).not.toContain('---');
 
     const paths = mani.files().map((f) => f.path);
-    expect(paths).toContain('.gemini/rules/_always.md');
-    expect(paths).toContain('.gemini/rules/scoped.md');
+    expect(paths).toContain('.agents/rules/_always.md');
+    expect(paths).toContain('.agents/rules/scoped.md');
   });
 
-  test('emits .md files to .agent/rules/ verbatim', async () => {
+  test('codex/agent rules files contain verbatim body without cursor frontmatter', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
+    cfg.paths.antigravityDir = '.agents';
     const mani = new Manifest(repo);
     await emitRules(repo, tree, cfg, mani);
 
-    const always = await readFile(join(repo, '.agent/rules/_always.md'), 'utf8');
-    expect(always).toContain('Rule 1');
-    expect(always).not.toContain('---');
-
-    const paths = mani.files().map((f) => f.path);
-    expect(paths).toContain('.agent/rules/_always.md');
-    expect(paths).toContain('.agent/rules/scoped.md');
-  });
-
-  test('codex/gemini/agent rules files contain verbatim body without cursor frontmatter', async () => {
-    const tree = await loadTree(FIXTURE);
-    const cfg = await loadConfig(FIXTURE);
-    const mani = new Manifest(repo);
-    await emitRules(repo, tree, cfg, mani);
-
-    for (const dir of ['.codex/rules', '.gemini/rules', '.agent/rules']) {
+    for (const dir of ['.codex/rules', '.agents/rules']) {
       const content = await readFile(join(repo, dir, '_always.md'), 'utf8');
       expect(content).not.toContain('alwaysApply');
       expect(content).not.toContain('description:');
     }
   });
 
-  test('nested rules preserve subdir layout across every tool', async () => {
+  test('nested rules preserve subdirs for Claude/Antigravity but flatten for Cursor', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
+    cfg.paths.antigravityDir = '.agents';
     const mani = new Manifest(repo);
     await emitRules(repo, tree, cfg, mani);
 
-    // .claude / .codex / .gemini / .agent → .md under same subdir
-    for (const dir of ['.claude/rules', '.codex/rules', '.gemini/rules', '.agent/rules']) {
-      const content = await readFile(join(repo, dir, 'auth/nested-rule.md'), 'utf8');
-      expect(content).toContain('Nested Rule');
-    }
+    // Nested subpath is preserved in Claude and Antigravity
+    expect(await readFile(join(repo, '.claude/rules/auth/nested-rule.md'), 'utf8')).toContain(
+      'Nested Rule',
+    );
+    expect(await readFile(join(repo, '.agents/rules/auth/nested-rule.md'), 'utf8')).toContain(
+      'Nested Rule',
+    );
 
-    // .cursor → .mdc under same subdir, with frontmatter
-    const mdc = await readFile(join(repo, '.cursor/rules/auth/nested-rule.mdc'), 'utf8');
+    // Cursor is flattened: slashes replaced by hyphens
+    const mdc = await readFile(join(repo, '.cursor/rules/auth-nested-rule.mdc'), 'utf8');
     expect(mdc).toContain('alwaysApply: true');
     expect(mdc).toContain('description: nested-rule');
-    expect(mdc).toContain('Nested Rule');
 
-    // manifest records the nested paths
-    const paths = mani.files().map((f) => f.path);
-    expect(paths).toContain('.claude/rules/auth/nested-rule.md');
-    expect(paths).toContain('.cursor/rules/auth/nested-rule.mdc');
-    expect(paths).toContain('.codex/rules/auth/nested-rule.md');
-    expect(paths).toContain('.gemini/rules/auth/nested-rule.md');
-    expect(paths).toContain('.agent/rules/auth/nested-rule.md');
+    // Gemini gets completely skipped
+    expect(
+      await readFile(join(repo, '.gemini/rules/auth/nested-rule.md'), 'utf8')
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(false);
   });
 
   test('disabled tools are skipped', async () => {
@@ -140,7 +128,6 @@ describe('emitRules', () => {
     const cfg = await loadConfig(FIXTURE);
     cfg.tools.cursor = false;
     cfg.tools.codex = false;
-    cfg.tools.gemini = false;
     cfg.tools.antigravity = false;
     const mani = new Manifest(repo);
     await emitRules(repo, tree, cfg, mani);
@@ -148,8 +135,92 @@ describe('emitRules', () => {
     const paths = mani.files().map((f) => f.path);
     expect(paths.some((p) => p.startsWith('.cursor/'))).toBe(false);
     expect(paths.some((p) => p.startsWith('.codex/'))).toBe(false);
-    expect(paths.some((p) => p.startsWith('.gemini/'))).toBe(false);
-    expect(paths.some((p) => p.startsWith('.agent/rules/'))).toBe(false);
+    expect(paths.some((p) => p.startsWith('.agents/rules/'))).toBe(false);
     expect(paths.some((p) => p.startsWith('.claude/'))).toBe(true);
+  });
+
+  test('rule activation modes (global, contextual, lazy-load) behave correctly', async () => {
+    const tree = await loadTree(FIXTURE);
+
+    tree.rules = [
+      {
+        path: 'rules/global-rule.md',
+        basename: 'global-rule',
+        subpath: 'global-rule',
+        frontmatter: {
+          name: 'Global Rule',
+          description: 'A global rule description',
+          activation: 'global',
+        },
+        body: 'Global rule body',
+      },
+      {
+        path: 'rules/contextual-rule.md',
+        basename: 'contextual-rule',
+        subpath: 'contextual-rule',
+        frontmatter: {
+          name: 'Contextual Rule',
+          description: 'A contextual rule description',
+          activation: 'contextual',
+          globs: ['src/**/*.ts', 'lib/**/*.js'],
+        },
+        body: 'Contextual rule body',
+      },
+      {
+        path: 'rules/lazy-rule.md',
+        basename: 'lazy-rule',
+        subpath: 'lazy-rule',
+        frontmatter: {
+          name: 'Lazy Rule',
+          description: 'A lazy rule description',
+          activation: 'lazy-load',
+        },
+        body: 'Lazy rule body',
+      },
+    ];
+
+    const cfg = await loadConfig(FIXTURE);
+    cfg.paths.antigravityDir = '.agents';
+    const mani = new Manifest(repo);
+    await emitRules(repo, tree, cfg, mani);
+
+    // Assert global rule for Claude
+    const claudeGlobal = await readFile(join(repo, '.claude/rules/global-rule.md'), 'utf8');
+    expect(claudeGlobal).toBe('Global rule body\n'); // empty YAML frontmatter for Claude Code
+
+    // Assert global rule for Cursor
+    const cursorGlobal = await readFile(join(repo, '.cursor/rules/global-rule.mdc'), 'utf8');
+    expect(cursorGlobal).toContain('alwaysApply: true');
+    expect(cursorGlobal).toContain('globs: ""');
+
+    // Assert contextual rule for Claude
+    const claudeContextual = await readFile(join(repo, '.claude/rules/contextual-rule.md'), 'utf8');
+    expect(claudeContextual).toContain('---\npaths:\n  - "src/**/*.ts"\n  - "lib/**/*.js"\n---');
+
+    // Assert contextual rule for Cursor
+    const cursorContextual = await readFile(
+      join(repo, '.cursor/rules/contextual-rule.mdc'),
+      'utf8',
+    );
+    expect(cursorContextual).toContain('alwaysApply: false');
+    expect(cursorContextual).toContain('globs: "src/**/*.ts, lib/**/*.js"');
+
+    // Assert lazy-load rule does NOT emit to Claude or Cursor
+    const existsClaudeLazy = await readFile(join(repo, '.claude/rules/lazy-rule.md'), 'utf8')
+      .then(() => true)
+      .catch(() => false);
+    expect(existsClaudeLazy).toBe(false);
+
+    const existsCursorLazy = await readFile(join(repo, '.cursor/rules/lazy-rule.mdc'), 'utf8')
+      .then(() => true)
+      .catch(() => false);
+    expect(existsCursorLazy).toBe(false);
+
+    // Assert lazy-load rule IS emitted to .agents/rules/ and .codex/rules/ normally
+    const agentsLazy = await readFile(join(repo, '.agents/rules/lazy-rule.md'), 'utf8');
+    expect(agentsLazy).toBe('Lazy rule body\n');
+
+    const codexLazy = await readFile(join(repo, '.codex/rules/lazy-rule.md'), 'utf8');
+    expect(codexLazy).toBe('Lazy rule body\n');
   });
 });
