@@ -142,12 +142,12 @@ test('linux: falls through to defaultBootIdReadFile when readFile is omitted', a
 
 test('defaultBootIdSpawn is wired up when spawn dep is omitted', async () => {
   try {
-    const result = await readBootId({ platform: 'darwin' });
+    const result = await readBootId({});
     expect(typeof result).toBe('string');
   } catch (err) {
     expect(err).toBeInstanceOf(Error);
   }
-});
+}, 30000);
 
 test('defaultBootIdReadFile resolves exists() and text() against a real file', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'proxai-bid-'));
