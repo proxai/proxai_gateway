@@ -1,6 +1,7 @@
 import type { FetchFn } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -56,6 +57,8 @@ function makeConfig(): GatewayConfig {
   };
 }
 
+const prodCtx = buildProfileContext('prod');
+
 interface FetchLog {
   watermarkCalls: number;
 }
@@ -101,6 +104,7 @@ test('starts the loop, runs at least one cycle, and exits cleanly on abort', asy
   const out = captureOutput();
   let cycles = 0;
   const promise = runDaemon({
+    profileCtx: prodCtx,
     output: out,
     config,
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
@@ -151,6 +155,7 @@ test('exits immediately when abort signal is already aborted', async () => {
   ctrl.abort();
   const out = captureOutput();
   const result = await runDaemon({
+    profileCtx: prodCtx,
     output: out,
     config,
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
@@ -193,6 +198,7 @@ test('empty cursor table triggers a watermark sync; populated cursors are seeded
     log,
   );
   const promise = runDaemon({
+    profileCtx: prodCtx,
     output: out,
     config,
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
@@ -236,6 +242,7 @@ test('non-empty cursor table skips the pre-flight sync', async () => {
   const log: FetchLog = { watermarkCalls: 0 };
   const httpClient = mockHttp(config, emptyWatermarks, log);
   const result = await runDaemon({
+    profileCtx: prodCtx,
     output: out,
     config,
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
@@ -263,6 +270,7 @@ test('exits cleanly with EXIT_CODE.ok when SESSION_STOPPED matches current boot_
   const out = captureOutput();
   let cycles = 0;
   const result = await runDaemon({
+    profileCtx: prodCtx,
     output: out,
     config,
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
@@ -304,6 +312,7 @@ test('deletes stale SESSION_STOPPED sentinel and proceeds when boot_id mismatche
   const out = captureOutput();
   let cycles = 0;
   const result = await runDaemon({
+    profileCtx: prodCtx,
     output: out,
     config,
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
@@ -342,6 +351,7 @@ test('proceeds normally when the SESSION_STOPPED sentinel does not exist', async
   const out = captureOutput();
   let cycles = 0;
   const result = await runDaemon({
+    profileCtx: prodCtx,
     output: out,
     config,
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
@@ -376,6 +386,7 @@ test('readBootId failure is logged as warn and does not abort the daemon', async
   const ctrl = new AbortController();
   const out = captureOutput();
   const result = await runDaemon({
+    profileCtx: prodCtx,
     output: out,
     config,
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
@@ -399,6 +410,7 @@ test('watermark sync failure logs warn and does not abort the daemon', async () 
   const out = captureOutput();
   const httpClient = mockHttp(config, () => new Response('', { status: 503 }));
   const result = await runDaemon({
+    profileCtx: prodCtx,
     output: out,
     config,
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),

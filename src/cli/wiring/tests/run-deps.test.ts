@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import { buildRunDeps } from 'cli/wiring/run-deps.ts';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
 import {
   makeTestGatewayConfig,
   TEST_ACCOUNT_CONFIG,
@@ -12,6 +13,8 @@ const cfg = makeTestGatewayConfig({
   capture: { ...TEST_CAPTURE_CONFIG, bufferPath: '/tmp/b.db' },
 });
 
+const prodCtx = buildProfileContext('prod');
+
 test('buildRunDeps: wires sentinels, version strings, abort, exitProcess', () => {
   const ctrl = new AbortController();
   let exited = false;
@@ -22,6 +25,7 @@ test('buildRunDeps: wires sentinels, version strings, abort, exitProcess', () =>
     exitProcess: () => {
       exited = true;
     },
+    profileCtx: prodCtx,
   });
   expect(deps.config).toBe(cfg);
   expect(deps.abortSignal).toBe(ctrl.signal);
@@ -30,6 +34,7 @@ test('buildRunDeps: wires sentinels, version strings, abort, exitProcess', () =>
   expect(deps.devMode).toBe(false);
   expect(typeof deps.gatewayVersion).toBe('string');
   expect(typeof deps.currentVersion).toBe('string');
+  expect(deps.profileCtx).toBe(prodCtx);
   deps.exitProcess?.();
   expect(exited).toBe(true);
   expect(deps.xstateInspect).toBeUndefined();
@@ -43,6 +48,7 @@ test('buildRunDeps: preserves xstateInspect when provided', () => {
     binaryPath: '/bin/p',
     exitProcess: () => {},
     xstateInspect: true,
+    profileCtx: prodCtx,
   });
   expect(deps.xstateInspect).toBe(true);
 });

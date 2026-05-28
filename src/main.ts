@@ -49,7 +49,9 @@ import { buildVersionString } from 'cli/wiring/version-string.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { configFilePath, logDir as defaultLogDir } from 'core/io/fs';
-import { profileRootDir } from 'core/io/fs/profile.ts';
+import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
+import type { ProfileName } from 'core/io/fs/profile.types.ts';
+import { VALID_PROFILES } from 'core/io/fs/profile.types.ts';
 import { GatewayError, PACKAGE_DESCRIPTION, PACKAGE_VERSION, UserAbortedError } from 'core/utils';
 import { loadConfigFromFile } from 'services/config';
 
@@ -65,6 +67,13 @@ program
 
 function exitUnsupportedPlatform(commandName: string): never {
   console.error(`unsupported platform for ${commandName}: ${process.platform}`);
+  process.exit(EXIT_CODE.error);
+}
+
+function parseProfileName(raw: string | undefined): ProfileName {
+  const candidate = (raw ?? 'prod').trim();
+  if (candidate === 'prod' || candidate === 'dev') return candidate;
+  console.error(`invalid --profile value: '${raw}'. Expected one of: ${VALID_PROFILES.join(', ')}`);
   process.exit(EXIT_CODE.error);
 }
 
@@ -204,23 +213,21 @@ program
     'Run the gateway daemon in the foreground (used by the service unit; not for direct invocation).',
   )
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
-  .action(async (opts: { config?: string }) => {
+  .option('--profile <name>', 'profile to run as (prod | dev)', 'prod')
+  .action(async (opts: { config?: string; profile?: string }) => {
+    const profileName = parseProfileName(opts.profile);
+    const profileCtx = buildProfileContext(profileName);
     const config = await loadConfigFromFile(opts.config);
     const ctrl = new AbortController();
     process.on('SIGINT', () => ctrl.abort());
     process.on('SIGTERM', () => ctrl.abort());
-    // Auto-upgrade exits non-zero so launchd (KeepAlive.SuccessfulExit=false),
-    // systemd (Restart=on-failure), and Windows scheduled tasks respawn the
-    // process under the freshly-replaced binary. A clean SIGINT/SIGTERM still
-    // returns through the normal `process.exit(result.exitCode)` path below
-    // with 0, so the user-initiated `proxai-gateway stop` continues to mean
-    // "stay stopped".
     const result = await runDaemon(
       buildRunDeps({
         config,
         abortSignal: ctrl.signal,
         binaryPath: process.execPath,
         exitProcess: () => process.exit(EXIT_CODE.upgradeRespawn),
+        profileCtx,
       }),
     );
     process.exit(result.exitCode);
@@ -255,6 +262,7 @@ program
       process.exit(EXIT_CODE.error);
     }
 
+    const profileCtx = buildProfileContext('prod');
     const config = await loadConfigFromFile(opts.config);
     const ctrl = new AbortController();
     process.on('SIGINT', () => ctrl.abort());
@@ -267,6 +275,7 @@ program
         binaryPath: process.execPath,
         exitProcess: () => process.exit(EXIT_CODE.upgradeRespawn),
         xstateInspect: true,
+        profileCtx,
       }),
     );
     process.exit(result.exitCode);

@@ -3,12 +3,7 @@ import { join } from 'node:path';
 
 import type { RunCommandDeps } from 'cli/commands/run';
 import { consoleOutput } from 'cli/output.ts';
-import {
-  authFailedSentinelPath,
-  bufferFullSentinelPath,
-  sessionStoppedSentinelPath,
-  updateAvailableSentinelPath,
-} from 'core/io/fs';
+import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 import { profileRootDir } from 'core/io/fs/profile.ts';
 import { GATEWAY_USER_AGENT, PACKAGE_VERSION } from 'core/utils';
 import type { GatewayConfig } from 'services/config';
@@ -19,16 +14,18 @@ export interface BuildRunDepsInputs {
   binaryPath: string;
   exitProcess: () => void;
   xstateInspect?: boolean | undefined;
+  profileCtx: ProfileContext;
 }
 
 export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
   const deps: RunCommandDeps = {
+    profileCtx: inputs.profileCtx,
     output: consoleOutput(),
     config: inputs.config,
-    authFailedSentinelPath: authFailedSentinelPath(),
-    bufferFullSentinelPath: bufferFullSentinelPath(),
-    sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
-    updateAvailableSentinelPath: updateAvailableSentinelPath(),
+    authFailedSentinelPath: inputs.profileCtx.sentinels.authFailed,
+    bufferFullSentinelPath: inputs.profileCtx.sentinels.bufferFull,
+    sessionStoppedSentinelPath: inputs.profileCtx.sentinels.sessionStopped,
+    updateAvailableSentinelPath: inputs.profileCtx.sentinels.updateAvailable,
     abortSignal: inputs.abortSignal,
     gatewayVersion: GATEWAY_USER_AGENT,
     currentVersion: PACKAGE_VERSION,

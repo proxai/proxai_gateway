@@ -1,6 +1,7 @@
 import type { Logger } from 'core/log';
 
 import type { OutputSink } from 'cli/cli.types.ts';
+import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 import type { GatewayConfig, InstallSource } from 'services/config';
 import { HttpClient } from 'services/http';
 import type {
@@ -11,6 +12,7 @@ import type {
 } from 'services/polling';
 
 export interface RunCommandDeps {
+  readonly profileCtx: ProfileContext;
   output: OutputSink;
   config: GatewayConfig;
   authFailedSentinelPath: string;
