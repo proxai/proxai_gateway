@@ -1,26 +1,4 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import type { InstallSource } from 'services/config/config.types.ts';
-import { profileRootDir } from 'core/io/fs/profile.ts';
-
-const PROD_URL = 'https://proxainest-production.up.railway.app';
-const DEV_URL = 'http://localhost:3001';
-
-export function resolveNestBaseUrl(devModeSentinelPath?: string): string {
-  const sentinelPath = devModeSentinelPath ?? join(profileRootDir(), 'DEV_MODE');
-  try {
-    if (existsSync(sentinelPath)) {
-      return DEV_URL;
-    }
-  } catch {}
-  return PROD_URL;
-}
-
-export const NEST_BASE_URL = resolveNestBaseUrl();
-export const NEST_INGEST_URL = `${NEST_BASE_URL}/v1/raw_records`;
-export const NEST_VERIFY_KEY_URL = `${NEST_BASE_URL}/ingestion/verify-key`;
-export const NEST_WATERMARKS_URL = `${NEST_BASE_URL}/v1/watermarks`;
-export const NEST_REGISTER_HOST_ID_URL = `${NEST_BASE_URL}/v1/host-ids/register`;
 
 export function nestIngestUrl(baseUrl: string): string {
   return `${baseUrl}/v1/raw_records`;

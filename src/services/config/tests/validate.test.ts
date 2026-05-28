@@ -10,11 +10,14 @@ import {
   DEFAULT_RECEIPT_RETENTION_DAYS,
   DEFAULT_STALE_PAUSE_DAYS,
   DEFAULT_STALE_WARN_DAYS,
-  NEST_INGEST_URL,
-  NEST_VERIFY_KEY_URL,
-  NEST_WATERMARKS_URL,
+  nestIngestUrl,
+  nestVerifyKeyUrl,
+  nestWatermarksUrl,
   validateAndCoerce,
 } from 'services/config';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
+
+const prodBaseUrl = buildProfileContext('prod').defaultNestBaseUrl;
 
 const minimalAccount = {
   api_key: 'pxg_live_test',
@@ -94,9 +97,9 @@ test('rejects non-numeric numeric fields', () => {
 
 test('applies defaults for missing optional sections', () => {
   const result = validateAndCoerce({ account: minimalAccount });
-  expect(result.backend.ingestUrl).toBe(NEST_INGEST_URL);
-  expect(result.backend.verifyKeyUrl).toBe(NEST_VERIFY_KEY_URL);
-  expect(result.backend.watermarksUrl).toBe(NEST_WATERMARKS_URL);
+  expect(result.backend.ingestUrl).toBe(nestIngestUrl(prodBaseUrl));
+  expect(result.backend.verifyKeyUrl).toBe(nestVerifyKeyUrl(prodBaseUrl));
+  expect(result.backend.watermarksUrl).toBe(nestWatermarksUrl(prodBaseUrl));
   expect(result.capture.pollIntervalSec).toBe(DEFAULT_POLL_INTERVAL_SEC);
   expect(result.capture.receiptRetentionDays).toBe(DEFAULT_RECEIPT_RETENTION_DAYS);
   expect(result.capture.failedRetentionDays).toBe(DEFAULT_FAILED_RETENTION_DAYS);

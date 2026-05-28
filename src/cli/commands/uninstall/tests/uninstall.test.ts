@@ -19,10 +19,10 @@ import type { ServiceManager } from 'cli/service-manager';
 import { deriveHostId } from 'core/system';
 import {
   writeConfigToFile,
-  NEST_INGEST_URL,
-  NEST_REGISTER_HOST_ID_URL,
-  NEST_VERIFY_KEY_URL,
-  NEST_WATERMARKS_URL,
+  nestIngestUrl,
+  nestRegisterHostIdUrl,
+  nestVerifyKeyUrl,
+  nestWatermarksUrl,
   DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
   DEFAULT_BUFFER_SOFT_RESUME_BYTES,
   DEFAULT_FAILED_RETENTION_DAYS,
@@ -35,6 +35,9 @@ import {
   DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
 } from 'services/config';
 import type { GatewayConfig, InstallSource } from 'services/config';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
+
+const prodBaseUrl = buildProfileContext('prod').defaultNestBaseUrl;
 
 const TEST_MACHINE_UUID = 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE';
 const TEST_USER_ID = 'u_1';
@@ -151,10 +154,10 @@ async function writeConfig(installSource: InstallSource = 'github_release'): Pro
       installSource,
     },
     backend: {
-      ingestUrl: NEST_INGEST_URL,
-      verifyKeyUrl: NEST_VERIFY_KEY_URL,
-      watermarksUrl: NEST_WATERMARKS_URL,
-      registerHostIdUrl: NEST_REGISTER_HOST_ID_URL,
+      ingestUrl: nestIngestUrl(prodBaseUrl),
+      verifyKeyUrl: nestVerifyKeyUrl(prodBaseUrl),
+      watermarksUrl: nestWatermarksUrl(prodBaseUrl),
+      registerHostIdUrl: nestRegisterHostIdUrl(prodBaseUrl),
     },
     capture: {
       pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
@@ -420,10 +423,10 @@ test('per-platform smoke: stop + unregister called regardless of platform shim',
           installSource: 'github_release',
         },
         backend: {
-          ingestUrl: NEST_INGEST_URL,
-          verifyKeyUrl: NEST_VERIFY_KEY_URL,
-          watermarksUrl: NEST_WATERMARKS_URL,
-          registerHostIdUrl: NEST_REGISTER_HOST_ID_URL,
+          ingestUrl: nestIngestUrl(prodBaseUrl),
+          verifyKeyUrl: nestVerifyKeyUrl(prodBaseUrl),
+          watermarksUrl: nestWatermarksUrl(prodBaseUrl),
+          registerHostIdUrl: nestRegisterHostIdUrl(prodBaseUrl),
         },
         capture: {
           pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,

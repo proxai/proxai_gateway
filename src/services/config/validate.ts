@@ -1,7 +1,8 @@
-import { bufferDbPath, expandHome, logDir } from 'core/io/fs';
+import { expandHome } from 'core/io/fs';
 import { DEFAULT_LOG_LEVEL, VALID_LOG_LEVELS } from 'core/log';
 import type { LogLevel } from 'core/log';
 import { ValidationError } from 'core/utils';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
 import {
   DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
   DEFAULT_BUFFER_SOFT_RESUME_BYTES,
@@ -16,10 +17,10 @@ import {
   MAX_POLL_INTERVAL_SEC,
   MIN_POLL_INTERVAL_SEC,
   MIN_UPLOAD_MAX_BATCHES_PER_SEC,
-  NEST_INGEST_URL,
-  NEST_REGISTER_HOST_ID_URL,
-  NEST_VERIFY_KEY_URL,
-  NEST_WATERMARKS_URL,
+  nestIngestUrl,
+  nestRegisterHostIdUrl,
+  nestVerifyKeyUrl,
+  nestWatermarksUrl,
   VALID_INSTALL_SOURCES,
 } from 'services/config/config.constants.ts';
 
@@ -61,21 +62,22 @@ function validateAccount(raw: unknown): AccountConfig {
 
 function validateBackend(raw: unknown): BackendConfig {
   const r = optionalTable(raw, 'backend');
+  const baseUrl = buildProfileContext('prod').defaultNestBaseUrl;
   return {
-    ingestUrl: optionalString(r['ingest_url'], NEST_INGEST_URL, 'backend.ingest_url'),
+    ingestUrl: optionalString(r['ingest_url'], nestIngestUrl(baseUrl), 'backend.ingest_url'),
     verifyKeyUrl: optionalString(
       r['verify_key_url'],
-      NEST_VERIFY_KEY_URL,
+      nestVerifyKeyUrl(baseUrl),
       'backend.verify_key_url',
     ),
     watermarksUrl: optionalString(
       r['watermarks_url'],
-      NEST_WATERMARKS_URL,
+      nestWatermarksUrl(baseUrl),
       'backend.watermarks_url',
     ),
     registerHostIdUrl: optionalString(
       r['register_host_id_url'],
-      NEST_REGISTER_HOST_ID_URL,
+      nestRegisterHostIdUrl(baseUrl),
       'backend.register_host_id_url',
     ),
   };
@@ -86,7 +88,7 @@ function validateCapture(raw: unknown, defaults?: ValidateDefaults): CaptureConf
   const bufferPathRaw = r['buffer_path'];
   const bufferPath =
     bufferPathRaw === undefined
-      ? (defaults?.defaultBufferPath ?? bufferDbPath())
+      ? (defaults?.defaultBufferPath ?? buildProfileContext('prod').bufferDbPath)
       : expandHome(requireString(bufferPathRaw, 'capture.buffer_path'));
   const bufferSoftPauseBytes = optionalNumber(
     r['buffer_soft_pause_bytes'],
@@ -163,7 +165,7 @@ function validateLogging(raw: unknown, defaults?: ValidateDefaults): LoggingConf
   const dirRaw = r['log_dir'];
   const dir =
     dirRaw === undefined
-      ? (defaults?.defaultLogDir ?? logDir())
+      ? (defaults?.defaultLogDir ?? buildProfileContext('prod').logDir)
       : expandHome(requireString(dirRaw, 'logging.log_dir'));
   return {
     level: parseLogLevel(r['level'], DEFAULT_LOG_LEVEL),

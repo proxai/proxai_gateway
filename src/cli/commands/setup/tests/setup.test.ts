@@ -12,8 +12,8 @@ import { HttpClient } from 'services/http';
 import {
   loadConfigFromFile,
   writeConfigToFile,
-  NEST_INGEST_URL,
-  NEST_VERIFY_KEY_URL,
+  nestIngestUrl,
+  nestVerifyKeyUrl,
   DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
   DEFAULT_BUFFER_SOFT_RESUME_BYTES,
   DEFAULT_FAILED_RETENTION_DAYS,
@@ -25,6 +25,9 @@ import {
   DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
   DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
 } from 'services/config';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
+
+const prodBaseUrl = buildProfileContext('prod').defaultNestBaseUrl;
 import type { GatewayConfig } from 'services/config';
 
 const TEST_MACHINE_UUID = 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE';
@@ -190,8 +193,8 @@ async function writeExistingConfig(
       ...overrides,
     },
     backend: {
-      ingestUrl: NEST_INGEST_URL,
-      verifyKeyUrl: NEST_VERIFY_KEY_URL,
+      ingestUrl: nestIngestUrl(prodBaseUrl),
+      verifyKeyUrl: nestVerifyKeyUrl(prodBaseUrl),
       watermarksUrl: 'https://api.example.com/v1/watermarks',
       registerHostIdUrl: 'https://api.example.com/v1/host-ids/register',
     },
