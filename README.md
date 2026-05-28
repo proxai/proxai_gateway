@@ -42,7 +42,25 @@ You can also pass the key inline: `proxai-gateway setup <ingestion-key>`.
 proxai-gateway status
 ```
 
-Shows whether the gateway is active and how capture and uploads are doing. Refreshes live; press `q` to quit.
+Shows whether the gateway is active, how much data has been captured and uploaded in the last 12 months, recent upload activity, and any active issues. Refreshes live; press `q` to quit.
+
+## View logs
+
+```sh
+proxai-gateway logs
+```
+
+Shows the most recent uploaded records — timestamp, source agent, and a snippet of what was captured. Refreshes live; press `q` to quit.
+
+Use `--error` to list only records that failed or are in a warning state, with a description of what went wrong. Use `--pending` to see records queued but not yet uploaded. Use `--static` for a one-shot view without live refresh.
+
+## Diagnose problems
+
+```sh
+proxai-gateway doctor
+```
+
+Checks for common failure scenarios — daemon not running, authentication errors, network issues, upload backlog, disk space, stale binary, and more. Each finding is labelled `CONFIRMED` or `LIKELY` with a specific cause and suggested action. The output is plain text you can paste to the team if you need help.
 
 ## Manage the service
 
