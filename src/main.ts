@@ -5,6 +5,8 @@ import { Command } from 'commander';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 
 import { runDev } from 'cli/commands/dev.ts';
+import { runLogs } from 'cli/commands/logs';
+import { runDoctor } from 'cli/commands/doctor';
 import { runRedactionList, runRedactionTest } from 'cli/commands/redaction.ts';
 import { runRestart } from 'cli/commands/restart.ts';
 import { runDaemon } from 'cli/commands/run';
@@ -23,6 +25,8 @@ import { autoUpgradeFromConfig } from 'cli/wiring/auto-upgrade.ts';
 
 import { consoleOutput } from 'cli/output.ts';
 import { buildDevDeps } from 'cli/wiring/dev-deps.ts';
+import { buildDoctorDeps } from 'cli/wiring/doctor-deps.ts';
+import { buildLogsDeps } from 'cli/wiring/logs-deps.ts';
 import {
   buildPlatformServiceContext,
   buildServiceUnitRecreate,
@@ -56,6 +60,8 @@ import type { ProfileName } from 'core/io/fs/profile.types.ts';
 import { VALID_PROFILES } from 'core/io/fs/profile.types.ts';
 import { GatewayError, PACKAGE_DESCRIPTION, PACKAGE_VERSION, UserAbortedError } from 'core/utils';
 import { loadConfigFromFile } from 'services/config';
+
+const godMode = await readDevModeSentinel(join(profileRootDir(), 'DEV_MODE'));
 
 const program = new Command();
 program
@@ -107,7 +113,7 @@ program
     're-run setup even if a configuration already exists. Overwrites the stored ingestion key.',
     false,
   )
-  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
+  .option('--profile <name>', 'profile to target (prod | dev)')
   .action(
     async (
       positionalApiKey: string | undefined,
@@ -119,8 +125,10 @@ program
         profile?: string;
       },
     ) => {
+      const defaultProfile: ProfileName = godMode ? 'dev' : 'prod';
+      const profileName = parseProfileName(opts.profile ?? defaultProfile);
       const ctx = buildPlatformServiceContext(process.platform, process.execPath);
-      const profileCtx = buildProfileContext(parseProfileName(opts.profile));
+      const profileCtx = buildProfileContext(profileName);
       const setupInputs = {
         platform: process.platform,
         programPath: process.execPath,
@@ -281,26 +289,29 @@ program
   });
 
 program
-  .command('dev [action]')
+  .command('dev [action] [key]', { hidden: !godMode })
   .alias('d')
   .description(
-    'Configure or toggle gateway development mode (actions: "on" to force localhost, "off" to restore production, or empty/no option to toggle).',
+    'Manage gateway development mode. Actions: "on", "off", "setup <KEY>", or no action to toggle.',
   )
-  .action(async (action?: string) => {
-    const result = await runDev(buildDevDeps(), action);
+  .action(async (action?: string, key?: string) => {
+    const result = await runDev(
+      buildDevDeps(),
+      action,
+      key !== undefined ? { apiKey: key } : undefined,
+    );
     process.exit(result.exitCode);
   });
 
 program
-  .command('xstate')
+  .command('xstate', { hidden: !godMode })
   .description(
     'Start the gateway daemon in the foreground with the Stately browser visualizer enabled (only available in development mode).',
   )
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
   .action(async (opts: { config?: string; profile?: string }) => {
-    const isDevMode = await readDevModeSentinel(join(profileRootDir(), 'DEV_MODE'));
-    if (!isDevMode) {
+    if (!godMode) {
       console.error(
         chalk.red(
           'Error: "xstate" command is only available in development mode.\n' +
@@ -358,7 +369,7 @@ program
   });
 
 program
-  .command('inspect')
+  .command('inspect', { hidden: !godMode })
   .alias('ins')
   .description(
     'Dry-run telemetry scanner that compiles records, file counts, and decompressed data sizes without updating buffers.',
@@ -420,7 +431,7 @@ program
   });
 
 program
-  .command('tail')
+  .command('tail', { hidden: !godMode })
   .alias('t')
   .description(
     'Stream structured (ndjson) log entries from the active gateway log file. Pretty-prints by default; combine filters as needed.',
@@ -479,7 +490,7 @@ program
   );
 
 const redaction = program
-  .command('redaction')
+  .command('redaction', { hidden: !godMode })
   .description('Inspect the on-device secret-redaction rules and try them against a sample file.');
 
 redaction
@@ -503,7 +514,7 @@ redaction
   });
 
 program
-  .command('replay <logPath>')
+  .command('replay <logPath>', { hidden: !godMode })
   .description(
     'Replay a JSONL log of state-machine transitions and print the final state per machine. Useful for incident debugging.',
   )
@@ -533,6 +544,76 @@ redaction
   .action((opts: { categories?: boolean; category?: string; json?: boolean; profile?: string }) => {
     parseProfileName(opts.profile);
     const result = runRedactionList(buildRedactionListDeps(), buildRedactionListOptions(opts));
+    process.exit(result.exitCode);
+  });
+
+program
+  .command('logs')
+  .description('Show uploaded records and any errors from the local buffer.')
+  .option('--static', 'one-shot output, no live refresh', false)
+  .option('--json', 'emit JSON; implies --static', false)
+  .option('--error', 'show only failed, quarantined, and looping-resync records', false)
+  .option('--source <app>', 'filter by coding agent (claude-code, cursor, codex, gemini-cli)')
+  .option('--since <dur>', 'show records from the last duration (e.g. 24h, 7d)')
+  .option('--pending', 'show queued records not yet uploaded', false)
+  .option('--lines <n>', 'number of records to display', '20')
+  .option('--profile <name>', 'profile to query (prod | dev)')
+  .action(
+    async (opts: {
+      static?: boolean;
+      json?: boolean;
+      error?: boolean;
+      source?: string;
+      since?: string;
+      pending?: boolean;
+      lines?: string;
+      profile?: string;
+    }) => {
+      const defaultProfile: ProfileName = godMode ? 'dev' : 'prod';
+      const profileName = parseProfileName(opts.profile ?? defaultProfile);
+      const profileCtx = buildProfileContext(profileName);
+      const { deps, cleanup } = await buildLogsDeps({ bufferPath: profileCtx.bufferDbPath });
+      const ctrl = new AbortController();
+      process.on('SIGINT', () => ctrl.abort());
+      process.on('SIGTERM', () => ctrl.abort());
+      try {
+        const parsedLines = opts.lines !== undefined ? parseInt(opts.lines, 10) : 20;
+        const safeLines = Number.isFinite(parsedLines) ? parsedLines : 20;
+        const result = await runLogs(deps, {
+          lines: safeLines,
+          ...(opts.static === true ? { static: true as const } : {}),
+          ...(opts.json === true ? { json: true as const } : {}),
+          ...(opts.error === true ? { error: true as const } : {}),
+          ...(opts.pending === true ? { pending: true as const } : {}),
+          ...(opts.source !== undefined ? { source: opts.source } : {}),
+          ...(opts.since !== undefined ? { since: opts.since } : {}),
+        });
+        process.exit(result.exitCode);
+      } finally {
+        cleanup();
+      }
+    },
+  );
+
+program
+  .command('doctor')
+  .description('Diagnose common failure scenarios and report findings with copy-pasteable output.')
+  .option('--profile <name>', 'profile to diagnose (prod | dev)')
+  .action(async (opts: { profile?: string }) => {
+    const defaultProfile: ProfileName = godMode ? 'dev' : 'prod';
+    const profileName = parseProfileName(opts.profile ?? defaultProfile);
+    const profileCtx = buildProfileContext(profileName);
+    const platform = process.platform;
+    const unitPath = platformServiceUnitPath(platform, profileCtx.configDir);
+    const serviceManager =
+      unitPath !== null
+        ? (buildPlatformServiceContext(platform, process.execPath, profileCtx.configDir)
+            ?.serviceManager ?? null)
+        : null;
+    const result = await runDoctor(
+      buildDoctorDeps({ serviceManager, platform, profileCtx }),
+      opts.profile !== undefined ? { profile: opts.profile } : {},
+    );
     process.exit(result.exitCode);
   });
 

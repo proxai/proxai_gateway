@@ -6,6 +6,8 @@ import { COMMAND_ALIASES } from 'cli/command-aliases.ts';
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
 const ENTRY = join(REPO_ROOT, 'src', 'main.ts');
 
+const GOD_MODE_ONLY_COMMANDS = new Set(['dev', 'inspect', 'tail']);
+
 async function runHelp(): Promise<string> {
   const proc = Bun.spawn(['bun', ENTRY, '--help'], {
     cwd: REPO_ROOT,
@@ -23,7 +25,7 @@ async function runHelp(): Promise<string> {
 test('every long command has its declared alias visible in --help output', async () => {
   const help = await runHelp();
   for (const [name, alias] of Object.entries(COMMAND_ALIASES)) {
-    if (name === 'dev') continue;
+    if (GOD_MODE_ONLY_COMMANDS.has(name)) continue;
     expect(help).toContain(`${name}|${alias}`);
   }
 }, 30_000);
