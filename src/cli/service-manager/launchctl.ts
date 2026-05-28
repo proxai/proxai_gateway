@@ -1,34 +1,35 @@
-import { LAUNCHD_LABEL } from 'cli/cli.constants.ts';
 import { runCommand } from 'cli/service-manager/run-command.ts';
 import type { ServiceManager, ServiceRuntimeInfo, SpawnFn } from 'cli/service-manager/types.ts';
-
-const LAUNCHCTL_TARGET = `gui/{uid}/${LAUNCHD_LABEL}`;
 
 function uidString(): string {
   return String(process.getuid?.() ?? 0);
 }
 
-function darwinTarget(): string {
-  return LAUNCHCTL_TARGET.replace('{uid}', uidString());
+function darwinTarget(label: string): string {
+  return `gui/${uidString()}/${label}`;
 }
 
 function darwinDomain(): string {
   return `gui/${uidString()}`;
 }
 
-export function createLaunchctlManager(spawn: SpawnFn, unitPath: string): ServiceManager {
+export function createLaunchctlManager(
+  spawn: SpawnFn,
+  unitPath: string,
+  label: string,
+): ServiceManager {
   return {
     isRegistered: async () => {
-      const result = await runCommand(spawn, ['launchctl', 'print', darwinTarget()]);
+      const result = await runCommand(spawn, ['launchctl', 'print', darwinTarget(label)]);
       return result.exitCode === 0;
     },
     isRunning: async () => {
-      const result = await runCommand(spawn, ['launchctl', 'print', darwinTarget()]);
+      const result = await runCommand(spawn, ['launchctl', 'print', darwinTarget(label)]);
       if (result.exitCode !== 0) return false;
       return /state\s*=\s*running/.test(result.stdout);
     },
     ensureRegistered: async () => {
-      const printed = await runCommand(spawn, ['launchctl', 'print', darwinTarget()]);
+      const printed = await runCommand(spawn, ['launchctl', 'print', darwinTarget(label)]);
       if (printed.exitCode === 0) return;
       const bootstrap = await runCommand(spawn, [
         'launchctl',
@@ -45,7 +46,7 @@ export function createLaunchctlManager(spawn: SpawnFn, unitPath: string): Servic
       }
     },
     start: async () => {
-      const printed = await runCommand(spawn, ['launchctl', 'print', darwinTarget()]);
+      const printed = await runCommand(spawn, ['launchctl', 'print', darwinTarget(label)]);
       if (printed.exitCode !== 0) {
         const bootstrap = await runCommand(spawn, [
           'launchctl',
@@ -61,7 +62,7 @@ export function createLaunchctlManager(spawn: SpawnFn, unitPath: string): Servic
           );
         }
       }
-      const kick = await runCommand(spawn, ['launchctl', 'kickstart', darwinTarget()]);
+      const kick = await runCommand(spawn, ['launchctl', 'kickstart', darwinTarget(label)]);
       if (kick.exitCode !== 0) {
         throw new Error(
           `launchctl kickstart failed (exit ${kick.exitCode.toString()}): ${
@@ -71,9 +72,9 @@ export function createLaunchctlManager(spawn: SpawnFn, unitPath: string): Servic
       }
     },
     stop: async () => {
-      const printed = await runCommand(spawn, ['launchctl', 'print', darwinTarget()]);
+      const printed = await runCommand(spawn, ['launchctl', 'print', darwinTarget(label)]);
       if (printed.exitCode !== 0) return;
-      const out = await runCommand(spawn, ['launchctl', 'bootout', darwinTarget()]);
+      const out = await runCommand(spawn, ['launchctl', 'bootout', darwinTarget(label)]);
       if (out.exitCode !== 0) {
         throw new Error(
           `launchctl bootout failed (exit ${out.exitCode.toString()}): ${
@@ -83,7 +84,7 @@ export function createLaunchctlManager(spawn: SpawnFn, unitPath: string): Servic
       }
     },
     restart: async () => {
-      const printed = await runCommand(spawn, ['launchctl', 'print', darwinTarget()]);
+      const printed = await runCommand(spawn, ['launchctl', 'print', darwinTarget(label)]);
       if (printed.exitCode !== 0) {
         const bootstrap = await runCommand(spawn, [
           'launchctl',
@@ -99,7 +100,7 @@ export function createLaunchctlManager(spawn: SpawnFn, unitPath: string): Servic
           );
         }
       }
-      const kick = await runCommand(spawn, ['launchctl', 'kickstart', '-k', darwinTarget()]);
+      const kick = await runCommand(spawn, ['launchctl', 'kickstart', '-k', darwinTarget(label)]);
       if (kick.exitCode !== 0) {
         throw new Error(
           `launchctl kickstart -k failed (exit ${kick.exitCode.toString()}): ${
@@ -109,9 +110,9 @@ export function createLaunchctlManager(spawn: SpawnFn, unitPath: string): Servic
       }
     },
     unregister: async () => {
-      const printed = await runCommand(spawn, ['launchctl', 'print', darwinTarget()]);
+      const printed = await runCommand(spawn, ['launchctl', 'print', darwinTarget(label)]);
       if (printed.exitCode !== 0) return;
-      const out = await runCommand(spawn, ['launchctl', 'bootout', darwinTarget()]);
+      const out = await runCommand(spawn, ['launchctl', 'bootout', darwinTarget(label)]);
       if (out.exitCode !== 0) {
         throw new Error(
           `launchctl bootout failed (exit ${out.exitCode.toString()}): ${
@@ -121,7 +122,7 @@ export function createLaunchctlManager(spawn: SpawnFn, unitPath: string): Servic
       }
     },
     runtimeInfo: async () => {
-      const result = await runCommand(spawn, ['launchctl', 'print', darwinTarget()]);
+      const result = await runCommand(spawn, ['launchctl', 'print', darwinTarget(label)]);
       if (result.exitCode !== 0) return { pid: null, startedAt: null };
       return parseLaunchctlPrint(result.stdout);
     },

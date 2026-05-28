@@ -1,9 +1,8 @@
-import { SYSTEMD_UNIT_NAME } from 'cli/cli.constants.ts';
 import { runCommand } from 'cli/service-manager/run-command.ts';
 import type { ServiceManager, ServiceRuntimeInfo, SpawnFn } from 'cli/service-manager/types.ts';
 
-export function createSystemctlManager(spawn: SpawnFn): ServiceManager {
-  const unit = SYSTEMD_UNIT_NAME;
+export function createSystemctlManager(spawn: SpawnFn, unitName: string): ServiceManager {
+  const unit = unitName;
   return {
     isRegistered: async () => {
       const result = await runCommand(spawn, ['systemctl', '--user', 'list-unit-files', unit]);

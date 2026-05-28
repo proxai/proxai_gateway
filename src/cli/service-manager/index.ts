@@ -5,6 +5,11 @@ import { createSystemctlManager } from 'cli/service-manager/systemctl.ts';
 import { defaultSpawn } from 'cli/service-manager/run-command.ts';
 import type { ServiceManager, ServiceManagerDeps } from 'cli/service-manager/types.ts';
 import {
+  profileLaunchdLabel,
+  profileSystemdUnitName,
+  profileWindowsTaskName,
+} from 'cli/service-unit/dev-labels.ts';
+import {
   serviceManagerMachine,
   type ServiceManagerMachine,
   type ServicePlatform,
@@ -35,13 +40,14 @@ function platformToServicePlatform(platform: NodeJS.Platform): ServicePlatform {
 
 function buildInner(deps: ServiceManagerDeps): ServiceManager {
   const spawn = deps.spawn ?? defaultSpawn();
+  const profile = deps.profile ?? 'prod';
   switch (deps.platform) {
     case 'darwin':
-      return createLaunchctlManager(spawn, deps.unitPath);
+      return createLaunchctlManager(spawn, deps.unitPath, profileLaunchdLabel(profile));
     case 'linux':
-      return createSystemctlManager(spawn);
+      return createSystemctlManager(spawn, profileSystemdUnitName(profile));
     case 'win32':
-      return createSchtasksManager(spawn, deps.unitPath);
+      return createSchtasksManager(spawn, deps.unitPath, profileWindowsTaskName(profile));
     default:
       throw new Error(`unsupported platform for service-manager: ${deps.platform}`);
   }

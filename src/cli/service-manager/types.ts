@@ -30,8 +30,11 @@ export type SpawnFn = (
   exitCode: number | null;
 };
 
+import type { ProfileName } from 'core/io/fs/profile.types.ts';
+
 export interface ServiceManagerDeps {
   platform: NodeJS.Platform;
   unitPath: string;
   spawn?: SpawnFn;
+  profile?: ProfileName;
 }

@@ -1,9 +1,11 @@
-import { WINDOWS_TASK_NAME } from 'cli/cli.constants.ts';
 import { runCommand } from 'cli/service-manager/run-command.ts';
 import type { ServiceManager, ServiceRuntimeInfo, SpawnFn } from 'cli/service-manager/types.ts';
 
-export function createSchtasksManager(spawn: SpawnFn, unitPath: string): ServiceManager {
-  const taskName = WINDOWS_TASK_NAME;
+export function createSchtasksManager(
+  spawn: SpawnFn,
+  unitPath: string,
+  taskName: string,
+): ServiceManager {
   return {
     isRegistered: async () => {
       const result = await runCommand(spawn, ['schtasks', '/Query', '/TN', taskName]);
