@@ -1,6 +1,3 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-
 import type { RunCommandDeps } from 'cli/commands/run';
 import { consoleOutput } from 'cli/output.ts';
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
@@ -30,7 +27,7 @@ export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
     currentVersion: PACKAGE_VERSION,
     binaryPath: inputs.binaryPath,
     installSource: inputs.config.account.installSource,
-    devMode: existsSync(join(inputs.profileCtx.configDir, 'DEV_MODE')),
+    devMode: inputs.profileCtx.isDev,
     exitProcess: inputs.exitProcess,
   };
   if (inputs.xstateInspect !== undefined) {
