@@ -6,6 +6,7 @@ import {
   BATCH_STATUS,
   BUFFER_TABLES,
   RECEIPT_COLS,
+  RESYNC_EVENT_COLS,
 } from 'services/buffer/buffer.constants.ts';
 import { setLastPruneAt } from 'services/buffer/metadata.ts';
 import { pruneQuarantinedOlderThan } from 'services/buffer/quarantine.ts';
@@ -22,6 +23,11 @@ const COUNT_OLD_RECEIPTS_SQL = `
 const DELETE_OLD_RECEIPTS_SQL = `
   DELETE FROM ${BUFFER_TABLES.receipts}
   WHERE ${RECEIPT_COLS.deliveredAt} < ?
+`;
+
+const DELETE_OLD_RESYNC_EVENTS_SQL = `
+  DELETE FROM ${BUFFER_TABLES.resyncEvents}
+  WHERE ${RESYNC_EVENT_COLS.recoveredAt} < ?
 `;
 
 const SUM_OLD_FAILED_BYTES_SQL = `
@@ -51,6 +57,7 @@ export interface PruneResult {
   receiptsDeleted: number;
   failedBatchesDeleted: number;
   quarantinedDeleted: number;
+  resyncEventsDeleted: number;
   receiptBytesFreed: number;
   failedBytesFreed: number;
 }
@@ -67,6 +74,7 @@ export function pruneBuffer(input: PruneInput): PruneResult {
   let failedBatchesDeleted = 0;
   let failedBytesFreed = 0;
   let quarantinedDeleted = 0;
+  let resyncEventsDeleted = 0;
 
   const tx = db.transaction(() => {
     const receiptCountRow = db
@@ -88,6 +96,9 @@ export function pruneBuffer(input: PruneInput): PruneResult {
 
     quarantinedDeleted = pruneQuarantinedOlderThan(db, failedCutoff);
 
+    const resyncResult = db.query(DELETE_OLD_RESYNC_EVENTS_SQL).run(receiptCutoff);
+    resyncEventsDeleted = Number(resyncResult.changes ?? 0);
+
     setLastPruneAt(db, now.toISOString());
   });
   tx();
@@ -97,6 +108,7 @@ export function pruneBuffer(input: PruneInput): PruneResult {
     receiptsDeleted,
     failedBatchesDeleted,
     quarantinedDeleted,
+    resyncEventsDeleted,
     receiptBytesFreed,
     failedBytesFreed,
   };
@@ -109,6 +121,7 @@ export function pruneBuffer(input: PruneInput): PruneResult {
       failed_batches_deleted: failedBatchesDeleted,
       failed_bytes_freed: failedBytesFreed,
       quarantined_deleted: quarantinedDeleted,
+      resync_events_deleted: resyncEventsDeleted,
       receipt_cutoff: receiptCutoff,
       failed_cutoff: failedCutoff,
     },
