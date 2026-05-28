@@ -1,5 +1,6 @@
 import type { RunCommandDeps } from 'cli/commands/run';
 import { consoleOutput } from 'cli/output.ts';
+import { buildRunCoordinatedUpgradeDeps } from 'cli/wiring/upgrade-restore-deps.ts';
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 import { GATEWAY_USER_AGENT, PACKAGE_VERSION } from 'core/utils';
 import type { GatewayConfig } from 'services/config';
@@ -11,9 +12,11 @@ export interface BuildRunDepsInputs {
   exitProcess: () => void;
   xstateInspect?: boolean | undefined;
   profileCtx: ProfileContext;
+  platform?: NodeJS.Platform;
 }
 
 export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
+  const platform = inputs.platform ?? process.platform;
   const deps: RunCommandDeps = {
     profileCtx: inputs.profileCtx,
     output: consoleOutput(),
@@ -32,6 +35,14 @@ export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
   };
   if (inputs.xstateInspect !== undefined) {
     deps.xstateInspect = inputs.xstateInspect;
+  }
+  const coordDeps = buildRunCoordinatedUpgradeDeps({
+    binaryPath: inputs.binaryPath,
+    platform,
+    isDev: inputs.profileCtx.isDev,
+  });
+  if (coordDeps !== undefined) {
+    deps.coordinatedUpgradeDeps = coordDeps;
   }
   return deps;
 }

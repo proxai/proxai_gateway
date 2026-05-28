@@ -15,6 +15,7 @@ import { checkLatestVersion } from 'services/polling/version-check.ts';
 import type { BinaryFreshnessStatus } from 'services/state-machines/binary-freshness';
 import { heartbeatLoopMachine } from 'services/state-machines/heartbeat-loop';
 import { runAutoUpgrade } from 'services/upgrade';
+import { coordinatedUpgrade } from 'services/upgrade/coordinated-upgrade.ts';
 
 const DEFAULT_VERSION_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
@@ -107,6 +108,16 @@ async function maybeRunAutoUpgrade(ctx: HeartbeatCycleContext): Promise<boolean>
   }
 
   if (ctx.binaryPath === undefined || ctx.currentVersion === undefined) return false;
+
+  if (ctx.devMode !== true && ctx.coordinatedUpgradeDeps !== undefined) {
+    const result = await coordinatedUpgrade(ctx.coordinatedUpgradeDeps);
+    setMetadata(ctx.buffer, METADATA_KEYS.lastVersionCheckAt, nowIsoUtc());
+    if (result.upgradeApplied) {
+      ctx.exitProcess?.();
+    }
+    return true;
+  }
+
   const autoDeps: Parameters<typeof runAutoUpgrade>[0] = {
     binaryPath: ctx.binaryPath,
     currentVersion: ctx.currentVersion,

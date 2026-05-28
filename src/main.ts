@@ -21,7 +21,9 @@ import { runUninstall } from 'cli/commands/uninstall';
 import { runUpgrade } from 'cli/commands/upgrade.ts';
 import { runInspect } from 'cli/commands/inspect';
 import { defaultReplayDeps, runReplay } from 'cli/commands/replay';
+import { runUpgradePostRespawnRestore } from 'services/upgrade/coordinated-upgrade.ts';
 import { autoUpgradeFromConfig } from 'cli/wiring/auto-upgrade.ts';
+import { buildUpgradePostRespawnRestoreDeps } from 'cli/wiring/upgrade-restore-deps.ts';
 
 import { consoleOutput } from 'cli/output.ts';
 import { buildDevDeps } from 'cli/wiring/dev-deps.ts';
@@ -271,6 +273,13 @@ program
               profileName,
             };
       await refreshServiceUnitIfLegacy(refreshConfig);
+    }
+    if (!profileCtx.isDev) {
+      try {
+        await runUpgradePostRespawnRestore(
+          buildUpgradePostRespawnRestoreDeps({ platform: process.platform }),
+        );
+      } catch {}
     }
     const config = await loadConfigFromFile(opts.config ?? profileCtx.configFilePath);
     const ctrl = new AbortController();

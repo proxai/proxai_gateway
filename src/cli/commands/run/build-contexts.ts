@@ -90,6 +90,9 @@ export function buildHeartbeatContext(input: {
   if (deps.binaryPath !== undefined) heartbeatCtx.binaryPath = deps.binaryPath;
   if (deps.devMode !== undefined) heartbeatCtx.devMode = deps.devMode;
   if (deps.exitProcess !== undefined) heartbeatCtx.exitProcess = deps.exitProcess;
+  if (deps.coordinatedUpgradeDeps !== undefined) {
+    heartbeatCtx.coordinatedUpgradeDeps = deps.coordinatedUpgradeDeps;
+  }
   return heartbeatCtx;
 }
 

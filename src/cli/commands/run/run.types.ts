@@ -10,6 +10,7 @@ import type {
   HeartbeatCycleResult,
   RegisteredSource,
 } from 'services/polling';
+import type { CoordinatedUpgradeDeps } from 'services/upgrade/coordinated-upgrade.ts';
 
 export interface RunCommandDeps {
   readonly profileCtx: ProfileContext;
@@ -37,4 +38,5 @@ export interface RunCommandDeps {
   logger?: Logger;
   httpClient?: HttpClient;
   readBootId?: () => Promise<string>;
+  coordinatedUpgradeDeps?: CoordinatedUpgradeDeps;
 }

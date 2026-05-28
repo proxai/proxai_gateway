@@ -6,6 +6,7 @@ import type { PendingPressureResult, PruneResult } from 'services/buffer';
 import type { InstallSource } from 'services/config';
 import type { HttpClient } from 'services/http';
 import type { DrainResult, Pacer } from 'services/uploader';
+import type { CoordinatedUpgradeDeps } from 'services/upgrade/coordinated-upgrade.ts';
 
 export interface SourcePollerContext {
   buffer: Database;
@@ -112,6 +113,7 @@ export interface HeartbeatCycleContext {
   currentVersion?: string;
   binaryPath?: string;
   exitProcess?: () => void;
+  coordinatedUpgradeDeps?: CoordinatedUpgradeDeps;
 }
 
 export interface HeartbeatCycleResult {
