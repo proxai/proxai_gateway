@@ -14,6 +14,7 @@ import {
   deleteBatch,
   markBatchDelivered,
   markBatchFailed,
+  recordResyncEvent,
   recordRetriableFailure,
   setCursorFromRegression,
 } from 'services/buffer';
@@ -86,6 +87,14 @@ async function classifyAndPersist(
   const log = ctx.logger?.child({ capture_id: captureId });
   if (err instanceof WatermarkRegressionError) {
     setCursorFromRegression(ctx.db, batch, err.currentServerWatermarkEnd);
+    recordResyncEvent(ctx.db, {
+      sourceApp: batch.sourceApp,
+      sourcePathHash: batch.sourcePathHash,
+      watermarkKind: batch.watermarkKind,
+      serverWatermarkEnd: err.currentServerWatermarkEnd,
+      skippedUnits: err.currentServerWatermarkEnd - batch.watermarkEnd,
+      recoveredAt: nowIsoUtc(),
+    });
     deleteBatch(ctx.db, captureId);
     lifecycle.send({
       type: 'WATERMARK_REGRESSED',
