@@ -104,7 +104,12 @@ export function renderLogsFrame(
     frame.pending.length === 0;
 
   if (isEmpty) {
-    const mode = options.error === true ? 'No errors found.' : options.pending === true ? 'No pending records.' : 'No uploaded records yet.';
+    const mode =
+      options.error === true
+        ? 'No errors found.'
+        : options.pending === true
+          ? 'No pending records.'
+          : 'No uploaded records yet.';
     lines.push(chalk.dim(mode));
   }
 
