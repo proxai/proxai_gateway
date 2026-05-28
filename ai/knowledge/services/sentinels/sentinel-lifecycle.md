@@ -29,7 +29,7 @@ All five live inside `<profileRootDir>/<profile>/` — i.e. inside `prod/` or `d
 4. Returns `true` only if they match (same boot session).
 5. Self-clears the file (deletes it) if the boot_id mismatches (reboot occurred) or the body is malformed, and returns `false`.
 
-`DEV_MODE` controls CLI perspective (default profile, god-mode visibility, status detail level) only. It never gates daemon loops.
+`DEV_MODE` controls CLI perspective (default profile, dev-only command visibility, status detail level) only. It never gates daemon loops.
 
 ## Boot-id self-clearing: TWO sanctioned users
 

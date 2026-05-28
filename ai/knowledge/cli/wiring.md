@@ -28,13 +28,13 @@ For every CLI command there is a paired wiring file. `main.ts` calls `buildXxxDe
 
 ## `ProfileContext` threading
 
-Every wiring builder that touches profile-specific paths accepts a `ProfileContext` object. `main.ts` resolves the targeted profile (from `--profile <name>` flag, or using `godMode` to determine the default) and calls `buildProfileContext(profileName)` before passing the result into the builder.
+Every wiring builder that touches profile-specific paths accepts a `ProfileContext` object. `main.ts` resolves the targeted profile (from `--profile <name>` flag, or using `isDevMode` to determine the default) and calls `buildProfileContext(profileName)` before passing the result into the builder.
 
 `dev-deps.ts` is the exception: `runDev` needs access to both the `prod` and `dev` profile contexts simultaneously (e.g. to auto-start the dev daemon on `dev on`, or to coordinate both profiles in `dev setup`). `buildDevDeps()` constructs both internally.
 
 The `--profile` default is:
-- `'dev'` for `setup`, `logs`, `doctor` when `godMode === true` (CLI perspective follows the dev-mode flag).
-- `'prod'` for all other commands, regardless of god mode.
+- `'dev'` for `setup`, `logs`, `doctor` when `isDevMode === true` (CLI perspective follows the dev-mode flag).
+- `'prod'` for all other commands, regardless of dev mode.
 
 ## What `buildPlatformServiceContext` returns
 

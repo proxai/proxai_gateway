@@ -8,7 +8,7 @@ This document serves as an advanced architectural cheatsheet describing the data
 
 ## Relational Map & Database Layout
 
-The flowchart below map the structural schema of the 6 tables of `buffer.db`, highlighting composite keys, column types, and the ACID transactional boundary that executes daily pruning routines.
+The flowchart below map the structural schema of the 7 tables of `buffer.db`, highlighting composite keys, column types, and the ACID transactional boundary that executes daily pruning routines.
 
 ```mermaid
 %%{init: {"theme": "base", "themeCSS": "svg { background-color: #081612; border: 1px solid #142c26; border-radius: 8px; padding: 12px; } .flowchart-link, .marker { stroke: #10b981 !important; filter: drop-shadow(0px 0px 4px rgba(16, 185, 129, 0.8)) !important; } .edgePath .path { stroke: #10b981 !important; stroke-width: 2px !important; } .node rect, .node circle, .node polygon, .node path { stroke-width: 2px !important; } .node.startNode rect, .node.startNode circle, .node.startNode polygon, .node.startNode path { fill: #0a201b !important; stroke: #10b981 !important; filter: drop-shadow(0px 0px 6px rgba(16, 185, 129, 0.7)) !important; } .node.startNode .label { color: #b3f5e6 !important; } .node.stopNode rect, .node.stopNode circle, .node.stopNode polygon, .node.stopNode path { fill: #241212 !important; stroke: #ef4444 !important; filter: drop-shadow(0px 0px 6px rgba(239, 68, 68, 0.7)) !important; } .node.stopNode .label { color: #fca5a5 !important; } .node.decNode rect, .node.decNode circle, .node.decNode polygon, .node.decNode path { fill: #241c0e !important; stroke: #f59e0b !important; filter: drop-shadow(0px 0px 6px rgba(245, 158, 11, 0.7)) !important; } .node.decNode .label { color: #fde68a !important; } .node.processNode rect, .node.processNode circle, .node.processNode polygon, .node.processNode path { fill: #0d1b2d !important; stroke: #3b82f6 !important; filter: drop-shadow(0px 0px 6px rgba(59, 130, 246, 0.7)) !important; } .node.processNode .label { color: #bfdbfe !important; } .node.actionNode rect, .node.actionNode circle, .node.actionNode polygon, .node.actionNode path { fill: #1e112c !important; stroke: #a855f7 !important; filter: drop-shadow(0px 0px 6px rgba(168, 85, 247, 0.7)) !important; } .node.actionNode .label { color: #e9d5ff !important; } .node.default rect, .node.default circle, .node.default polygon, .node.default path { fill: #0a201b !important; stroke: #14b8a6 !important; filter: drop-shadow(0px 0px 6px rgba(20, 184, 166, 0.7)) !important; } .node.default .label { color: #ccfbf1 !important; }", "themeVariables": { "primaryColor": "#081612", "primaryTextColor": "#f1f5f9", "primaryBorderColor": "#142c26", "lineColor": "#10b981", "secondaryColor": "#081612", "tertiaryColor": "#081612", "fontFamily": "Inter, sans-serif" }, "flowchart": {"nodeSpacing": 35, "rankSpacing": 40}}}%%
@@ -21,43 +21,51 @@ flowchart TD
   classDef default fill:#0a201b,stroke:#14b8a6,stroke-width:2px,color:#ccfbf1,padding:10px 20px;
 
   %% Database Tables & Core Schema Definitions
-  cursors["Table: source_cursors<br/>-----------------------------<br/>• COMPOSITE PRIMARY KEY:<br/>  (source_app, source_path_hash, source_inode, watermark_table)<br/>• watermark_end: INTEGER<br/>• last_seen_size_bytes: INTEGER<br/>• last_seen_page_count: INTEGER<br/>• consecutive_errors: INTEGER DEFAULT 0<br/>• updated_at: INTEGER"]
+  batches["Table: upload_batches<br/>-----------------------------<br/>PK capture_id TEXT<br/>source_app TEXT<br/>source_kind TEXT<br/>source_path TEXT<br/>source_path_hash TEXT<br/>source_inode INT<br/>watermark_kind TEXT<br/>watermark_start INT<br/>watermark_end INT<br/>watermark_table TEXT<br/>agent_schema_version TEXT<br/>gateway_version TEXT<br/>captured_at_utc TEXT<br/>body_format TEXT<br/>body_compression TEXT<br/>body BLOB<br/>status TEXT DEFAULT pending<br/>attempts INT DEFAULT 0<br/>created_at TEXT<br/>last_error TEXT<br/>IDX status,created_at + source_path_hash"]
 
-  batches["Table: upload_batches<br/>-----------------------------<br/>• id: TEXT PRIMARY KEY (UUIDv7)<br/>• source_app: TEXT<br/>• source_path_hash: TEXT<br/>• watermark_start: INTEGER<br/>• watermark_end: INTEGER<br/>• body: BLOB (Zstd compressed base64)<br/>• compressed_size: INTEGER<br/>• status: TEXT (pending / failed / shipped)<br/>• retry_count: INTEGER DEFAULT 0<br/>• last_attempt_at: INTEGER<br/>• created_at: INTEGER"]
+  cursors["Table: source_cursors<br/>-----------------------------<br/>COMPOSITE PK source_app,source_path_hash,source_inode,watermark_table<br/>source_path TEXT<br/>source_inode INT DEFAULT 0<br/>watermark_table TEXT DEFAULT ''<br/>watermark_end INT DEFAULT 0<br/>last_polled_at TEXT<br/>consecutive_errors INT DEFAULT 0<br/>last_seen_size_bytes INT<br/>last_seen_page_count INT"]
 
-  receipts["Table: upload_receipts<br/>-----------------------------<br/>• id: TEXT PRIMARY KEY (UUIDv7)<br/>• batch_id: TEXT (Index / FK to upload_batches)<br/>• created_at: INTEGER"]
+  receipts["Table: upload_receipts<br/>-----------------------------<br/>PK capture_id TEXT<br/>source_app TEXT<br/>source_path_hash TEXT<br/>watermark_kind TEXT<br/>watermark_start INT<br/>watermark_end INT<br/>watermark_table TEXT<br/>delivered_at TEXT<br/>idempotent_on_server INT DEFAULT 0<br/>user_prompt TEXT redacted<br/>user_prompt_added_at TEXT<br/>source_path TEXT<br/>agent_schema_version TEXT<br/>gateway_version TEXT<br/>captured_at_utc TEXT<br/>attempts INT<br/>source_inode INT<br/>shipped_bytes INT<br/>IDX source_path_hash + delivered_at"]
 
-  quarantine["Table: quarantined_records<br/>-----------------------------<br/>• id: TEXT PRIMARY KEY (UUIDv7)<br/>• source_app: TEXT<br/>• source_path_hash: TEXT<br/>• watermark_start: INTEGER<br/>• watermark_end: INTEGER<br/>• record_index: INTEGER<br/>• reason: TEXT (redaction_clash / unparsable)<br/>• created_at: INTEGER"]
+  quarantine["Table: quarantined_records<br/>-----------------------------<br/>PK id INT AUTOINCREMENT<br/>source_app TEXT<br/>source_path TEXT<br/>source_path_hash TEXT<br/>source_inode INT<br/>watermark_table TEXT<br/>watermark_position INT<br/>row_pk TEXT<br/>redacted_size_bytes INT<br/>reason TEXT<br/>quarantined_at_utc TEXT<br/>gateway_version TEXT<br/>IDX source_app + quarantined_at_utc"]
 
-  state["Table: daemon_state<br/>-----------------------------<br/>• host_id: TEXT PRIMARY KEY<br/>• user_id: TEXT<br/>• installed_at: INTEGER<br/>• latest_known_version: TEXT<br/>• last_version_check_at: INTEGER<br/>• machine_snapshots: TEXT (XState JSON snapshots)<br/>• updated_at: INTEGER"]
+  resync["Table: resync_events<br/>-----------------------------<br/>PK id INT AUTOINCREMENT<br/>source_app TEXT<br/>source_path_hash TEXT<br/>watermark_kind TEXT<br/>server_watermark_end INT<br/>skipped_units INT<br/>recovered_at TEXT<br/>IDX recovered_at"]
 
-  metadata["Table: buffer_metadata<br/>-----------------------------<br/>• key: TEXT PRIMARY KEY<br/>• value: TEXT<br/>• updated_at: INTEGER"]
+  state["Table: daemon_state<br/>-----------------------------<br/>PK id INT CHECK id=1 single row<br/>last_cycle_started_at TEXT<br/>last_cycle_completed_at TEXT<br/>last_cycle_duration_ms INT<br/>last_drain_attempted INT<br/>last_drain_accepted INT<br/>last_drain_retriable INT<br/>last_drain_fatal INT<br/>last_drain_recovered INT<br/>last_upload_error TEXT<br/>last_consecutive_retriable_break INT<br/>last_source_captures TEXT JSON<br/>machine_snapshots TEXT"]
+
+  metadata["Table: buffer_metadata<br/>-----------------------------<br/>PK key TEXT<br/>value TEXT<br/>holds last_prune_at + rolling stats"]
 
   %% Core Relationships & Flow Paths
   cursors -->|Watermarks tracked to produce| batches
-  batches -->|One-to-One index / FK relationship| receipts
-  batches -->|Failed/redacted records split to| quarantine
-  state -->|Maintains active snapshots & syncs metrics with| metadata
-  metadata -->|Consulted by prune scheduler to trigger| pruneTick
+  batches -->|On 200 OK insert receipt + delete batch| receipts
+  batches -->|Oversized row metadata recorded to| quarantine
+  batches -->|On watermark regression append| resync
+  state -->|Cycle counters + drain results persisted to| metadata
+  metadata -->|Holds last_prune_at consulted by| pruneTick
 
   %% Daily Pruning ACID Transaction Flow
-  pruneTick([Daily Prune Trigger]) --> pruneTx[db.transaction wrapper]
+  pruneTick([Prune Trigger]) --> pruneTx[db.transaction wrapper]
 
-  pruneTx --> deleteReceipts["DELETE FROM upload_receipts<br/>WHERE created_at < 30 days"]
-  pruneTx --> deleteBatches["DELETE FROM upload_batches<br/>WHERE status == shipped<br/>AND created_at < 30 days"]
-  pruneTx --> deleteQuarantine["DELETE FROM quarantined_records<br/>WHERE created_at < 30 days"]
+  pruneTx --> deleteReceipts["DELETE upload_receipts<br/>WHERE delivered_at < receipt cutoff 365d"]
+  pruneTx --> deleteFailed["DELETE upload_batches<br/>WHERE status = failed<br/>AND created_at < failed cutoff 365d"]
+  pruneTx --> deleteQuarantine["DELETE quarantined_records<br/>WHERE quarantined_at_utc < failed cutoff"]
+  pruneTx --> deleteResync["DELETE resync_events<br/>WHERE recovered_at < receipt cutoff"]
+  pruneTx --> setPruneAt["UPDATE buffer_metadata<br/>SET last_prune_at = now"]
 
-  pruneTx -->|Reads / updates last_prune_at in| metadata
   pruneTx -.->|Rollback on Error| pruneFail([Rollback transaction])
 
   deleteReceipts --> pruneEnd([Pruning Tx Success])
-  deleteBatches --> pruneEnd
+  deleteFailed --> pruneEnd
   deleteQuarantine --> pruneEnd
+  deleteResync --> pruneEnd
+  setPruneAt --> pruneEnd
 
   %% Direct Pruning Operations to Target Tables
   deleteReceipts -.->|Cleans up| receipts
-  deleteBatches -.->|Cleans up| batches
+  deleteFailed -.->|Cleans up failed only, pending kept| batches
   deleteQuarantine -.->|Cleans up| quarantine
+  deleteResync -.->|Cleans up| resync
+  setPruneAt -.->|Writes| metadata
 
   %% Explicit Class Mapping for All Nodes
   class pruneTick startNode;
@@ -67,12 +75,15 @@ flowchart TD
   class cursors processNode;
   class receipts processNode;
   class quarantine processNode;
+  class resync processNode;
   class state processNode;
   class metadata processNode;
   class pruneTx processNode;
   class deleteReceipts actionNode;
-  class deleteBatches actionNode;
+  class deleteFailed actionNode;
   class deleteQuarantine actionNode;
+  class deleteResync actionNode;
+  class setPruneAt actionNode;
 ```
 
 [← Previous: 3. Ingestion Pipeline](./3-ingestion-pipeline.md) · [Index](./README.md) · [Next: Back to Main Index →](../../README.md)

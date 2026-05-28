@@ -63,7 +63,7 @@ import { VALID_PROFILES } from 'core/io/fs/profile.types.ts';
 import { GatewayError, PACKAGE_DESCRIPTION, PACKAGE_VERSION, UserAbortedError } from 'core/utils';
 import { loadConfigFromFile } from 'services/config';
 
-const godMode = await readDevModeSentinel(join(profileRootDir(), 'DEV_MODE'));
+const isDevMode = await readDevModeSentinel(join(profileRootDir(), 'DEV_MODE'));
 
 const program = new Command();
 program
@@ -130,7 +130,7 @@ program
         profile?: string;
       },
     ) => {
-      const defaultProfile: ProfileName = godMode ? 'dev' : 'prod';
+      const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
       const profileName = parseProfileName(opts.profile ?? defaultProfile);
       const ctx = buildPlatformServiceContext(process.platform, process.execPath);
       const profileCtx = buildProfileContext(profileName);
@@ -301,7 +301,7 @@ program
   });
 
 program
-  .command('dev [action] [key]', { hidden: !godMode })
+  .command('dev [action] [key]', { hidden: !isDevMode })
   .alias('d')
   .description(
     'Manage gateway development mode. Actions: "on", "off", "setup <KEY>", or no action to toggle.',
@@ -316,14 +316,14 @@ program
   });
 
 program
-  .command('xstate', { hidden: !godMode })
+  .command('xstate', { hidden: !isDevMode })
   .description(
     'Start the gateway daemon in the foreground with the Stately browser visualizer enabled (only available in development mode).',
   )
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
   .action(async (opts: { config?: string; profile?: string }) => {
-    if (!godMode) {
+    if (!isDevMode) {
       console.error(
         chalk.red(
           'Error: "xstate" command is only available in development mode.\n' +
@@ -375,7 +375,7 @@ program
     const sCtx = await buildStatusContext(statusContextInputs);
     let devCleanup: (() => void) | null = null;
     try {
-      if (opts.all === true || godMode) {
+      if (opts.all === true || isDevMode) {
         const devProfileCtx = buildProfileContext('dev');
         const devCtx = await buildStatusContext({
           profileCtx: devProfileCtx,
@@ -396,7 +396,7 @@ program
   });
 
 program
-  .command('inspect', { hidden: !godMode })
+  .command('inspect', { hidden: !isDevMode })
   .alias('ins')
   .description(
     'Dry-run telemetry scanner that compiles records, file counts, and decompressed data sizes without updating buffers.',
@@ -458,7 +458,7 @@ program
   });
 
 program
-  .command('tail', { hidden: !godMode })
+  .command('tail', { hidden: !isDevMode })
   .alias('t')
   .description(
     'Stream structured (ndjson) log entries from the active gateway log file. Defaults to live watch mode; use --static for one-shot output.',
@@ -517,7 +517,7 @@ program
   );
 
 const redaction = program
-  .command('redaction', { hidden: !godMode })
+  .command('redaction', { hidden: !isDevMode })
   .description('Inspect the on-device secret-redaction rules and try them against a sample file.');
 
 redaction
@@ -541,7 +541,7 @@ redaction
   });
 
 program
-  .command('replay <logPath>', { hidden: !godMode })
+  .command('replay <logPath>', { hidden: !isDevMode })
   .description(
     'Replay a JSONL log of state-machine transitions and print the final state per machine. Useful for incident debugging.',
   )
@@ -596,7 +596,7 @@ program
       lines?: string;
       profile?: string;
     }) => {
-      const defaultProfile: ProfileName = godMode ? 'dev' : 'prod';
+      const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
       const profileName = parseProfileName(opts.profile ?? defaultProfile);
       const profileCtx = buildProfileContext(profileName);
       const { deps, cleanup } = await buildLogsDeps({ bufferPath: profileCtx.bufferDbPath });
@@ -627,7 +627,7 @@ program
   .description('Diagnose common failure scenarios and report findings with copy-pasteable output.')
   .option('--profile <name>', 'profile to diagnose (prod | dev)')
   .action(async (opts: { profile?: string }) => {
-    const defaultProfile: ProfileName = godMode ? 'dev' : 'prod';
+    const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
     const profileName = parseProfileName(opts.profile ?? defaultProfile);
     const profileCtx = buildProfileContext(profileName);
     const platform = process.platform;

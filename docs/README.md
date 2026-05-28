@@ -11,7 +11,7 @@ These are the internal, FAQ-shaped docs for `proxai_gateway`. The source reposit
 3. [03 — Buffer](./03-buffer/README.md) — the SQLite store, its tables, and the pressure / pruning policy.
 4. [04 — Daemon Loops](./04-daemon-loops/README.md) — the three cycles (capture, drain, heartbeat) and the sentinels that gate them.
 5. [05 — Backend](./05-backend/README.md) — the wire contract with the ingest service and the identity / privacy boundary.
-6. [06 — Operations](./06-operations/README.md) — running, configuring, and observing the daemon.
+6. [06 — Operations](./06-operations/README.md) — running, configuring, and observing the daemon(s), plus dev mode and prod/dev profile isolation.
 7. [07 — Platform & Deployment](./07-platform-and-deployment/README.md) — cross-platform differences, install/upgrade/uninstall, build, and CI/CD.
 
 ## Conventions

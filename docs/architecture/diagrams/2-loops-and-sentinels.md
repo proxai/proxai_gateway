@@ -6,6 +6,18 @@
 
 This document serves as an advanced architectural cheatsheet describing the execution path of the three concurrent daemon cycles (Capture, Drain, Heartbeat) and how they coordinate state using filesystem sentinel flags instead of in-memory IPC.
 
+## Sentinel Inventory
+
+Each profile owns its own sentinel set under `<root>/<profile>/`. There are **5 per-profile sentinels**:
+
+- `AUTH_FAILED` — written by the drain upload path on a confirmed invalid key; cleared only by `setup --force`. Gates capture and drain.
+- `BUFFER_FULL` — written by capture when pending bytes exceed the soft-pause threshold; cleared by drain once pressure drops below soft-resume. Gates capture only (never drain).
+- `SESSION_STOPPED` — boot-id self-clearing; read once at daemon boot to exit cleanly. Not gated inside the per-cycle loops.
+- `CONSENT_ACCEPTED` — informational only; never gates any cycle.
+- `UPDATE_AVAILABLE` — written by the brew heartbeat branch when a newer release exists; surfaced to the user, does not gate.
+
+Separately, a single **root-level boot-scoped `DEV_MODE` flag** lives at `<root>/DEV_MODE` (not per-profile). It is boot-id self-clearing and unlocks the hidden `dev` profile, the `dev`/`xstate` commands, and the dev-default profile for `setup`/`logs`/`doctor`.
+
 ## Loop Coordination & Sentinel Gates
 
 The flowchart below map how the three concurrent cycles run in parallel, and how their execution is gated by the presence of small filesystem sentinels.
@@ -20,30 +32,32 @@ flowchart TD
   classDef actionNode fill:#1e112c,stroke:#a855f7,stroke-width:2px,color:#e9d5ff,padding:10px 20px;
   classDef default fill:#0a201b,stroke:#14b8a6,stroke-width:2px,color:#ccfbf1,padding:10px 20px;
 
-  loopBoot(["runDaemonLoops"]) --> capTick([Capture Cycle Tick])
+  bootGate{"SESSION_STOPPED at boot?"} -->|Present matching boot_id| bootExit(["Exit cleanly code 0"])
+  bootGate -->|Absent / stale| loopBoot(["runDaemonLoops Promise.all"])
+  loopBoot --> capTick([Capture Cycle Tick])
   loopBoot --> drainTick([Drain Cycle Tick])
   loopBoot --> hbTick([Heartbeat Cycle Tick])
 
-  capTick --> capGates{Sentinel Check}
-  capGates -->|AUTH_FAILED / SESSION_STOPPED| capHalt([Skip Cycle])
-  capGates -->|BUFFER_FULL| capHalt
+  capTick --> capGates{Capture Gate Check}
+  capGates -->|AUTH_FAILED present| capHalt([Skip Cycle])
+  capGates -->|BUFFER_FULL present| capHalt
   capGates -->|Clear| poll[Poll background Workers<br/>concurrently]
-  poll --> pressureCheck{Pending size > 50 GiB?}
+  poll --> pressureCheck{Pending bytes > soft-pause?}
   pressureCheck -->|Yes| writeFull[Write BUFFER_FULL sentinel]
   pressureCheck -->|No| capEnd([Success])
   writeFull --> capEnd
 
-  drainTick --> drainGates{Sentinel Check}
-  drainGates -->|AUTH_FAILED / SESSION_STOPPED| drainHalt([Skip Cycle])
-  drainGates -->|Clear| pullBatches[Pull up to 256 batches<br/>from buffer.db]
+  drainTick --> drainGates{Drain Gate Check}
+  drainGates -->|AUTH_FAILED present| drainHalt([Skip Cycle])
+  drainGates -->|Clear| pullBatches[Pull up to 256 oldest pending<br/>from buffer.db]
   pullBatches --> upload[Upload batches sequentially<br/>apply pacing backoffs]
-  upload --> prune[ACID Prune receipts &<br/>logs older than 30 days]
-  prune --> resumeCheck{Pending size < 45 GiB?}
+  upload --> prune[ACID prune: receipts + resync 365d<br/>failed + quarantined on failed cutoff]
+  prune --> resumeCheck{Pending bytes < soft-resume?}
   resumeCheck -->|Yes| clearFull[Delete BUFFER_FULL sentinel]
   resumeCheck -->|No| drainEnd([Success])
   clearFull --> drainEnd
 
-  hbTick --> checkStale{Installed > 30 / 60 days?}
+  hbTick --> checkStale{Installed past warn / pause days?}
   checkStale -->|Yes| warnStale[Log stale warning]
   checkStale -->|No| checkUpgrade{Upgrade Check Rate-Limited?}
   warnStale --> checkUpgrade
@@ -53,8 +67,8 @@ flowchart TD
   hasNew -->|No| hbEnd
   hasNew -->|Yes| brewCheck{install_source == brew?}
   brewCheck -->|Yes| writeUpdate[Write UPDATE_AVAILABLE sentinel]
-  brewCheck -->|No| runUpgrade[Replace binary in-place<br/>& exitProcess 75]
-  runUpgrade --> serviceRestart([Service manager restarts daemon])
+  brewCheck -->|"No (prod)"| coordUp[coordinatedUpgrade<br/>stop dev + replace + exitProcess 75]
+  coordUp --> serviceRestart([Service manager respawns prod<br/>then restarts dev])
   writeUpdate --> hbEnd
 
   capHalt --> cycleWait([Next Scheduled Interval])
@@ -62,8 +76,10 @@ flowchart TD
   drainHalt --> cycleWait
   drainEnd --> cycleWait
   hbEnd --> cycleWait
-  serviceRestart --> loopBoot
+  serviceRestart --> bootGate
 
+  class bootGate decNode;
+  class bootExit stopNode;
   class loopBoot startNode;
   class capTick startNode;
   class drainTick startNode;
@@ -92,7 +108,7 @@ flowchart TD
   class writeFull actionNode;
   class clearFull actionNode;
   class writeUpdate actionNode;
-  class runUpgrade actionNode;
+  class coordUp actionNode;
 ```
 
 [← Previous: 1. Daemon Lifecycle](./1-daemon-lifecycle-and-service.md) · [Index](./README.md) · [Next: 3. Ingestion Pipeline →](./3-ingestion-pipeline.md)

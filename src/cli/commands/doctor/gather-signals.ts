@@ -132,16 +132,14 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     geminiCliExists,
     nestReachable,
   ] = await Promise.all([
-    Bun.file(deps.configFilePath)
-      .exists()
-      .catch(() => false),
+    Bun.file(deps.configFilePath).exists(),
     readSentinelFlag(deps.authFailedSentinelPath),
     readSentinelFlag(deps.bufferFullSentinelPath),
     readSentinelFlag(deps.sessionStoppedSentinelPath),
     readSentinelFlag(deps.updateAvailableSentinelPath),
     probeServiceManager(deps),
-    probeWritable(deps.configDirPath).catch(() => false),
-    probeWritable(deps.logDirPath).catch(() => false),
+    probeWritable(deps.configDirPath),
+    probeWritable(deps.logDirPath),
     probeBinaryMtime(deps.binaryPath),
     probeSystemdLinger(deps.platform),
     probeMacOsQuarantine(deps.binaryPath, deps.platform),
@@ -153,21 +151,14 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
   ]);
 
   let configParses = false;
+  let apiKeyPresent = false;
   if (configExists) {
     try {
       const text = await Bun.file(deps.configFilePath).text();
       configParses = text.length > 0;
+      apiKeyPresent = configParses && text.includes('api_key') && !text.includes('api_key = ""');
     } catch {
       configParses = false;
-    }
-  }
-
-  let apiKeyPresent = false;
-  if (configExists && configParses) {
-    try {
-      const text = await Bun.file(deps.configFilePath).text();
-      apiKeyPresent = text.includes('api_key') && !text.includes('api_key = ""');
-    } catch {
       apiKeyPresent = false;
     }
   }

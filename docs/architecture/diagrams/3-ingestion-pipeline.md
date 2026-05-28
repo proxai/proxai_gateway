@@ -4,7 +4,7 @@
 
 *Last Updated: 2026-05-27*
 
-This document serves as an advanced architectural cheatsheet illustrating the complete end-to-end data ingestion pipeline of `proxai_gateway`. It details how files are discovered, snapshotted, parsed, redacted, compressed, and uploaded with adaptive backoffs and pacing controls.
+This document serves as an advanced architectural cheatsheet illustrating the complete end-to-end data ingestion pipeline of `proxai_gateway`. It details how files are discovered, snapshotted, parsed, redacted, compressed, and uploaded with adaptive backoffs and pacing controls. On a successful upload the receipt retains the redacted `user_prompt` extracted from the batch body; on a server `400 watermark_regression` the cursor jumps forward to the server watermark, a `resync_events` row is appended, and the redundant local batch is deleted as a `recovered` outcome.
 
 ## Data Path & Ingestion Mechanics
 
@@ -56,13 +56,16 @@ flowchart TD
   pullQueue --> ship["POST /v1/raw_records"]
   ship --> parseResp{HTTP Response Status?}
   
-  parseResp -->|400 Watermark| pullRemote[GET watermarks + adjust cursor]
-  parseResp -->|200 OK| success[Write receipt + delete batch]
+  parseResp -->|400 Watermark Regression| regress["setCursorFromRegression to server watermark"]
+  parseResp -->|200 OK| success["Insert receipt + delete batch in one tx"]
   parseResp -->|401 / 403| authFail[Write AUTH_FAILED sentinel]
   parseResp -->|429 RateLimit| backoff429["429 Pacer: slotMs * mult^steps, max 30s"]
   parseResp -->|5xx Error| backoff5xx["5xx Pacer: 30s * 2^steps, max 5min"]
+
+  success --> extractPrompt["extractUserPrompt from body<br/>store redacted user_prompt on receipt"]
+  regress --> appendResync["Append resync_events row<br/>skipped_units = server_end - local_end"]
+  appendResync --> dropBatch["deleteBatch: local batch redundant<br/>outcome recovered, not failed"]
   
-  pullRemote --> pullQueue
   backoff429 --> retry[Retry next Drain cycle]
   backoff5xx --> retry
   retry --> pullQueue
@@ -72,7 +75,8 @@ flowchart TD
   class authFail stopNode;
   class backoff429 stopNode;
   class backoff5xx stopNode;
-  class success stopNode;
+  class extractPrompt stopNode;
+  class dropBatch stopNode;
   class statCheck decNode;
   class isSqlite decNode;
   class strip decNode;
@@ -86,7 +90,6 @@ flowchart TD
   class compress processNode;
   class split processNode;
   class pullQueue processNode;
-  class pullRemote processNode;
   class retry processNode;
   class snapshot actionNode;
   class readSlice actionNode;
@@ -94,6 +97,9 @@ flowchart TD
   class replaceToken actionNode;
   class insertDB actionNode;
   class ship actionNode;
+  class success actionNode;
+  class regress actionNode;
+  class appendResync actionNode;
 ```
 
 [← Previous: 2. Loops & Sentinels](./2-loops-and-sentinels.md) · [Index](./README.md) · [Next: 4. SQLite Buffer Schema →](./4-sqlite-buffer-schema.md)

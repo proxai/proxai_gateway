@@ -10,8 +10,8 @@ The three concurrent loops that drive the daemon — capture, drain, heartbeat �
 
 1. [4.1 Capture Cycle](./4.1-capture-cycle.md) — 2-minute default, sentinel gates, per-source order, error tracking.
 2. [4.2 Drain Cycle](./4.2-drain-cycle.md) — 30-second default, 256-batch cap, three-consecutive-retriable break, pacer mechanics, backoff math.
-3. [4.3 Heartbeat Cycle](./4.3-heartbeat-cycle.md) — 1-hour default, GitHub release check, stale-binary policy, brew vs. in-place upgrade branches.
-4. [4.4 Sentinels](./4.4-sentinels.md) — the six filesystem flags, what triggers each, what clears each, how they are surfaced.
+3. [4.3 Heartbeat Cycle](./4.3-heartbeat-cycle.md) — 1-hour default, GitHub release check, stale-binary policy, brew vs. coordinated dual-daemon in-place upgrade branches.
+4. [4.4 Sentinels](./4.4-sentinels.md) — the five per-profile filesystem flags plus the root-level boot-scoped `DEV_MODE` toggle, what triggers each, what clears each, how they are surfaced.
 
 The drain cycle's wire-level conversation with the ingest service is documented in [Backend](../05-backend/README.md).
 

@@ -1,19 +1,19 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-28T10:21:42.643Z",
-  "sourceHash": "72f9918b7727f01ca36c72dfe09b3a50",
+  "generatedAt": "2026-05-28T12:29:07.972Z",
+  "sourceHash": "22ac1479750b75435c897149a22df203",
   "files": [
     {
       "path": "CLAUDE.md",
-      "hash": "22f6ca56a1e313ad"
+      "hash": "4dde015814bb303b"
     },
     {
       "path": "AGENTS.md",
-      "hash": "73fffb99fb589f04"
+      "hash": "76ac3a40cae6cd12"
     },
     {
       "path": ".agents/AGENTS.md",
-      "hash": "521059f507d0c718"
+      "hash": "a5395ffbb287b3e5"
     },
     {
       "path": ".claude/rules/_always.md",
@@ -353,35 +353,35 @@
     },
     {
       "path": ".claude/knowledge/cli/commands-overview.md",
-      "hash": "c1b8e1e781f738e5"
+      "hash": "3e86ee06af2da04f"
     },
     {
       "path": ".cursor/knowledge/cli/commands-overview.md",
-      "hash": "c1b8e1e781f738e5"
+      "hash": "3e86ee06af2da04f"
     },
     {
       "path": ".codex/knowledge/cli/commands-overview.md",
-      "hash": "c1b8e1e781f738e5"
+      "hash": "3e86ee06af2da04f"
     },
     {
       "path": ".agents/knowledge/cli/commands-overview.md",
-      "hash": "c1b8e1e781f738e5"
+      "hash": "3e86ee06af2da04f"
     },
     {
       "path": ".claude/knowledge/cli/dev-mode.md",
-      "hash": "a07036c55f09baf9"
+      "hash": "5f7506f27c2dfb41"
     },
     {
       "path": ".cursor/knowledge/cli/dev-mode.md",
-      "hash": "a07036c55f09baf9"
+      "hash": "5f7506f27c2dfb41"
     },
     {
       "path": ".codex/knowledge/cli/dev-mode.md",
-      "hash": "a07036c55f09baf9"
+      "hash": "5f7506f27c2dfb41"
     },
     {
       "path": ".agents/knowledge/cli/dev-mode.md",
-      "hash": "a07036c55f09baf9"
+      "hash": "5f7506f27c2dfb41"
     },
     {
       "path": ".claude/knowledge/cli/doctor.md",
@@ -417,19 +417,19 @@
     },
     {
       "path": ".claude/knowledge/cli/wiring.md",
-      "hash": "ac2802bdaee0c1d8"
+      "hash": "b3ed3dcecc42cf0e"
     },
     {
       "path": ".cursor/knowledge/cli/wiring.md",
-      "hash": "ac2802bdaee0c1d8"
+      "hash": "b3ed3dcecc42cf0e"
     },
     {
       "path": ".codex/knowledge/cli/wiring.md",
-      "hash": "ac2802bdaee0c1d8"
+      "hash": "b3ed3dcecc42cf0e"
     },
     {
       "path": ".agents/knowledge/cli/wiring.md",
-      "hash": "ac2802bdaee0c1d8"
+      "hash": "b3ed3dcecc42cf0e"
     },
     {
       "path": ".claude/knowledge/conventions.md",
@@ -993,19 +993,19 @@
     },
     {
       "path": ".claude/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "dc74593690054d64"
+      "hash": "f3b1cf39cbdd49d6"
     },
     {
       "path": ".cursor/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "dc74593690054d64"
+      "hash": "f3b1cf39cbdd49d6"
     },
     {
       "path": ".codex/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "dc74593690054d64"
+      "hash": "f3b1cf39cbdd49d6"
     },
     {
       "path": ".agents/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "dc74593690054d64"
+      "hash": "f3b1cf39cbdd49d6"
     },
     {
       "path": ".claude/knowledge/services/sentinels/watermark-pattern.md",

@@ -83,7 +83,7 @@ const GEMINI_TOOL_CALL_KEEP_KEYS = [
 ];
 const GEMINI_ARG_VALUE_MAX_BYTES = 512;
 
-function trimGeminiToolCallArgs(args: unknown): unknown {
+export function trimGeminiToolCallArgs(args: unknown): unknown {
   if (args === null || typeof args !== 'object' || Array.isArray(args)) {
     return args;
   }
@@ -101,8 +101,8 @@ function trimGeminiToolCallArgs(args: unknown): unknown {
   return trimmed;
 }
 
-function trimGeminiToolCall(call: unknown): unknown {
-  if (call === null || typeof call !== 'object') {
+export function trimGeminiToolCall(call: unknown): unknown {
+  if (call === null || typeof call !== 'object' || Array.isArray(call)) {
     return call;
   }
   const source = call as Record<string, unknown>;
@@ -118,8 +118,8 @@ function trimGeminiToolCall(call: unknown): unknown {
   return trimmed;
 }
 
-function trimGeminiThought(thought: unknown): unknown {
-  if (thought === null || typeof thought !== 'object') {
+export function trimGeminiThought(thought: unknown): unknown {
+  if (thought === null || typeof thought !== 'object' || Array.isArray(thought)) {
     return thought;
   }
   const source = thought as Record<string, unknown>;

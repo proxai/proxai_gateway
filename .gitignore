@@ -34,6 +34,11 @@ Thumbs.db
 scratch/
 .tmp/
 
+# Planning and brainstorming folders (local only)
+docs/planning/
+docs/superpowers/
+
+
 # Local AI tooling — the ai/ folder is the source of truth and is checked in.
 # Generated per-tool artifacts (CLAUDE.md, AGENTS.md, .cursor/, etc.) are
 # emitted by `bun run ai:sync` and are not committed.

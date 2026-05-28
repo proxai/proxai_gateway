@@ -22,7 +22,7 @@ The CLI is "in dev mode" iff the flag is present **and** its boot id matches the
 
 The flag controls CLI **perspective** only:
 
-1. **God-mode command visibility.** When `godMode === true`, the hidden commands (`dev`, `run`, `xstate`, `tail`, `inspect`, `redaction`, `replay`) become visible in `--help`. This is evaluated once at `main.ts` startup.
+1. **Dev-mode command visibility.** When `isDevMode === true`, the hidden commands (`dev`, `run`, `xstate`, `tail`, `inspect`, `redaction`, `replay`) become visible in `--help`. This is evaluated once at `main.ts` startup.
 2. **Default profile for commands.** `setup`, `logs`, and `doctor` default to the `dev` profile when in dev mode. All other commands still default to `prod`; use `--profile dev` to override.
 3. **Status detail level.** `status` shows both prod and dev profiles with full detail when in dev mode (equivalent to `--all`).
 
@@ -61,7 +61,7 @@ The dev daemon **auto-starts** whenever a dev config exists:
 
 Dev mode itself **never auto-activates** — always requires explicit `dev on`.
 
-## God mode and the sentinel rule clarification
+## Dev mode and the sentinel rule clarification
 
 The sentinel rule "do not replicate the SESSION_STOPPED boot_id self-clearing pattern" is superseded for `DEV_MODE`. The `DEV_MODE` flag is a sanctioned second user of the boot_id pattern — the rule documents `SESSION_STOPPED` as the original user; `DEV_MODE` is the second. See `ai/knowledge/services/sentinels/sentinel-lifecycle.md` for the full sentinel table.
 
@@ -70,6 +70,6 @@ The sentinel rule "do not replicate the SESSION_STOPPED boot_id self-clearing pa
 - Not a URL-flip mechanism. The `resolveNestBaseUrl` DEV_MODE URL-flip stopgap from Phase 1 is gone. Each daemon's URL comes from its own profile's `config.toml` `[backend]` section.
 - Not config-existence detection. The flag is independent of whether `dev/config.toml` exists.
 - Not a daemon lifecycle gate. Daemons start and stop based on service-manager state and `SESSION_STOPPED`, not on the dev-mode flag.
-- Not visible to regular users. The `dev` command is hidden (`{ hidden: !godMode }`); it does not appear in `--help` or README for prod users.
+- Not visible to regular users. The `dev` command is hidden (`{ hidden: !isDevMode }`); it does not appear in `--help` or README for prod users.
 
 [source: src/main.ts; src/cli/commands/dev.ts; src/cli/wiring/dev-deps.ts; src/core/io/fs/dev-mode-sentinel.ts; src/core/io/fs/profile.ts]
