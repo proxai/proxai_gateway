@@ -186,22 +186,12 @@ test('persists drain cycle metrics: total, last_at, duration', async () => {
   await runDrainCycle(ctx);
   expect(getMetadata(buffer, METADATA_KEYS.drainCyclesTotal)).toBe('1');
   expect(getMetadata(buffer, METADATA_KEYS.drainLastCycleAt)).toMatch(/Z$/);
-  expect(getMetadata(buffer, METADATA_KEYS.drainTotalBatchesShipped)).toBe('1');
-  expect(getMetadata(buffer, METADATA_KEYS.uploadTotalBatchesShipped)).toBe('1');
-});
-
-test('persists per-source upload counters from drain accepted-by-source', async () => {
-  insertBatch(buffer, batchWith('p'));
-  const ctx = makeContext();
-  await runDrainCycle(ctx);
-  expect(getMetadata(buffer, 'upload_batches_shipped_by_source.claude-code')).toBe('1');
 });
 
 test('drain with no pending records still updates drain cycle counter', async () => {
   const ctx = makeContext();
   await runDrainCycle(ctx);
   expect(getMetadata(buffer, METADATA_KEYS.drainCyclesTotal)).toBe('1');
-  expect(getMetadata(buffer, METADATA_KEYS.drainTotalBatchesShipped)).toBeNull();
 });
 
 test('logs warn when prune throws', async () => {

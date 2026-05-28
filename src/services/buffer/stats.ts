@@ -10,6 +10,92 @@ import type { BatchStatus, BufferCounts } from 'services/buffer/buffer.types.ts'
 import { countReceipts } from 'services/buffer/receipts.ts';
 import type { SourceApp } from 'services/contract';
 
+export interface UploadTotals {
+  batches: number;
+  bytes: number;
+}
+
+export interface UploadTotalsBySource {
+  [app: string]: UploadTotals;
+}
+
+export interface DerivedUploadStats {
+  totalBatchesUploaded: number;
+  totalBytesUploaded: number;
+  bySource: UploadTotalsBySource;
+  lastSuccessAt: string | null;
+  idempotentResends: number;
+}
+
+export interface DerivedCaptureStats {
+  capturedBytes: number;
+}
+
+export interface ResyncSummary {
+  total: number;
+  totalSkippedUnits: number;
+}
+
+const COUNT_RECEIPTS_UPLOADED_SQL = `SELECT COUNT(*) AS count FROM ${BUFFER_TABLES.receipts}`;
+
+const SUM_SHIPPED_BYTES_SQL = `
+  SELECT COALESCE(SUM(${RECEIPT_COLS.shippedBytes}), 0) AS total
+  FROM ${BUFFER_TABLES.receipts}
+`;
+
+const MAX_DELIVERED_AT_SQL = `
+  SELECT MAX(${RECEIPT_COLS.deliveredAt}) AS last_at FROM ${BUFFER_TABLES.receipts}
+`;
+
+const COUNT_IDEMPOTENT_SQL = `
+  SELECT COUNT(*) AS count FROM ${BUFFER_TABLES.receipts}
+  WHERE ${RECEIPT_COLS.idempotentOnServer} = 1
+`;
+
+const UPLOAD_TOTALS_BY_SOURCE_SQL = `
+  SELECT
+    ${RECEIPT_COLS.sourceApp} AS source_app,
+    COUNT(*) AS batches,
+    COALESCE(SUM(${RECEIPT_COLS.shippedBytes}), 0) AS bytes
+  FROM ${BUFFER_TABLES.receipts}
+  GROUP BY ${RECEIPT_COLS.sourceApp}
+`;
+
+export function derivedUploadStats(db: Database): DerivedUploadStats {
+  const countRow = db.query<{ count: number }, []>(COUNT_RECEIPTS_UPLOADED_SQL).get();
+  const totalBatchesUploaded = countRow?.count ?? 0;
+
+  const bytesRow = db.query<{ total: number }, []>(SUM_SHIPPED_BYTES_SQL).get();
+  const totalBytesUploaded = bytesRow?.total ?? 0;
+
+  const lastAtRow = db.query<{ last_at: string | null }, []>(MAX_DELIVERED_AT_SQL).get();
+  const lastSuccessAt = lastAtRow?.last_at ?? null;
+
+  const idempotentRow = db.query<{ count: number }, []>(COUNT_IDEMPOTENT_SQL).get();
+  const idempotentResends = idempotentRow?.count ?? 0;
+
+  const sourceRows = db
+    .query<{ source_app: string; batches: number; bytes: number }, []>(UPLOAD_TOTALS_BY_SOURCE_SQL)
+    .all();
+  const bySource: UploadTotalsBySource = {};
+  for (const row of sourceRows) {
+    bySource[row.source_app] = { batches: row.batches, bytes: row.bytes };
+  }
+
+  return { totalBatchesUploaded, totalBytesUploaded, bySource, lastSuccessAt, idempotentResends };
+}
+
+const SUM_PENDING_AND_FAILED_BODY_SQL = `
+  SELECT COALESCE(SUM(LENGTH(${BATCH_COLS.body})), 0) AS total
+  FROM ${BUFFER_TABLES.batches}
+`;
+
+export function derivedCapturedBytes(db: Database, uploadedBytes: number): number {
+  const row = db.query<{ total: number }, []>(SUM_PENDING_AND_FAILED_BODY_SQL).get();
+  const inFlightBytes = row?.total ?? 0;
+  return uploadedBytes + inFlightBytes;
+}
+
 const TOTAL_PENDING_BYTES_SQL = `
   SELECT COALESCE(SUM(LENGTH(${BATCH_COLS.body})), 0) AS total
   FROM ${BUFFER_TABLES.batches}

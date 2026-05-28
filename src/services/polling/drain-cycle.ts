@@ -7,8 +7,6 @@ import {
   pruneBuffer,
   setDaemonState,
   setMetadata,
-  uploadBatchesShippedKey,
-  uploadBytesShippedKey,
 } from 'services/buffer';
 import { METADATA_KEYS } from 'services/buffer';
 import type { DaemonStateSnapshot, PruneResult } from 'services/buffer';
@@ -204,48 +202,6 @@ function persistDrainMetrics(
     if (drainResult.retriable > 0 || drainResult.fatal > 0) {
       const errs = readNumberMetadata(ctx.buffer, METADATA_KEYS.drainCyclesWithErrors) + 1;
       setMetadata(ctx.buffer, METADATA_KEYS.drainCyclesWithErrors, errs.toString());
-    }
-
-    if (drainResult.accepted > 0) {
-      const totBatches =
-        readNumberMetadata(ctx.buffer, METADATA_KEYS.drainTotalBatchesShipped) +
-        drainResult.accepted;
-      setMetadata(ctx.buffer, METADATA_KEYS.drainTotalBatchesShipped, totBatches.toString());
-
-      const totBytes =
-        readNumberMetadata(ctx.buffer, METADATA_KEYS.drainTotalBytesShipped) +
-        drainResult.acceptedBytes;
-      setMetadata(ctx.buffer, METADATA_KEYS.drainTotalBytesShipped, totBytes.toString());
-
-      const legacyBatches =
-        readNumberMetadata(ctx.buffer, METADATA_KEYS.uploadTotalBatchesShipped) +
-        drainResult.accepted;
-      setMetadata(ctx.buffer, METADATA_KEYS.uploadTotalBatchesShipped, legacyBatches.toString());
-      const legacyBytes =
-        readNumberMetadata(ctx.buffer, METADATA_KEYS.uploadTotalBytesShipped) +
-        drainResult.acceptedBytes;
-      setMetadata(ctx.buffer, METADATA_KEYS.uploadTotalBytesShipped, legacyBytes.toString());
-
-      setMetadata(ctx.buffer, METADATA_KEYS.uploadLastSuccessAt, completedAt);
-      setMetadata(
-        ctx.buffer,
-        METADATA_KEYS.uploadLastSuccessBatches,
-        drainResult.accepted.toString(),
-      );
-      setMetadata(
-        ctx.buffer,
-        METADATA_KEYS.uploadLastSuccessBytes,
-        drainResult.acceptedBytes.toString(),
-      );
-      for (const [app, totals] of Object.entries(drainResult.acceptedBySource)) {
-        if (totals === undefined) continue;
-        const batchesKey = uploadBatchesShippedKey(app);
-        const bytesKey = uploadBytesShippedKey(app);
-        const prevBatches = readNumberMetadata(ctx.buffer, batchesKey);
-        const prevBytes = readNumberMetadata(ctx.buffer, bytesKey);
-        setMetadata(ctx.buffer, batchesKey, (prevBatches + totals.batches).toString());
-        setMetadata(ctx.buffer, bytesKey, (prevBytes + totals.bytes).toString());
-      }
     }
   } catch (err) {
     ctx.logger?.warn(

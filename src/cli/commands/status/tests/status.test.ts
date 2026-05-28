@@ -1,4 +1,4 @@
-import { requireDefined } from 'core/utils';
+import { generateUuidV7, requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 import { rmRecursive } from 'core/io/fs';
@@ -52,7 +52,13 @@ import {
   sectionHeader,
 } from 'cli/commands/format-status.ts';
 import { captureOutput } from 'cli/output.ts';
-import { openInMemoryBufferDb, setDaemonState } from 'services/buffer';
+import {
+  insertReceipt,
+  openInMemoryBufferDb,
+  setDaemonState,
+  setMetadata,
+  METADATA_KEYS,
+} from 'services/buffer';
 
 let dir: string;
 let buffer: Database;
@@ -390,13 +396,6 @@ test('deriveHealth returns healthy when drain is clean', () => {
   ).toBe('healthy');
 });
 
-import {
-  setMetadata,
-  METADATA_KEYS,
-  uploadBatchesShippedKey,
-  uploadBytesShippedKey,
-} from 'services/buffer';
-
 test('runStatus JSON mode reports binary age days when installedAt is set via loadConfig dep', async () => {
   const out = captureOutput();
   const installedAt = new Date(Date.now() - 14 * 86_400_000).toISOString();
@@ -437,35 +436,69 @@ test('runStatus JSON mode handles invalid installedAt timestamp gracefully (days
   expect(json.system.binaryAge.days).toBeNull();
 });
 
-test('runStatus surfaces per-source upload counters in JSON output when metadata populated', async () => {
-  setMetadata(buffer, uploadBatchesShippedKey('claude-code'), '70');
-  setMetadata(buffer, uploadBytesShippedKey('claude-code'), (9 * 1024 * 1024).toString());
-  setMetadata(buffer, uploadBatchesShippedKey('cursor'), '14');
-  setMetadata(buffer, uploadBytesShippedKey('cursor'), (2 * 1024 * 1024).toString());
+test('runStatus surfaces per-source upload counters in JSON output when receipts present', async () => {
+  const claudeCodeBytes = 9 * 1024 * 1024;
+  const cursorBytes = 2 * 1024 * 1024;
+  for (let i = 0; i < 3; i++) {
+    insertReceipt(buffer, {
+      captureId: generateUuidV7(),
+      sourceApp: 'claude-code',
+      sourcePathHash: 'a'.repeat(64),
+      watermarkKind: 'byte_range',
+      watermarkStart: 0,
+      watermarkEnd: 100,
+      watermarkTable: null,
+      deliveredAt: new Date().toISOString(),
+      idempotentOnServer: false,
+      shippedBytes: Math.floor(claudeCodeBytes / 3),
+    });
+  }
+  insertReceipt(buffer, {
+    captureId: generateUuidV7(),
+    sourceApp: 'cursor',
+    sourcePathHash: 'b'.repeat(64),
+    watermarkKind: 'rowid_range',
+    watermarkStart: 0,
+    watermarkEnd: 10,
+    watermarkTable: null,
+    deliveredAt: new Date().toISOString(),
+    idempotentOnServer: false,
+    shippedBytes: cursorBytes,
+  });
   const out = captureOutput();
   const result = await runStatus(makeDeps({ output: out }), { json: true });
   expect(result.exitCode).toBe(0);
   const json = JSON.parse(out.lines[0]?.msg ?? '{}') as {
     upload: { shippedBySource: Record<string, { batches: number; bytes: number }> };
   };
-  expect(json.upload.shippedBySource['claude-code']).toEqual({
-    batches: 70,
-    bytes: 9 * 1024 * 1024,
-  });
-  expect(json.upload.shippedBySource['cursor']).toEqual({ batches: 14, bytes: 2 * 1024 * 1024 });
+  expect(json.upload.shippedBySource['claude-code']?.batches).toBe(3);
+  expect(json.upload.shippedBySource['cursor']?.batches).toBe(1);
+  expect(json.upload.shippedBySource['cursor']?.bytes).toBe(cursorBytes);
   expect(json.upload.shippedBySource['codex']).toBeUndefined();
 });
 
-test('readNumberWithFallback: primary present but non-finite falls through to legacy', async () => {
-  setMetadata(buffer, METADATA_KEYS.drainTotalBatchesShipped, 'garbage');
-  setMetadata(buffer, METADATA_KEYS.uploadTotalBatchesShipped, '42');
+test('totalBatchesShipped is derived from upload_receipts rows', async () => {
+  for (let i = 0; i < 5; i++) {
+    insertReceipt(buffer, {
+      captureId: generateUuidV7(),
+      sourceApp: 'claude-code',
+      sourcePathHash: 'a'.repeat(64),
+      watermarkKind: 'byte_range',
+      watermarkStart: 0,
+      watermarkEnd: 100,
+      watermarkTable: null,
+      deliveredAt: new Date().toISOString(),
+      idempotentOnServer: false,
+      shippedBytes: 1024,
+    });
+  }
   const out = captureOutput();
   const result = await runStatus(makeDeps({ output: out }), { json: true });
   expect(result.exitCode).toBe(0);
   const json = JSON.parse(requireDefined(out.lines[0]).msg) as {
     upload: { totalBatchesShipped: number };
   };
-  expect(json.upload.totalBatchesShipped).toBe(42);
+  expect(json.upload.totalBatchesShipped).toBe(5);
 });
 
 test('getMetadataWithFallback: primary present uses primary, no legacy lookup', async () => {

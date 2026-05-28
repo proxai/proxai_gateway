@@ -8,18 +8,17 @@ import {
   countCapturedConversations,
   countQuarantined,
   countsBySource,
+  derivedCapturedBytes,
+  derivedUploadStats,
   getDaemonState,
   getLastPruneAt,
   getMetadata,
   getMetadataWithFallback,
   METADATA_KEYS,
   readNumber,
-  readNumberOrNull,
   readNumberWithFallback,
   totalFailedBytes,
   totalPendingBytes,
-  uploadBatchesShippedKey,
-  uploadBytesShippedKey,
 } from 'services/buffer';
 import { loadConfigFromFile } from 'services/config';
 import {
@@ -43,12 +42,12 @@ const SOURCE_ORDER: ('claude-code' | 'cursor' | 'codex' | 'gemini-cli')[] = [
 ];
 
 export function readShippedBySource(db: Database): UploadBySource {
+  const stats = derivedUploadStats(db);
   const result: UploadBySource = {};
   for (const app of SOURCE_ORDER) {
-    const batches = readNumber(db, uploadBatchesShippedKey(app));
-    const bytes = readNumber(db, uploadBytesShippedKey(app));
-    if (batches > 0 || bytes > 0) {
-      result[app] = { batches, bytes };
+    const totals = stats.bySource[app];
+    if (totals !== undefined && (totals.batches > 0 || totals.bytes > 0)) {
+      result[app] = { batches: totals.batches, bytes: totals.bytes };
     }
   }
   return result;
@@ -66,6 +65,13 @@ export async function gatherStatusSnapshot(
   const lastPruneAt = getLastPruneAt(buffer);
   const daemonState = getDaemonState(buffer);
   const conversationsCaptured = countCapturedConversations(buffer);
+
+  const uploadStats = derivedUploadStats(buffer);
+  const totalBatchesShipped = uploadStats.totalBatchesUploaded;
+  const totalBytesShipped = uploadStats.totalBytesUploaded;
+  const shippedBySource = readShippedBySource(buffer);
+  const lastSuccessAt = uploadStats.lastSuccessAt;
+  const capturedBytes = derivedCapturedBytes(buffer, totalBytesShipped);
 
   const captureCyclesTotal = readNumberWithFallback(
     buffer,
@@ -85,20 +91,6 @@ export async function gatherStatusSnapshot(
   const drainLastCycleAt = getMetadata(buffer, METADATA_KEYS.drainLastCycleAt);
   const drainCyclesTotal = readNumber(buffer, METADATA_KEYS.drainCyclesTotal);
   const drainCyclesTotalDurationMs = readNumber(buffer, METADATA_KEYS.drainLastCycleDurationMs);
-  const totalBatchesShipped = readNumberWithFallback(
-    buffer,
-    METADATA_KEYS.drainTotalBatchesShipped,
-    METADATA_KEYS.uploadTotalBatchesShipped,
-  );
-  const totalBytesShipped = readNumberWithFallback(
-    buffer,
-    METADATA_KEYS.drainTotalBytesShipped,
-    METADATA_KEYS.uploadTotalBytesShipped,
-  );
-  const shippedBySource = readShippedBySource(buffer);
-  const lastSuccessAt = getMetadata(buffer, METADATA_KEYS.uploadLastSuccessAt);
-  const lastSuccessBatches = readNumberOrNull(buffer, METADATA_KEYS.uploadLastSuccessBatches);
-  const lastSuccessBytes = readNumberOrNull(buffer, METADATA_KEYS.uploadLastSuccessBytes);
   const lastVersionCheckAt = getMetadata(buffer, METADATA_KEYS.lastVersionCheckAt);
   const latestKnownVersion = getMetadata(buffer, METADATA_KEYS.latestKnownVersion);
 
@@ -186,15 +178,15 @@ export async function gatherStatusSnapshot(
     totalBytesShipped,
     shippedBySource,
     lastSuccessAt,
-    lastSuccessBatches,
-    lastSuccessBytes,
+    lastSuccessBatches: null,
+    lastSuccessBytes: null,
     lastVersionCheckAt,
     latestKnownVersion,
     runtime,
     cfg,
     now,
     history: {
-      totalBytesCaptured: totalBytesShipped + pendingBytes + failedBytes,
+      totalBytesCaptured: capturedBytes,
       totalBytesSent: totalBytesShipped,
       totalRecordsCaptured: totalBatchesShipped + counts.pending + counts.failed,
       totalRecordsSent: totalBatchesShipped,
