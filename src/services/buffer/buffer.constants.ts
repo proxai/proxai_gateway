@@ -12,6 +12,7 @@ export const BUFFER_TABLES = {
   metadata: 'buffer_metadata',
   daemonState: 'daemon_state',
   quarantined: 'quarantined_records',
+  resyncEvents: 'resync_events',
 } as const;
 
 export const METADATA_COLS = {
@@ -312,4 +313,31 @@ export const QUARANTINE_SOURCE_APP_INDEX_DDL = `
 export const QUARANTINE_AT_INDEX_DDL = `
   CREATE INDEX IF NOT EXISTS ${BUFFER_INDEXES.quarantinedAt}
     ON ${BUFFER_TABLES.quarantined} (${QUARANTINE_COLS.quarantinedAtUtc})
+`;
+
+export const RESYNC_EVENT_COLS = {
+  id: 'id',
+  sourceApp: 'source_app',
+  sourcePathHash: 'source_path_hash',
+  watermarkKind: 'watermark_kind',
+  serverWatermarkEnd: 'server_watermark_end',
+  skippedUnits: 'skipped_units',
+  recoveredAt: 'recovered_at',
+} as const;
+
+export const RESYNC_EVENTS_TABLE_DDL = `
+  CREATE TABLE IF NOT EXISTS ${BUFFER_TABLES.resyncEvents} (
+    ${RESYNC_EVENT_COLS.id} INTEGER PRIMARY KEY AUTOINCREMENT,
+    ${RESYNC_EVENT_COLS.sourceApp} TEXT NOT NULL,
+    ${RESYNC_EVENT_COLS.sourcePathHash} TEXT NOT NULL,
+    ${RESYNC_EVENT_COLS.watermarkKind} TEXT NOT NULL,
+    ${RESYNC_EVENT_COLS.serverWatermarkEnd} INTEGER NOT NULL,
+    ${RESYNC_EVENT_COLS.skippedUnits} INTEGER NOT NULL,
+    ${RESYNC_EVENT_COLS.recoveredAt} TEXT NOT NULL
+  )
+`;
+
+export const RESYNC_EVENTS_RECOVERED_AT_INDEX_DDL = `
+  CREATE INDEX IF NOT EXISTS idx_resync_events_recovered_at
+    ON ${BUFFER_TABLES.resyncEvents} (${RESYNC_EVENT_COLS.recoveredAt})
 `;

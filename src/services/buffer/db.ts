@@ -27,6 +27,8 @@ import {
   RECEIPT_DELIVERED_AT_INDEX_DDL,
   RECEIPT_PATH_HASH_INDEX_DDL,
   RECEIPT_TABLE_DDL,
+  RESYNC_EVENTS_RECOVERED_AT_INDEX_DDL,
+  RESYNC_EVENTS_TABLE_DDL,
 } from 'services/buffer/buffer.constants.ts';
 import {
   DAEMON_STATE_TABLE_DDL,
@@ -62,6 +64,8 @@ function initializeSchema(db: Database): void {
   db.run(QUARANTINE_TABLE_DDL);
   db.run(QUARANTINE_SOURCE_APP_INDEX_DDL);
   db.run(QUARANTINE_AT_INDEX_DDL);
+  db.run(RESYNC_EVENTS_TABLE_DDL);
+  db.run(RESYNC_EVENTS_RECOVERED_AT_INDEX_DDL);
 }
 
 function migrateCursorVacuumColumns(db: Database): void {

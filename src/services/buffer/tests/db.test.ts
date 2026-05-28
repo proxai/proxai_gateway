@@ -44,6 +44,7 @@ test('listTables shows all buffer tables including quarantined records', () => {
       BUFFER_TABLES.metadata,
       BUFFER_TABLES.daemonState,
       BUFFER_TABLES.quarantined,
+      BUFFER_TABLES.resyncEvents,
     ].toSorted(),
   );
 });
