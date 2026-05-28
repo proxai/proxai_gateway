@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-28T13:50:13.144Z",
-  "sourceHash": "21252546669886b5256addccda5d8ac3",
+  "generatedAt": "2026-05-28T14:02:52.252Z",
+  "sourceHash": "f8a414b25f5e302a0a078ba4fdb9218d",
   "files": [
     {
       "path": "CLAUDE.md",
@@ -49,19 +49,19 @@
     },
     {
       "path": ".claude/rules/modules/cross-platform.md",
-      "hash": "8d6263b390a950e5"
+      "hash": "fdbc5ee8815b53b8"
     },
     {
       "path": ".cursor/rules/modules-cross-platform.mdc",
-      "hash": "dba6f95ce5338847"
+      "hash": "cbda14ba6f085d8a"
     },
     {
       "path": ".codex/rules/modules/cross-platform.md",
-      "hash": "39a7334a2d23bbd7"
+      "hash": "8ea949e9fe645802"
     },
     {
       "path": ".agents/rules/modules/cross-platform.md",
-      "hash": "39a7334a2d23bbd7"
+      "hash": "8ea949e9fe645802"
     },
     {
       "path": ".claude/rules/modules/typescript.md",

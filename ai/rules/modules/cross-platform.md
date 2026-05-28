@@ -20,6 +20,8 @@ globs: ["src/**/*.ts", "**/*.ts"]
 - `USERDOMAIN`/`USERNAME` resolution must go through `resolveWindowsUserId(env)` in `cli/wiring/platform.ts`; pass an explicit env in tests.
 - For "force write failure" tests: use a real tempdir with a regular file as the parent path; produces `ENOTDIR` portably. Do not use `/dev/null/<x>`.
 - For "extreme path" tests: embed a NUL byte (`\0`) in the path string. `node:fs.stat` rejects it on every platform.
-- Tests depending on hardware or host kernel diagnostics (such as `readBootId`) must mock `core/system/boot-id.ts` in CI/Docker environments, where reading host `/proc/sys/kernel/random/boot_id` or running host shells will fail.
+- Tests depending on hardware or host kernel diagnostics (such as `readBootId`) must mock `core/system/boot-id.ts` in unit tests, or increase test timeout thresholds to `30000ms` (30s) in integration tests. In CI/Docker environments, be aware of:
+  1. Linux jobs often execute in unprivileged containers where access to the host kernel's `/proc/sys/kernel/random/boot_id` is blocked/empty for security and namespace sandboxing.
+  2. Windows VM runners do have Boot IDs, but cold-starting shell processes (like `powershell` querying WMI/CIM LastBootUpTime) under parallelized test pressure can easily exceed the default 5-second test timeout.
 - To force write-permission errors portably without using Unix `chmodSync` (which Windows directory structures ignore), create a directory placeholder at the target lock file path (`mkdirSync(lockPath)`). Writing to this path will throw `EISDIR` portably across all platforms.
 - Relative paths and subpaths returned by filesystem loaders or recursive copy routines that are written to manifests (e.g. `.mapper-manifest.json`) or compared in spec files must always normalize backslashes (`\`) to forward slashes (`/`). This guarantees cross-platform test stability and prevents dirty git diffs when syncing on Windows.
