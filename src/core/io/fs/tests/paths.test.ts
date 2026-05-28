@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 import {
   authFailedSentinelPath,
@@ -11,20 +11,25 @@ import {
   consentSentinelPath,
   controlSocketPath,
   expandHome,
+  legacyRootDir,
   logDir,
   sessionStoppedSentinelPath,
   updateAvailableSentinelPath,
 } from 'core/io/fs';
 
-test('configDir returns ~/.proxai/proxai-gateway on macOS / Linux', () => {
+test('configDir returns ~/.proxai/proxai-gateway/prod on macOS / Linux', () => {
   if (process.platform === 'darwin' || process.platform === 'linux') {
-    expect(configDir()).toBe(join(homedir(), '.proxai', 'proxai-gateway'));
+    expect(configDir()).toBe(join(homedir(), '.proxai', 'proxai-gateway', 'prod'));
   }
 });
 
-test('logDir is platform-appropriate', () => {
+test('logDir is platform-appropriate and nested under prod', () => {
   const dir = logDir();
   expect(dir).toContain('proxai-gateway');
+  expect(
+    dir.endsWith(join('proxai-gateway', 'prod') + sep) ||
+      dir.endsWith(join('proxai-gateway', 'prod')),
+  ).toBe(true);
 });
 
 test('derived paths live under configDir', () => {
@@ -46,6 +51,18 @@ test('sessionStoppedSentinelPath and updateAvailableSentinelPath live under conf
   expect(updateAvailableSentinelPath()).toContain('UPDATE_AVAILABLE');
 });
 
+test('legacyRootDir returns the root without profile segment', () => {
+  if (process.platform === 'darwin' || process.platform === 'linux') {
+    expect(legacyRootDir()).toBe(join(homedir(), '.proxai', 'proxai-gateway'));
+  }
+});
+
+test('configDir is one level deeper than legacyRootDir', () => {
+  if (process.platform === 'darwin' || process.platform === 'linux') {
+    expect(configDir()).toBe(join(legacyRootDir(), 'prod'));
+  }
+});
+
 test('expandHome expands leading ~/', () => {
   expect(expandHome('~/foo/bar')).toBe(join(homedir(), 'foo', 'bar'));
   expect(expandHome('~')).toBe(homedir());
@@ -63,9 +80,9 @@ function withPlatform<T>(platform: NodeJS.Platform, fn: () => T): T {
   }
 }
 
-test('configDir on linux uses ~/.proxai/proxai-gateway', () => {
+test('configDir on linux uses ~/.proxai/proxai-gateway/prod', () => {
   withPlatform('linux', () => {
-    expect(configDir()).toBe(join(homedir(), '.proxai', 'proxai-gateway'));
+    expect(configDir()).toBe(join(homedir(), '.proxai', 'proxai-gateway', 'prod'));
   });
 });
 
@@ -76,6 +93,7 @@ test('configDir on win32 uses LOCALAPPDATA when set', () => {
     const dir = configDir();
     expect(dir).toContain('proxai');
     expect(dir).toContain('proxai-gateway');
+    expect(dir).toContain('prod');
   });
   if (original === undefined) delete process.env['LOCALAPPDATA'];
   else process.env['LOCALAPPDATA'] = original;
@@ -97,9 +115,10 @@ test('configDir throws on unsupported platform', () => {
   });
 });
 
-test('logDir on linux uses ~/.local/state', () => {
+test('logDir on linux uses ~/.local/state nested under prod', () => {
   withPlatform('linux', () => {
     expect(logDir()).toContain(join('.local', 'state', 'proxai', 'proxai-gateway'));
+    expect(logDir()).toContain('prod');
   });
 });
 
@@ -111,6 +130,7 @@ test('logDir on win32 uses LOCALAPPDATA Logs', () => {
     expect(dir).toContain('Logs');
     expect(dir).toContain('proxai');
     expect(dir).toContain('proxai-gateway');
+    expect(dir).toContain('prod');
   });
   if (original === undefined) delete process.env['LOCALAPPDATA'];
   else process.env['LOCALAPPDATA'] = original;
@@ -134,15 +154,17 @@ test('logDir throws on unsupported platform', () => {
   });
 });
 
-test('controlSocketPath returns posix socket on darwin', () => {
+test('controlSocketPath returns posix socket under prod on darwin', () => {
   withPlatform('darwin', () => {
     expect(controlSocketPath()).toMatch(/control\.sock$/);
+    expect(controlSocketPath()).toContain(join('prod', 'control.sock'));
   });
 });
 
-test('controlSocketPath returns posix socket on linux', () => {
+test('controlSocketPath returns posix socket under prod on linux', () => {
   withPlatform('linux', () => {
     expect(controlSocketPath()).toMatch(/control\.sock$/);
+    expect(controlSocketPath()).toContain(join('prod', 'control.sock'));
   });
 });
 

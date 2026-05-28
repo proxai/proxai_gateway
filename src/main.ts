@@ -47,7 +47,9 @@ import { buildUninstallDeps, buildUninstallOptions } from 'cli/wiring/uninstall-
 import { buildUpgradeDeps } from 'cli/wiring/upgrade-deps.ts';
 import { buildVersionString } from 'cli/wiring/version-string.ts';
 import { existsSync } from 'node:fs';
-import { configFilePath, devModeSentinelPath, logDir as defaultLogDir } from 'core/io/fs';
+import { join } from 'node:path';
+import { configFilePath, logDir as defaultLogDir } from 'core/io/fs';
+import { profileRootDir } from 'core/io/fs/profile.ts';
 import { GatewayError, PACKAGE_DESCRIPTION, PACKAGE_VERSION, UserAbortedError } from 'core/utils';
 import { loadConfigFromFile } from 'services/config';
 
@@ -242,7 +244,7 @@ program
   )
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .action(async (opts: { config?: string }) => {
-    const isDevMode = existsSync(devModeSentinelPath());
+    const isDevMode = existsSync(join(profileRootDir(), 'DEV_MODE'));
     if (!isDevMode) {
       console.error(
         chalk.red(

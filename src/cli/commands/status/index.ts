@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
-import { devModeSentinelPath } from 'core/io/fs';
+import { join } from 'node:path';
+import { profileRootDir } from 'core/io/fs/profile.ts';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
@@ -44,7 +45,7 @@ export async function runStatus(
 async function runJsonStatus(deps: StatusCommandDeps): Promise<CommandResult> {
   const exists = await deps.configExists();
   if (!exists) {
-    const isDevMode = existsSync(deps.devModeSentinelPath ?? devModeSentinelPath());
+    const isDevMode = existsSync(deps.devModeSentinelPath ?? join(profileRootDir(), 'DEV_MODE'));
     const emptyJson = buildEmptyStatusJson();
     emptyJson.isDevMode = isDevMode;
     deps.output.info(JSON.stringify(emptyJson));
@@ -80,7 +81,7 @@ async function runWatchStatus(
 
 async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
   const exists = await deps.configExists();
-  const isDevMode = existsSync(deps.devModeSentinelPath ?? devModeSentinelPath());
+  const isDevMode = existsSync(deps.devModeSentinelPath ?? join(profileRootDir(), 'DEV_MODE'));
   const isLocalBuild = isLocalBuildPath(deps.binaryPath);
   const devLike = isDevMode || isLocalBuild;
   const nowLocal = (deps.now ?? ((): Date => new Date()))();

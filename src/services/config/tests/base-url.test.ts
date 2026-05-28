@@ -1,31 +1,25 @@
-import { expect, test, mock } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 
-const mockSentinelPath = join(tmpdir(), `DEV_MODE_TEST_${Math.random().toString(36).slice(2)}`);
+import { resolveNestBaseUrl } from 'services/config/config.constants.ts';
 
-mock.module('core/io/fs', () => {
-  const actual = import.meta.require('core/io/fs');
-  return {
-    ...actual,
-    devModeSentinelPath: () => mockSentinelPath,
-  };
-});
-
-import { resolveNestBaseUrl } from 'services/config';
+const mockDir = join(tmpdir(), `DEV_MODE_ROOT_TEST_${Math.random().toString(36).slice(2)}`);
+const mockSentinelPath = join(mockDir, 'DEV_MODE');
 
 test('defaults to the production Railway URL when sentinel is absent', () => {
   if (existsSync(mockSentinelPath)) {
     unlinkSync(mockSentinelPath);
   }
-  expect(resolveNestBaseUrl()).toBe('https://proxainest-production.up.railway.app');
+  expect(resolveNestBaseUrl(mockSentinelPath)).toBe('https://proxainest-production.up.railway.app');
 });
 
 test('uses localhost:3001 when sentinel is present', () => {
+  mkdirSync(mockDir, { recursive: true });
   writeFileSync(mockSentinelPath, 'ENABLED');
   try {
-    expect(resolveNestBaseUrl()).toBe('http://localhost:3001');
+    expect(resolveNestBaseUrl(mockSentinelPath)).toBe('http://localhost:3001');
   } finally {
     if (existsSync(mockSentinelPath)) {
       unlinkSync(mockSentinelPath);

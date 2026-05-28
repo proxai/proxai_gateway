@@ -1,13 +1,15 @@
 import { existsSync } from 'node:fs';
-import { devModeSentinelPath } from 'core/io/fs';
+import { join } from 'node:path';
 import type { InstallSource } from 'services/config/config.types.ts';
+import { profileRootDir } from 'core/io/fs/profile.ts';
 
 const PROD_URL = 'https://proxainest-production.up.railway.app';
 const DEV_URL = 'http://localhost:3001';
 
-export function resolveNestBaseUrl(): string {
+export function resolveNestBaseUrl(devModeSentinelPath?: string): string {
+  const sentinelPath = devModeSentinelPath ?? join(profileRootDir(), 'DEV_MODE');
   try {
-    if (existsSync(devModeSentinelPath())) {
+    if (existsSync(sentinelPath)) {
       return DEV_URL;
     }
   } catch {}

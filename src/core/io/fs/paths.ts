@@ -1,84 +1,46 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { APP_NAME, ORG_NAME } from 'core/io/fs/fs.constants.ts';
+import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
 
 export function configDir(): string {
-  switch (process.platform) {
-    case 'darwin':
-    case 'linux':
-      return join(homedir(), `.${ORG_NAME}`, APP_NAME);
-    case 'win32':
-      return join(
-        process.env['LOCALAPPDATA'] ?? join(homedir(), 'AppData', 'Local'),
-        ORG_NAME,
-        APP_NAME,
-      );
-    default:
-      throw new Error(`unsupported platform: ${process.platform}`);
-  }
+  return buildProfileContext('prod').configDir;
 }
 
 export function logDir(): string {
-  switch (process.platform) {
-    case 'darwin':
-      return join(homedir(), 'Library', 'Logs', ORG_NAME, APP_NAME);
-    case 'linux':
-      return join(homedir(), '.local', 'state', ORG_NAME, APP_NAME, 'log');
-    case 'win32':
-      return join(
-        process.env['LOCALAPPDATA'] ?? join(homedir(), 'AppData', 'Local'),
-        ORG_NAME,
-        APP_NAME,
-        'Logs',
-      );
-    default:
-      throw new Error(`unsupported platform: ${process.platform}`);
-  }
+  return buildProfileContext('prod').logDir;
 }
 
 export function bufferDbPath(): string {
-  return join(configDir(), 'buffer.db');
+  return buildProfileContext('prod').bufferDbPath;
 }
 
 export function configFilePath(): string {
-  return join(configDir(), 'config.toml');
+  return buildProfileContext('prod').configFilePath;
 }
 
 export function authFailedSentinelPath(): string {
-  return join(configDir(), 'AUTH_FAILED');
+  return buildProfileContext('prod').sentinels.authFailed;
 }
 
 export function bufferFullSentinelPath(): string {
-  return join(configDir(), 'BUFFER_FULL');
+  return buildProfileContext('prod').sentinels.bufferFull;
 }
 
 export function sessionStoppedSentinelPath(): string {
-  return join(configDir(), 'SESSION_STOPPED');
+  return buildProfileContext('prod').sentinels.sessionStopped;
 }
 
 export function consentSentinelPath(): string {
-  return join(configDir(), 'CONSENT_ACCEPTED');
+  return buildProfileContext('prod').sentinels.consent;
 }
 
 export function updateAvailableSentinelPath(): string {
-  return join(configDir(), 'UPDATE_AVAILABLE');
-}
-
-export function devModeSentinelPath(): string {
-  return join(configDir(), 'DEV_MODE');
+  return buildProfileContext('prod').sentinels.updateAvailable;
 }
 
 export function controlSocketPath(): string {
-  switch (process.platform) {
-    case 'darwin':
-    case 'linux':
-      return join(configDir(), 'control.sock');
-    case 'win32':
-      return `\\\\.\\pipe\\${APP_NAME}-control`;
-    default:
-      throw new Error(`unsupported platform: ${process.platform}`);
-  }
+  return buildProfileContext('prod').controlSocketPath;
 }
 
 export function expandHome(path: string): string {
@@ -87,4 +49,8 @@ export function expandHome(path: string): string {
     return join(homedir(), path.slice(2));
   }
   return path;
+}
+
+export function legacyRootDir(): string {
+  return profileRootDir();
 }
