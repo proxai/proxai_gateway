@@ -153,6 +153,8 @@ export function nextPendingBatchAfter(
 export interface MarkBatchDeliveredInput {
   idempotentOnServer: boolean;
   deliveredAt?: string;
+  userPrompt?: string | null;
+  userPromptAddedAt?: string | null;
 }
 
 export function markBatchDelivered(
@@ -172,6 +174,15 @@ export function markBatchDelivered(
       watermarkTable: batch.watermarkTable,
       deliveredAt,
       idempotentOnServer: input.idempotentOnServer,
+      userPrompt: input.userPrompt ?? null,
+      userPromptAddedAt: input.userPromptAddedAt ?? null,
+      sourcePath: batch.sourcePath,
+      agentSchemaVersion: batch.agentSchemaVersion,
+      gatewayVersion: batch.gatewayVersion,
+      capturedAtUtc: batch.capturedAtUtc,
+      attempts: batch.attempts,
+      sourceInode: batch.sourceInode,
+      shippedBytes: batch.body.byteLength,
     });
     db.query(DELETE_BATCH_SQL).run(batch.captureId);
   });
