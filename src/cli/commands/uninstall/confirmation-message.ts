@@ -20,9 +20,14 @@ export function buildConfirmationMessage(deps: UninstallCommandDeps, reset: bool
   lines.push('  • clean up the PATH entry from your shell rc / Windows User PATH');
   if (reset) {
     lines.push('');
-    lines.push('--reset will additionally wipe local state:');
-    lines.push(`  • ${deps.configDir}  (config, buffer DB, sentinels: ${SENTINEL_LIST})`);
-    lines.push(`  • ${deps.logDir}  (logs)`);
+    lines.push('--reset will additionally wipe local state for both profiles:');
+    lines.push(`  • ${deps.configDir}  (prod config, buffer DB, sentinels: ${SENTINEL_LIST})`);
+    lines.push(`  • ${deps.logDir}  (prod logs)`);
+    lines.push(`  • ${deps.devConfigDir}  (dev config, buffer DB, sentinels: ${SENTINEL_LIST})`);
+    lines.push(`  • ${deps.devLogDir}  (dev logs)`);
+    lines.push(
+      `  • root markers: .migrated-flat-to-nested, .upgrade-restore-state, .upgrade.lock, .migration.lock, DEV_MODE`,
+    );
     lines.push('');
     lines.push('Server-side state is preserved. Re-setup will resume cursors from server.');
     lines.push('Pending unuploaded batches will be lost; their bytes will be re-captured.');

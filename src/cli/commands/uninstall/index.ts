@@ -1,4 +1,6 @@
 import { unlink } from 'node:fs/promises';
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { createActor } from 'xstate';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
@@ -15,10 +17,32 @@ import type {
   UninstallCommandOptions,
 } from 'cli/commands/uninstall/uninstall.types.ts';
 
+const ROOT_FILES_TO_REMOVE = [
+  '.migrated-flat-to-nested',
+  '.upgrade-restore-state',
+  '.upgrade.lock',
+  '.migration.lock',
+  'DEV_MODE',
+] as const;
+
 export type {
   UninstallCommandDeps,
   UninstallCommandOptions,
 } from 'cli/commands/uninstall/uninstall.types.ts';
+
+async function removeUnitFile(deps: UninstallCommandDeps, unitPath: string | null): Promise<void> {
+  if (unitPath === null) return;
+  try {
+    await unlink(unitPath);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    if (code !== 'ENOENT') {
+      deps.output.warn(
+        `could not remove service unit file: ${(err as Error).message ?? String(err)}`,
+      );
+    }
+  }
+}
 
 export async function runUninstall(
   deps: UninstallCommandDeps,
@@ -57,6 +81,18 @@ export async function runUninstall(
 
   machine.send({ type: 'BEGIN' });
 
+  if (deps.devServiceManager !== null) {
+    try {
+      await deps.devServiceManager.stop();
+    } catch {}
+
+    try {
+      await deps.devServiceManager.unregister();
+    } catch {}
+
+    await removeUnitFile(deps, deps.devServiceUnitPath);
+  }
+
   try {
     await deps.serviceManager.stop();
     deps.output.info('daemon stopped');
@@ -71,25 +107,19 @@ export async function runUninstall(
     deps.output.info('service was not registered');
   }
 
-  if (deps.serviceUnitPath !== null) {
-    try {
-      await unlink(deps.serviceUnitPath);
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException | undefined)?.code;
-      if (code !== 'ENOENT') {
-        deps.output.warn(
-          `could not remove service unit file: ${(err as Error).message ?? String(err)}`,
-        );
-      }
-    }
-  }
+  await removeUnitFile(deps, deps.serviceUnitPath);
   machine.send({ type: 'SERVICE_STOPPED' });
 
   let pathsSwept = 0;
   if (reset) {
     await rmRecursive(deps.configDir);
     await rmRecursive(deps.logDir);
-    pathsSwept += 2;
+    await rmRecursive(deps.devConfigDir);
+    await rmRecursive(deps.devLogDir);
+    for (const file of ROOT_FILES_TO_REMOVE) {
+      rmSync(join(deps.profileRootDir, file), { force: true });
+    }
+    pathsSwept += 4;
     deps.output.success('local state wiped');
   }
 

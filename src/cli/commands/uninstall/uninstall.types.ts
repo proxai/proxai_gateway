@@ -15,6 +15,12 @@ export interface UninstallCommandDeps {
   logDir: string;
   serviceUnitPath: string | null;
   serviceManager: ServiceManager;
+  devServiceManager: ServiceManager | null;
+  devServiceUnitPath: string | null;
+  devConfigDir: string;
+  devLogDir: string;
+  profileRootDir: string;
+  profileLogDirRoot: string;
   configExists: () => Promise<boolean>;
   sweep?: PackageManagerSweep;
   binaryRemover?: DirectBinaryRemover;

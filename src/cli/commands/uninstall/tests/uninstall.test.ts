@@ -118,15 +118,21 @@ function fakeCleaner(outcomes: PathCleanupOutcome[] | (() => Promise<PathCleanup
 let tmpRoot: string;
 let configDirPath: string;
 let logDirPath: string;
+let devConfigDirPath: string;
+let devLogDirPath: string;
 let configPath: string;
 let serviceUnitPath: string;
 
 beforeEach(async () => {
   tmpRoot = await mkdtemp(join(tmpdir(), 'proxai-cli-uninstall-'));
-  configDirPath = join(tmpRoot, '.proxai');
-  logDirPath = join(tmpRoot, 'logs');
+  configDirPath = join(tmpRoot, '.proxai', 'prod');
+  logDirPath = join(tmpRoot, 'logs', 'prod');
+  devConfigDirPath = join(tmpRoot, '.proxai', 'dev');
+  devLogDirPath = join(tmpRoot, 'logs', 'dev');
   await mkdir(configDirPath, { recursive: true });
   await mkdir(logDirPath, { recursive: true });
+  await mkdir(devConfigDirPath, { recursive: true });
+  await mkdir(devLogDirPath, { recursive: true });
   configPath = join(configDirPath, 'config.toml');
   serviceUnitPath = join(tmpRoot, 'unit.plist');
 });
@@ -182,6 +188,12 @@ function depsFor(
     logDir: logDirPath,
     serviceUnitPath,
     serviceManager: sm,
+    devServiceManager: null,
+    devServiceUnitPath: null,
+    devConfigDir: devConfigDirPath,
+    devLogDir: devLogDirPath,
+    profileRootDir: join(tmpRoot, '.proxai'),
+    profileLogDirRoot: join(tmpRoot, 'logs'),
     configExists: () => Bun.file(configPath).exists(),
   };
 }
@@ -389,10 +401,14 @@ test('per-platform smoke: stop + unregister called regardless of platform shim',
   const platforms = ['darwin', 'linux', 'win32'] as const;
   await Promise.all(
     platforms.map(async (platform) => {
-      const isolatedConfigDir = join(tmpRoot, platform, '.proxai');
-      const isolatedLogDir = join(tmpRoot, platform, 'logs');
+      const isolatedConfigDir = join(tmpRoot, platform, '.proxai', 'prod');
+      const isolatedDevConfigDir = join(tmpRoot, platform, '.proxai', 'dev');
+      const isolatedLogDir = join(tmpRoot, platform, 'logs', 'prod');
+      const isolatedDevLogDir = join(tmpRoot, platform, 'logs', 'dev');
       await mkdir(isolatedConfigDir, { recursive: true });
+      await mkdir(isolatedDevConfigDir, { recursive: true });
       await mkdir(isolatedLogDir, { recursive: true });
+      await mkdir(isolatedDevLogDir, { recursive: true });
       const isolatedConfigPath = join(isolatedConfigDir, 'config.toml');
       const isolatedServiceUnitPath = join(tmpRoot, `unit-${platform}.plist`);
       const config: GatewayConfig = {
@@ -437,6 +453,12 @@ test('per-platform smoke: stop + unregister called regardless of platform shim',
         logDir: isolatedLogDir,
         serviceUnitPath: isolatedServiceUnitPath,
         serviceManager: sm,
+        devServiceManager: null,
+        devServiceUnitPath: null,
+        devConfigDir: isolatedDevConfigDir,
+        devLogDir: isolatedDevLogDir,
+        profileRootDir: join(tmpRoot, platform, '.proxai'),
+        profileLogDirRoot: join(tmpRoot, platform, 'logs'),
         configExists: () => Bun.file(isolatedConfigPath).exists(),
       };
       const result = await runUninstall(deps, { yes: true });
