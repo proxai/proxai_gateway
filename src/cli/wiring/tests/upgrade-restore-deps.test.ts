@@ -7,17 +7,12 @@ import { join } from 'node:path';
 import { asGlobalFetch } from 'core/utils';
 import type { FetchFn } from 'core/utils';
 import { rmRecursive } from 'core/io/fs';
-import * as realProfile from 'core/io/fs/profile.ts';
 import type { ProfileContext, ProfileName } from 'core/io/fs/profile.types.ts';
 
 const PLATFORMS: NodeJS.Platform[] = ['darwin', 'linux', 'win32'];
 
 let dir: string;
 let devConfigPresent: boolean;
-
-function fakeRootDir(): string {
-  return dir;
-}
 
 function fakeProfileContext(profile: ProfileName): ProfileContext {
   const configDir = join(dir, profile);
@@ -40,16 +35,18 @@ function fakeProfileContext(profile: ProfileName): ProfileContext {
   };
 }
 
+function makeOverrides(): { rootDir: string; devCtx: ProfileContext } {
+  return {
+    rootDir: dir,
+    devCtx: fakeProfileContext('dev'),
+  };
+}
+
 const originalFetch = globalThis.fetch;
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'proxai-upgrade-restore-deps-'));
   devConfigPresent = false;
-  await mock.module('core/io/fs/profile.ts', () => ({
-    ...realProfile,
-    profileRootDir: fakeRootDir,
-    buildProfileContext: fakeProfileContext,
-  }));
 });
 
 afterEach(async () => {
@@ -68,7 +65,11 @@ function writeDevConfig(): void {
 for (const platform of PLATFORMS) {
   test(`buildCoordinatedUpgradeDeps shape is complete for ${platform}`, async () => {
     const mod = await import('cli/wiring/upgrade-restore-deps.ts');
-    const deps = mod.buildCoordinatedUpgradeDeps({ binaryPath: '/bin/gw', platform });
+    const deps = mod.buildCoordinatedUpgradeDeps({
+      binaryPath: '/bin/gw',
+      platform,
+      overrides: makeOverrides(),
+    });
     expect(deps.rootDir).toBe(dir);
     expect(deps.devCtx.name).toBe('dev');
     expect(deps.devCtx.isDev).toBe(true);
@@ -81,7 +82,11 @@ for (const platform of PLATFORMS) {
 
 test('buildCoordinatedUpgradeDeps uses a null service manager on an unsupported platform', async () => {
   const mod = await import('cli/wiring/upgrade-restore-deps.ts');
-  const deps = mod.buildCoordinatedUpgradeDeps({ binaryPath: '/bin/gw', platform: 'freebsd' });
+  const deps = mod.buildCoordinatedUpgradeDeps({
+    binaryPath: '/bin/gw',
+    platform: 'freebsd',
+    overrides: makeOverrides(),
+  });
   expect(await deps.devServiceManager.isRunning()).toBe(false);
   expect(await deps.devServiceManager.isRegistered()).toBe(false);
   expect(await deps.devServiceManager.runtimeInfo()).toEqual({ pid: null, startedAt: null });
@@ -95,7 +100,11 @@ test('buildCoordinatedUpgradeDeps uses a null service manager on an unsupported 
 test('buildCoordinatedUpgradeDeps devConfigExists reflects the file on disk', async () => {
   writeDevConfig();
   const mod = await import('cli/wiring/upgrade-restore-deps.ts');
-  const deps = mod.buildCoordinatedUpgradeDeps({ binaryPath: '/bin/gw', platform: 'linux' });
+  const deps = mod.buildCoordinatedUpgradeDeps({
+    binaryPath: '/bin/gw',
+    platform: 'linux',
+    overrides: makeOverrides(),
+  });
   expect(devConfigPresent).toBe(true);
   expect(deps.devConfigExists()).toBe(true);
 });
@@ -103,7 +112,10 @@ test('buildCoordinatedUpgradeDeps devConfigExists reflects the file on disk', as
 for (const platform of PLATFORMS) {
   test(`buildUpgradePostRespawnRestoreDeps shape is complete for ${platform}`, async () => {
     const mod = await import('cli/wiring/upgrade-restore-deps.ts');
-    const deps = mod.buildUpgradePostRespawnRestoreDeps({ platform });
+    const deps = mod.buildUpgradePostRespawnRestoreDeps({
+      platform,
+      overrides: makeOverrides(),
+    });
     expect(deps.rootDir).toBe(dir);
     expect(deps.devCtx.name).toBe('dev');
     expect(typeof deps.devServiceManager.isRunning).toBe('function');
@@ -117,6 +129,7 @@ test('buildRunCoordinatedUpgradeDeps returns undefined in dev mode', async () =>
     binaryPath: '/bin/gw',
     platform: 'linux',
     isDev: true,
+    overrides: makeOverrides(),
   });
   expect(result).toBeUndefined();
 });
@@ -127,6 +140,7 @@ test('buildRunCoordinatedUpgradeDeps returns undefined when dev config is absent
     binaryPath: '/bin/gw',
     platform: 'linux',
     isDev: false,
+    overrides: makeOverrides(),
   });
   expect(result).toBeUndefined();
 });
@@ -138,6 +152,7 @@ test('buildRunCoordinatedUpgradeDeps returns deps when dev config exists in prod
     binaryPath: '/bin/gw',
     platform: 'linux',
     isDev: false,
+    overrides: makeOverrides(),
   });
   expect(result).toBeDefined();
   expect(result?.rootDir).toBe(dir);
@@ -166,7 +181,11 @@ function makeReleaseFetch(tag: string, assetName: string | null, bytes?: Uint8Ar
 test('downloadAndReplaceBinary returns early when version check is not ok', async () => {
   globalThis.fetch = asGlobalFetch(async () => new Response('boom', { status: 500 }));
   const mod = await import('cli/wiring/upgrade-restore-deps.ts');
-  const deps = mod.buildCoordinatedUpgradeDeps({ binaryPath: join(dir, 'gw'), platform: 'linux' });
+  const deps = mod.buildCoordinatedUpgradeDeps({
+    binaryPath: join(dir, 'gw'),
+    platform: 'linux',
+    overrides: makeOverrides(),
+  });
   await deps.downloadAndReplaceBinary();
 });
 
@@ -175,14 +194,22 @@ test('downloadAndReplaceBinary returns early when there is no update', async () 
     makeReleaseFetch('v0.0.0', `proxai-gateway-linux-${process.arch}`),
   );
   const mod = await import('cli/wiring/upgrade-restore-deps.ts');
-  const deps = mod.buildCoordinatedUpgradeDeps({ binaryPath: join(dir, 'gw'), platform: 'linux' });
+  const deps = mod.buildCoordinatedUpgradeDeps({
+    binaryPath: join(dir, 'gw'),
+    platform: 'linux',
+    overrides: makeOverrides(),
+  });
   await deps.downloadAndReplaceBinary();
 });
 
 test('downloadAndReplaceBinary returns early when no platform asset matches', async () => {
   globalThis.fetch = asGlobalFetch(makeReleaseFetch('v9999.12.31', 'proxai-gateway-other-arch'));
   const mod = await import('cli/wiring/upgrade-restore-deps.ts');
-  const deps = mod.buildCoordinatedUpgradeDeps({ binaryPath: join(dir, 'gw'), platform: 'linux' });
+  const deps = mod.buildCoordinatedUpgradeDeps({
+    binaryPath: join(dir, 'gw'),
+    platform: 'linux',
+    overrides: makeOverrides(),
+  });
   await deps.downloadAndReplaceBinary();
 });
 
@@ -191,7 +218,11 @@ test('downloadAndReplaceBinary returns early when download body is empty', async
     makeReleaseFetch('v9999.12.31', `proxai-gateway-linux-${process.arch}`, new Uint8Array(0)),
   );
   const mod = await import('cli/wiring/upgrade-restore-deps.ts');
-  const deps = mod.buildCoordinatedUpgradeDeps({ binaryPath: join(dir, 'gw'), platform: 'linux' });
+  const deps = mod.buildCoordinatedUpgradeDeps({
+    binaryPath: join(dir, 'gw'),
+    platform: 'linux',
+    overrides: makeOverrides(),
+  });
   await deps.downloadAndReplaceBinary();
 });
 
@@ -203,7 +234,11 @@ test('downloadAndReplaceBinary replaces the binary on the full success path', as
   const binaryPath = join(dir, 'gw');
   writeFileSync(binaryPath, 'old');
   const mod = await import('cli/wiring/upgrade-restore-deps.ts');
-  const deps = mod.buildCoordinatedUpgradeDeps({ binaryPath, platform: 'linux' });
+  const deps = mod.buildCoordinatedUpgradeDeps({
+    binaryPath,
+    platform: 'linux',
+    overrides: makeOverrides(),
+  });
   await deps.downloadAndReplaceBinary();
   expect(await Bun.file(binaryPath).text()).toBe('fresh-binary');
 });

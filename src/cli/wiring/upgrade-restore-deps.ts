@@ -4,6 +4,7 @@ import { getServiceManager } from 'cli/service-manager';
 import type { ServiceManager } from 'cli/service-manager';
 import { platformServiceUnitPath } from 'cli/wiring/platform.ts';
 import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
+import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 import { PACKAGE_VERSION } from 'core/utils';
 import type {
   CoordinatedUpgradeDeps,
@@ -34,15 +35,21 @@ function buildDevServiceManager(platform: NodeJS.Platform, devConfigDir: string)
 export interface BuildCoordinatedUpgradeDepsInput {
   readonly binaryPath: string;
   readonly platform: NodeJS.Platform;
+  readonly overrides?:
+    | {
+        readonly rootDir?: string;
+        readonly devCtx?: ProfileContext;
+      }
+    | undefined;
 }
 
 export function buildCoordinatedUpgradeDeps(
   input: BuildCoordinatedUpgradeDepsInput,
 ): CoordinatedUpgradeDeps {
-  const devCtx = buildProfileContext('dev');
+  const devCtx = input.overrides?.devCtx ?? buildProfileContext('dev');
 
   return {
-    rootDir: profileRootDir(),
+    rootDir: input.overrides?.rootDir ?? profileRootDir(),
     devCtx,
     devServiceManager: buildDevServiceManager(input.platform, devCtx.configDir),
     devConfigExists: () => existsSync(devCtx.configFilePath),
@@ -69,15 +76,21 @@ export function buildCoordinatedUpgradeDeps(
 
 export interface BuildUpgradePostRespawnRestoreDepsInput {
   readonly platform: NodeJS.Platform;
+  readonly overrides?:
+    | {
+        readonly rootDir?: string;
+        readonly devCtx?: ProfileContext;
+      }
+    | undefined;
 }
 
 export function buildUpgradePostRespawnRestoreDeps(
   input: BuildUpgradePostRespawnRestoreDepsInput,
 ): UpgradePostRespawnRestoreDeps {
-  const devCtx = buildProfileContext('dev');
+  const devCtx = input.overrides?.devCtx ?? buildProfileContext('dev');
 
   return {
-    rootDir: profileRootDir(),
+    rootDir: input.overrides?.rootDir ?? profileRootDir(),
     devCtx,
     devServiceManager: buildDevServiceManager(input.platform, devCtx.configDir),
     devConfigExists: () => existsSync(devCtx.configFilePath),
@@ -88,9 +101,17 @@ export function buildRunCoordinatedUpgradeDeps(input: {
   readonly binaryPath: string;
   readonly platform: NodeJS.Platform;
   readonly isDev: boolean;
+  readonly overrides?: {
+    readonly rootDir?: string;
+    readonly devCtx?: ProfileContext;
+  };
 }): CoordinatedUpgradeDeps | undefined {
   if (input.isDev) return undefined;
-  const devCtx = buildProfileContext('dev');
+  const devCtx = input.overrides?.devCtx ?? buildProfileContext('dev');
   if (!existsSync(devCtx.configFilePath)) return undefined;
-  return buildCoordinatedUpgradeDeps({ binaryPath: input.binaryPath, platform: input.platform });
+  return buildCoordinatedUpgradeDeps({
+    binaryPath: input.binaryPath,
+    platform: input.platform,
+    overrides: input.overrides,
+  });
 }

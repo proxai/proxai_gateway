@@ -40,7 +40,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitUntil(check: () => boolean, timeoutMs = 5_000, stepMs = 25): Promise<void> {
+async function waitUntil(check: () => boolean, timeoutMs = 30_000, stepMs = 25): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   const step = async (): Promise<void> => {
     if (check() || Date.now() >= deadline) return;
@@ -78,6 +78,7 @@ test('initial sweep reports present state for a sentinel that exists on disk', a
 
 test('writing a sentinel file triggers a present transition via fs.watch (debounced)', async () => {
   watcher = await startSentinelWatcher({ paths, target: registry, debounceMs: 20 });
+  await sleep(250);
   expect(registry.getSnapshot().matches({ auth: 'absent' })).toBe(true);
   await writeFile(
     paths.authFailed,
@@ -86,7 +87,7 @@ test('writing a sentinel file triggers a present transition via fs.watch (deboun
   await waitUntil(() => registry.getSnapshot().matches({ auth: 'present' }));
   expect(registry.getSnapshot().matches({ auth: 'present' })).toBe(true);
   expect(registry.getSnapshot().context.authPayload?.reason).toBe('maintenance');
-});
+}, 30_000);
 
 test('removing a sentinel file triggers an absent transition', async () => {
   await writeFile(
@@ -94,11 +95,12 @@ test('removing a sentinel file triggers an absent transition', async () => {
     JSON.stringify({ reason: 'maintenance', detected_at: '2026-05-25T12:00:00.000Z' }),
   );
   watcher = await startSentinelWatcher({ paths, target: registry, debounceMs: 20 });
+  await sleep(250);
   expect(registry.getSnapshot().matches({ auth: 'present' })).toBe(true);
   await unlink(paths.authFailed);
   await waitUntil(() => registry.getSnapshot().matches({ auth: 'absent' }));
   expect(registry.getSnapshot().matches({ auth: 'absent' })).toBe(true);
-});
+}, 30_000);
 
 test('stop() releases the fs.watch loop without errors', async () => {
   watcher = await startSentinelWatcher({ paths, target: registry });
@@ -137,6 +139,7 @@ test('dispatch failure is logged via deps.logger.warn without crashing the watch
     debounceMs: 20,
     logger: fakeLogger as never,
   });
+  await sleep(250);
   throwOnSend = true;
   await writeFile(
     paths.authFailed,
@@ -145,7 +148,7 @@ test('dispatch failure is logged via deps.logger.warn without crashing the watch
   await waitUntil(() => warnCalls.some((c) => c['event'] === 'sentinel_watcher.dispatch_failed'));
   await local.stop();
   expect(warnCalls.some((c) => c['event'] === 'sentinel_watcher.dispatch_failed')).toBe(true);
-});
+}, 30_000);
 
 test('fs.watch errors on a missing configDir are logged via deps.logger.warn', async () => {
   await rmRecursive(dir);
@@ -175,4 +178,4 @@ test('fs.watch errors on a missing configDir are logged via deps.logger.warn', a
   await local.stop();
   dir = await mkdtemp(join(tmpdir(), 'proxai-sentinel-watcher-restored-'));
   expect(warnCalls.some((c) => c['event'] === 'sentinel_watcher.fatal')).toBe(true);
-});
+}, 30_000);

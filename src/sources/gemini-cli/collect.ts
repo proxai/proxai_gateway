@@ -9,7 +9,7 @@ import {
 } from 'core/utils';
 import { getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
-import { BODY_MAX_DECOMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
+import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
 import {
   GEMINI_CLI_AGENT_SCHEMA_PREFIX,
@@ -300,14 +300,14 @@ export async function collectGeminiCliFile(
 
       const { redactedBytes: redactedSlice, compressed } = redactSlice(slice);
 
-      if (redactedSlice.byteLength > BODY_MAX_DECOMPRESSED_BYTES) {
+      if (redactedSlice.byteLength > context.maxDecompressedBytes) {
         throw new OversizedDecompressedSliceError({
           sourcePath: file.sourcePath,
           sourcePathHash: file.sourcePathHash,
           rawBytes: redactedSlice.byteLength,
           compressedBytes: compressed.byteLength,
           sliceIndex: i,
-          cap: BODY_MAX_DECOMPRESSED_BYTES,
+          cap: context.maxDecompressedBytes,
         });
       }
 

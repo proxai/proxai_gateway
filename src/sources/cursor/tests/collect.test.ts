@@ -49,9 +49,13 @@ async function makeDb(rows: SeedRow[], name = 'state.vscdb'): Promise<Discovered
   const path = join(dir, name);
   const db = new Database(path, { create: true });
   db.run('CREATE TABLE cursorDiskKV (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)');
-  for (const row of rows) {
-    db.query('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)').run(row.key, row.value);
-  }
+  const insert = db.prepare('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)');
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      insert.run(row.key, row.value);
+    }
+  });
+  tx();
   db.close();
   const stat = await statFile(path);
   if (!stat.exists) throw new Error('file missing after write');
@@ -436,9 +440,9 @@ test('size_decreased signal also triggers re-keying via #gen suffix', async () =
 
 test('splits an oversized snapshot into multiple batches with contiguous rowid coverage', async () => {
   const rows: { key: string; value: string }[] = [];
-  const rowCount = 500;
+  const rowCount = 30;
   for (let i = 0; i < rowCount; i++) {
-    const noise = randomBytes(6_000).toString('base64');
+    const noise = randomBytes(1000).toString('base64');
     rows.push({
       key: i % 2 === 0 ? `composerData:c${i.toString()}` : `bubbleId:c${i.toString()}:b1`,
       value: JSON.stringify({ _v: 1, text: noise }),
@@ -446,7 +450,11 @@ test('splits an oversized snapshot into multiple batches with contiguous rowid c
   }
   const file = await makeDb(rows, 'big.vscdb');
 
-  const result = await collectCursorFile(file, ctx(buffer));
+  const customCtx = {
+    ...ctx(buffer),
+    maxDecompressedBytes: 15_000,
+  };
+  const result = await collectCursorFile(file, customCtx);
   expect(result.errors).toEqual([]);
   expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
 
@@ -503,17 +511,20 @@ test('null last_seen columns on existing cursor never trigger size/page_count si
   expect(batch.sourcePathHash).toBe(file.sourcePathHash);
 });
 
-test('surfaces OversizedDecompressedSliceError when single row exceeds BODY_MAX_DECOMPRESSED_BYTES', async () => {
-  const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
+test('surfaces OversizedDecompressedSliceError when single row exceeds maxDecompressedBytes', async () => {
+  const giantPayload = 'x'.repeat(20_000);
   const file = await makeDb([{ key: 'composerData:huge', value: giantPayload }]);
-
-  const result = await collectCursorFile(file, ctx(buffer));
+  const customCtx = {
+    ...ctx(buffer),
+    maxDecompressedBytes: 15_000,
+  };
+  const result = await collectCursorFile(file, customCtx);
   const oversized = result.errors.filter((e) => /decompressed slice/.test(e.reason));
   expect(oversized.length).toBeGreaterThanOrEqual(1);
 }, 60_000);
 
 test('logs quarantine.write_failed when quarantine insert throws on cursor', async () => {
-  const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
+  const giantPayload = 'x'.repeat(20_000);
   const file = await makeDb([{ key: 'composerData:huge', value: giantPayload }]);
   buffer.exec('DROP TABLE quarantined_records');
   const warns: { msg: string }[] = [];
@@ -540,6 +551,7 @@ test('logs quarantine.write_failed when quarantine insert throws on cursor', asy
   const baseCtx = ctx(buffer);
   const fakeCtx = {
     ...baseCtx,
+    maxDecompressedBytes: 15_000,
     logger: fakeLogger,
   };
   const result = await collectCursorFile(file, fakeCtx);
@@ -548,13 +560,16 @@ test('logs quarantine.write_failed when quarantine insert throws on cursor', asy
 }, 60_000);
 
 test('quarantines oversized cursor row, advances cursor past it, and continues', async () => {
-  const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
+  const giantPayload = 'x'.repeat(20_000);
   const file = await makeDb([
     { key: 'composerData:huge', value: giantPayload },
     { key: 'bubbleId:c1:b1', value: '{"_v":3,"type":1,"text":"hi"}' },
   ]);
-
-  const result = await collectCursorFile(file, ctx(buffer));
+  const customCtx = {
+    ...ctx(buffer),
+    maxDecompressedBytes: 15_000,
+  };
+  const result = await collectCursorFile(file, customCtx);
 
   expect(countQuarantined(buffer, 'cursor')).toBeGreaterThanOrEqual(1);
 

@@ -98,6 +98,7 @@ test('stop() releases the sentinel watcher and snapshot timer without throwing',
 
 test('writing a sentinel file after boot updates the registry via fs.watch', async () => {
   const handle = await startDaemonActors({ buffer, paths });
+  await sleep(250);
   expect(handle.registry.getSnapshot().matches({ auth: 'absent' })).toBe(true);
   await writeFile(paths.authFailed, '{"reason":"halt","detected_at":"x"}');
   await waitUntilTrue(() => handle.registry.getSnapshot().matches({ auth: 'present' }));

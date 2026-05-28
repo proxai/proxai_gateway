@@ -608,13 +608,13 @@ test('splits an oversized table snapshot into multiple batches with contiguous r
       model TEXT
     )`,
   );
-  const rowCount = 1500;
+  const rowCount = 30;
   const insert = db.prepare(
     'INSERT INTO threads (id, cli_version, cwd, title, model) VALUES (?, ?, ?, ?, ?)',
   );
   const tx = db.transaction(() => {
     for (let i = 0; i < rowCount; i++) {
-      const noise = randomBytes(2200).toString('base64');
+      const noise = randomBytes(1000).toString('base64');
       insert.run(`t${i.toString()}`, '0.126.0', noise, 't', 'gpt-5');
     }
   });
@@ -631,7 +631,11 @@ test('splits an oversized table snapshot into multiple batches with contiguous r
     lastModifiedMs: stat.mtimeMs,
   };
 
-  const { result } = await collectCodexState(file, ctx(buffer));
+  const customCtx = {
+    ...ctx(buffer),
+    maxDecompressedBytes: 15_000,
+  };
+  const { result } = await collectCodexState(file, customCtx);
   expect(result.errors).toEqual([]);
 
   expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
@@ -723,7 +727,7 @@ test('logs quarantine.write_failed when quarantine insert throws', async () => {
       model TEXT
     )`,
   );
-  const giant = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
+  const giant = 'x'.repeat(20_000);
   db.query('INSERT INTO threads (id, cli_version, cwd, title, model) VALUES (?, ?, ?, ?, ?)').run(
     't-big',
     '0.1.0',
@@ -770,6 +774,7 @@ test('logs quarantine.write_failed when quarantine insert throws', async () => {
   const fakeCtx = {
     ...baseCtx,
     logger: fakeLogger,
+    maxDecompressedBytes: 15_000,
   };
   const { result } = await collectCodexState(file, fakeCtx);
   expect(result.errors.some((e) => /quarantined/.test(e.reason))).toBe(true);
@@ -803,7 +808,7 @@ test('quarantines oversized codex state row, advances cursor, and continues to n
       status TEXT
     )`,
   );
-  const giant = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
+  const giant = 'x'.repeat(20_000);
   db.query('INSERT INTO threads (id, cli_version, cwd, title, model) VALUES (?, ?, ?, ?, ?)').run(
     't-big',
     '0.1.0',
@@ -830,7 +835,11 @@ test('quarantines oversized codex state row, advances cursor, and continues to n
     lastModifiedMs: stat.mtimeMs,
   };
 
-  const { result } = await collectCodexState(file, ctx(buffer));
+  const customCtx = {
+    ...ctx(buffer),
+    maxDecompressedBytes: 15_000,
+  };
+  const { result } = await collectCodexState(file, customCtx);
 
   expect(countQuarantined(buffer, 'codex')).toBeGreaterThanOrEqual(1);
 
@@ -847,7 +856,7 @@ test('quarantines oversized codex state row, advances cursor, and continues to n
   expect(result.capturedBatches).toBeGreaterThanOrEqual(1);
 }, 120_000);
 
-test('surfaces OversizedDecompressedSliceError when single row exceeds BODY_MAX_DECOMPRESSED_BYTES', async () => {
+test('surfaces OversizedDecompressedSliceError when single row exceeds maxDecompressedBytes', async () => {
   const path = join(dir, 'oversized_state.sqlite');
   const db = new Database(path, { create: true });
   db.run(
@@ -874,7 +883,7 @@ test('surfaces OversizedDecompressedSliceError when single row exceeds BODY_MAX_
       status TEXT
     )`,
   );
-  const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
+  const giantPayload = 'x'.repeat(20_000);
   db.query('INSERT INTO threads (id, cli_version, cwd, title, model) VALUES (?, ?, ?, ?, ?)').run(
     't1',
     '0.1.0',
@@ -894,7 +903,11 @@ test('surfaces OversizedDecompressedSliceError when single row exceeds BODY_MAX_
     lastModifiedMs: stat.mtimeMs,
   };
 
-  const { result } = await collectCodexState(file, ctx(buffer));
+  const customCtx = {
+    ...ctx(buffer),
+    maxDecompressedBytes: 15_000,
+  };
+  const { result } = await collectCodexState(file, customCtx);
   const oversized = result.errors.filter((e) => /decompressed slice/.test(e.reason));
   expect(oversized.length).toBeGreaterThanOrEqual(1);
 }, 120_000);

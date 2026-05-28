@@ -249,10 +249,10 @@ test('persists the wire-DTO fields needed by the uploader', async () => {
 });
 
 test('splits an oversized slice into multiple batches with contiguous watermark coverage', async () => {
-  const targetTotalLines = Math.ceil((3 * 1024 * 1024) / 2048);
+  const targetTotalLines = 20;
   const linesArr: string[] = [];
   for (let i = 0; i < targetTotalLines; i++) {
-    const noise = randomBytes(1500).toString('base64');
+    const noise = randomBytes(1000).toString('base64');
     linesArr.push(
       JSON.stringify({
         type: 'user',
@@ -264,7 +264,11 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
   const content = `${linesArr.join('\n')}\n`;
   const file = await makeFile(content, 'big.jsonl');
 
-  const result = await collectClaudeCodeFile(file, ctx(buffer));
+  const customCtx = {
+    ...ctx(buffer),
+    maxDecompressedBytes: 15_000,
+  };
+  const result = await collectClaudeCodeFile(file, customCtx);
   expect(result.errors).toEqual([]);
   expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
 
@@ -340,12 +344,16 @@ test('watermark continuity holds under redaction-induced byte-count changes', as
   expect(anyBodySmallerThanRange).toBe(true);
 });
 
-test('surfaces OversizedDecompressedSliceError when single line exceeds BODY_MAX_DECOMPRESSED_BYTES', async () => {
-  const giantPayload = 'x'.repeat(BODY_MAX_DECOMPRESSED_BYTES + 1024);
+test('surfaces OversizedDecompressedSliceError when single line exceeds maxDecompressedBytes', async () => {
+  const giantPayload = 'x'.repeat(20_000);
   const oneLine = `${JSON.stringify({ type: 'user', message: { role: 'user', content: giantPayload }, version: '2.1.122' })}\n`;
   const file = await makeFile(oneLine, 'oversized.jsonl');
 
-  const result = await collectClaudeCodeFile(file, ctx(buffer));
+  const customCtx = {
+    ...ctx(buffer),
+    maxDecompressedBytes: 15_000,
+  };
+  const result = await collectClaudeCodeFile(file, customCtx);
   expect(result.errors.length).toBeGreaterThanOrEqual(1);
   expect(requireDefined(result.errors[0]).reason).toMatch(/decompressed slice/);
 }, 30_000);

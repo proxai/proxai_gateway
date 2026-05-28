@@ -7,7 +7,7 @@ import {
 } from 'core/utils';
 import { getCursor, insertBatch, recordQuarantine, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
-import { BODY_MAX_DECOMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
+import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
 import {
   CURSOR_BODY_COMPRESSION,
@@ -229,7 +229,7 @@ export function processRows(input: ProcessRowsInput): void {
     const redactedBytes = measurement.rawBytes;
     const compressed = measurement.compressed;
 
-    if (redactedBytes > BODY_MAX_DECOMPRESSED_BYTES) {
+    if (redactedBytes > input.context.maxDecompressedBytes) {
       try {
         recordQuarantine(input.context.buffer, {
           sourceApp: CURSOR_SOURCE_APP,
@@ -262,13 +262,13 @@ export function processRows(input: ProcessRowsInput): void {
           source_path_hash: input.effectiveSourcePathHash,
           watermark_position: lastRowidInSlice,
           redacted_size_bytes: redactedBytes,
-          cap: BODY_MAX_DECOMPRESSED_BYTES,
+          cap: input.context.maxDecompressedBytes,
         },
         'oversized cursor kv row quarantined; advancing cursor past it',
       );
       input.result.errors.push({
         sourcePath: input.effectiveSourcePath,
-        reason: `decompressed slice exceeded ${BODY_MAX_DECOMPRESSED_BYTES.toString()} bytes (${redactedBytes.toString()}); row quarantined`,
+        reason: `decompressed slice exceeded ${input.context.maxDecompressedBytes.toString()} bytes (${redactedBytes.toString()}); row quarantined`,
       });
       const priorCursor = getCursor(input.context.buffer, {
         sourceApp: CURSOR_SOURCE_APP,

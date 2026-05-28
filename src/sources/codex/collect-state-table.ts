@@ -17,7 +17,7 @@ import {
 } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import type { CodexTable } from 'services/contract';
-import { BODY_MAX_DECOMPRESSED_BYTES, BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
+import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
 import {
   CODEX_BODY_COMPRESSION,
@@ -125,7 +125,7 @@ export function collectOneTable(
     const redactedBytes = measurement.rawBytes;
     const compressed = measurement.compressed;
 
-    if (redactedBytes > BODY_MAX_DECOMPRESSED_BYTES) {
+    if (redactedBytes > context.maxDecompressedBytes) {
       try {
         recordQuarantine(context.buffer, {
           sourceApp: CODEX_SOURCE_APP,
@@ -159,13 +159,13 @@ export function collectOneTable(
           watermark_table: table,
           watermark_position: lastRowidInSlice,
           redacted_size_bytes: redactedBytes,
-          cap: BODY_MAX_DECOMPRESSED_BYTES,
+          cap: context.maxDecompressedBytes,
         },
         'oversized codex state row quarantined; advancing cursor past it',
       );
       result.errors.push({
         sourcePath: identity.sourcePath,
-        reason: `decompressed slice exceeded ${BODY_MAX_DECOMPRESSED_BYTES.toString()} bytes (${redactedBytes.toString()}); row quarantined`,
+        reason: `decompressed slice exceeded ${context.maxDecompressedBytes.toString()} bytes (${redactedBytes.toString()}); row quarantined`,
         table,
       });
       const refreshedCursor = getCursor(context.buffer, {
