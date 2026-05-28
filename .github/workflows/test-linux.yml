@@ -15,7 +15,7 @@ env:
 
 jobs:
   test:
-    name: arm64 Unit Tests
+    name: Linux - arm64 Unit Tests
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     steps:

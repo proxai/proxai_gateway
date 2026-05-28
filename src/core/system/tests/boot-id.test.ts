@@ -142,7 +142,7 @@ test('linux: falls through to defaultBootIdReadFile when readFile is omitted', a
 
 test('defaultBootIdSpawn is wired up when spawn dep is omitted', async () => {
   try {
-    const result = await readBootId({});
+    const result = await readBootId({ platform: 'darwin' });
     expect(typeof result).toBe('string');
   } catch (err) {
     expect(err).toBeInstanceOf(Error);
