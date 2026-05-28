@@ -17,10 +17,11 @@ export interface BuildRunDepsInputs {
   abortSignal: AbortSignal;
   binaryPath: string;
   exitProcess: () => void;
+  xstateInspect?: boolean | undefined;
 }
 
 export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
-  return {
+  const deps: RunCommandDeps = {
     output: consoleOutput(),
     config: inputs.config,
     authFailedSentinelPath: authFailedSentinelPath(),
@@ -35,4 +36,8 @@ export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
     devMode: existsSync(devModeSentinelPath()),
     exitProcess: inputs.exitProcess,
   };
+  if (inputs.xstateInspect !== undefined) {
+    deps.xstateInspect = inputs.xstateInspect;
+  }
+  return deps;
 }

@@ -170,4 +170,5 @@ export interface DaemonLoopOptions {
   onDrainComplete?: (result: DrainCycleResult) => void;
   onHeartbeatComplete?: (result: HeartbeatCycleResult) => void;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  xstateInspect?: boolean | undefined;
 }

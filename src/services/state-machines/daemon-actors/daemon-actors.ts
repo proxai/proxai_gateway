@@ -1,4 +1,6 @@
 import { createActor, type Actor, type AnyActor } from 'xstate';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { daemonRootMachine } from 'services/state-machines/daemon-root';
 import { startEventRouter } from 'services/state-machines/event-router';
 import {
@@ -40,10 +42,42 @@ function buildSnapshotRegistry(actors: readonly NamedActor[]): SnapshotRegistry 
 }
 
 export async function startDaemonActors(input: DaemonActorsInput): Promise<DaemonActorsHandle> {
-  const registry: Actor<SentinelRegistryMachine> = createActor(sentinelRegistryMachine);
+  const isDevMode = existsSync(join(input.paths.configDir, 'DEV_MODE'));
+  let xstateInspect: NonNullable<Parameters<typeof createActor>[1]>['inspect'] = undefined;
+
+  const shouldInspect = isDevMode && input.xstateInspect === true;
+
+  if (shouldInspect) {
+    try {
+      const { createBrowserInspector } = await import('@statelyai/inspect');
+      const inspector = createBrowserInspector();
+      xstateInspect = inspector.inspect;
+    } catch (err) {
+      input.logger?.warn(
+        {
+          event: 'daemon_actors.inspect_init_failed',
+          error: err instanceof Error ? err.message : String(err),
+        },
+        'failed to initialize stately browser inspector',
+      );
+    }
+  }
+
+  const registryOptions: NonNullable<Parameters<typeof createActor>[1]> = {};
+  const rootOptions: NonNullable<Parameters<typeof createActor>[1]> = {};
+
+  if (xstateInspect !== undefined) {
+    registryOptions.inspect = xstateInspect;
+    rootOptions.inspect = xstateInspect;
+  }
+
+  const registry: Actor<SentinelRegistryMachine> = createActor(
+    sentinelRegistryMachine,
+    registryOptions,
+  );
   registry.start();
 
-  const root = createActor(daemonRootMachine);
+  const root = createActor(daemonRootMachine, rootOptions);
   root.start();
   root.send({ type: 'CONFIG_LOADED' });
   root.send({ type: 'BUFFER_OPENED' });

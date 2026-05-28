@@ -23,6 +23,7 @@ export interface RunCommandDeps {
   binaryPath?: string;
   installSource?: InstallSource;
   devMode?: boolean;
+  xstateInspect?: boolean | undefined;
   exitProcess?: () => void;
   sources?: readonly RegisteredSource[];
   onCaptureComplete?: (result: CaptureCycleResult) => void;

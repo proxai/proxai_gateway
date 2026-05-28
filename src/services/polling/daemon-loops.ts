@@ -36,7 +36,7 @@ export async function runDaemonLoops(
   const sleep = options.sleep ?? abortableSleep;
   const signal = options.abortSignal;
 
-  const handle = await bootDaemonActors(contexts);
+  const handle = await bootDaemonActors(contexts, options.xstateInspect);
 
   try {
     handle.markReady(nowIsoUtc());
@@ -52,9 +52,12 @@ export async function runDaemonLoops(
   }
 }
 
-async function bootDaemonActors(contexts: DaemonLoopContexts): Promise<DaemonActorsHandle> {
+async function bootDaemonActors(
+  contexts: DaemonLoopContexts,
+  xstateInspect?: boolean,
+): Promise<DaemonActorsHandle> {
   const configDir = dirname(contexts.capture.authFailedSentinelPath);
-  return startDaemonActors({
+  const input: Parameters<typeof startDaemonActors>[0] = {
     buffer: contexts.capture.buffer,
     paths: {
       configDir,
@@ -64,8 +67,10 @@ async function bootDaemonActors(contexts: DaemonLoopContexts): Promise<DaemonAct
       updateAvailable:
         contexts.heartbeat.updateAvailableSentinelPath ?? join(configDir, 'UPDATE_AVAILABLE'),
     },
+    ...(xstateInspect !== undefined ? { xstateInspect } : {}),
     ...(contexts.capture.logger !== undefined ? { logger: contexts.capture.logger } : {}),
-  });
+  };
+  return startDaemonActors(input);
 }
 
 async function captureLoop(

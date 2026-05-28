@@ -10,6 +10,7 @@ export interface DaemonActorsInput {
   readonly paths: SentinelWatcherPaths;
   readonly logger?: MinimalLogger;
   readonly snapshotIntervalMs?: number;
+  readonly xstateInspect?: boolean | undefined;
 }
 
 export interface DaemonActorsHandle {

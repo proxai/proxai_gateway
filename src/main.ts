@@ -46,7 +46,8 @@ import { buildTailDeps, buildTailOptions } from 'cli/wiring/tail-deps.ts';
 import { buildUninstallDeps, buildUninstallOptions } from 'cli/wiring/uninstall-deps.ts';
 import { buildUpgradeDeps } from 'cli/wiring/upgrade-deps.ts';
 import { buildVersionString } from 'cli/wiring/version-string.ts';
-import { configFilePath, logDir as defaultLogDir } from 'core/io/fs';
+import { existsSync } from 'node:fs';
+import { configFilePath, devModeSentinelPath, logDir as defaultLogDir } from 'core/io/fs';
 import { GatewayError, PACKAGE_DESCRIPTION, PACKAGE_VERSION, UserAbortedError } from 'core/utils';
 import { loadConfigFromFile } from 'services/config';
 
@@ -231,6 +232,41 @@ program
   )
   .action(async (action?: string) => {
     const result = await runDev(buildDevDeps(), action);
+    process.exit(result.exitCode);
+  });
+
+program
+  .command('xstate')
+  .description(
+    'Start the gateway daemon in the foreground with the Stately browser visualizer enabled (only available in development mode).',
+  )
+  .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
+  .action(async (opts: { config?: string }) => {
+    const isDevMode = existsSync(devModeSentinelPath());
+    if (!isDevMode) {
+      console.error(
+        chalk.red(
+          'Error: "xstate" command is only available in development mode.\n' +
+            'Please run "proxai-gateway dev on" first to activate development mode.',
+        ),
+      );
+      process.exit(EXIT_CODE.error);
+    }
+
+    const config = await loadConfigFromFile(opts.config);
+    const ctrl = new AbortController();
+    process.on('SIGINT', () => ctrl.abort());
+    process.on('SIGTERM', () => ctrl.abort());
+
+    const result = await runDaemon(
+      buildRunDeps({
+        config,
+        abortSignal: ctrl.signal,
+        binaryPath: process.execPath,
+        exitProcess: () => process.exit(EXIT_CODE.upgradeRespawn),
+        xstateInspect: true,
+      }),
+    );
     process.exit(result.exitCode);
   });
 

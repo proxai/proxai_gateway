@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -7,6 +7,7 @@ import { openInMemoryBufferDb, getMachineSnapshots } from 'services/buffer';
 import type { Database } from 'bun:sqlite';
 import { startDaemonActors } from 'services/state-machines/daemon-actors';
 import type { SentinelWatcherPaths } from 'services/state-machines/sentinel-watcher';
+import type { MinimalLogger } from 'core/log';
 
 let dir: string;
 let paths: SentinelWatcherPaths;
@@ -100,6 +101,112 @@ test('writing a sentinel file after boot updates the registry via fs.watch', asy
   await writeFile(paths.authFailed, '{"reason":"halt","detected_at":"x"}');
   await waitUntilTrue(() => handle.registry.getSnapshot().matches({ auth: 'present' }));
   expect(handle.registry.getSnapshot().matches({ auth: 'present' })).toBe(true);
+  await handle.stop();
+});
+
+test('startDaemonActors initializes stately inspector when DEV_MODE is active and xstateInspect is true', async () => {
+  await writeFile(join(paths.configDir, 'DEV_MODE'), '');
+
+  let inspectCalled = false;
+  await mock.module('@statelyai/inspect', () => {
+    return {
+      createBrowserInspector: () => {
+        return {
+          inspect: () => {
+            inspectCalled = true;
+          },
+        };
+      },
+    };
+  });
+
+  const handle = await startDaemonActors({
+    buffer,
+    paths,
+    xstateInspect: true,
+  });
+
+  expect(inspectCalled).toBe(true);
+  await handle.stop();
+  mock.restore();
+});
+
+test('startDaemonActors logs a warning when stately inspector initialization throws', async () => {
+  await writeFile(join(paths.configDir, 'DEV_MODE'), '');
+
+  await mock.module('@statelyai/inspect', () => {
+    return {
+      createBrowserInspector: () => {
+        throw new Error('inspect failed mock');
+      },
+    };
+  });
+
+  const warnings: { ctx: unknown; msg: string }[] = [];
+  const logger: MinimalLogger = {
+    warn: (ctx: unknown, msg: string) => {
+      warnings.push({ ctx, msg });
+    },
+    info: () => {},
+    error: () => {},
+    debug: () => {},
+    fatal: () => {},
+    trace: () => {},
+    child: () => logger,
+  };
+
+  const handle = await startDaemonActors({
+    buffer,
+    paths,
+    xstateInspect: true,
+    logger,
+  });
+
+  expect(warnings.length).toBe(1);
+  const warn = warnings[0];
+  if (!warn) {
+    throw new Error('Expected warning to be logged');
+  }
+  expect(warn.msg).toBe('failed to initialize stately browser inspector');
+  expect(JSON.stringify(warn.ctx)).toContain('inspect failed mock');
+
+  await handle.stop();
+  mock.restore();
+});
+
+test('flushSnapshots logs a warning when database is closed', async () => {
+  const warnings: { ctx: unknown; msg: string }[] = [];
+  const logger: MinimalLogger = {
+    warn: (ctx: unknown, msg: string) => {
+      warnings.push({ ctx, msg });
+    },
+    info: () => {},
+    error: () => {},
+    debug: () => {},
+    fatal: () => {},
+    trace: () => {},
+    child: () => logger,
+  };
+
+  const handle = await startDaemonActors({
+    buffer,
+    paths,
+    logger,
+  });
+
+  buffer.close();
+
+  handle.flushSnapshots();
+
+  expect(warnings.length).toBe(1);
+  const warn = warnings[0];
+  if (!warn) {
+    throw new Error('Expected warning to be logged');
+  }
+  expect(warn.msg).toBe('failed to persist machine snapshots');
+
+  buffer = openInMemoryBufferDb();
+
   await handle.stop();
 });
 

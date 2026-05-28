@@ -101,6 +101,7 @@ export function buildLoopOptions(deps: RunCommandDeps): Parameters<typeof runDae
   if (deps.onCaptureComplete !== undefined) opts.onCaptureComplete = deps.onCaptureComplete;
   if (deps.onDrainComplete !== undefined) opts.onDrainComplete = deps.onDrainComplete;
   if (deps.onHeartbeatComplete !== undefined) opts.onHeartbeatComplete = deps.onHeartbeatComplete;
+  if (deps.xstateInspect !== undefined) opts.xstateInspect = deps.xstateInspect;
   return opts;
 }
 

@@ -32,4 +32,17 @@ test('buildRunDeps: wires sentinels, version strings, abort, exitProcess', () =>
   expect(typeof deps.currentVersion).toBe('string');
   deps.exitProcess?.();
   expect(exited).toBe(true);
+  expect(deps.xstateInspect).toBeUndefined();
+});
+
+test('buildRunDeps: preserves xstateInspect when provided', () => {
+  const ctrl = new AbortController();
+  const deps = buildRunDeps({
+    config: cfg,
+    abortSignal: ctrl.signal,
+    binaryPath: '/bin/p',
+    exitProcess: () => {},
+    xstateInspect: true,
+  });
+  expect(deps.xstateInspect).toBe(true);
 });
