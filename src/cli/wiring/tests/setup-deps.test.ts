@@ -1,11 +1,14 @@
 import { expect, test } from 'bun:test';
 
 import type { ServiceManager } from 'cli/service-manager';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
 import {
   buildSetupDeps,
   buildSetupOptions,
   invokeSetupInteractive,
 } from 'cli/wiring/setup-deps.ts';
+
+const profileCtx = buildProfileContext('prod');
 
 const sm = {
   ensureRegistered: async () => {},
@@ -25,6 +28,7 @@ test('buildSetupDeps: omits serviceManager when null and platform=darwin', () =>
     serviceUnitPath: null,
     serviceManager: null,
     env: {},
+    profileCtx,
   });
   expect(deps.platform).toBe('darwin');
   expect(deps.serviceUnitPath).toBe(null);
@@ -39,6 +43,7 @@ test('buildSetupDeps: includes serviceManager when provided', () => {
     serviceUnitPath: '/tmp/x.service',
     serviceManager: sm,
     env: {},
+    profileCtx,
   });
   expect(deps.serviceManager).toBe(sm);
   expect(deps.serviceUnitPath).toBe('/tmp/x.service');
@@ -51,6 +56,7 @@ test('buildSetupDeps: configExists() resolves with a boolean', async () => {
     serviceUnitPath: null,
     serviceManager: null,
     env: {},
+    profileCtx,
   });
   await expect(deps.configExists()).resolves.toEqual(expect.any(Boolean));
 });
@@ -62,6 +68,7 @@ test('buildSetupDeps: httpClientFactory returns a working HttpClient', () => {
     serviceUnitPath: null,
     serviceManager: null,
     env: {},
+    profileCtx,
   });
   const client = deps.httpClientFactory('test-key', 'test-host');
   expect(client).toBeDefined();
@@ -74,6 +81,7 @@ test('buildSetupDeps: readMachineUuid is wired and returns a string or throws Ga
     serviceUnitPath: null,
     serviceManager: null,
     env: {},
+    profileCtx,
   });
   expect(deps.readMachineUuid).toBeDefined();
   const reader = deps.readMachineUuid;
@@ -95,6 +103,7 @@ test('buildSetupDeps: sets windowsUserId on win32 when env supports it', () => {
     serviceUnitPath: 'C:\\tmp\\x.xml',
     serviceManager: sm,
     env: { USERDOMAIN: 'CORP', USERNAME: 'alice' },
+    profileCtx,
   });
   expect(deps.windowsUserId).toBe('CORP\\alice');
 });
@@ -107,6 +116,7 @@ test('buildSetupDeps: warns and omits windowsUserId on win32 when env is empty',
     serviceUnitPath: 'C:\\tmp\\x.xml',
     serviceManager: sm,
     env: {},
+    profileCtx,
   });
   expect('windowsUserId' in deps).toBe(false);
   expect(warnings).not.toContain('thrown');
@@ -160,6 +170,7 @@ test('invokeSetupInteractive: returns a function that, when invoked, calls the p
       serviceUnitPath: null,
       serviceManager: null,
       env: {},
+      profileCtx,
     },
     async () => {
       runnerInvoked = true;
@@ -181,6 +192,7 @@ test('invokeSetupInteractive: forwards inferred installSource to runSetup option
       serviceUnitPath: null,
       serviceManager: null,
       env: {},
+      profileCtx,
     },
     async (_deps, opts) => {
       capturedInstallSource = opts?.installSource;
@@ -200,6 +212,7 @@ test('invokeSetupInteractive: falls back to github_release when no pattern match
       serviceUnitPath: null,
       serviceManager: null,
       env: {},
+      profileCtx,
     },
     async (_deps, opts) => {
       captured = opts?.installSource;

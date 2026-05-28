@@ -5,22 +5,15 @@ import { resolveWindowsUserId } from 'cli/wiring/platform.ts';
 import { consoleOutput } from 'cli/output.ts';
 import { inquirerPrompts } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager';
-import {
-  authFailedSentinelPath,
-  bufferDbPath,
-  configFilePath,
-  consentSentinelPath,
-  logDir,
-  sessionStoppedSentinelPath,
-} from 'core/io/fs';
+import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 import { readMachineUuid } from 'core/system';
 import { GATEWAY_USER_AGENT } from 'core/utils';
 import {
   inferInstallSource,
-  NEST_INGEST_URL,
-  NEST_REGISTER_HOST_ID_URL,
-  NEST_VERIFY_KEY_URL,
-  NEST_WATERMARKS_URL,
+  nestIngestUrl,
+  nestRegisterHostIdUrl,
+  nestVerifyKeyUrl,
+  nestWatermarksUrl,
 } from 'services/config';
 import type { InstallSource } from 'services/config';
 import { HttpClient } from 'services/http';
@@ -31,31 +24,34 @@ export interface BuildSetupDepsInputs {
   serviceUnitPath: string | null;
   serviceManager: ServiceManager | null;
   env: NodeJS.ProcessEnv;
+  profileCtx: ProfileContext;
 }
 
 export function buildSetupDeps(inputs: BuildSetupDepsInputs): SetupCommandDeps {
   const out = consoleOutput();
+  const { profileCtx } = inputs;
   const base: SetupCommandDeps = {
     output: out,
     prompts: inquirerPrompts(),
-    configPath: configFilePath(),
-    bufferDbPath: bufferDbPath(),
-    logDir: logDir(),
-    authFailedSentinelPath: authFailedSentinelPath(),
-    sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
-    consentSentinelPath: consentSentinelPath(),
+    configPath: profileCtx.configFilePath,
+    bufferDbPath: profileCtx.bufferDbPath,
+    logDir: profileCtx.logDir,
+    defaultNestBaseUrl: profileCtx.defaultNestBaseUrl,
+    authFailedSentinelPath: profileCtx.sentinels.authFailed,
+    sessionStoppedSentinelPath: profileCtx.sentinels.sessionStopped,
+    consentSentinelPath: profileCtx.sentinels.consent,
     serviceUnitPath: inputs.serviceUnitPath,
     programPath: inputs.programPath,
-    configExists: () => Bun.file(configFilePath()).exists(),
+    configExists: () => Bun.file(profileCtx.configFilePath).exists(),
     httpClientFactory: (apiKey, hostId) =>
       new HttpClient({
         apiKey,
         hostId,
         endpoints: {
-          ingest: NEST_INGEST_URL,
-          verifyKey: NEST_VERIFY_KEY_URL,
-          watermarks: NEST_WATERMARKS_URL,
-          registerHostId: NEST_REGISTER_HOST_ID_URL,
+          ingest: nestIngestUrl(profileCtx.defaultNestBaseUrl),
+          verifyKey: nestVerifyKeyUrl(profileCtx.defaultNestBaseUrl),
+          watermarks: nestWatermarksUrl(profileCtx.defaultNestBaseUrl),
+          registerHostId: nestRegisterHostIdUrl(profileCtx.defaultNestBaseUrl),
         },
         gatewayVersion: GATEWAY_USER_AGENT,
       }),

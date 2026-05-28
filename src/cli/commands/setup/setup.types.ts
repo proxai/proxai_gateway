@@ -10,6 +10,7 @@ export interface SetupCommandDeps {
   configPath: string;
   bufferDbPath: string;
   logDir: string;
+  defaultNestBaseUrl: string;
   authFailedSentinelPath: string;
   serviceUnitPath: string | null;
   sessionStoppedSentinelPath?: string;

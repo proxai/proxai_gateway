@@ -22,6 +22,11 @@ import {
   NEST_WATERMARKS_URL,
   VALID_INSTALL_SOURCES,
 } from 'services/config/config.constants.ts';
+
+export interface ValidateDefaults {
+  readonly defaultBufferPath: string;
+  readonly defaultLogDir: string;
+}
 import type {
   AccountConfig,
   BackendConfig,
@@ -32,13 +37,13 @@ import type {
   StaleBinaryConfig,
 } from 'services/config/config.types.ts';
 
-export function validateAndCoerce(raw: unknown): GatewayConfig {
+export function validateAndCoerce(raw: unknown, defaults?: ValidateDefaults): GatewayConfig {
   const root = requireTable(raw, 'root');
   return {
     account: validateAccount(root['account']),
     backend: validateBackend(root['backend']),
-    capture: validateCapture(root['capture']),
-    logging: validateLogging(root['logging']),
+    capture: validateCapture(root['capture'], defaults),
+    logging: validateLogging(root['logging'], defaults),
     staleBinary: validateStaleBinary(root['stale_binary']),
   };
 }
@@ -76,12 +81,12 @@ function validateBackend(raw: unknown): BackendConfig {
   };
 }
 
-function validateCapture(raw: unknown): CaptureConfig {
+function validateCapture(raw: unknown, defaults?: ValidateDefaults): CaptureConfig {
   const r = optionalTable(raw, 'capture');
   const bufferPathRaw = r['buffer_path'];
   const bufferPath =
     bufferPathRaw === undefined
-      ? bufferDbPath()
+      ? (defaults?.defaultBufferPath ?? bufferDbPath())
       : expandHome(requireString(bufferPathRaw, 'capture.buffer_path'));
   const bufferSoftPauseBytes = optionalNumber(
     r['buffer_soft_pause_bytes'],
@@ -153,11 +158,13 @@ function validateCapture(raw: unknown): CaptureConfig {
   return capture;
 }
 
-function validateLogging(raw: unknown): LoggingConfig {
+function validateLogging(raw: unknown, defaults?: ValidateDefaults): LoggingConfig {
   const r = optionalTable(raw, 'logging');
   const dirRaw = r['log_dir'];
   const dir =
-    dirRaw === undefined ? logDir() : expandHome(requireString(dirRaw, 'logging.log_dir'));
+    dirRaw === undefined
+      ? (defaults?.defaultLogDir ?? logDir())
+      : expandHome(requireString(dirRaw, 'logging.log_dir'));
   return {
     level: parseLogLevel(r['level'], DEFAULT_LOG_LEVEL),
     logDir: dir,

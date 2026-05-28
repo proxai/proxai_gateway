@@ -96,6 +96,7 @@ export async function runSetup(
     installSource,
     bufferDbPath: deps.bufferDbPath,
     logDir: deps.logDir,
+    defaultNestBaseUrl: deps.defaultNestBaseUrl,
   });
   await writeConfigArtifacts(config, deps);
   machine.send({ type: 'CONFIG_WRITTEN' });

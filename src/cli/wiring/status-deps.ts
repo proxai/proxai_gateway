@@ -12,12 +12,12 @@ import {
   sessionStoppedSentinelPath,
   updateAvailableSentinelPath,
 } from 'core/io/fs';
-import { profileRootDir } from 'core/io/fs/profile.ts';
+import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
 import { PACKAGE_VERSION } from 'core/utils';
-
-const STATUS_BINARY_PATH = process.execPath;
 import { openBufferDb } from 'services/buffer';
 import { loadConfigFromFile } from 'services/config';
+
+const STATUS_BINARY_PATH = process.execPath;
 
 export interface StatusContext {
   deps: StatusCommandDeps;
@@ -57,7 +57,9 @@ export async function buildStatusContext(inputs: BuildStatusContextInputs): Prom
 
   let bufferPath = inputs.defaultBufferPath ?? bufferDbPath();
   try {
-    const config = await loadConfigFromFile(inputs.configOverride);
+    const config = await loadConfigFromFile(
+      inputs.configOverride ?? buildProfileContext('prod').configFilePath,
+    );
     bufferPath = config.capture.bufferPath;
   } catch {}
 
@@ -74,7 +76,7 @@ export async function buildStatusContext(inputs: BuildStatusContextInputs): Prom
     devModeSentinelPath: join(profileRootDir(), 'DEV_MODE'),
     currentVersion: PACKAGE_VERSION,
     binaryPath: STATUS_BINARY_PATH,
-    loadConfig: (path) => loadConfigFromFile(path),
+    loadConfig: (path) => loadConfigFromFile(path ?? buildProfileContext('prod').configFilePath),
   };
   if (inputs.serviceManager !== null) {
     deps.serviceManager = inputs.serviceManager;

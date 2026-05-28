@@ -1,13 +1,12 @@
 import { stringify as stringifyToml } from 'smol-toml';
 
-import { configFilePath, setMode, writeAtomic } from 'core/io/fs';
+import { setMode, writeAtomic } from 'core/io/fs';
 import type { GatewayConfig } from 'services/config/config.types.ts';
 
-export async function writeConfigToFile(config: GatewayConfig, path?: string): Promise<void> {
-  const filePath = path ?? configFilePath();
+export async function writeConfigToFile(config: GatewayConfig, path: string): Promise<void> {
   const text = serializeConfig(config);
-  await writeAtomic(filePath, text);
-  await setMode(filePath, 0o600);
+  await writeAtomic(path, text);
+  await setMode(path, 0o600);
 }
 
 export function serializeConfig(config: GatewayConfig): string {

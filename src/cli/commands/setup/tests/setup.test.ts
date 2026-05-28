@@ -164,6 +164,7 @@ function deps(control: MockHttpControl): Parameters<typeof runSetup>[0] {
     configPath,
     bufferDbPath,
     logDir,
+    defaultNestBaseUrl: 'https://api.example.com',
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     consentSentinelPath: join(dir, 'CONSENT_ACCEPTED'),
     serviceUnitPath: join(dir, 'service.unit'),

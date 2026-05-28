@@ -114,12 +114,14 @@ program
       opts: { apiKey?: string; installSource: string; start?: boolean; force?: boolean },
     ) => {
       const ctx = buildPlatformServiceContext(process.platform, process.execPath);
+      const profileCtx = buildProfileContext('prod');
       const setupInputs = {
         platform: process.platform,
         programPath: process.execPath,
         serviceUnitPath: ctx?.unitPath ?? null,
         serviceManager: ctx?.serviceManager ?? null,
         env: process.env,
+        profileCtx,
       };
       const effectiveKey = positionalApiKey ?? opts.apiKey;
       const optionsForRun: typeof opts =
@@ -144,6 +146,7 @@ program
       serviceUnitPath: ctx.unitPath,
       serviceManager: ctx.serviceManager,
       env: process.env,
+      profileCtx: buildProfileContext('prod'),
     };
     const result = await runStart(
       buildStartDeps({
@@ -160,7 +163,7 @@ program
             binaryPath: process.execPath,
             currentVersion: PACKAGE_VERSION,
             devMode: false,
-            loadConfig: () => loadConfigFromFile(),
+            loadConfig: () => loadConfigFromFile(buildProfileContext('prod').configFilePath),
             exitProcess: () => process.exit(0),
           }),
       }),
@@ -194,6 +197,7 @@ program
       serviceUnitPath: ctx.unitPath,
       serviceManager: ctx.serviceManager,
       env: process.env,
+      profileCtx: buildProfileContext('prod'),
     };
     const result = await runRestart(
       buildRestartDeps({
@@ -242,7 +246,7 @@ program
             };
       await refreshServiceUnitIfLegacy(refreshConfig);
     }
-    const config = await loadConfigFromFile(opts.config);
+    const config = await loadConfigFromFile(opts.config ?? profileCtx.configFilePath);
     const ctrl = new AbortController();
     process.on('SIGINT', () => ctrl.abort());
     process.on('SIGTERM', () => ctrl.abort());
@@ -288,7 +292,7 @@ program
     }
 
     const profileCtx = buildProfileContext('prod');
-    const config = await loadConfigFromFile(opts.config);
+    const config = await loadConfigFromFile(opts.config ?? profileCtx.configFilePath);
     const ctrl = new AbortController();
     process.on('SIGINT', () => ctrl.abort());
     process.on('SIGTERM', () => ctrl.abort());
@@ -429,7 +433,9 @@ program
     }) => {
       let dir = defaultLogDir();
       try {
-        const config = await loadConfigFromFile(opts.config);
+        const config = await loadConfigFromFile(
+          opts.config ?? buildProfileContext('prod').configFilePath,
+        );
         dir = config.logging.logDir;
       } catch {}
       const ctrl = new AbortController();

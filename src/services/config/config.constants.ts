@@ -22,6 +22,22 @@ export const NEST_VERIFY_KEY_URL = `${NEST_BASE_URL}/ingestion/verify-key`;
 export const NEST_WATERMARKS_URL = `${NEST_BASE_URL}/v1/watermarks`;
 export const NEST_REGISTER_HOST_ID_URL = `${NEST_BASE_URL}/v1/host-ids/register`;
 
+export function nestIngestUrl(baseUrl: string): string {
+  return `${baseUrl}/v1/raw_records`;
+}
+
+export function nestVerifyKeyUrl(baseUrl: string): string {
+  return `${baseUrl}/ingestion/verify-key`;
+}
+
+export function nestWatermarksUrl(baseUrl: string): string {
+  return `${baseUrl}/v1/watermarks`;
+}
+
+export function nestRegisterHostIdUrl(baseUrl: string): string {
+  return `${baseUrl}/v1/host-ids/register`;
+}
+
 export const DEFAULT_POLL_INTERVAL_SEC = 300;
 export const MIN_POLL_INTERVAL_SEC = 60;
 export const MAX_POLL_INTERVAL_SEC = 3600;

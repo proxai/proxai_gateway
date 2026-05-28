@@ -12,10 +12,10 @@ import {
   DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
   DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
   DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
-  NEST_INGEST_URL,
-  NEST_REGISTER_HOST_ID_URL,
-  NEST_VERIFY_KEY_URL,
-  NEST_WATERMARKS_URL,
+  nestIngestUrl,
+  nestRegisterHostIdUrl,
+  nestVerifyKeyUrl,
+  nestWatermarksUrl,
   writeConfigToFile,
 } from 'services/config';
 import type { GatewayConfig, InstallSource } from 'services/config';
@@ -30,6 +30,7 @@ export interface BuildAndWriteConfigInputs {
   installSource: InstallSource;
   bufferDbPath: string;
   logDir: string;
+  defaultNestBaseUrl: string;
 }
 
 export function buildGatewayConfig(input: BuildAndWriteConfigInputs): GatewayConfig {
@@ -42,10 +43,10 @@ export function buildGatewayConfig(input: BuildAndWriteConfigInputs): GatewayCon
       installSource: input.installSource,
     },
     backend: {
-      ingestUrl: NEST_INGEST_URL,
-      verifyKeyUrl: NEST_VERIFY_KEY_URL,
-      watermarksUrl: NEST_WATERMARKS_URL,
-      registerHostIdUrl: NEST_REGISTER_HOST_ID_URL,
+      ingestUrl: nestIngestUrl(input.defaultNestBaseUrl),
+      verifyKeyUrl: nestVerifyKeyUrl(input.defaultNestBaseUrl),
+      watermarksUrl: nestWatermarksUrl(input.defaultNestBaseUrl),
+      registerHostIdUrl: nestRegisterHostIdUrl(input.defaultNestBaseUrl),
     },
     capture: {
       pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
