@@ -21,7 +21,8 @@ export class Manifest {
   constructor(private readonly repoRoot: string) {}
 
   recordEmit(relPath: string, hash: string): void {
-    this.entries.push({ path: relPath, hash });
+    const normalized = relPath.replace(/\\/g, '/');
+    this.entries.push({ path: normalized, hash });
   }
 
   files(): readonly ManifestEntry[] {
