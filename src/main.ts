@@ -56,7 +56,7 @@ import { buildUninstallDeps, buildUninstallOptions } from 'cli/wiring/uninstall-
 import { buildUpgradeDeps } from 'cli/wiring/upgrade-deps.ts';
 import { buildVersionString } from 'cli/wiring/version-string.ts';
 import { join } from 'node:path';
-import { configFilePath, readDevModeSentinel } from 'core/io/fs';
+import { readDevModeSentinel } from 'core/io/fs';
 import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
 import type { ProfileName } from 'core/io/fs/profile.types.ts';
 import { VALID_PROFILES } from 'core/io/fs/profile.types.ts';
@@ -70,7 +70,10 @@ program
   .name('proxai-gateway')
   .description(PACKAGE_DESCRIPTION)
   .version(
-    buildVersionString({ version: PACKAGE_VERSION, installSourcePath: configFilePath() }),
+    buildVersionString({
+      version: PACKAGE_VERSION,
+      installSourcePath: buildProfileContext('prod').configFilePath,
+    }),
     '-v, --version',
     'output the version and install source',
   );

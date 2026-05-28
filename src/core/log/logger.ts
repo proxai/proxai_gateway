@@ -5,7 +5,7 @@ import pino from 'pino';
 import pinoRoll from 'pino-roll';
 import pretty from 'pino-pretty';
 
-import { logDir as defaultLogDir } from 'core/io/fs';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
 import {
   DEFAULT_LOG_LEVEL,
   LOG_RETENTION_DAYS,
@@ -52,7 +52,7 @@ export async function createLogger(options: LoggerFactoryOptions = {}): Promise<
 }
 
 export function defaultLogFilePath(): string {
-  return join(defaultLogDir(), STRUCTURED_LOG_FILENAME);
+  return join(buildProfileContext('prod').logDir, STRUCTURED_LOG_FILENAME);
 }
 
 interface FileLikeStream {
