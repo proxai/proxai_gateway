@@ -4,6 +4,7 @@ import { getServiceManager } from 'cli/service-manager';
 import type { ServiceManager } from 'cli/service-manager';
 import type { ServiceUnitRecreateConfig } from 'cli/service-unit/writer.ts';
 import { defaultSystemdUnitPath } from 'cli/service-unit/systemd-unit.ts';
+import type { ProfileName } from 'core/io/fs/profile.types.ts';
 
 export function platformServiceUnitPath(platform: NodeJS.Platform): string | null {
   if (platform === 'darwin') return defaultLaunchdPlistPath();
@@ -43,11 +44,13 @@ export function buildServiceUnitRecreate(
   unitPath: string,
   programPath: string,
   env: NodeJS.ProcessEnv,
+  profileName: ProfileName = 'prod',
 ): ServiceUnitRecreateConfig {
   const recreate: ServiceUnitRecreateConfig = {
     serviceUnitPath: unitPath,
     programPath,
     platform,
+    profileName,
   };
   if (platform === 'win32') {
     const windowsUserId = resolveWindowsUserId(env);

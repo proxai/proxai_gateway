@@ -150,3 +150,112 @@ test('ensureServiceUnitExists default writer writes a real file when called with
   const text = await readFile(path, 'utf8');
   expect(text).toContain('<plist');
 });
+
+test('writeServiceUnit defaults to prod profile on darwin', async () => {
+  const path = join(dir, 'default-profile.plist');
+  await writeServiceUnit({
+    serviceUnitPath: path,
+    programPath: '/usr/local/bin/proxai-gateway',
+    platform: 'darwin',
+  });
+  const text = await readFile(path, 'utf8');
+  expect(text).toContain('<string>--profile</string>');
+  expect(text).toContain('<string>prod</string>');
+  expect(text).not.toContain('<string>dev</string>');
+});
+
+test('writeServiceUnit uses dev profile on darwin when specified', async () => {
+  const path = join(dir, 'dev-profile.plist');
+  await writeServiceUnit({
+    serviceUnitPath: path,
+    programPath: '/usr/local/bin/proxai-gateway',
+    platform: 'darwin',
+    profileName: 'dev',
+  });
+  const text = await readFile(path, 'utf8');
+  expect(text).toContain('<string>--profile</string>');
+  expect(text).toContain('<string>dev</string>');
+});
+
+test('writeServiceUnit defaults to prod profile on linux', async () => {
+  const path = join(dir, 'default-profile.service');
+  await writeServiceUnit({
+    serviceUnitPath: path,
+    programPath: '/usr/local/bin/proxai-gateway',
+    platform: 'linux',
+  });
+  const text = await readFile(path, 'utf8');
+  expect(text).toContain('--profile');
+  expect(text).toContain('prod');
+});
+
+test('writeServiceUnit uses dev profile on linux when specified', async () => {
+  const path = join(dir, 'dev-profile.service');
+  await writeServiceUnit({
+    serviceUnitPath: path,
+    programPath: '/usr/local/bin/proxai-gateway',
+    platform: 'linux',
+    profileName: 'dev',
+  });
+  const text = await readFile(path, 'utf8');
+  expect(text).toContain('--profile');
+  expect(text).toContain('dev');
+});
+
+test('writeServiceUnit defaults to prod profile on win32', async () => {
+  const path = join(dir, 'default-profile.xml');
+  await writeServiceUnit({
+    serviceUnitPath: path,
+    programPath: 'C:\\proxai-gateway.exe',
+    platform: 'win32',
+  });
+  const text = await readFile(path, 'utf16le');
+  expect(text).toContain('--profile');
+  expect(text).toContain('prod');
+});
+
+test('writeServiceUnit uses dev profile on win32 when specified', async () => {
+  const path = join(dir, 'dev-profile.xml');
+  await writeServiceUnit({
+    serviceUnitPath: path,
+    programPath: 'C:\\proxai-gateway.exe',
+    platform: 'win32',
+    profileName: 'dev',
+  });
+  const text = await readFile(path, 'utf16le');
+  expect(text).toContain('--profile');
+  expect(text).toContain('dev');
+});
+
+test('ensureServiceUnitExists threads profileName to writer', async () => {
+  let observedArgs: readonly string[] | undefined;
+  await ensureServiceUnitExists({
+    config: {
+      serviceUnitPath: join(dir, 'plist'),
+      programPath: '/tmp/bin',
+      platform: 'darwin',
+      profileName: 'dev',
+    },
+    fileExists: async () => false,
+    writer: async (input) => {
+      observedArgs = input.programArgs;
+    },
+  });
+  expect(observedArgs).toEqual(['run', '--profile', 'dev']);
+});
+
+test('ensureServiceUnitExists uses prod profile by default', async () => {
+  let observedArgs: readonly string[] | undefined;
+  await ensureServiceUnitExists({
+    config: {
+      serviceUnitPath: join(dir, 'plist'),
+      programPath: '/tmp/bin',
+      platform: 'darwin',
+    },
+    fileExists: async () => false,
+    writer: async (input) => {
+      observedArgs = input.programArgs;
+    },
+  });
+  expect(observedArgs).toEqual(['run', '--profile', 'prod']);
+});

@@ -104,3 +104,36 @@ test('buildServiceUnitRecreate: omits windowsUserId on win32 when env is empty',
   expect(recreate.platform).toBe('win32');
   expect('windowsUserId' in recreate).toBe(false);
 });
+
+test('buildServiceUnitRecreate: defaults profileName to prod when not provided', () => {
+  const recreate = buildServiceUnitRecreate(
+    'darwin',
+    '/Users/x/Library/LaunchAgents/x.plist',
+    '/bin/p',
+    {},
+  );
+  expect(recreate.profileName).toBe('prod');
+});
+
+test('buildServiceUnitRecreate: sets profileName to dev when passed', () => {
+  const recreate = buildServiceUnitRecreate(
+    'darwin',
+    '/Users/x/Library/LaunchAgents/x.plist',
+    '/bin/p',
+    {},
+    'dev',
+  );
+  expect(recreate.profileName).toBe('dev');
+});
+
+test('buildServiceUnitRecreate: preserves windowsUserId alongside profileName on win32', () => {
+  const recreate = buildServiceUnitRecreate(
+    'win32',
+    'C:\\path\\task.xml',
+    'C:\\bin\\p.exe',
+    { USERDOMAIN: 'CORP', USERNAME: 'alice' },
+    'dev',
+  );
+  expect(recreate.windowsUserId).toBe('CORP\\alice');
+  expect(recreate.profileName).toBe('dev');
+});
