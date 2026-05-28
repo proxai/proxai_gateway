@@ -26,10 +26,7 @@ test('configDir returns ~/.proxai/proxai-gateway/prod on macOS / Linux', () => {
 test('logDir is platform-appropriate and nested under prod', () => {
   const dir = logDir();
   expect(dir).toContain('proxai-gateway');
-  expect(
-    dir.endsWith(join('proxai-gateway', 'prod') + sep) ||
-      dir.endsWith(join('proxai-gateway', 'prod')),
-  ).toBe(true);
+  expect(dir.endsWith(`${sep}prod`)).toBe(true);
 });
 
 test('derived paths live under configDir', () => {
