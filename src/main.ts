@@ -8,6 +8,7 @@ import { runDev } from 'cli/commands/dev.ts';
 import { runRedactionList, runRedactionTest } from 'cli/commands/redaction.ts';
 import { runRestart } from 'cli/commands/restart.ts';
 import { runDaemon } from 'cli/commands/run';
+import { runDaemonStartupRelocation } from 'cli/commands/run/startup-relocation.ts';
 import { runSetup } from 'cli/commands/setup';
 import { runStart } from 'cli/commands/start.ts';
 import { runStatus } from 'cli/commands/status';
@@ -215,6 +216,7 @@ program
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .option('--profile <name>', 'profile to run as (prod | dev)', 'prod')
   .action(async (opts: { config?: string; profile?: string }) => {
+    await runDaemonStartupRelocation();
     const profileName = parseProfileName(opts.profile);
     const profileCtx = buildProfileContext(profileName);
     const config = await loadConfigFromFile(opts.config);
