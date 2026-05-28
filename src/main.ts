@@ -8,6 +8,7 @@ import { runDev } from 'cli/commands/dev.ts';
 import { runRedactionList, runRedactionTest } from 'cli/commands/redaction.ts';
 import { runRestart } from 'cli/commands/restart.ts';
 import { runDaemon } from 'cli/commands/run';
+import { refreshServiceUnitIfLegacy } from 'cli/commands/run/service-unit-refresh.ts';
 import { runDaemonStartupRelocation } from 'cli/commands/run/startup-relocation.ts';
 import { runSetup } from 'cli/commands/setup';
 import { runStart } from 'cli/commands/start.ts';
@@ -26,6 +27,7 @@ import {
   buildPlatformServiceContext,
   buildServiceUnitRecreate,
   platformServiceUnitPath,
+  resolveWindowsUserId,
 } from 'cli/wiring/platform.ts';
 import {
   buildRedactionListDeps,
@@ -219,6 +221,27 @@ program
     await runDaemonStartupRelocation();
     const profileName = parseProfileName(opts.profile);
     const profileCtx = buildProfileContext(profileName);
+    const platformCtx = buildPlatformServiceContext(process.platform, process.execPath);
+    if (platformCtx !== null) {
+      const windowsUserId =
+        platformCtx.platform === 'win32' ? resolveWindowsUserId(process.env) : undefined;
+      const refreshConfig =
+        windowsUserId !== undefined
+          ? {
+              serviceUnitPath: platformCtx.unitPath,
+              programPath: process.execPath,
+              platform: platformCtx.platform,
+              profileName,
+              windowsUserId,
+            }
+          : {
+              serviceUnitPath: platformCtx.unitPath,
+              programPath: process.execPath,
+              platform: platformCtx.platform,
+              profileName,
+            };
+      await refreshServiceUnitIfLegacy(refreshConfig);
+    }
     const config = await loadConfigFromFile(opts.config);
     const ctrl = new AbortController();
     process.on('SIGINT', () => ctrl.abort());
