@@ -51,7 +51,7 @@ import { buildUpgradeDeps } from 'cli/wiring/upgrade-deps.ts';
 import { buildVersionString } from 'cli/wiring/version-string.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { configFilePath, logDir as defaultLogDir } from 'core/io/fs';
+import { configFilePath } from 'core/io/fs';
 import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
 import type { ProfileName } from 'core/io/fs/profile.types.ts';
 import { VALID_PROFILES } from 'core/io/fs/profile.types.ts';
@@ -108,13 +108,20 @@ program
     're-run setup even if a configuration already exists. Overwrites the stored ingestion key.',
     false,
   )
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
   .action(
     async (
       positionalApiKey: string | undefined,
-      opts: { apiKey?: string; installSource: string; start?: boolean; force?: boolean },
+      opts: {
+        apiKey?: string;
+        installSource: string;
+        start?: boolean;
+        force?: boolean;
+        profile?: string;
+      },
     ) => {
       const ctx = buildPlatformServiceContext(process.platform, process.execPath);
-      const profileCtx = buildProfileContext('prod');
+      const profileCtx = buildProfileContext(parseProfileName(opts.profile));
       const setupInputs = {
         platform: process.platform,
         programPath: process.execPath,
@@ -137,10 +144,11 @@ program
   .description(
     'Register the gateway as a managed service (launchd / systemd / Scheduled Task) and start the daemon. Auto-restarts on reboot. Requires a prior `setup`.',
   )
-  .action(async () => {
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
+  .action(async (opts: { profile?: string }) => {
     const ctx = buildPlatformServiceContext(process.platform, process.execPath);
     if (ctx === null) exitUnsupportedPlatform('start');
-    const profileCtx = buildProfileContext('prod');
+    const profileCtx = buildProfileContext(parseProfileName(opts.profile));
     const setupInputs = {
       platform: ctx.platform,
       programPath: process.execPath,
@@ -179,13 +187,14 @@ program
   .description(
     'Halt the running gateway daemon for this session. The service remains registered and will start again automatically on next reboot. Use `uninstall` to fully decommission.',
   )
-  .action(async () => {
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
+  .action(async (opts: { profile?: string }) => {
     const ctx = buildPlatformServiceContext(process.platform, process.execPath);
     if (ctx === null) exitUnsupportedPlatform('stop');
     const result = await runStop(
       buildStopDeps({
         serviceManager: ctx.serviceManager,
-        profileCtx: buildProfileContext('prod'),
+        profileCtx: buildProfileContext(parseProfileName(opts.profile)),
       }),
     );
     process.exit(result.exitCode);
@@ -195,10 +204,11 @@ program
   .command('restart')
   .alias('r')
   .description('Stop and start the gateway daemon. Equivalent to `stop` followed by `start`.')
-  .action(async () => {
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
+  .action(async (opts: { profile?: string }) => {
     const ctx = buildPlatformServiceContext(process.platform, process.execPath);
     if (ctx === null) exitUnsupportedPlatform('restart');
-    const profileCtx = buildProfileContext('prod');
+    const profileCtx = buildProfileContext(parseProfileName(opts.profile));
     const setupInputs = {
       platform: ctx.platform,
       programPath: process.execPath,
@@ -288,7 +298,8 @@ program
     'Start the gateway daemon in the foreground with the Stately browser visualizer enabled (only available in development mode).',
   )
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
-  .action(async (opts: { config?: string }) => {
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
+  .action(async (opts: { config?: string; profile?: string }) => {
     const isDevMode = existsSync(join(profileRootDir(), 'DEV_MODE'));
     if (!isDevMode) {
       console.error(
@@ -300,7 +311,7 @@ program
       process.exit(EXIT_CODE.error);
     }
 
-    const profileCtx = buildProfileContext('prod');
+    const profileCtx = buildProfileContext(parseProfileName(opts.profile));
     const config = await loadConfigFromFile(opts.config ?? profileCtx.configFilePath);
     const ctrl = new AbortController();
     process.on('SIGINT', () => ctrl.abort());
@@ -327,9 +338,10 @@ program
   )
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .option('--json', 'emit machine-readable JSON instead of the watch-mode UI', false)
-  .action(async (opts: { config?: string; json?: boolean }) => {
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
+  .action(async (opts: { config?: string; json?: boolean; profile?: string }) => {
     const ctx = buildPlatformServiceContext(process.platform, process.execPath);
-    const profileCtx = buildProfileContext('prod');
+    const profileCtx = buildProfileContext(parseProfileName(opts.profile));
     const statusContextInputs: Parameters<typeof buildStatusContext>[0] = {
       profileCtx,
       json: opts.json === true,
@@ -352,10 +364,12 @@ program
   .description(
     'Dry-run telemetry scanner that compiles records, file counts, and decompressed data sizes without updating buffers.',
   )
-  .action(async () => {
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
+  .action(async (opts: { profile?: string }) => {
+    const profileCtx = buildProfileContext(parseProfileName(opts.profile));
     const result = await runInspect({
       output: consoleOutput(),
-      configExists: () => Bun.file(configFilePath()).exists(),
+      configExists: () => Bun.file(profileCtx.configFilePath).exists(),
       gatewayVersion: PACKAGE_VERSION,
     });
     process.exit(result.exitCode);
@@ -373,9 +387,10 @@ program
     false,
   )
   .option('-y, --yes', 'skip the interactive confirmation prompt for `--reset`', false)
-  .action(async (opts: { reset?: boolean; yes?: boolean }) => {
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
+  .action(async (opts: { reset?: boolean; yes?: boolean; profile?: string }) => {
     const platform = process.platform;
-    const profileCtx = buildProfileContext('prod');
+    const profileCtx = buildProfileContext(parseProfileName(opts.profile));
     const unitPath = platformServiceUnitPath(platform, profileCtx.configDir);
     if (unitPath === null) exitUnsupportedPlatform('uninstall');
     const ctx = buildPlatformServiceContext(platform, process.execPath, profileCtx.configDir);
@@ -399,7 +414,8 @@ program
   .description(
     'Fetch the latest gateway release from GitHub and replace the running binary. On Windows, writes the new binary alongside the existing one (restart required to apply).',
   )
-  .action(async () => {
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
+  .action(async (_opts: { profile?: string }) => {
     const result = await runUpgrade(buildUpgradeDeps({ binaryPath: process.execPath }));
     process.exit(result.exitCode);
   });
@@ -434,6 +450,7 @@ program
     false,
   )
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
   .action(
     async (opts: {
       lines?: string;
@@ -443,12 +460,12 @@ program
       since?: string;
       raw?: boolean;
       config?: string;
+      profile?: string;
     }) => {
-      let dir = defaultLogDir();
+      const profileCtx = buildProfileContext(parseProfileName(opts.profile));
+      let dir = profileCtx.logDir;
       try {
-        const config = await loadConfigFromFile(
-          opts.config ?? buildProfileContext('prod').configFilePath,
-        );
+        const config = await loadConfigFromFile(opts.config ?? profileCtx.configFilePath);
         dir = config.logging.logDir;
       } catch {}
       const ctrl = new AbortController();
@@ -476,7 +493,9 @@ redaction
     'after the redacted output, print a summary of which rules matched and how many times',
     false,
   )
-  .action(async (filePath: string, opts: { showRules?: boolean }) => {
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
+  .action(async (filePath: string, opts: { showRules?: boolean; profile?: string }) => {
+    parseProfileName(opts.profile);
     const result = await runRedactionTest(
       buildRedactionTestDeps(),
       buildRedactionTestOptions(filePath, opts),
@@ -490,7 +509,9 @@ program
     'Replay a JSONL log of state-machine transitions and print the final state per machine. Useful for incident debugging.',
   )
   .option('--machine <name>', 'limit the replay to a single machine')
-  .action(async (logPath: string, opts: { machine?: string }) => {
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
+  .action(async (logPath: string, opts: { machine?: string; profile?: string }) => {
+    parseProfileName(opts.profile);
     const replayOptions: { logPath: string; machine?: string } = { logPath };
     if (opts.machine !== undefined) replayOptions.machine = opts.machine;
     const result = await runReplay(defaultReplayDeps, replayOptions);
@@ -509,7 +530,9 @@ redaction
     'emit raw JSON instead of the pretty table format (useful for piping to jq)',
     false,
   )
-  .action((opts: { categories?: boolean; category?: string; json?: boolean }) => {
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
+  .action((opts: { categories?: boolean; category?: string; json?: boolean; profile?: string }) => {
+    parseProfileName(opts.profile);
     const result = runRedactionList(buildRedactionListDeps(), buildRedactionListOptions(opts));
     process.exit(result.exitCode);
   });
