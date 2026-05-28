@@ -14,6 +14,16 @@ import {
   QUARANTINE_AT_INDEX_DDL,
   QUARANTINE_SOURCE_APP_INDEX_DDL,
   QUARANTINE_TABLE_DDL,
+  RECEIPT_ALTER_ADD_AGENT_SCHEMA_VERSION_DDL,
+  RECEIPT_ALTER_ADD_ATTEMPTS_DDL,
+  RECEIPT_ALTER_ADD_CAPTURED_AT_UTC_DDL,
+  RECEIPT_ALTER_ADD_GATEWAY_VERSION_DDL,
+  RECEIPT_ALTER_ADD_SHIPPED_BYTES_DDL,
+  RECEIPT_ALTER_ADD_SOURCE_INODE_DDL,
+  RECEIPT_ALTER_ADD_SOURCE_PATH_DDL,
+  RECEIPT_ALTER_ADD_USER_PROMPT_ADDED_AT_DDL,
+  RECEIPT_ALTER_ADD_USER_PROMPT_DDL,
+  RECEIPT_COLS,
   RECEIPT_DELIVERED_AT_INDEX_DDL,
   RECEIPT_PATH_HASH_INDEX_DDL,
   RECEIPT_TABLE_DDL,
@@ -45,6 +55,7 @@ function initializeSchema(db: Database): void {
   db.run(RECEIPT_TABLE_DDL);
   db.run(RECEIPT_PATH_HASH_INDEX_DDL);
   db.run(RECEIPT_DELIVERED_AT_INDEX_DDL);
+  migrateReceiptDisplayColumns(db);
   db.run(METADATA_TABLE_DDL);
   db.run(DAEMON_STATE_TABLE_DDL);
   migrateDaemonStateMachineSnapshots(db);
@@ -59,5 +70,35 @@ function migrateCursorVacuumColumns(db: Database): void {
   }
   if (!columnExists(db, BUFFER_TABLES.cursors, CURSOR_COLS.lastSeenPageCount)) {
     db.run(CURSOR_ALTER_ADD_LAST_SEEN_PAGE_COUNT_DDL);
+  }
+}
+
+function migrateReceiptDisplayColumns(db: Database): void {
+  if (!columnExists(db, BUFFER_TABLES.receipts, RECEIPT_COLS.userPrompt)) {
+    db.run(RECEIPT_ALTER_ADD_USER_PROMPT_DDL);
+  }
+  if (!columnExists(db, BUFFER_TABLES.receipts, RECEIPT_COLS.userPromptAddedAt)) {
+    db.run(RECEIPT_ALTER_ADD_USER_PROMPT_ADDED_AT_DDL);
+  }
+  if (!columnExists(db, BUFFER_TABLES.receipts, RECEIPT_COLS.sourcePath)) {
+    db.run(RECEIPT_ALTER_ADD_SOURCE_PATH_DDL);
+  }
+  if (!columnExists(db, BUFFER_TABLES.receipts, RECEIPT_COLS.agentSchemaVersion)) {
+    db.run(RECEIPT_ALTER_ADD_AGENT_SCHEMA_VERSION_DDL);
+  }
+  if (!columnExists(db, BUFFER_TABLES.receipts, RECEIPT_COLS.gatewayVersion)) {
+    db.run(RECEIPT_ALTER_ADD_GATEWAY_VERSION_DDL);
+  }
+  if (!columnExists(db, BUFFER_TABLES.receipts, RECEIPT_COLS.capturedAtUtc)) {
+    db.run(RECEIPT_ALTER_ADD_CAPTURED_AT_UTC_DDL);
+  }
+  if (!columnExists(db, BUFFER_TABLES.receipts, RECEIPT_COLS.attempts)) {
+    db.run(RECEIPT_ALTER_ADD_ATTEMPTS_DDL);
+  }
+  if (!columnExists(db, BUFFER_TABLES.receipts, RECEIPT_COLS.sourceInode)) {
+    db.run(RECEIPT_ALTER_ADD_SOURCE_INODE_DDL);
+  }
+  if (!columnExists(db, BUFFER_TABLES.receipts, RECEIPT_COLS.shippedBytes)) {
+    db.run(RECEIPT_ALTER_ADD_SHIPPED_BYTES_DDL);
   }
 }

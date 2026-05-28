@@ -67,6 +67,15 @@ export interface NewReceipt {
   watermarkTable: string | null;
   deliveredAt: string;
   idempotentOnServer: boolean;
+  userPrompt?: string | null;
+  userPromptAddedAt?: string | null;
+  sourcePath?: string | null;
+  agentSchemaVersion?: string | null;
+  gatewayVersion?: string | null;
+  capturedAtUtc?: string | null;
+  attempts?: number | null;
+  sourceInode?: number | null;
+  shippedBytes?: number | null;
 }
 
 export interface StoredReceipt extends NewReceipt {}

@@ -14,6 +14,15 @@ interface ReceiptRow {
   watermark_table: string | null;
   delivered_at: string;
   idempotent_on_server: number;
+  user_prompt: string | null;
+  user_prompt_added_at: string | null;
+  source_path: string | null;
+  agent_schema_version: string | null;
+  gateway_version: string | null;
+  captured_at_utc: string | null;
+  attempts: number | null;
+  source_inode: number | null;
+  shipped_bytes: number | null;
 }
 
 const INSERT_RECEIPT_SQL = `
@@ -26,8 +35,17 @@ const INSERT_RECEIPT_SQL = `
     ${RECEIPT_COLS.watermarkEnd},
     ${RECEIPT_COLS.watermarkTable},
     ${RECEIPT_COLS.deliveredAt},
-    ${RECEIPT_COLS.idempotentOnServer}
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ${RECEIPT_COLS.idempotentOnServer},
+    ${RECEIPT_COLS.userPrompt},
+    ${RECEIPT_COLS.userPromptAddedAt},
+    ${RECEIPT_COLS.sourcePath},
+    ${RECEIPT_COLS.agentSchemaVersion},
+    ${RECEIPT_COLS.gatewayVersion},
+    ${RECEIPT_COLS.capturedAtUtc},
+    ${RECEIPT_COLS.attempts},
+    ${RECEIPT_COLS.sourceInode},
+    ${RECEIPT_COLS.shippedBytes}
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 const GET_RECEIPT_SQL = `
@@ -54,6 +72,15 @@ export function insertReceipt(db: Database, receipt: NewReceipt): void {
     receipt.watermarkTable,
     receipt.deliveredAt,
     receipt.idempotentOnServer ? 1 : 0,
+    receipt.userPrompt ?? null,
+    receipt.userPromptAddedAt ?? null,
+    receipt.sourcePath ?? null,
+    receipt.agentSchemaVersion ?? null,
+    receipt.gatewayVersion ?? null,
+    receipt.capturedAtUtc ?? null,
+    receipt.attempts ?? null,
+    receipt.sourceInode ?? null,
+    receipt.shippedBytes ?? null,
   );
 }
 
@@ -83,5 +110,14 @@ function rowToReceipt(row: ReceiptRow): StoredReceipt {
     watermarkTable: row.watermark_table,
     deliveredAt: row.delivered_at,
     idempotentOnServer: row.idempotent_on_server !== 0,
+    userPrompt: row.user_prompt,
+    userPromptAddedAt: row.user_prompt_added_at,
+    sourcePath: row.source_path,
+    agentSchemaVersion: row.agent_schema_version,
+    gatewayVersion: row.gateway_version,
+    capturedAtUtc: row.captured_at_utc,
+    attempts: row.attempts,
+    sourceInode: row.source_inode,
+    shippedBytes: row.shipped_bytes,
   };
 }

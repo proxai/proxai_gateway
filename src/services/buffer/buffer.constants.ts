@@ -96,6 +96,15 @@ export const RECEIPT_COLS = {
   watermarkTable: 'watermark_table',
   deliveredAt: 'delivered_at',
   idempotentOnServer: 'idempotent_on_server',
+  userPrompt: 'user_prompt',
+  userPromptAddedAt: 'user_prompt_added_at',
+  sourcePath: 'source_path',
+  agentSchemaVersion: 'agent_schema_version',
+  gatewayVersion: 'gateway_version',
+  capturedAtUtc: 'captured_at_utc',
+  attempts: 'attempts',
+  sourceInode: 'source_inode',
+  shippedBytes: 'shipped_bytes',
 } as const;
 
 export const BUFFER_INDEXES = {
@@ -203,8 +212,62 @@ export const RECEIPT_TABLE_DDL = `
     ${RECEIPT_COLS.watermarkEnd} INTEGER NOT NULL,
     ${RECEIPT_COLS.watermarkTable} TEXT,
     ${RECEIPT_COLS.deliveredAt} TEXT NOT NULL,
-    ${RECEIPT_COLS.idempotentOnServer} INTEGER NOT NULL DEFAULT 0
+    ${RECEIPT_COLS.idempotentOnServer} INTEGER NOT NULL DEFAULT 0,
+    ${RECEIPT_COLS.userPrompt} TEXT,
+    ${RECEIPT_COLS.userPromptAddedAt} TEXT,
+    ${RECEIPT_COLS.sourcePath} TEXT,
+    ${RECEIPT_COLS.agentSchemaVersion} TEXT,
+    ${RECEIPT_COLS.gatewayVersion} TEXT,
+    ${RECEIPT_COLS.capturedAtUtc} TEXT,
+    ${RECEIPT_COLS.attempts} INTEGER,
+    ${RECEIPT_COLS.sourceInode} INTEGER,
+    ${RECEIPT_COLS.shippedBytes} INTEGER
   )
+`;
+
+export const RECEIPT_ALTER_ADD_USER_PROMPT_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.receipts}
+    ADD COLUMN ${RECEIPT_COLS.userPrompt} TEXT
+`;
+
+export const RECEIPT_ALTER_ADD_USER_PROMPT_ADDED_AT_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.receipts}
+    ADD COLUMN ${RECEIPT_COLS.userPromptAddedAt} TEXT
+`;
+
+export const RECEIPT_ALTER_ADD_SOURCE_PATH_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.receipts}
+    ADD COLUMN ${RECEIPT_COLS.sourcePath} TEXT
+`;
+
+export const RECEIPT_ALTER_ADD_AGENT_SCHEMA_VERSION_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.receipts}
+    ADD COLUMN ${RECEIPT_COLS.agentSchemaVersion} TEXT
+`;
+
+export const RECEIPT_ALTER_ADD_GATEWAY_VERSION_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.receipts}
+    ADD COLUMN ${RECEIPT_COLS.gatewayVersion} TEXT
+`;
+
+export const RECEIPT_ALTER_ADD_CAPTURED_AT_UTC_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.receipts}
+    ADD COLUMN ${RECEIPT_COLS.capturedAtUtc} TEXT
+`;
+
+export const RECEIPT_ALTER_ADD_ATTEMPTS_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.receipts}
+    ADD COLUMN ${RECEIPT_COLS.attempts} INTEGER
+`;
+
+export const RECEIPT_ALTER_ADD_SOURCE_INODE_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.receipts}
+    ADD COLUMN ${RECEIPT_COLS.sourceInode} INTEGER
+`;
+
+export const RECEIPT_ALTER_ADD_SHIPPED_BYTES_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.receipts}
+    ADD COLUMN ${RECEIPT_COLS.shippedBytes} INTEGER
 `;
 
 export const RECEIPT_PATH_HASH_INDEX_DDL = `
