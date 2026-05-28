@@ -27,7 +27,7 @@ test('buildTailOptions: returns empty when nothing set', () => {
 test('buildTailOptions: forwards each flag', () => {
   const out = buildTailOptions({
     lines: '100',
-    follow: true,
+    static: true,
     source: 'codex',
     level: 'warn',
     since: '1h',
@@ -35,7 +35,7 @@ test('buildTailOptions: forwards each flag', () => {
   });
   expect(out).toEqual({
     lines: 100,
-    follow: true,
+    static: true,
     source: 'codex',
     level: 'warn',
     since: '1h',
@@ -44,5 +44,5 @@ test('buildTailOptions: forwards each flag', () => {
 });
 
 test('buildTailOptions: omits flags that are false or undefined', () => {
-  expect(buildTailOptions({ follow: false, raw: false })).toEqual({});
+  expect(buildTailOptions({ static: false, raw: false })).toEqual({});
 });

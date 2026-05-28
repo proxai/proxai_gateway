@@ -18,7 +18,7 @@ export function buildTailDeps(inputs: BuildTailDepsInputs): TailCommandDeps {
 
 export function buildTailOptions(opts: {
   lines?: string;
-  follow?: boolean;
+  static?: boolean;
   source?: string;
   level?: string;
   since?: string;
@@ -26,7 +26,7 @@ export function buildTailOptions(opts: {
 }): TailCommandOptions {
   const out: TailCommandOptions = {};
   if (opts.lines !== undefined) out.lines = Number(opts.lines);
-  if (opts.follow === true) out.follow = true;
+  if (opts.static === true) out.static = true;
   if (opts.source !== undefined) out.source = opts.source;
   if (opts.level !== undefined) out.level = opts.level as LogLevel;
   if (opts.since !== undefined) out.since = opts.since;

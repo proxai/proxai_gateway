@@ -13,7 +13,7 @@ export interface TailCommandDeps {
 
 export interface TailCommandOptions {
   lines?: number;
-  follow?: boolean;
+  static?: boolean;
   source?: string;
   level?: LogLevel;
   since?: string;

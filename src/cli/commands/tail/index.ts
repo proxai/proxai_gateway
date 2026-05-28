@@ -31,6 +31,7 @@ export async function runTail(
     return { exitCode: EXIT_CODE.validationError };
   }
 
+  const isStatic = options.static === true;
   const lineLimit = options.lines ?? 50;
   const raw = options.raw === true;
   const emit = deps.emit;
@@ -41,7 +42,7 @@ export async function runTail(
 
   const initialExists = await Bun.file(path).exists();
   if (!initialExists) {
-    if (options.follow === true) {
+    if (!isStatic) {
       deps.output.info(chalk.dim('Waiting for daemon to start writing logs...'));
     } else if (!raw) {
       deps.output.info(chalk.dim('No logs yet. Start the daemon with `proxai-gateway start`.'));
@@ -54,7 +55,7 @@ export async function runTail(
     emit(raw ? line : formatLine(line));
   }
 
-  if (options.follow !== true) {
+  if (isStatic) {
     return { exitCode: EXIT_CODE.ok };
   }
 

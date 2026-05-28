@@ -28,12 +28,12 @@ async function seedTodaysLog(content: string): Promise<string> {
   return path;
 }
 
-test('emits last N lines when not following', async () => {
+test('emits last N lines in static mode', async () => {
   await seedTodaysLog([makeLine(30, 'a'), makeLine(30, 'b'), makeLine(30, 'c')].join('\n') + '\n');
   const lines: string[] = [];
   const result = await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { lines: 2, raw: true },
+    { lines: 2, raw: true, static: true },
   );
   expect(result.exitCode).toBe(0);
   expect(lines).toHaveLength(2);
@@ -41,11 +41,11 @@ test('emits last N lines when not following', async () => {
   expect(JSON.parse(requireDefined(lines[1])).msg).toBe('c');
 });
 
-test('returns 0 with no output when log file is missing', async () => {
+test('returns 0 with no output when log file is missing in static mode', async () => {
   const lines: string[] = [];
   const result = await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { lines: 50, raw: true },
+    { lines: 50, raw: true, static: true },
   );
   expect(result.exitCode).toBe(0);
   expect(lines).toEqual([]);
@@ -62,7 +62,7 @@ test('--source filters by source_app', async () => {
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { source: 'claude-code', raw: true },
+    { source: 'claude-code', raw: true, static: true },
   );
   expect(lines).toHaveLength(2);
   expect(lines.every((l) => JSON.parse(l).source_app === 'claude-code')).toBe(true);
@@ -80,7 +80,7 @@ test('--level filters out lines below threshold', async () => {
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { level: 'warn', raw: true },
+    { level: 'warn', raw: true, static: true },
   );
   expect(lines).toHaveLength(2);
   expect(lines.every((l) => JSON.parse(l).level >= 40)).toBe(true);
@@ -94,7 +94,7 @@ test('--since filters by time window', async () => {
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { since: '1h', raw: true },
+    { since: '1h', raw: true, static: true },
   );
   expect(lines).toHaveLength(1);
   expect(JSON.parse(requireDefined(lines[0])).msg).toBe('recent');
@@ -119,13 +119,13 @@ test('returns validationError on invalid --level', async () => {
   expect(result.exitCode).toBe(2);
 });
 
-test('--json passthrough emits raw lines unmodified', async () => {
+test('--raw passthrough emits raw lines unmodified', async () => {
   const raw = makeLine(30, 'hello', { source_app: 'cursor' });
   await seedTodaysLog(`${raw}\n`);
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { raw: true },
+    { raw: true, static: true },
   );
   expect(lines).toHaveLength(1);
   expect(lines[0]).toBe(raw);
@@ -136,7 +136,7 @@ test('without --json, applies pretty formatting', async () => {
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { raw: false },
+    { static: true, raw: false },
   );
   expect(lines).toHaveLength(1);
   expect(lines[0]).toContain('pretty-test');
@@ -144,7 +144,7 @@ test('without --json, applies pretty formatting', async () => {
   expect(lines[0]).toContain('INFO');
 });
 
-test('--follow emits new lines and stops on abort', async () => {
+test('watch mode emits new lines and stops on abort', async () => {
   await seedTodaysLog(`${makeLine(30, 'first')}\n`);
   const ctrl = new AbortController();
   const lines: string[] = [];
@@ -157,7 +157,7 @@ test('--follow emits new lines and stops on abort', async () => {
       abortSignal: ctrl.signal,
       pollIntervalMs: 1,
     },
-    { follow: true, raw: true },
+    { raw: true },
   );
   await Bun.sleep(10);
   await Bun.write(todaysLogPath(dir), `${makeLine(30, 'first')}\n${makeLine(30, 'second')}\n`);
@@ -169,19 +169,19 @@ test('--follow emits new lines and stops on abort', async () => {
   expect(lines.some((l) => JSON.parse(l).msg === 'second')).toBe(true);
 });
 
-test('--follow exits immediately when signal is already aborted', async () => {
+test('watch mode exits immediately when signal is already aborted', async () => {
   await seedTodaysLog(`${makeLine(30, 'first')}\n`);
   const ctrl = new AbortController();
   ctrl.abort();
   const lines: string[] = [];
   const result = await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l), abortSignal: ctrl.signal },
-    { follow: true, raw: true },
+    { raw: true },
   );
   expect(result.exitCode).toBe(0);
 });
 
-test('--follow swallows stat errors mid-stream when log file disappears', async () => {
+test('watch mode swallows stat errors mid-stream when log file disappears', async () => {
   await seedTodaysLog(`${makeLine(30, 'first')}\n`);
   const ctrl = new AbortController();
   const lines: string[] = [];
@@ -193,7 +193,7 @@ test('--follow swallows stat errors mid-stream when log file disappears', async 
       abortSignal: ctrl.signal,
       pollIntervalMs: 1,
     },
-    { follow: true, raw: true },
+    { raw: true },
   );
   await Bun.sleep(10);
   await rmRecursive(todaysLogPath(dir));
@@ -203,7 +203,7 @@ test('--follow swallows stat errors mid-stream when log file disappears', async 
   expect(result.exitCode).toBe(0);
 });
 
-test('--follow handles missing log file gracefully (exits cleanly on abort)', async () => {
+test('watch mode handles missing log file gracefully (exits cleanly on abort)', async () => {
   const ctrl = new AbortController();
   const lines: string[] = [];
   const promise = runTail(
@@ -214,7 +214,7 @@ test('--follow handles missing log file gracefully (exits cleanly on abort)', as
       abortSignal: ctrl.signal,
       pollIntervalMs: 1,
     },
-    { follow: true, raw: true },
+    { raw: true },
   );
   await Bun.sleep(20);
   ctrl.abort();
@@ -246,7 +246,7 @@ test('formatLine produces a colored, structured line for valid input', () => {
   expect(out).toContain('capture_id');
 });
 
-test('shows waiting-for-log message when --follow and log missing', async () => {
+test('shows waiting-for-log message in watch mode when log missing', async () => {
   const out = captureOutput();
   const lines: string[] = [];
   const ctrl = new AbortController();
@@ -259,26 +259,32 @@ test('shows waiting-for-log message when --follow and log missing', async () => 
       abortSignal: ctrl.signal,
       pollIntervalMs: 5,
     },
-    { follow: true, raw: true },
+    { raw: true },
   );
   expect(out.lines.some((l) => l.msg.includes('Waiting for daemon'))).toBe(true);
 });
 
-test('shows no-logs hint when not following and log missing in pretty mode', async () => {
+test('shows no-logs hint in static mode when log missing in pretty mode', async () => {
   const out = captureOutput();
   const lines: string[] = [];
-  await runTail({ output: out, logDir: dir, emit: (l) => lines.push(l) }, { lines: 50 });
+  await runTail(
+    { output: out, logDir: dir, emit: (l) => lines.push(l) },
+    { lines: 50, static: true },
+  );
   expect(out.lines.some((l) => l.msg.includes('No logs yet'))).toBe(true);
 });
 
-test('does not show no-logs hint in raw mode', async () => {
+test('does not show no-logs hint in static raw mode', async () => {
   const out = captureOutput();
   const lines: string[] = [];
-  await runTail({ output: out, logDir: dir, emit: (l) => lines.push(l) }, { lines: 50, raw: true });
+  await runTail(
+    { output: out, logDir: dir, emit: (l) => lines.push(l) },
+    { lines: 50, raw: true, static: true },
+  );
   expect(out.lines.some((l) => l.msg.includes('No logs yet'))).toBe(false);
 });
 
-test('appears-streaming message when log file is created during follow', async () => {
+test('appears-streaming message when log file is created during watch', async () => {
   const out = captureOutput();
   const lines: string[] = [];
   const ctrl = new AbortController();
@@ -297,7 +303,7 @@ test('appears-streaming message when log file is created during follow', async (
       abortSignal: ctrl.signal,
       pollIntervalMs: 10,
     },
-    { follow: true, raw: true },
+    { raw: true },
   );
   expect(out.lines.some((l) => l.msg.includes('Waiting for daemon'))).toBe(true);
   expect(out.lines.some((l) => l.msg.includes('Log file appeared'))).toBe(true);
@@ -385,7 +391,7 @@ test('parses different --since unit suffixes (s, m, h, d)', async () => {
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { since: '1d', raw: true },
+    { since: '1d', raw: true, static: true },
   );
   expect(lines).toHaveLength(1);
   expect(JSON.parse(requireDefined(lines[0])).msg).toBe('recent');
@@ -411,7 +417,7 @@ test('formatLine handles unknown level by falling through to numeric label', () 
   expect(out).toContain('25');
 });
 
-test('--follow resets read position when the log file rotates mid-loop', async () => {
+test('watch mode resets read position when the log file rotates mid-loop', async () => {
   const pathA = join(dir, 'rotA.log');
   const pathB = join(dir, 'rotB.log');
   await Bun.write(pathA, `${makeLine(30, 'pre-rotate')}\n`);
@@ -433,7 +439,7 @@ test('--follow resets read position when the log file rotates mid-loop', async (
       pathProvider,
       pollIntervalMs: 1,
     },
-    { follow: true, raw: true },
+    { raw: true },
   );
   await Bun.sleep(20);
 
@@ -451,7 +457,7 @@ test('skips malformed JSON lines silently', async () => {
   const lines: string[] = [];
   await runTail(
     { output: captureOutput(), logDir: dir, emit: (l) => lines.push(l) },
-    { raw: true },
+    { raw: true, static: true },
   );
   expect(lines).toHaveLength(1);
   expect(JSON.parse(requireDefined(lines[0])).msg).toBe('good');
