@@ -26,6 +26,7 @@ import {
   type BatchIdentity,
   type BatchLifecycleMachine,
 } from 'services/state-machines/batch-lifecycle';
+import { extractUserPrompt } from 'services/prompt-extract';
 import { buildRawRecordDTO } from 'services/uploader/build-dto.ts';
 import type { UploadOutcome, UploaderContext } from 'services/uploader/uploader.types.ts';
 
@@ -57,7 +58,21 @@ export async function uploadBatch(
   log?.debug({ event: 'upload.start', attempts: batch.attempts }, 'upload started');
   try {
     const result = await ctx.http.uploadRawRecord(dto);
-    markBatchDelivered(ctx.db, batch, { idempotentOnServer: result.idempotent });
+    let extracted;
+    try {
+      extracted = extractUserPrompt({
+        sourceApp: batch.sourceApp,
+        bodyFormat: batch.bodyFormat,
+        body: batch.body,
+      });
+    } catch {
+      extracted = { userPrompt: null, userPromptAddedAt: null };
+    }
+    markBatchDelivered(ctx.db, batch, {
+      idempotentOnServer: result.idempotent,
+      userPrompt: extracted.userPrompt,
+      userPromptAddedAt: extracted.userPromptAddedAt,
+    });
     lifecycle.send({
       type: 'ACCEPTED',
       idempotent: result.idempotent,
