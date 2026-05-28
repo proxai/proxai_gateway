@@ -1,23 +1,23 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-27T23:31:52.546Z",
-  "sourceHash": "0217d1a1c7f7e2260b5a9ee6bbdae5ae",
+  "generatedAt": "2026-05-28T09:29:33.520Z",
+  "sourceHash": "5deabbb6ec415c5503742bbf3392460b",
   "files": [
     {
       "path": "CLAUDE.md",
-      "hash": "a842de745a041ffe"
+      "hash": "9c0d6b66924cdeaf"
     },
     {
       "path": "AGENTS.md",
-      "hash": "484a459989c3095e"
+      "hash": "09f63c66fbc63979"
     },
     {
       "path": "GEMINI.md",
-      "hash": "954153a8c4f967af"
+      "hash": "e0a356520c10910e"
     },
     {
       "path": ".agent/AGENTS.md",
-      "hash": "0bcded1d30a2d155"
+      "hash": "c3051418c1eed379"
     },
     {
       "path": ".claude/rules/_always.md",
@@ -441,23 +441,63 @@
     },
     {
       "path": ".claude/knowledge/cli/commands-overview.md",
-      "hash": "06119784d1863cf0"
+      "hash": "c1b8e1e781f738e5"
     },
     {
       "path": ".cursor/knowledge/cli/commands-overview.md",
-      "hash": "06119784d1863cf0"
+      "hash": "c1b8e1e781f738e5"
     },
     {
       "path": ".codex/knowledge/cli/commands-overview.md",
-      "hash": "06119784d1863cf0"
+      "hash": "c1b8e1e781f738e5"
     },
     {
       "path": ".gemini/knowledge/cli/commands-overview.md",
-      "hash": "06119784d1863cf0"
+      "hash": "c1b8e1e781f738e5"
     },
     {
       "path": ".agent/knowledge/cli/commands-overview.md",
-      "hash": "06119784d1863cf0"
+      "hash": "c1b8e1e781f738e5"
+    },
+    {
+      "path": ".claude/knowledge/cli/dev-mode.md",
+      "hash": "a07036c55f09baf9"
+    },
+    {
+      "path": ".cursor/knowledge/cli/dev-mode.md",
+      "hash": "a07036c55f09baf9"
+    },
+    {
+      "path": ".codex/knowledge/cli/dev-mode.md",
+      "hash": "a07036c55f09baf9"
+    },
+    {
+      "path": ".gemini/knowledge/cli/dev-mode.md",
+      "hash": "a07036c55f09baf9"
+    },
+    {
+      "path": ".agent/knowledge/cli/dev-mode.md",
+      "hash": "a07036c55f09baf9"
+    },
+    {
+      "path": ".claude/knowledge/cli/doctor.md",
+      "hash": "2a422380770e24de"
+    },
+    {
+      "path": ".cursor/knowledge/cli/doctor.md",
+      "hash": "2a422380770e24de"
+    },
+    {
+      "path": ".codex/knowledge/cli/doctor.md",
+      "hash": "2a422380770e24de"
+    },
+    {
+      "path": ".gemini/knowledge/cli/doctor.md",
+      "hash": "2a422380770e24de"
+    },
+    {
+      "path": ".agent/knowledge/cli/doctor.md",
+      "hash": "2a422380770e24de"
     },
     {
       "path": ".claude/knowledge/cli/service-unit.md",
@@ -481,23 +521,23 @@
     },
     {
       "path": ".claude/knowledge/cli/wiring.md",
-      "hash": "a26d1d78fcc9d774"
+      "hash": "ac2802bdaee0c1d8"
     },
     {
       "path": ".cursor/knowledge/cli/wiring.md",
-      "hash": "a26d1d78fcc9d774"
+      "hash": "ac2802bdaee0c1d8"
     },
     {
       "path": ".codex/knowledge/cli/wiring.md",
-      "hash": "a26d1d78fcc9d774"
+      "hash": "ac2802bdaee0c1d8"
     },
     {
       "path": ".gemini/knowledge/cli/wiring.md",
-      "hash": "a26d1d78fcc9d774"
+      "hash": "ac2802bdaee0c1d8"
     },
     {
       "path": ".agent/knowledge/cli/wiring.md",
-      "hash": "a26d1d78fcc9d774"
+      "hash": "ac2802bdaee0c1d8"
     },
     {
       "path": ".claude/knowledge/conventions.md",
@@ -601,23 +641,23 @@
     },
     {
       "path": ".claude/knowledge/cross-platform/file-paths-per-platform.md",
-      "hash": "56f03caafad0a06f"
+      "hash": "f2e781c99d12e627"
     },
     {
       "path": ".cursor/knowledge/cross-platform/file-paths-per-platform.md",
-      "hash": "56f03caafad0a06f"
+      "hash": "f2e781c99d12e627"
     },
     {
       "path": ".codex/knowledge/cross-platform/file-paths-per-platform.md",
-      "hash": "56f03caafad0a06f"
+      "hash": "f2e781c99d12e627"
     },
     {
       "path": ".gemini/knowledge/cross-platform/file-paths-per-platform.md",
-      "hash": "56f03caafad0a06f"
+      "hash": "f2e781c99d12e627"
     },
     {
       "path": ".agent/knowledge/cross-platform/file-paths-per-platform.md",
-      "hash": "56f03caafad0a06f"
+      "hash": "f2e781c99d12e627"
     },
     {
       "path": ".claude/knowledge/cross-platform/permissions-per-platform.md",
@@ -761,23 +801,23 @@
     },
     {
       "path": ".claude/knowledge/release/auto-update-flow.md",
-      "hash": "a3c6c78688bcde53"
+      "hash": "59d3e63238a75c95"
     },
     {
       "path": ".cursor/knowledge/release/auto-update-flow.md",
-      "hash": "a3c6c78688bcde53"
+      "hash": "59d3e63238a75c95"
     },
     {
       "path": ".codex/knowledge/release/auto-update-flow.md",
-      "hash": "a3c6c78688bcde53"
+      "hash": "59d3e63238a75c95"
     },
     {
       "path": ".gemini/knowledge/release/auto-update-flow.md",
-      "hash": "a3c6c78688bcde53"
+      "hash": "59d3e63238a75c95"
     },
     {
       "path": ".agent/knowledge/release/auto-update-flow.md",
-      "hash": "a3c6c78688bcde53"
+      "hash": "59d3e63238a75c95"
     },
     {
       "path": ".claude/knowledge/release/build-and-publish.md",
@@ -1160,6 +1200,26 @@
       "hash": "7791dbed5e99d870"
     },
     {
+      "path": ".claude/knowledge/services/retention-and-stats.md",
+      "hash": "07e02d773e0c2a6a"
+    },
+    {
+      "path": ".cursor/knowledge/services/retention-and-stats.md",
+      "hash": "07e02d773e0c2a6a"
+    },
+    {
+      "path": ".codex/knowledge/services/retention-and-stats.md",
+      "hash": "07e02d773e0c2a6a"
+    },
+    {
+      "path": ".gemini/knowledge/services/retention-and-stats.md",
+      "hash": "07e02d773e0c2a6a"
+    },
+    {
+      "path": ".agent/knowledge/services/retention-and-stats.md",
+      "hash": "07e02d773e0c2a6a"
+    },
+    {
       "path": ".claude/knowledge/services/sentinels/dedup-stack.md",
       "hash": "e2a96ed5d3aeec85"
     },
@@ -1181,23 +1241,23 @@
     },
     {
       "path": ".claude/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "0b01a3d9d7afb2a1"
+      "hash": "dc74593690054d64"
     },
     {
       "path": ".cursor/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "0b01a3d9d7afb2a1"
+      "hash": "dc74593690054d64"
     },
     {
       "path": ".codex/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "0b01a3d9d7afb2a1"
+      "hash": "dc74593690054d64"
     },
     {
       "path": ".gemini/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "0b01a3d9d7afb2a1"
+      "hash": "dc74593690054d64"
     },
     {
       "path": ".agent/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "0b01a3d9d7afb2a1"
+      "hash": "dc74593690054d64"
     },
     {
       "path": ".claude/knowledge/services/sentinels/watermark-pattern.md",
