@@ -49,9 +49,8 @@ import { buildTailDeps, buildTailOptions } from 'cli/wiring/tail-deps.ts';
 import { buildUninstallDeps, buildUninstallOptions } from 'cli/wiring/uninstall-deps.ts';
 import { buildUpgradeDeps } from 'cli/wiring/upgrade-deps.ts';
 import { buildVersionString } from 'cli/wiring/version-string.ts';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { configFilePath } from 'core/io/fs';
+import { configFilePath, readDevModeSentinel } from 'core/io/fs';
 import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
 import type { ProfileName } from 'core/io/fs/profile.types.ts';
 import { VALID_PROFILES } from 'core/io/fs/profile.types.ts';
@@ -300,7 +299,7 @@ program
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
   .action(async (opts: { config?: string; profile?: string }) => {
-    const isDevMode = existsSync(join(profileRootDir(), 'DEV_MODE'));
+    const isDevMode = await readDevModeSentinel(join(profileRootDir(), 'DEV_MODE'));
     if (!isDevMode) {
       console.error(
         chalk.red(

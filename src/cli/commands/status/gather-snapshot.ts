@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
 import { profileRootDir } from 'core/io/fs/profile.ts';
 
 import {
@@ -146,7 +146,9 @@ export async function gatherStatusSnapshot(
     drain: daemonState,
   });
 
-  const isDevMode = existsSync(deps.devModeSentinelPath ?? join(profileRootDir(), 'DEV_MODE'));
+  const isDevMode = await readDevModeSentinel(
+    deps.devModeSentinelPath ?? join(profileRootDir(), 'DEV_MODE'),
+  );
 
   return {
     health,

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
+import { readBootId } from 'core/system';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -105,7 +106,8 @@ test('writing a sentinel file after boot updates the registry via fs.watch', asy
 });
 
 test('startDaemonActors initializes stately inspector when DEV_MODE is active and xstateInspect is true', async () => {
-  await writeFile(join(paths.configDir, 'DEV_MODE'), '');
+  const bootId = await readBootId();
+  await writeFile(join(paths.configDir, 'DEV_MODE'), JSON.stringify({ bootId }));
 
   let inspectCalled = false;
   await mock.module('@statelyai/inspect', () => {
@@ -132,7 +134,8 @@ test('startDaemonActors initializes stately inspector when DEV_MODE is active an
 });
 
 test('startDaemonActors logs a warning when stately inspector initialization throws', async () => {
-  await writeFile(join(paths.configDir, 'DEV_MODE'), '');
+  const bootId = await readBootId();
+  await writeFile(join(paths.configDir, 'DEV_MODE'), JSON.stringify({ bootId }));
 
   await mock.module('@statelyai/inspect', () => {
     return {

@@ -1,6 +1,6 @@
 import { createActor, type Actor, type AnyActor } from 'xstate';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
 import { daemonRootMachine } from 'services/state-machines/daemon-root';
 import { startEventRouter } from 'services/state-machines/event-router';
 import {
@@ -42,7 +42,7 @@ function buildSnapshotRegistry(actors: readonly NamedActor[]): SnapshotRegistry 
 }
 
 export async function startDaemonActors(input: DaemonActorsInput): Promise<DaemonActorsHandle> {
-  const isDevMode = existsSync(join(input.paths.configDir, 'DEV_MODE'));
+  const isDevMode = await readDevModeSentinel(join(input.paths.configDir, 'DEV_MODE'));
   let xstateInspect: NonNullable<Parameters<typeof createActor>[1]>['inspect'] = undefined;
 
   const shouldInspect = isDevMode && input.xstateInspect === true;
