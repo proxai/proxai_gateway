@@ -8,25 +8,27 @@ import { createDefaultSweep } from 'services/uninstall';
 import { consoleOutput } from 'cli/output.ts';
 import { inquirerPrompts } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager';
-import { configDir, configFilePath, logDir } from 'core/io/fs';
+import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 
 export interface BuildUninstallDepsInputs {
   platform: NodeJS.Platform;
   programPath: string;
   serviceUnitPath: string;
   serviceManager: ServiceManager;
+  profileCtx: ProfileContext;
 }
 
 export function buildUninstallDeps(inputs: BuildUninstallDepsInputs): UninstallCommandDeps {
+  const { profileCtx } = inputs;
   return {
     output: consoleOutput(),
     prompts: inquirerPrompts(),
-    configPath: configFilePath(),
-    configDir: configDir(),
-    logDir: logDir(),
+    configPath: profileCtx.configFilePath,
+    configDir: profileCtx.configDir,
+    logDir: profileCtx.logDir,
     serviceUnitPath: inputs.serviceUnitPath,
     serviceManager: inputs.serviceManager,
-    configExists: () => Bun.file(configFilePath()).exists(),
+    configExists: () => Bun.file(profileCtx.configFilePath).exists(),
     sweep: createDefaultSweep(),
     binaryRemover: createDefaultBinaryRemover(inputs.platform),
     pathCleaner: createDefaultShellPathCleaner(inputs.platform),

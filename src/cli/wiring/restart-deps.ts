@@ -3,20 +3,21 @@ import type { RestartCommandDeps } from 'cli/commands/restart.ts';
 import { consoleOutput } from 'cli/output.ts';
 import type { ServiceManager } from 'cli/service-manager';
 import type { ServiceUnitRecreateConfig } from 'cli/service-unit/writer.ts';
-import { configFilePath, sessionStoppedSentinelPath } from 'core/io/fs';
+import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 
 export interface BuildRestartDepsInputs {
   serviceManager: ServiceManager;
   serviceUnitRecreate: ServiceUnitRecreateConfig;
   invokeSetup: () => Promise<CommandResult>;
+  profileCtx: ProfileContext;
 }
 
 export function buildRestartDeps(inputs: BuildRestartDepsInputs): RestartCommandDeps {
   return {
     output: consoleOutput(),
-    configExists: () => Bun.file(configFilePath()).exists(),
+    configExists: () => Bun.file(inputs.profileCtx.configFilePath).exists(),
     serviceManager: inputs.serviceManager,
-    sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
+    sessionStoppedSentinelPath: inputs.profileCtx.sentinels.sessionStopped,
     invokeSetup: inputs.invokeSetup,
     serviceUnitRecreate: inputs.serviceUnitRecreate,
   };

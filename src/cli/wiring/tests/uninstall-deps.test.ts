@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import type { ServiceManager } from 'cli/service-manager';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
 import { buildUninstallDeps, buildUninstallOptions } from 'cli/wiring/uninstall-deps.ts';
 
 const sm = {
@@ -14,12 +15,15 @@ const sm = {
   runtimeInfo: async () => ({ pid: null, startedAt: null }),
 } satisfies ServiceManager;
 
+const profileCtx = buildProfileContext('prod');
+
 test('buildUninstallDeps: wires sweep + binaryRemover + pathCleaner + installDir', () => {
   const deps = buildUninstallDeps({
     platform: 'darwin',
     programPath: '/bin/p',
     serviceUnitPath: '/tmp/x.plist',
     serviceManager: sm,
+    profileCtx,
   });
   expect(deps.serviceManager).toBe(sm);
   expect(deps.serviceUnitPath).toBe('/tmp/x.plist');
@@ -37,6 +41,7 @@ test('buildUninstallDeps: works for all supported platforms', () => {
       programPath: '/bin/p',
       serviceUnitPath: '/tmp/x',
       serviceManager: sm,
+      profileCtx,
     });
     expect(deps.binaryRemover).toBeDefined();
     expect(deps.pathCleaner).toBeDefined();
@@ -57,6 +62,7 @@ test('buildUninstallDeps: configExists() resolves to a boolean', async () => {
     programPath: '/bin/p',
     serviceUnitPath: '/tmp/x',
     serviceManager: sm,
+    profileCtx,
   });
   await expect(deps.configExists()).resolves.toEqual(expect.any(Boolean));
 });

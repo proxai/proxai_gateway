@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 
 import type { ServiceManager } from 'cli/service-manager';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
 import { buildStopDeps } from 'cli/wiring/stop-deps.ts';
 
 const sm = {
@@ -14,8 +15,10 @@ const sm = {
   runtimeInfo: async () => ({ pid: null, startedAt: null }),
 } satisfies ServiceManager;
 
+const profileCtx = buildProfileContext('prod');
+
 test('buildStopDeps: returns deps with the provided service manager', () => {
-  const deps = buildStopDeps(sm);
+  const deps = buildStopDeps({ serviceManager: sm, profileCtx });
   expect(typeof deps.output.info).toBe('function');
   expect(deps.serviceManager).toBe(sm);
   expect(typeof deps.sessionStoppedSentinelPath).toBe('string');

@@ -140,13 +140,14 @@ program
   .action(async () => {
     const ctx = buildPlatformServiceContext(process.platform, process.execPath);
     if (ctx === null) exitUnsupportedPlatform('start');
+    const profileCtx = buildProfileContext('prod');
     const setupInputs = {
       platform: ctx.platform,
       programPath: process.execPath,
       serviceUnitPath: ctx.unitPath,
       serviceManager: ctx.serviceManager,
       env: process.env,
-      profileCtx: buildProfileContext('prod'),
+      profileCtx,
     };
     const result = await runStart(
       buildStartDeps({
@@ -163,9 +164,10 @@ program
             binaryPath: process.execPath,
             currentVersion: PACKAGE_VERSION,
             devMode: false,
-            loadConfig: () => loadConfigFromFile(buildProfileContext('prod').configFilePath),
+            loadConfig: () => loadConfigFromFile(profileCtx.configFilePath),
             exitProcess: () => process.exit(0),
           }),
+        profileCtx,
       }),
     );
     process.exit(result.exitCode);
@@ -180,7 +182,12 @@ program
   .action(async () => {
     const ctx = buildPlatformServiceContext(process.platform, process.execPath);
     if (ctx === null) exitUnsupportedPlatform('stop');
-    const result = await runStop(buildStopDeps(ctx.serviceManager));
+    const result = await runStop(
+      buildStopDeps({
+        serviceManager: ctx.serviceManager,
+        profileCtx: buildProfileContext('prod'),
+      }),
+    );
     process.exit(result.exitCode);
   });
 
@@ -191,13 +198,14 @@ program
   .action(async () => {
     const ctx = buildPlatformServiceContext(process.platform, process.execPath);
     if (ctx === null) exitUnsupportedPlatform('restart');
+    const profileCtx = buildProfileContext('prod');
     const setupInputs = {
       platform: ctx.platform,
       programPath: process.execPath,
       serviceUnitPath: ctx.unitPath,
       serviceManager: ctx.serviceManager,
       env: process.env,
-      profileCtx: buildProfileContext('prod'),
+      profileCtx,
     };
     const result = await runRestart(
       buildRestartDeps({
@@ -209,6 +217,7 @@ program
           process.env,
         ),
         invokeSetup: invokeSetupInteractive(setupInputs),
+        profileCtx,
       }),
     );
     process.exit(result.exitCode);
@@ -320,10 +329,12 @@ program
   .option('--json', 'emit machine-readable JSON instead of the watch-mode UI', false)
   .action(async (opts: { config?: string; json?: boolean }) => {
     const ctx = buildPlatformServiceContext(process.platform, process.execPath);
+    const profileCtx = buildProfileContext('prod');
     const statusContextInputs: Parameters<typeof buildStatusContext>[0] = {
+      profileCtx,
       json: opts.json === true,
       serviceManager: ctx?.serviceManager ?? null,
-      configPath: configFilePath(),
+      configPath: profileCtx.configFilePath,
     };
     if (opts.config !== undefined) statusContextInputs.configOverride = opts.config;
     const sCtx = await buildStatusContext(statusContextInputs);
@@ -364,9 +375,10 @@ program
   .option('-y, --yes', 'skip the interactive confirmation prompt for `--reset`', false)
   .action(async (opts: { reset?: boolean; yes?: boolean }) => {
     const platform = process.platform;
-    const unitPath = platformServiceUnitPath(platform);
+    const profileCtx = buildProfileContext('prod');
+    const unitPath = platformServiceUnitPath(platform, profileCtx.configDir);
     if (unitPath === null) exitUnsupportedPlatform('uninstall');
-    const ctx = buildPlatformServiceContext(platform, process.execPath);
+    const ctx = buildPlatformServiceContext(platform, process.execPath, profileCtx.configDir);
     if (ctx === null) exitUnsupportedPlatform('uninstall');
     const result = await runUninstall(
       buildUninstallDeps({
@@ -374,6 +386,7 @@ program
         programPath: process.execPath,
         serviceUnitPath: unitPath,
         serviceManager: ctx.serviceManager,
+        profileCtx,
       }),
       buildUninstallOptions(opts),
     );

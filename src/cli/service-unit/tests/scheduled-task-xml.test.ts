@@ -59,7 +59,7 @@ test('defaultScheduledTaskName equals constant', () => {
 });
 
 test('defaultScheduledTaskXmlPath ends with scheduled-task.xml', () => {
-  const p = defaultScheduledTaskXmlPath();
+  const p = defaultScheduledTaskXmlPath('/some/config/dir');
   expect(p.endsWith('scheduled-task.xml')).toBe(true);
 });
 

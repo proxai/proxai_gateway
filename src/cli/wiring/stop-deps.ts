@@ -1,12 +1,17 @@
 import type { StopCommandDeps } from 'cli/commands/stop.ts';
 import { consoleOutput } from 'cli/output.ts';
 import type { ServiceManager } from 'cli/service-manager';
-import { sessionStoppedSentinelPath } from 'core/io/fs';
+import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 
-export function buildStopDeps(serviceManager: ServiceManager): StopCommandDeps {
+export interface BuildStopDepsInputs {
+  serviceManager: ServiceManager;
+  profileCtx: ProfileContext;
+}
+
+export function buildStopDeps(inputs: BuildStopDepsInputs): StopCommandDeps {
   return {
     output: consoleOutput(),
-    serviceManager,
-    sessionStoppedSentinelPath: sessionStoppedSentinelPath(),
+    serviceManager: inputs.serviceManager,
+    sessionStoppedSentinelPath: inputs.profileCtx.sentinels.sessionStopped,
   };
 }

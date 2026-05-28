@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { ServiceManager } from 'cli/service-manager';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
 import { buildStatusContext } from 'cli/wiring/status-deps.ts';
 
 const sm = {
@@ -17,8 +18,11 @@ const sm = {
   runtimeInfo: async () => ({ pid: null, startedAt: null }),
 } satisfies ServiceManager;
 
+const profileCtx = buildProfileContext('prod');
+
 test('buildStatusContext: returns minimal deps and noop cleanup when config does not exist', async () => {
   const ctx = await buildStatusContext({
+    profileCtx,
     configPath: '/dev/null/proxai-no-such-config.toml',
     json: false,
     serviceManager: null,
@@ -30,6 +34,7 @@ test('buildStatusContext: returns minimal deps and noop cleanup when config does
 
 test('buildStatusContext: forwards json flag', async () => {
   const ctx = await buildStatusContext({
+    profileCtx,
     configPath: '/dev/null/proxai-no-such-config.toml',
     json: true,
     serviceManager: null,
@@ -40,6 +45,7 @@ test('buildStatusContext: forwards json flag', async () => {
 
 test('buildStatusContext: configExists() resolves false when no config', async () => {
   const ctx = await buildStatusContext({
+    profileCtx,
     configPath: '/dev/null/proxai-no-such.toml',
     json: false,
     serviceManager: null,
@@ -76,6 +82,7 @@ test('buildStatusContext: opens buffer and includes serviceManager when config f
     ].join('\n');
     await writeFile(cfgPath, minimalToml, 'utf8');
     const ctx = await buildStatusContext({
+      profileCtx,
       configPath: cfgPath,
       configOverride: cfgPath,
       json: true,
@@ -107,6 +114,7 @@ test('buildStatusContext: falls back to default buffer path when configOverride 
     const fallbackBuffer = join(dir, 'fallback.db');
     await writeFile(cfgPath, 'malformed = toml without sections', 'utf8');
     const ctx = await buildStatusContext({
+      profileCtx,
       configPath: cfgPath,
       defaultBufferPath: fallbackBuffer,
       json: false,
@@ -147,6 +155,7 @@ test('buildStatusContext: omits serviceManager when null', async () => {
     ].join('\n');
     await writeFile(cfgPath, minimalToml, 'utf8');
     const ctx = await buildStatusContext({
+      profileCtx,
       configPath: cfgPath,
       configOverride: cfgPath,
       json: false,

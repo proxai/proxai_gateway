@@ -3,6 +3,7 @@ import { expect, test } from 'bun:test';
 import type { CommandResult } from 'cli/cli.types.ts';
 import type { ServiceManager } from 'cli/service-manager';
 import type { ServiceUnitRecreateConfig } from 'cli/service-unit/writer.ts';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
 import { buildStartDeps } from 'cli/wiring/start-deps.ts';
 
 const sm = {
@@ -24,6 +25,7 @@ const recreate: ServiceUnitRecreateConfig = {
 
 const invokeSetup = (): Promise<CommandResult> => Promise.resolve({ exitCode: 0 });
 const runAutoUpgrade = (): Promise<void> => Promise.resolve();
+const profileCtx = buildProfileContext('prod');
 
 test('buildStartDeps: wires service manager, recreate, invokeSetup, runAutoUpgrade', () => {
   const deps = buildStartDeps({
@@ -31,6 +33,7 @@ test('buildStartDeps: wires service manager, recreate, invokeSetup, runAutoUpgra
     serviceUnitRecreate: recreate,
     invokeSetup,
     runAutoUpgrade,
+    profileCtx,
   });
   expect(deps.serviceManager).toBe(sm);
   expect(deps.serviceUnitRecreate).toBe(recreate);
@@ -46,6 +49,7 @@ test('buildStartDeps: configExists() resolves to a boolean', async () => {
     serviceUnitRecreate: recreate,
     invokeSetup,
     runAutoUpgrade,
+    profileCtx,
   });
   await expect(deps.configExists()).resolves.toEqual(expect.any(Boolean));
 });

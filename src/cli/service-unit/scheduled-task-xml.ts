@@ -1,7 +1,6 @@
 import { join } from 'node:path';
 
 import { WINDOWS_TASK_NAME } from 'cli/cli.constants.ts';
-import { configDir } from 'core/io/fs';
 
 export interface ScheduledTaskXmlInput {
   programPath: string;
@@ -67,8 +66,8 @@ export function buildScheduledTaskXml(input: ScheduledTaskXmlInput): string {
 `;
 }
 
-export function defaultScheduledTaskXmlPath(): string {
-  return join(configDir(), 'scheduled-task.xml');
+export function defaultScheduledTaskXmlPath(configDir: string): string {
+  return join(configDir, 'scheduled-task.xml');
 }
 
 export function defaultScheduledTaskName(): string {
