@@ -67,6 +67,9 @@ export function buildStatusJson(snapshot: StatusSnapshot): StatusJsonOutput {
     configured: true,
     isDevMode: snapshot.isDevMode,
     health: snapshot.health,
+    profileName: snapshot.profileName,
+    lastUploads: snapshot.lastUploads,
+    resyncCount: snapshot.resyncCount,
     sentinels: {
       authFailed: snapshot.authFailed,
       authFailedReason: snapshot.authFailedReason.length > 0 ? snapshot.authFailedReason : null,

@@ -73,7 +73,7 @@ async function runWatchStatus(
     output: deps.output,
     stdin,
     render,
-    gatherFrame: () => buildFrame(deps),
+    gatherFrame: () => buildDualFrame(deps, options),
     ...(options.intervalMs !== undefined ? { intervalMs: options.intervalMs } : {}),
     ...(options.clearScreen !== undefined ? { clearScreen: options.clearScreen } : {}),
   });
@@ -81,11 +81,34 @@ async function runWatchStatus(
   return { exitCode: EXIT_CODE.ok };
 }
 
-async function buildFrame(deps: StatusCommandDeps): Promise<RenderInputs> {
-  const exists = await deps.configExists();
+async function buildDualFrame(
+  deps: StatusCommandDeps,
+  options: StatusCommandOptions,
+): Promise<RenderInputs> {
   const isDevMode = await readDevModeSentinel(
     deps.devModeSentinelPath ?? join(profileRootDir(), 'DEV_MODE'),
   );
+
+  const showBoth = options.all === true || isDevMode;
+  const devDeps = options.devDeps;
+
+  if (showBoth && devDeps !== undefined) {
+    const [prodFrame, devFrame] = await Promise.all([
+      buildFrame(deps, isDevMode),
+      buildFrame(devDeps, isDevMode),
+    ]);
+    const combined: RenderInputs = {
+      ...prodFrame,
+      secondProfile: devFrame,
+    };
+    return combined;
+  }
+
+  return buildFrame(deps, isDevMode);
+}
+
+async function buildFrame(deps: StatusCommandDeps, isDevMode: boolean): Promise<RenderInputs> {
+  const exists = await deps.configExists();
   const isLocalBuild = isLocalBuildPath(deps.binaryPath);
   const devLike = isDevMode || isLocalBuild;
   const nowLocal = (deps.now ?? ((): Date => new Date()))();

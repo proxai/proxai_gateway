@@ -358,7 +358,8 @@ program
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .option('--json', 'emit machine-readable JSON instead of the watch-mode UI', false)
   .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
-  .action(async (opts: { config?: string; json?: boolean; profile?: string }) => {
+  .option('--all', 'show both prod and dev profiles side-by-side', false)
+  .action(async (opts: { config?: string; json?: boolean; profile?: string; all?: boolean }) => {
     const ctx = buildPlatformServiceContext(process.platform, process.execPath);
     const profileCtx = buildProfileContext(parseProfileName(opts.profile));
     const statusContextInputs: Parameters<typeof buildStatusContext>[0] = {
@@ -369,11 +370,25 @@ program
     };
     if (opts.config !== undefined) statusContextInputs.configOverride = opts.config;
     const sCtx = await buildStatusContext(statusContextInputs);
+    let devCleanup: (() => void) | null = null;
     try {
+      if (opts.all === true || godMode) {
+        const devProfileCtx = buildProfileContext('dev');
+        const devCtx = await buildStatusContext({
+          profileCtx: devProfileCtx,
+          json: opts.json === true,
+          serviceManager: ctx?.serviceManager ?? null,
+          configPath: devProfileCtx.configFilePath,
+        });
+        devCleanup = devCtx.cleanup;
+        sCtx.options.devDeps = devCtx.deps;
+      }
+      if (opts.all === true) sCtx.options.all = true;
       const result = await runStatus(sCtx.deps, sCtx.options);
       process.exit(result.exitCode);
     } finally {
       sCtx.cleanup();
+      if (devCleanup !== null) devCleanup();
     }
   });
 
@@ -443,12 +458,12 @@ program
   .command('tail', { hidden: !godMode })
   .alias('t')
   .description(
-    'Stream structured (ndjson) log entries from the active gateway log file. Pretty-prints by default; combine filters as needed.',
+    'Stream structured (ndjson) log entries from the active gateway log file. Defaults to live watch mode; use --static for one-shot output.',
   )
   .option('--lines <n>', 'number of trailing entries to print before applying filters', '50')
   .option(
-    '-f, --follow',
-    'keep the stream open and print new entries as they are written; exit with Ctrl-C',
+    '--static',
+    'one-shot output: print trailing lines and exit without watching for new entries',
     false,
   )
   .option(
@@ -473,7 +488,7 @@ program
   .action(
     async (opts: {
       lines?: string;
-      follow?: boolean;
+      static?: boolean;
       source?: string;
       level?: string;
       since?: string;

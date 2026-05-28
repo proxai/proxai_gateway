@@ -2,10 +2,12 @@ import type { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
 import { profileRootDir } from 'core/io/fs/profile.ts';
+import type { ProfileName } from 'core/io/fs/profile.types.ts';
 
 import {
   countByStatus,
   countCapturedConversations,
+  countIdempotentReceipts,
   countQuarantined,
   countsBySource,
   derivedCapturedBytes,
@@ -15,6 +17,8 @@ import {
   getMetadata,
   getMetadataWithFallback,
   METADATA_KEYS,
+  queryLastUploads,
+  queryResyncStats,
   readNumber,
   readNumberWithFallback,
   totalFailedBytes,
@@ -56,6 +60,7 @@ export function readShippedBySource(db: Database): UploadBySource {
 export async function gatherStatusSnapshot(
   deps: StatusCommandDeps,
   buffer: Database,
+  profileName: ProfileName = 'prod',
 ): Promise<StatusSnapshot> {
   const counts = countByStatus(buffer);
   const pendingBytes = totalPendingBytes(buffer);
@@ -72,6 +77,9 @@ export async function gatherStatusSnapshot(
   const shippedBySource = readShippedBySource(buffer);
   const lastSuccessAt = uploadStats.lastSuccessAt;
   const capturedBytes = derivedCapturedBytes(buffer, totalBytesShipped);
+  const idempotentCount = countIdempotentReceipts(buffer);
+  const lastUploads = queryLastUploads(buffer, 5);
+  const resyncStats = queryResyncStats(buffer);
 
   const captureCyclesTotal = readNumberWithFallback(
     buffer,
@@ -151,6 +159,7 @@ export async function gatherStatusSnapshot(
   );
 
   return {
+    profileName,
     health,
     isDevMode,
     authFailed,
@@ -178,12 +187,18 @@ export async function gatherStatusSnapshot(
     drainCyclesTotalDurationMs,
     totalBatchesShipped,
     totalBytesShipped,
+    capturedBytes,
+    uploadedBytes: totalBytesShipped,
+    idempotentCount,
     shippedBySource,
     lastSuccessAt,
     lastSuccessBatches: null,
     lastSuccessBytes: null,
     lastVersionCheckAt,
     latestKnownVersion,
+    lastUploads,
+    resyncCount: resyncStats.count,
+    lastResyncAt: resyncStats.lastRecoveredAt,
     runtime,
     cfg,
     now,

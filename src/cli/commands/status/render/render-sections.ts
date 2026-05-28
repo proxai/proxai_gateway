@@ -24,7 +24,10 @@ import {
   sectionDivider,
   subRowCountBytes,
 } from 'cli/commands/status/render/format-rows.ts';
+import type { LastUploadRow } from 'services/buffer';
 import type { StatusSnapshot } from 'cli/commands/status/status.types.ts';
+
+const PROMPT_SNIPPET_MAX = 80;
 
 const SOURCE_ORDER: readonly ('claude-code' | 'cursor' | 'codex' | 'gemini-cli')[] = [
   'claude-code',
@@ -322,4 +325,56 @@ function renderBinaryAgeLine(s: StatusSnapshot): string {
   if (safeDays >= pauseAfterDays) return `${chalk.red(`${safeDays.toString()} days`)}  ${tail}`;
   if (safeDays >= warnAfterDays) return `${chalk.yellow(`${safeDays.toString()} days`)}  ${tail}`;
   return `${safeDays.toString()} days  ${tail}`;
+}
+
+export function renderLastUploadsSection(s: StatusSnapshot): string[] {
+  if (s.lastUploads.length === 0) return [];
+  const lines: string[] = [sectionDivider('Last Uploads (last 12 months)')];
+
+  const capturedLabel = formatBytes(s.capturedBytes);
+  const uploadedLabel = `${s.counts.delivered.toString()} uploaded`;
+  const pendingLabel = `${s.counts.pending.toString()} pending`;
+  const summaryParts = [
+    `${chalk.bold(capturedLabel)} captured`,
+    `(${uploadedLabel}, ${pendingLabel})`,
+  ];
+  if (s.idempotentCount > 0) {
+    summaryParts.push(chalk.dim(`(${s.idempotentCount.toString()} re-sent)`));
+  }
+  lines.push(rowText('Summary', summaryParts.join('  ')));
+
+  for (const row of s.lastUploads) {
+    lines.push(renderLastUploadRow(row, s.now));
+  }
+
+  return lines;
+}
+
+function renderLastUploadRow(row: LastUploadRow, now: Date): string {
+  const when =
+    row.userPromptAddedAt !== null
+      ? formatRelative(row.userPromptAddedAt, { now })
+      : formatRelative(row.deliveredAt, { now });
+  const source = chalk.dim(row.sourceApp.padEnd(12));
+  const bytes =
+    row.shippedBytes !== null
+      ? chalk.dim(formatBytes(row.shippedBytes).padStart(8))
+      : chalk.dim('        ');
+  const prompt =
+    row.userPrompt !== null
+      ? chalk.dim(
+          row.userPrompt.length > PROMPT_SNIPPET_MAX
+            ? `${row.userPrompt.slice(0, PROMPT_SNIPPET_MAX)}…`
+            : row.userPrompt,
+        )
+      : '';
+  return `       ${when.padEnd(12)}  ${source}  ${bytes}  ${prompt}`;
+}
+
+export function renderResyncNote(s: StatusSnapshot): string[] {
+  if (s.resyncCount === 0) return [];
+  const lastStr =
+    s.lastResyncAt !== null ? formatTimeWithRelative(s.lastResyncAt, { now: s.now }) : '';
+  const note = `Re-synced with server: ${s.resyncCount.toString()} times, last ${lastStr}`;
+  return [`  ${chalk.dim(note)}`];
 }

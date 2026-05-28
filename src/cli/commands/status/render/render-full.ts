@@ -7,6 +7,8 @@ import {
   renderCaptureSection,
   renderHealthSection,
   renderHistorySection,
+  renderLastUploadsSection,
+  renderResyncNote,
   renderUploadSection,
 } from 'cli/commands/status/render/render-sections.ts';
 import type { RenderInputs } from 'cli/commands/status/render/render.types.ts';
@@ -18,6 +20,58 @@ const LOCAL_BUILD_BADGE = chalk.bgCyan.black(' LOCAL BUILD ');
 const FOOTER_HINT = 'Press q or Esc to quit';
 
 export function renderFullStatus(inputs: RenderInputs, deps: StatusCommandDeps): string {
+  if (inputs.secondProfile !== undefined) {
+    return renderDualStatus(inputs, inputs.secondProfile, deps);
+  }
+  return renderSingleStatus(inputs, deps);
+}
+
+function renderDualStatus(prod: RenderInputs, dev: RenderInputs, deps: StatusCommandDeps): string {
+  const prodBlock = renderProfileBlock(prod, deps, 'prod');
+  const devBlock = renderProfileBlock(dev, deps, 'dev');
+  return `${prodBlock}\n\n${devBlock}\n\n  ${dim(FOOTER_HINT)}`;
+}
+
+function renderProfileBlock(
+  inputs: RenderInputs,
+  deps: StatusCommandDeps,
+  profileLabel: string,
+): string {
+  const lines: string[] = [];
+  lines.push(renderHeaderLine(inputs, profileLabel));
+  if (inputs.isDevMode || inputs.isLocalBuild) {
+    lines.push(...renderDevBanner(inputs));
+  }
+  lines.push('');
+  lines.push(renderSummaryLine(inputs));
+  if (inputs.summary.hint !== null) {
+    lines.push(`     ${dim(inputs.summary.hint)}`);
+  }
+  if (inputs.snapshot !== null) {
+    lines.push(...renderCaptureSection(inputs.snapshot));
+    lines.push(...renderBufferSection(inputs.snapshot));
+    lines.push(...renderUploadSection(inputs.snapshot));
+    lines.push(...renderLastUploadsSection(inputs.snapshot));
+    lines.push(...renderResyncNote(inputs.snapshot));
+    lines.push(...renderHistorySection(inputs.snapshot));
+    const inferredAlive = inferDaemonAlive(
+      inputs.snapshot.drainLastCycleAt,
+      inputs.snapshot.captureLastCycleAt,
+      inputs.snapshot.now,
+    );
+    lines.push(
+      ...renderHealthSection({
+        s: inputs.snapshot,
+        currentVersion: deps.currentVersion ?? '',
+        inferredAlive,
+        isDevLike: inputs.isDevMode || inputs.isLocalBuild,
+      }),
+    );
+  }
+  return lines.join('\n');
+}
+
+function renderSingleStatus(inputs: RenderInputs, deps: StatusCommandDeps): string {
   const lines: string[] = [];
   lines.push(renderHeaderLine(inputs));
   if (inputs.isDevMode || inputs.isLocalBuild) {
@@ -32,6 +86,8 @@ export function renderFullStatus(inputs: RenderInputs, deps: StatusCommandDeps):
     lines.push(...renderCaptureSection(inputs.snapshot));
     lines.push(...renderBufferSection(inputs.snapshot));
     lines.push(...renderUploadSection(inputs.snapshot));
+    lines.push(...renderLastUploadsSection(inputs.snapshot));
+    lines.push(...renderResyncNote(inputs.snapshot));
     lines.push(...renderHistorySection(inputs.snapshot));
     const inferredAlive = inferDaemonAlive(
       inputs.snapshot.drainLastCycleAt,
@@ -52,12 +108,13 @@ export function renderFullStatus(inputs: RenderInputs, deps: StatusCommandDeps):
   return lines.join('\n');
 }
 
-function renderHeaderLine(inputs: RenderInputs): string {
+function renderHeaderLine(inputs: RenderInputs, profileLabel?: string): string {
   const version = inputs.version !== null ? ` ${dim(`v${inputs.version}`)}` : '';
   const dev = inputs.isDevMode ? ` ${DEV_BADGE}` : '';
   const local = inputs.isLocalBuild ? ` ${LOCAL_BUILD_BADGE}` : '';
   const ts = dim(formatLocalDateTime(inputs.nowLocal));
-  return `  ${chalk.bold(HEADER_LABEL)}${version}${dev}${local}    ${ts}`;
+  const profile = profileLabel !== undefined ? ` ${chalk.dim(`[${profileLabel}]`)}` : '';
+  return `  ${chalk.bold(HEADER_LABEL)}${version}${profile}${dev}${local}    ${ts}`;
 }
 
 function renderDevBanner(inputs: RenderInputs): string[] {

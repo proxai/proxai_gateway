@@ -2,8 +2,14 @@ import type { Database } from 'bun:sqlite';
 
 import type { OutputSink } from 'cli/cli.types.ts';
 import type { ServiceManager } from 'cli/service-manager';
-import type { CountsBySource, DaemonStateSnapshot, SourceCycleResult } from 'services/buffer';
+import type {
+  CountsBySource,
+  DaemonStateSnapshot,
+  LastUploadRow,
+  SourceCycleResult,
+} from 'services/buffer';
 import type { GatewayConfig } from 'services/config';
+import type { ProfileName } from 'core/io/fs/profile.types.ts';
 import type { SourceApp } from 'services/contract';
 
 import type { StatusHealth } from 'cli/commands/status/decorators.ts';
@@ -30,6 +36,8 @@ import type { ReadableInputStream } from 'cli/commands/status/key-handler.types.
 
 export interface StatusCommandOptions {
   json?: boolean;
+  all?: boolean;
+  devDeps?: StatusCommandDeps;
   stdin?: ReadableInputStream;
   intervalMs?: number;
   clearScreen?: boolean;
@@ -39,6 +47,9 @@ export interface StatusJsonOutput {
   configured: boolean;
   isDevMode: boolean;
   health: string;
+  profileName?: ProfileName;
+  lastUploads?: LastUploadRow[];
+  resyncCount?: number;
   sentinels: {
     authFailed: boolean;
     authFailedReason: string | null;
@@ -103,6 +114,7 @@ export interface StatusJsonOutput {
 }
 
 export interface StatusSnapshot {
+  profileName: ProfileName;
   health: StatusHealth;
   isDevMode: boolean;
   authFailed: boolean;
@@ -130,12 +142,18 @@ export interface StatusSnapshot {
   drainCyclesTotalDurationMs: number;
   totalBatchesShipped: number;
   totalBytesShipped: number;
+  capturedBytes: number;
+  uploadedBytes: number;
+  idempotentCount: number;
   shippedBySource: UploadBySource;
   lastSuccessAt: string | null;
   lastSuccessBatches: number | null;
   lastSuccessBytes: number | null;
   lastVersionCheckAt: string | null;
   latestKnownVersion: string | null;
+  lastUploads: LastUploadRow[];
+  resyncCount: number;
+  lastResyncAt: string | null;
   runtime: { isRunning: boolean; pid: number | null; startedAt: Date | null };
   cfg: GatewayConfig | null;
   now: Date;

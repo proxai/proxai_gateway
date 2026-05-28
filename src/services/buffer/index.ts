@@ -12,4 +12,5 @@ export * from 'services/buffer/quarantine.ts';
 export * from 'services/buffer/receipts.ts';
 export * from 'services/buffer/resync.ts';
 export * from 'services/buffer/stats.ts';
+export * from 'services/buffer/status-queries.ts';
 export * from 'services/buffer/vacuum-detect.ts';
