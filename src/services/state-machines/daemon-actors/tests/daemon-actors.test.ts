@@ -10,6 +10,10 @@ import { startDaemonActors } from 'services/state-machines/daemon-actors';
 import type { SentinelWatcherPaths } from 'services/state-machines/sentinel-watcher';
 import type { MinimalLogger } from 'core/log';
 
+mock.module('core/system/boot-id.ts', () => ({
+  readBootId: () => Promise.resolve('mock-boot-id-daemon-actors'),
+}));
+
 let dir: string;
 let paths: SentinelWatcherPaths;
 let buffer: Database;

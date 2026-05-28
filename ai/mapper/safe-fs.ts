@@ -26,7 +26,7 @@ export async function copyDirRecursive(src: string, dst: string): Promise<string
     const dp = join(dst, e.name);
     if (e.isDirectory()) {
       const sub = await copyDirRecursive(sp, dp);
-      out.push(...sub.map((s) => join(e.name, s)));
+      out.push(...sub.map((s) => join(e.name, s).replace(/\\/g, '/')));
     } else if (e.isFile()) {
       await mkdir(dirname(dp), { recursive: true });
       await copyFile(sp, dp);

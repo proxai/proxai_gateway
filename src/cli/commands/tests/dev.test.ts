@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test, mock } from 'bun:test';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { existsSync, unlinkSync } from 'node:fs';
@@ -7,6 +7,10 @@ import { captureOutput } from 'cli/output.ts';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { DevCommandDeps } from 'cli/commands/dev.ts';
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
+
+mock.module('core/system/boot-id.ts', () => ({
+  readBootId: () => Promise.resolve('mock-boot-id-dev-cmd'),
+}));
 
 const mockSentinelPath = join(tmpdir(), `DEV_MODE_CMD_TEST_${Math.random().toString(36).slice(2)}`);
 

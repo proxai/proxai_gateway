@@ -49,7 +49,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun run lint && bun run format:check",
-    "validate": "bun run lint:fix && bun run format && bun run typecheck && bun test && bun run build:darwin-arm64",
+    "validate": "bun run lint:fix && bun run format && bun run typecheck && bun run test && bun run build:darwin-arm64",
     "prepare": "husky || true",
     "build": "bun scripts/build.ts",
     "ai:sync": "bun run ai/mapper/index.ts",

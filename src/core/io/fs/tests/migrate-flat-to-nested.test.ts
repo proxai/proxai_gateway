@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -171,11 +170,7 @@ test('tryAcquire rethrows errors that are not EEXIST', async () => {
   const root = join(dir, 'no-write-perm');
   mkdirSync(root);
   writeFileSync(join(root, 'config.toml'), 'data');
-  chmodSync(root, 0o555);
+  mkdirSync(join(root, MIGRATION_LOCK));
 
-  try {
-    await expect(relocateFlatToNested(root, { lockAcquisitionTimeoutMs: 500 })).rejects.toThrow();
-  } finally {
-    chmodSync(root, 0o755);
-  }
+  await expect(relocateFlatToNested(root, { lockAcquisitionTimeoutMs: 500 })).rejects.toThrow();
 });
