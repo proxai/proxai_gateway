@@ -125,6 +125,7 @@ export interface DoctorSignals {
 export interface DoctorCommandOptions {
   readonly profile?: string | undefined;
   readonly output?: string | boolean | undefined;
+  readonly compact?: boolean;
 }
 
 export interface DoctorCommandDeps {

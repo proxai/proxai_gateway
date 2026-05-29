@@ -10,5 +10,6 @@ export interface RenderInputs {
   readonly binaryPath: string | null;
   readonly nowLocal: Date;
   readonly version: string | null;
+  readonly compact?: boolean;
   readonly secondProfile?: RenderInputs;
 }

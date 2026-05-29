@@ -5,6 +5,7 @@ import { rmRecursive } from 'core/io/fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { readBootId } from 'core/system/boot-id.ts';
 
 import {
   inferDaemonAlive,
@@ -191,6 +192,8 @@ test('JSON mode returns error when configured but buffer is undefined', async ()
 });
 
 test('watch mode renders the configured-but-buffer-unavailable summary', async () => {
+  const bootId = await readBootId();
+  await writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
   const out = captureOutput();
   buffer.close();
   const bufferlessDeps = { ...makeDeps({ output: out }) };
@@ -203,6 +206,8 @@ test('watch mode renders the configured-but-buffer-unavailable summary', async (
 });
 
 test('watch mode renders the full breakdown by default', async () => {
+  const bootId = await readBootId();
+  await writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
   setDaemonState(buffer, {
     lastCycleStartedAt: '2026-05-08T02:40:13.100Z',
     lastCycleCompletedAt: '2026-05-08T02:46:52.293Z',
@@ -226,6 +231,36 @@ test('watch mode renders the full breakdown by default', async () => {
   expect(all).toContain('Buffer');
   expect(all).toContain('Upload');
   expect(all).toContain('Health');
+});
+
+test('watch mode renders simplified compact status when compact option is true', async () => {
+  const bootId = await readBootId();
+  await writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
+  setDaemonState(buffer, {
+    lastCycleStartedAt: '2026-05-08T02:40:13.100Z',
+    lastCycleCompletedAt: '2026-05-08T02:46:52.293Z',
+    lastCycleDurationMs: 5000,
+    lastDrainAttempted: 1,
+    lastDrainAccepted: 1,
+    lastDrainRetriable: 0,
+    lastDrainFatal: 0,
+    lastDrainRecovered: 0,
+    lastUploadError: null,
+    lastConsecutiveRetriableBreak: false,
+    lastSourceCaptures: {
+      'claude-code': { filesProcessed: 1, capturedBatches: 1, capturedBytes: 100, errorsCount: 0 },
+    },
+  });
+  const out = captureOutput();
+  const result = await runStatus(makeDeps({ output: out }), { compact: true });
+  expect(result.exitCode).toBe(0);
+  const all = out.lines.map((l) => l.msg).join('\n');
+  expect(all).not.toContain('──  Capture  ──');
+  expect(all).not.toContain('──  Buffer  ──');
+  expect(all).not.toContain('──  Upload  ──');
+  expect(all).not.toContain('──  Health  ──');
+  expect(all).not.toContain('──  Resync  ──');
+  expect(all).toContain('App is');
 });
 
 test('JSON mode handles authFailed and bufferFull and sessionStopped sentinels', async () => {

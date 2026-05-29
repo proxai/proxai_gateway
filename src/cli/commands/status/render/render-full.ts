@@ -20,10 +20,85 @@ const LOCAL_BUILD_BADGE = chalk.bgCyan.black(' LOCAL BUILD ');
 const FOOTER_HINT = 'Press q or Esc to quit';
 
 export function renderFullStatus(inputs: RenderInputs, deps: StatusCommandDeps): string {
+  if (inputs.compact === true) {
+    return renderCompactStatus(inputs);
+  }
   if (inputs.secondProfile !== undefined) {
     return renderDualStatus(inputs, inputs.secondProfile, deps);
   }
   return renderSingleStatus(inputs, deps);
+}
+
+function cleanSummaryJargon(summary: RenderInputs['summary']): RenderInputs['summary'] {
+  let headline = summary.headline;
+  let hint = summary.hint;
+
+  // Headline replacements to strip daemon, background service, or sentinel jargon
+  if (
+    headline.includes('Background service is running') ||
+    headline.includes('Dev daemon active') ||
+    headline.includes('Dev daemon is running')
+  ) {
+    if (headline.includes('running locally')) {
+      headline = 'App is running locally.';
+    } else {
+      headline = 'App is running.';
+    }
+  } else if (
+    headline.includes('Background service is not running') ||
+    headline.includes('Dev daemon is not running')
+  ) {
+    headline = 'App is not running.';
+  } else if (headline.includes('Session stopped')) {
+    headline = 'App is stopped.';
+  } else if (headline.includes('Buffer almost full')) {
+    headline = headline.replace('Buffer almost full', 'System buffer is almost full');
+  }
+
+  // Hint replacements to simplify phrasing
+  if (hint !== null) {
+    if (hint.includes('dev daemon')) {
+      hint = hint.replace('Restart your dev daemon to resume.', 'Restart the app to resume.');
+    }
+    if (hint.includes('Reboot your machine or run `proxai-gateway start`')) {
+      hint = 'Run `proxai-gateway start` to resume.';
+    }
+    if (hint.includes('register with launchd/systemd')) {
+      hint = 'Run `proxai-gateway start` to enable auto-restart.';
+    }
+  }
+
+  return {
+    level: summary.level,
+    headline,
+    hint,
+  };
+}
+
+function renderCompactStatus(inputs: RenderInputs): string {
+  const lines: string[] = [];
+  const version = inputs.version !== null ? ` ${dim(`v${inputs.version}`)}` : '';
+  const ts = dim(formatLocalDateTime(inputs.nowLocal));
+  lines.push(`  ${chalk.bold(HEADER_LABEL)}${version}    ${ts}`);
+  lines.push('');
+
+  const cleanSummary = cleanSummaryJargon(inputs.summary);
+  const glyph = glyphForLevel(cleanSummary.level);
+  const color = colorForLevel(cleanSummary.level);
+  lines.push(`  ${glyph} ${chalk.bold(color(cleanSummary.headline))}`);
+  if (cleanSummary.hint !== null) {
+    lines.push(`     ${dim(cleanSummary.hint)}`);
+  }
+
+  if (inputs.snapshot !== null) {
+    // Only show last successful uploads and history all-time sections
+    lines.push(...renderLastUploadsSection(inputs.snapshot));
+    lines.push(...renderHistorySection(inputs.snapshot));
+  }
+
+  lines.push('');
+  lines.push(`  ${dim(FOOTER_HINT)}`);
+  return lines.join('\n');
 }
 
 function renderDualStatus(prod: RenderInputs, dev: RenderInputs, deps: StatusCommandDeps): string {

@@ -18,6 +18,9 @@ import { autoStartDaemon, writeServiceUnitIfNeeded } from 'cli/commands/setup/in
 import { acquireApiKey } from 'cli/commands/setup/key-flow.ts';
 import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup/setup.types.ts';
 import { verifyAndRegister } from 'cli/commands/setup/verify-and-register.ts';
+import { isLocalBuildPath } from 'cli/commands/status/local-build.ts';
+import { runUpgrade } from 'cli/commands/upgrade.ts';
+import { buildUpgradeDeps } from 'cli/wiring/upgrade-deps.ts';
 
 function maskKey(key: string): string {
   if (key.length <= 8) return '***';
@@ -30,6 +33,29 @@ export async function runSetup(
   deps: SetupCommandDeps,
   options: SetupCommandOptions = {},
 ): Promise<CommandResult> {
+  const isInstalled = await deps.configExists();
+  if (isInstalled) {
+    const isLocal =
+      isLocalBuildPath(deps.programPath) ||
+      deps.programPath.includes('src/main.ts') ||
+      deps.programPath.includes('src\\main.ts');
+    if (isLocal) {
+      deps.output.error(
+        "Re-installation blocked: A local development build is already installed. Please run 'proxai-gateway uninstall' first.",
+      );
+      return { exitCode: EXIT_CODE.error };
+    }
+    if (
+      options.force !== true &&
+      (options.apiKey === undefined || options.apiKey.trim().length === 0)
+    ) {
+      deps.output.info('Gateway is already installed. Redirecting smoothly to upgrade flow...');
+      const upgradeDeps = buildUpgradeDeps({ binaryPath: deps.programPath });
+      const upgradeFn = deps.runUpgrade ?? runUpgrade;
+      return upgradeFn(upgradeDeps, {});
+    }
+  }
+
   const machine = createActor(setupMachine);
   machine.start();
   machine.send({ type: 'CONSENT_ACCEPTED' });

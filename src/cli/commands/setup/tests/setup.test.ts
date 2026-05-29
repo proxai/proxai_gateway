@@ -177,6 +177,7 @@ function deps(control: MockHttpControl): Parameters<typeof runSetup>[0] {
     readMachineUuid: async () => TEST_MACHINE_UUID,
     now: () => '2026-04-29T10:42:00.123Z',
     platform: 'linux',
+    runUpgrade: async () => ({ exitCode: 0 }),
   };
 }
 
@@ -483,28 +484,37 @@ test('aborts when re-entry does not match (existing config preserved)', async ()
   expect(config.account.apiKey).toBe(VALID_KEY);
 });
 
-test('without --api-key or --force, existing config triggers a guided exit (alreadyInstalled)', async () => {
+test('setup with existing config and production build path redirects to upgrade flow', async () => {
   await writeExistingConfig();
   const control = newControl();
   const out = captureOutput();
   const d = { ...deps(control), output: out };
   const result = await runSetup(d, {});
-  expect(result.exitCode).toBe(5);
+  expect(result.exitCode).toBe(0);
   expect(control.verifyCalls).toBe(0);
-  expect(out.lines.some((l) => l.msg.includes('already configured'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('--force'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('uninstall --reset'))).toBe(true);
+  expect(
+    out.lines.some(
+      (l) =>
+        l.level === 'info' &&
+        l.msg.includes('Gateway is already installed. Redirecting smoothly to upgrade flow...'),
+    ),
+  ).toBe(true);
 });
 
-test('guided exit falls back to a generic message when the existing config fails to parse', async () => {
+test('redirects to upgrade flow even when existing config fails to parse', async () => {
   await Bun.write(configPath, 'not = [valid] toml }}}');
   const control = newControl();
   const out = captureOutput();
   const d = { ...deps(control), output: out };
   const result = await runSetup(d, {});
-  expect(result.exitCode).toBe(5);
-  expect(out.lines.some((l) => l.msg.includes('already configured'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('host_id'))).toBe(false);
+  expect(result.exitCode).toBe(0);
+  expect(
+    out.lines.some(
+      (l) =>
+        l.level === 'info' &&
+        l.msg.includes('Gateway is already installed. Redirecting smoothly to upgrade flow...'),
+    ),
+  ).toBe(true);
 });
 
 test('preserves installedAt and installSource on replace; rederives host_id from same user', async () => {
@@ -770,14 +780,14 @@ test('clears session-stopped sentinel before starting (when sentinel path suppli
   expect(await Bun.file(sentinelPath).exists()).toBe(false);
 });
 
-test('setup with existing config and no args auto-starts when daemon is down', async () => {
+test('setup with existing config and same api-key auto-starts when daemon is down', async () => {
   await writeExistingConfig();
   const control = newControl();
   const sm = fakeServiceManager();
   sm.isRunning = async () => false;
   const out = captureOutput();
   const d = { ...deps(control), output: out, serviceManager: sm };
-  const result = await runSetup(d, {});
+  const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
   expect(sm.calls.start).toBe(1);
   expect(out.lines.some((l) => l.msg.includes('Daemon is not running — starting it now'))).toBe(
@@ -785,14 +795,14 @@ test('setup with existing config and no args auto-starts when daemon is down', a
   );
 });
 
-test('setup with existing config and no args reports running when daemon is up', async () => {
+test('setup with existing config and same api-key reports running when daemon is up', async () => {
   await writeExistingConfig();
   const control = newControl();
   const sm = fakeServiceManager();
   sm.isRunning = async () => true;
   const out = captureOutput();
   const d = { ...deps(control), output: out, serviceManager: sm };
-  const result = await runSetup(d, {});
+  const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(5);
   expect(sm.calls.start).toBe(0);
   expect(out.lines.some((l) => l.msg.includes('Daemon is running'))).toBe(true);
@@ -848,4 +858,46 @@ test('setup with different api-key and user accepting replace runs full replace 
   expect(control.verifyCalls).toBe(1);
   const updated = await loadConfigFromFile(configPath);
   expect(updated.account.apiKey).toBe(NEW_KEY);
+});
+
+test('setup with existing config and local build path rejects with error', async () => {
+  const control = newControl();
+  const out = captureOutput();
+  const d = {
+    ...deps(control),
+    output: out,
+    programPath: '/workspace/dist/proxai-gateway',
+    configExists: async () => true,
+  };
+  const result = await runSetup(d, {});
+  expect(result.exitCode).toBe(1);
+  expect(
+    out.lines.some(
+      (l) =>
+        l.level === 'error' &&
+        l.msg.includes(
+          "Re-installation blocked: A local development build is already installed. Please run 'proxai-gateway uninstall' first.",
+        ),
+    ),
+  ).toBe(true);
+});
+
+test('setup with existing config and production build path redirects to upgrade', async () => {
+  const control = newControl();
+  const out = captureOutput();
+  const d = {
+    ...deps(control),
+    output: out,
+    programPath: '/usr/local/bin/proxai-gateway',
+    configExists: async () => true,
+  };
+  const result = await runSetup(d, {});
+  expect(result.exitCode).toBe(0);
+  expect(
+    out.lines.some(
+      (l) =>
+        l.level === 'info' &&
+        l.msg.includes('Gateway is already installed. Redirecting smoothly to upgrade flow...'),
+    ),
+  ).toBe(true);
 });

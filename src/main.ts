@@ -77,7 +77,8 @@ program
     }),
     '-v, --version',
     'output the version and install source',
-  );
+  )
+  .option('--compact', 'simplified regular user view', false);
 
 function exitUnsupportedPlatform(commandName: string): never {
   console.error(`unsupported platform for ${commandName}: ${process.platform}`);
@@ -369,38 +370,49 @@ program
   .option('--json', 'emit machine-readable JSON instead of the watch-mode UI', false)
   .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
   .option('--all', 'show both prod and dev profiles side-by-side', false)
-  .action(async (opts: { config?: string; json?: boolean; profile?: string; all?: boolean }) => {
-    const ctx = buildPlatformServiceContext(process.platform, process.execPath);
-    const profileCtx = buildProfileContext(parseProfileName(opts.profile));
-    const statusContextInputs: Parameters<typeof buildStatusContext>[0] = {
-      profileCtx,
-      json: opts.json === true,
-      serviceManager: ctx?.serviceManager ?? null,
-      configPath: profileCtx.configFilePath,
-    };
-    if (opts.config !== undefined) statusContextInputs.configOverride = opts.config;
-    const sCtx = await buildStatusContext(statusContextInputs);
-    let devCleanup: (() => void) | null = null;
-    try {
-      if (opts.all === true || isDevMode) {
-        const devProfileCtx = buildProfileContext('dev');
-        const devCtx = await buildStatusContext({
-          profileCtx: devProfileCtx,
-          json: opts.json === true,
-          serviceManager: ctx?.serviceManager ?? null,
-          configPath: devProfileCtx.configFilePath,
-        });
-        devCleanup = devCtx.cleanup;
-        sCtx.options.devDeps = devCtx.deps;
+  .option('--compact', 'simplified regular user view', false)
+  .action(
+    async (opts: {
+      config?: string;
+      json?: boolean;
+      profile?: string;
+      all?: boolean;
+      compact?: boolean;
+    }) => {
+      const compactMode = opts.compact === true || program.opts().compact === true;
+      const ctx = buildPlatformServiceContext(process.platform, process.execPath);
+      const profileCtx = buildProfileContext(parseProfileName(opts.profile));
+      const statusContextInputs: Parameters<typeof buildStatusContext>[0] = {
+        profileCtx,
+        json: opts.json === true,
+        serviceManager: ctx?.serviceManager ?? null,
+        configPath: profileCtx.configFilePath,
+      };
+      if (opts.config !== undefined) statusContextInputs.configOverride = opts.config;
+      const sCtx = await buildStatusContext(statusContextInputs);
+      let devCleanup: (() => void) | null = null;
+      try {
+        if ((opts.all === true || isDevMode) && !compactMode) {
+          const devProfileCtx = buildProfileContext('dev');
+          const devCtx = await buildStatusContext({
+            profileCtx: devProfileCtx,
+            json: opts.json === true,
+            serviceManager: ctx?.serviceManager ?? null,
+            configPath: devProfileCtx.configFilePath,
+          });
+          devCleanup = devCtx.cleanup;
+          sCtx.options.devDeps = devCtx.deps;
+        }
+        if (opts.all === true) sCtx.options.all = true;
+        sCtx.options.compact = compactMode;
+        const result = await runStatus(sCtx.deps, sCtx.options);
+        process.exit(result.exitCode);
+      } finally {
+        sCtx.cleanup();
+        if (devCleanup !== null) devCleanup();
       }
-      if (opts.all === true) sCtx.options.all = true;
-      const result = await runStatus(sCtx.deps, sCtx.options);
-      process.exit(result.exitCode);
-    } finally {
-      sCtx.cleanup();
-      if (devCleanup !== null) devCleanup();
-    }
-  });
+    },
+  );
 
 program
   .command('inspect', { hidden: !isDevMode })
@@ -595,6 +607,7 @@ program
   .option('--pending', 'show queued records not yet uploaded', false)
   .option('--lines <n>', 'number of records to display', '20')
   .option('--profile <name>', 'profile to query (prod | dev)')
+  .option('--compact', 'simplified regular user view', false)
   .action(
     async (opts: {
       static?: boolean;
@@ -605,7 +618,9 @@ program
       pending?: boolean;
       lines?: string;
       profile?: string;
+      compact?: boolean;
     }) => {
+      const compactMode = opts.compact === true || program.opts().compact === true;
       const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
       const profileName = parseProfileName(opts.profile ?? defaultProfile);
       const profileCtx = buildProfileContext(profileName);
@@ -618,6 +633,7 @@ program
         const safeLines = Number.isFinite(parsedLines) ? parsedLines : 20;
         const result = await runLogs(deps, {
           lines: safeLines,
+          compact: compactMode,
           ...(opts.static === true ? { static: true as const } : {}),
           ...(opts.json === true ? { json: true as const } : {}),
           ...(opts.error === true ? { error: true as const } : {}),
@@ -640,7 +656,9 @@ program
     '-o, --output [path]',
     'Output diagnostic report to an HTML file (absolute or relative, default: Desktop)',
   )
-  .action(async (opts: { profile?: string; output?: string | boolean }) => {
+  .option('--compact', 'simplified regular user view', false)
+  .action(async (opts: { profile?: string; output?: string | boolean; compact?: boolean }) => {
+    const compactMode = opts.compact === true || program.opts().compact === true;
     const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
     const profileName = parseProfileName(opts.profile ?? defaultProfile);
     const profileCtx = buildProfileContext(profileName);
@@ -654,6 +672,7 @@ program
     const result = await runDoctor(buildDoctorDeps({ serviceManager, platform, profileCtx }), {
       profile: opts.profile,
       output: opts.output,
+      compact: compactMode,
     });
     process.exit(result.exitCode);
   });

@@ -4,25 +4,33 @@ import type {
 } from 'cli/commands/status/unified-summary.types.ts';
 
 export function deriveUnifiedSummary(inputs: UnifiedSummaryInputs): UnifiedStatusSummary {
+  const isDevProfile = inputs.profileName === 'dev';
+
   if (!inputs.configured) {
     return {
       level: 'inactive',
       headline: 'Not set up yet.',
-      hint: 'Run `proxai-gateway setup` to connect your account.',
+      hint: isDevProfile
+        ? 'Run `proxai-gateway setup --profile dev` to connect your account.'
+        : 'Run `proxai-gateway setup` to connect your account.',
     };
   }
   if (inputs.authFailed) {
     return {
       level: 'error',
       headline: 'Account authentication failed.',
-      hint: 'Run `proxai-gateway setup --force` to reconfigure your account.',
+      hint: isDevProfile
+        ? 'Run `proxai-gateway setup --profile dev --force` to reconfigure your account.'
+        : 'Run `proxai-gateway setup --force` to reconfigure your account.',
     };
   }
   if (inputs.sessionStopped) {
     return {
       level: 'warning',
-      headline: 'Account configured. Session stopped for this boot.',
-      hint: inputs.isDevMode
+      headline: isDevProfile
+        ? 'Account configured. Dev daemon stopped for this boot.'
+        : 'Account configured. Session stopped for this boot.',
+      hint: isDevProfile
         ? 'Restart your dev daemon to resume.'
         : 'Reboot your machine or run `proxai-gateway start` to resume.',
     };
@@ -39,7 +47,7 @@ export function deriveUnifiedSummary(inputs: UnifiedSummaryInputs): UnifiedStatu
     if (inputs.daemonInferredAlive) {
       const age = formatLastCycleAge(inputs.daemonLastCycleAt);
       const agePrefix = age === null ? '' : `Last cycle ${age} · `;
-      if (inputs.isDevMode) {
+      if (isDevProfile) {
         return {
           level: 'ok',
           headline: 'Dev daemon active — running locally.',
@@ -52,7 +60,7 @@ export function deriveUnifiedSummary(inputs: UnifiedSummaryInputs): UnifiedStatu
         hint: `${agePrefix}Run \`proxai-gateway start\` to register with launchd/systemd for auto-restart.`,
       };
     }
-    if (inputs.isDevMode) {
+    if (isDevProfile) {
       return {
         level: 'warning',
         headline: 'Account configured. Dev daemon is not running.',
@@ -67,7 +75,9 @@ export function deriveUnifiedSummary(inputs: UnifiedSummaryInputs): UnifiedStatu
   }
   return {
     level: 'ok',
-    headline: 'Account configured. Background service is running.',
+    headline: isDevProfile
+      ? 'Account configured. Dev daemon is running.'
+      : 'Account configured. Background service is running.',
     hint: null,
   };
 }

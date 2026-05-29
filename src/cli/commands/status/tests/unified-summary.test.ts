@@ -77,3 +77,51 @@ test('session stopped state is below auth failure', () => {
   expect(s.level).toBe('warning');
   expect(s.headline).toContain('stopped');
 });
+
+test('dev profile: not configured returns inactive level with dev setup hint', () => {
+  const s = deriveUnifiedSummary({ ...BASE, configured: false, profileName: 'dev' });
+  expect(s.level).toBe('inactive');
+  expect(s.headline).toContain('Not set up');
+  expect(s.hint).toContain('--profile dev');
+});
+
+test('dev profile: auth failure returns error level with dev setup force hint', () => {
+  const s = deriveUnifiedSummary({ ...BASE, authFailed: true, profileName: 'dev' });
+  expect(s.level).toBe('error');
+  expect(s.headline).toContain('authentication');
+  expect(s.hint).toContain('--profile dev --force');
+});
+
+test('dev profile: session stopped returns dev-specific headline and hint', () => {
+  const s = deriveUnifiedSummary({ ...BASE, sessionStopped: true, profileName: 'dev' });
+  expect(s.level).toBe('warning');
+  expect(s.headline).toContain('Dev daemon stopped');
+  expect(s.hint).toContain('Restart your dev daemon');
+});
+
+test('dev profile: daemon active (inferred alive) returns dev-specific active headline', () => {
+  const recent = new Date(Date.now() - 8_000).toISOString();
+  const s = deriveUnifiedSummary({
+    ...BASE,
+    daemonRunning: false,
+    daemonInferredAlive: true,
+    daemonLastCycleAt: recent,
+    profileName: 'dev',
+  });
+  expect(s.level).toBe('ok');
+  expect(s.headline).toContain('Dev daemon active');
+  expect(s.hint).toContain('Stop with Ctrl-C');
+});
+
+test('dev profile: daemon not running returns dev-specific warning', () => {
+  const s = deriveUnifiedSummary({ ...BASE, daemonRunning: false, profileName: 'dev' });
+  expect(s.level).toBe('warning');
+  expect(s.headline).toContain('Dev daemon is not running');
+  expect(s.hint).toContain('Start it with');
+});
+
+test('dev profile: healthy state returns dev-specific running headline', () => {
+  const s = deriveUnifiedSummary({ ...BASE, profileName: 'dev' });
+  expect(s.level).toBe('ok');
+  expect(s.headline).toContain('Dev daemon is running');
+});

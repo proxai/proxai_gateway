@@ -89,13 +89,13 @@ async function buildDualFrame(
     deps.devModeSentinelPath ?? join(profileRootDir(), 'DEV_MODE'),
   );
 
-  const showBoth = options.all === true || isDevMode;
+  const showBoth = (options.all === true || isDevMode) && options.compact !== true;
   const devDeps = options.devDeps;
 
   if (showBoth && devDeps !== undefined) {
     const [prodFrame, devFrame] = await Promise.all([
-      buildFrame(deps, isDevMode),
-      buildFrame(devDeps, isDevMode),
+      buildFrame(deps, isDevMode, 'prod', options.compact),
+      buildFrame(devDeps, isDevMode, 'dev', options.compact),
     ]);
     const combined: RenderInputs = {
       ...prodFrame,
@@ -104,10 +104,15 @@ async function buildDualFrame(
     return combined;
   }
 
-  return buildFrame(deps, isDevMode);
+  return buildFrame(deps, isDevMode, 'prod', options.compact);
 }
 
-async function buildFrame(deps: StatusCommandDeps, isDevMode: boolean): Promise<RenderInputs> {
+async function buildFrame(
+  deps: StatusCommandDeps,
+  isDevMode: boolean,
+  profileName: 'prod' | 'dev',
+  compact?: boolean,
+): Promise<RenderInputs> {
   const exists = await deps.configExists();
   const isLocalBuild = isLocalBuildPath(deps.binaryPath);
   const nowLocal = (deps.now ?? ((): Date => new Date()))();
@@ -119,6 +124,7 @@ async function buildFrame(deps: StatusCommandDeps, isDevMode: boolean): Promise<
       summary: deriveUnifiedSummary({
         configured: false,
         isDevMode,
+        profileName,
         daemonRunning: false,
         daemonInferredAlive: false,
         daemonLastCycleAt: null,
@@ -135,6 +141,7 @@ async function buildFrame(deps: StatusCommandDeps, isDevMode: boolean): Promise<
       binaryPath,
       nowLocal,
       version,
+      compact: compact ?? !isDevMode,
     };
   }
 
@@ -143,6 +150,7 @@ async function buildFrame(deps: StatusCommandDeps, isDevMode: boolean): Promise<
       summary: deriveUnifiedSummary({
         configured: true,
         isDevMode,
+        profileName,
         daemonRunning: false,
         daemonInferredAlive: false,
         daemonLastCycleAt: null,
@@ -159,6 +167,7 @@ async function buildFrame(deps: StatusCommandDeps, isDevMode: boolean): Promise<
       binaryPath,
       nowLocal,
       version,
+      compact: compact ?? !isDevMode,
     };
   }
 
@@ -171,6 +180,7 @@ async function buildFrame(deps: StatusCommandDeps, isDevMode: boolean): Promise<
   const summary = deriveUnifiedSummary({
     configured: true,
     isDevMode,
+    profileName,
     daemonRunning: snapshot.runtime.isRunning,
     daemonInferredAlive,
     daemonLastCycleAt: snapshot.drainLastCycleAt ?? snapshot.captureLastCycleAt,
@@ -189,5 +199,6 @@ async function buildFrame(deps: StatusCommandDeps, isDevMode: boolean): Promise<
     binaryPath,
     nowLocal,
     version,
+    compact: compact ?? !isDevMode,
   };
 }

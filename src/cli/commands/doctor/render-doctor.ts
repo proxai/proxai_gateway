@@ -193,7 +193,11 @@ function renderSummaryBlock(sorted: readonly Finding[]): string[] {
   return lines;
 }
 
-export function renderDoctorOutput(findings: readonly Finding[], signals: DoctorSignals): string {
+export function renderDoctorOutput(
+  findings: readonly Finding[],
+  signals: DoctorSignals,
+  compact?: boolean,
+): string {
   const sorted = sortFindings(findings);
   const lines: string[] = [];
 
@@ -210,9 +214,11 @@ export function renderDoctorOutput(findings: readonly Finding[], signals: Doctor
   lines.push(...summaryBlock);
   lines.push('');
 
-  // Verbose Signals in the middle
-  lines.push(renderSignalsAppendix(signals));
-  lines.push('');
+  if (!compact) {
+    // Verbose Signals in the middle
+    lines.push(renderSignalsAppendix(signals));
+    lines.push('');
+  }
 
   // Duplicate 2: Summary at the bottom
   lines.push('═'.repeat(60));

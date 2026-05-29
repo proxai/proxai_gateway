@@ -1,4 +1,5 @@
 import { expect, test, describe } from 'bun:test';
+import { join } from 'node:path';
 import {
   defaultClaudeDesktopSessionsRoot,
   discoverClaudeDesktopFiles,
@@ -7,7 +8,8 @@ import {
 describe('discoverClaudeDesktopFiles', () => {
   test('resolves default sessions root', () => {
     const root = defaultClaudeDesktopSessionsRoot();
-    expect(root).toContain('Library/Application Support/Claude/local-agent-mode-sessions');
+    const expected = join('Library', 'Application Support', 'Claude', 'local-agent-mode-sessions');
+    expect(root).toContain(expected);
   });
 
   test('returns empty array when base directory does not exist', async () => {

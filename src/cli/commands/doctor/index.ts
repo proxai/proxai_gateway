@@ -11,6 +11,8 @@ import { homedir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import chalk from 'chalk';
+import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
+import { profileRootDir } from 'core/io/fs/profile.ts';
 import {
   checkA1NotSetUp,
   checkA2UnitNotRegistered,
@@ -114,7 +116,10 @@ export async function runDoctor(
 
   const signals = await gatherSignals(deps);
   const findings = runCheckers(signals);
-  const output = renderDoctorOutput(findings, signals);
+
+  const isDevMode = await readDevModeSentinel(join(profileRootDir(), 'DEV_MODE'));
+  const isCompact = options.compact === true || !isDevMode;
+  const output = renderDoctorOutput(findings, signals, isCompact);
 
   deps.output.info(output);
 

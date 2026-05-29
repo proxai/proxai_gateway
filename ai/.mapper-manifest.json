@@ -1,19 +1,19 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-28T15:58:54.209Z",
-  "sourceHash": "1cefc8a91330eec1b978d29bcdf62f22",
+  "generatedAt": "2026-05-29T18:02:11.840Z",
+  "sourceHash": "ed1036c8d35386bc67ddb9b1ecf0430f",
   "files": [
     {
       "path": "CLAUDE.md",
-      "hash": "53590c1de36067de"
+      "hash": "506a1c7aa176961b"
     },
     {
       "path": "AGENTS.md",
-      "hash": "71f4be6b41aaf376"
+      "hash": "27cb0bcda3f56c60"
     },
     {
       "path": ".agents/AGENTS.md",
-      "hash": "58eff41539c514af"
+      "hash": "3b9cecabdc38ffc6"
     },
     {
       "path": ".claude/rules/_always.md",
@@ -30,6 +30,22 @@
     {
       "path": ".agents/rules/_always.md",
       "hash": "99ac76b3a197097b"
+    },
+    {
+      "path": ".claude/rules/cross-platform.md",
+      "hash": "c66486d53ed47e89"
+    },
+    {
+      "path": ".cursor/rules/cross-platform.mdc",
+      "hash": "c7954b514c460a0b"
+    },
+    {
+      "path": ".codex/rules/cross-platform.md",
+      "hash": "c66486d53ed47e89"
+    },
+    {
+      "path": ".agents/rules/cross-platform.md",
+      "hash": "c66486d53ed47e89"
     },
     {
       "path": ".claude/rules/modules/cross-platform-feature-flags.md",

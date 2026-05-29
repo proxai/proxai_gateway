@@ -17,4 +17,5 @@ export interface UnifiedSummaryInputs {
   readonly bufferFullPendingBytes: number | null;
   readonly bufferFullThreshold: number | null;
   readonly sessionStopped: boolean;
+  readonly profileName?: 'prod' | 'dev';
 }

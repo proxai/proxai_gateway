@@ -13,6 +13,7 @@ export interface LogsCommandOptions {
   readonly lines?: number;
   readonly stdin?: ReadableInputStream;
   readonly intervalMs?: number;
+  readonly compact?: boolean;
 }
 
 export interface LogsCommandDeps {

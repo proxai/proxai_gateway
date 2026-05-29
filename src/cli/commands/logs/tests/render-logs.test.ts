@@ -138,7 +138,7 @@ test('renderLogsFrame renders quarantined rows with size and reason', () => {
 test('renderLogsFrame truncates an overlong source path', () => {
   const longPath = '/very/deep/' + 'segment/'.repeat(20) + 'file.jsonl';
   const frame: LogsFrame = { ...emptyFrame(), failed: [failed({ sourcePath: longPath })] };
-  const out = stripAnsi(renderLogsFrame(frame, { error: true }, makeDeps(false)));
+  const out = stripAnsi(renderLogsFrame(frame, { error: true }, makeDeps(true)));
   expect(out).toContain('…');
   expect(out).not.toContain(longPath);
 });
@@ -174,6 +174,21 @@ test('renderLogsFrame shows no-errors message for empty error frame', () => {
 test('renderLogsFrame shows no-pending message for empty pending frame', () => {
   const out = stripAnsi(renderLogsFrame(emptyFrame(), { pending: true }, makeDeps(false)));
   expect(out).toContain('No pending records.');
+});
+
+test('renderLogsFrame compact mode hides dev details even when isDevMode is true', () => {
+  const frame: LogsFrame = {
+    uploaded: [uploaded()],
+    failed: [failed()],
+    quarantined: [quarantined()],
+    pending: [pending()],
+  };
+  const out = stripAnsi(renderLogsFrame(frame, { compact: true }, makeDeps(true)));
+
+  // Hides captureId, sourcePathHash, sourcePath for all rows
+  expect(out).not.toContain('0190abcd-0000-7000-8000-000000000001');
+  expect(out).not.toContain('hash:');
+  expect(out).not.toContain('/home/user/project');
 });
 
 test('renderLogsJson serializes the frame to JSON', () => {

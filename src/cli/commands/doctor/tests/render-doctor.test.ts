@@ -217,3 +217,15 @@ test('signals appendix renders populated optional values and regression loops', 
   expect(out).toContain('macos_quarantine:        true');
   expect(out).toContain('clock_skew_ms:           4000');
 });
+
+test('renderDoctorOutput compact option hides verbose signals appendix completely', () => {
+  const out = stripAnsi(renderDoctorOutput([], baseSignals(), true));
+  expect(out).not.toContain('--- Signals ---');
+  expect(out).not.toContain('last_prune_at:');
+
+  // Confirms diagnostics summary is present at both top and bottom (duplicated)
+  const firstIndex = out.indexOf('DIAGNOSTICS SUMMARY');
+  const lastIndex = out.lastIndexOf('DIAGNOSTICS SUMMARY');
+  expect(firstIndex).toBeGreaterThanOrEqual(0);
+  expect(lastIndex).toBeGreaterThan(firstIndex);
+});

@@ -37,6 +37,7 @@ import type { ReadableInputStream } from 'cli/commands/status/key-handler.types.
 export interface StatusCommandOptions {
   json?: boolean;
   all?: boolean;
+  compact?: boolean;
   devDeps?: StatusCommandDeps;
   stdin?: ReadableInputStream;
   intervalMs?: number;
