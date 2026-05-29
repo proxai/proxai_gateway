@@ -2,6 +2,10 @@ import { requireDefined } from 'core/utils';
 import type { FetchFn } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { rmRecursive } from 'core/io/fs';
 
 import { getBatch, getReceipt, insertBatch, openInMemoryBufferDb } from 'services/buffer';
 import { drainBuffer } from 'services/uploader';
@@ -344,7 +348,7 @@ test('auth-unconfirmed retriable does not trigger any pacer distress signal', as
     http: createTestHttpClient(
       mockFetch((call) => {
         if (call.url.includes('/ingestion/verify-key')) return emptyResponse(503);
-        return emptyResponse(403);
+        return emptyResponse(401);
       }),
     ),
     hostId: TEST_HOST_ID,
@@ -403,4 +407,33 @@ test('network failure retriable does not trigger any pacer distress signal', asy
   expect(spy.retryAfters).toEqual([]);
   expect(spy.notify429Count.value).toBe(0);
   expect(spy.serviceUnavailableCalls).toEqual([]);
+});
+
+test('breaks out of the drainBuffer loop immediately on a fatal auth error', async () => {
+  const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-drain-auth-'));
+  const sentinelPath = join(dirAuth, 'AUTH_FAILED');
+  try {
+    await insertN(3);
+    let calls = 0;
+    const ctx: UploaderContext = {
+      db,
+      http: createTestHttpClient(
+        mockFetch(() => {
+          calls++;
+          return emptyResponse(403);
+        }),
+      ),
+      hostId: TEST_HOST_ID,
+      authFailedSentinelPath: sentinelPath,
+    };
+
+    const result = await drainBuffer(ctx);
+    expect(result.attempted).toBe(1);
+    expect(result.fatal).toBe(1);
+    expect(result.accepted).toBe(0);
+    expect(calls).toBe(1);
+    expect(await Bun.file(sentinelPath).exists()).toBe(true);
+  } finally {
+    await rmRecursive(dirAuth);
+  }
 });

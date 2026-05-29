@@ -178,7 +178,12 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
       updateAvailable,
     },
     buffer: dbData.bufferStats,
-    daemonState: dbData.daemonState,
+    daemonState: {
+      captureLastCycleAt: dbData.daemonState.captureLastCycleAt,
+      drainLastCycleAt: dbData.daemonState.drainLastCycleAt,
+      lastConsecutiveRetriableBreak: dbData.daemonState.lastConsecutiveRetriableBreak,
+      lastUploadError: dbData.daemonState.lastUploadError,
+    },
     binary: {
       version: deps.currentVersion,
       mtime: binaryMtime,

@@ -104,6 +104,7 @@ export interface HeartbeatCycleContext {
   staleBinary: StaleBinaryThresholds;
   updateAvailableSentinelPath?: string;
   logger?: MinimalLogger;
+  authFailedSentinelPath?: string;
 
   versionCheckFetch?: FetchFn;
   versionCheckIntervalMs?: number;

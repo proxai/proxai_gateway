@@ -25,6 +25,7 @@ import { runUpgradePostRespawnRestore } from 'services/upgrade/coordinated-upgra
 import { autoUpgradeFromConfig } from 'cli/wiring/auto-upgrade.ts';
 import { buildUpgradePostRespawnRestoreDeps } from 'cli/wiring/upgrade-restore-deps.ts';
 
+import { inquirerPrompts } from 'cli/prompts.ts';
 import { consoleOutput } from 'cli/output.ts';
 import { buildDevDeps } from 'cli/wiring/dev-deps.ts';
 import { buildDoctorDeps } from 'cli/wiring/doctor-deps.ts';
@@ -130,8 +131,14 @@ program
         profile?: string;
       },
     ) => {
-      const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
-      const profileName = parseProfileName(opts.profile ?? defaultProfile);
+      let profileName: ProfileName;
+      if (isDevMode && opts.profile === undefined) {
+        const prompts = inquirerPrompts();
+        profileName = await prompts.askProfile();
+      } else {
+        const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
+        profileName = parseProfileName(opts.profile ?? defaultProfile);
+      }
       const ctx = buildPlatformServiceContext(process.platform, process.execPath);
       const profileCtx = buildProfileContext(profileName);
       const setupInputs = {
@@ -629,7 +636,11 @@ program
   .command('doctor')
   .description('Diagnose common failure scenarios and report findings with copy-pasteable output.')
   .option('--profile <name>', 'profile to diagnose (prod | dev)')
-  .action(async (opts: { profile?: string }) => {
+  .option(
+    '-o, --output [path]',
+    'Output diagnostic report to an HTML file (absolute or relative, default: Desktop)',
+  )
+  .action(async (opts: { profile?: string; output?: string | boolean }) => {
     const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
     const profileName = parseProfileName(opts.profile ?? defaultProfile);
     const profileCtx = buildProfileContext(profileName);
@@ -640,10 +651,10 @@ program
         ? (buildPlatformServiceContext(platform, process.execPath, profileCtx.configDir)
             ?.serviceManager ?? null)
         : null;
-    const result = await runDoctor(
-      buildDoctorDeps({ serviceManager, platform, profileCtx }),
-      opts.profile !== undefined ? { profile: opts.profile } : {},
-    );
+    const result = await runDoctor(buildDoctorDeps({ serviceManager, platform, profileCtx }), {
+      profile: opts.profile,
+      output: opts.output,
+    });
     process.exit(result.exitCode);
   });
 

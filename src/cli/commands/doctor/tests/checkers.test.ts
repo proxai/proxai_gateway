@@ -13,6 +13,7 @@ import {
 import {
   checkB1InvalidKey,
   checkB2AuthUnconfirmedLoop,
+  checkB3IngestionKeyAuthError,
 } from 'cli/commands/doctor/checkers/auth.ts';
 import {
   checkC1RateLimited,
@@ -76,6 +77,7 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
       captureLastCycleAt: new Date().toISOString(),
       drainLastCycleAt: new Date().toISOString(),
       lastConsecutiveRetriableBreak: false,
+      lastUploadError: null,
     },
     binary: {
       version: '2026.5.28',
@@ -236,6 +238,28 @@ test('B2: auth-unconfirmed loop only when NO AUTH_FAILED and count>0', () => {
   );
   expect(f.code).toBe('B2');
   expect(f.cause).toContain('3 occurrences');
+});
+
+test('B3: ingestion key authentication error based on lastUploadError', () => {
+  expect(checkB3IngestionKeyAuthError(withDaemonState({ lastUploadError: null }))).toBeNull();
+  expect(
+    checkB3IngestionKeyAuthError(withDaemonState({ lastUploadError: 'some other error' })),
+  ).toBeNull();
+
+  const f1 = requireDefined(
+    checkB3IngestionKeyAuthError(withDaemonState({ lastUploadError: 'HTTP 403 Forbidden' })),
+  );
+  expect(f1.code).toBe('B3');
+  expect(f1.severity).toBe(Severity.critical);
+  expect(f1.confidence).toBe(Confidence.confirmed);
+
+  const f2 = requireDefined(
+    checkB3IngestionKeyAuthError(
+      withDaemonState({ lastUploadError: 'invalid ingestion key provided' }),
+    ),
+  );
+  expect(f2.code).toBe('B3');
+  expect(f2.severity).toBe(Severity.critical);
 });
 
 test('C1: rate-limited detection', () => {

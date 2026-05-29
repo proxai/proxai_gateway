@@ -241,11 +241,17 @@ export function renderHealthSection(input: {
   currentVersion: string;
   inferredAlive: boolean;
   isDevLike: boolean;
+  isLocalBuild: boolean;
 }): string[] {
   const s = input.s;
   const installSource: InstallSource | null = s.cfg?.account.installSource ?? null;
   const lines: string[] = [sectionDivider('Health')];
-  lines.push(rowText('Daemon', renderDaemonLine(s, input.inferredAlive, input.isDevLike)));
+  lines.push(
+    rowText(
+      'Daemon',
+      renderDaemonLine(s, input.inferredAlive, input.isDevLike, input.isLocalBuild),
+    ),
+  );
   lines.push(rowText('Sentinels', renderSentinelsLine(s)));
   lines.push(
     rowText('Auto-upgrade', renderAutoUpgradeLine(s, input.currentVersion, installSource)),
@@ -257,7 +263,12 @@ export function renderHealthSection(input: {
   return lines;
 }
 
-function renderDaemonLine(s: StatusSnapshot, inferredAlive: boolean, isDevLike: boolean): string {
+function renderDaemonLine(
+  s: StatusSnapshot,
+  inferredAlive: boolean,
+  isDevLike: boolean,
+  isLocalBuild: boolean,
+): string {
   if (s.runtime.isRunning) {
     const parts: string[] = [chalk.green('● running')];
     if (s.runtime.startedAt !== null) {
@@ -267,7 +278,11 @@ function renderDaemonLine(s: StatusSnapshot, inferredAlive: boolean, isDevLike: 
     return parts.join('  ');
   }
   if (inferredAlive) {
-    const tag = isDevLike ? 'running (local build)' : 'running (not registered)';
+    const tag = isLocalBuild
+      ? 'running (local build)'
+      : isDevLike
+        ? 'running (dev mode)'
+        : 'running (not registered)';
     return chalk.green(`● ${tag}`);
   }
   return chalk.red('○ not running');

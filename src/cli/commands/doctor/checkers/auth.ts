@@ -23,3 +23,19 @@ export function checkB2AuthUnconfirmedLoop(signals: DoctorSignals): Finding | nu
     action: `Check connectivity to the nest endpoint; AUTH_FAILED is absent so the key itself is fine`,
   };
 }
+
+export function checkB3IngestionKeyAuthError(signals: DoctorSignals): Finding | null {
+  const err = signals.daemonState.lastUploadError;
+  if (!err) return null;
+  const lower = err.toLowerCase();
+  if (lower.includes('403') || lower.includes('ingestion key') || lower.includes('ingestion_key')) {
+    return {
+      code: 'B3',
+      severity: Severity.critical,
+      confidence: Confidence.confirmed,
+      cause: `Ingestion key auth error in last upload cycle: ${err}`,
+      action: 'Run: proxai-gateway setup --force with a valid key',
+    };
+  }
+  return null;
+}

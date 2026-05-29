@@ -124,3 +124,42 @@ test('accepts an explicit profile option without altering exit code', async () =
   expect(result.exitCode).toBe(0);
   expect(requireDefined(out.lines[0]).msg).toContain('Gathering');
 });
+
+test('doctor writes HTML report to specified absolute output path', async () => {
+  const out = captured();
+  const reportPath = join(dir, 'custom-report.html');
+  const result = await runDoctor(makeDeps(out), { output: reportPath });
+  expect(result.exitCode).toBe(0);
+
+  const fileExists = await Bun.file(reportPath).exists();
+  expect(fileExists).toBe(true);
+
+  const content = await Bun.file(reportPath).text();
+  expect(content).toContain('<!DOCTYPE html>');
+  expect(content).toContain('PROXAI-GATEWAY DOCTOR');
+  const count = content.split('Diagnostics Summary').length - 1;
+  expect(count).toBeGreaterThanOrEqual(2);
+});
+
+test('doctor writes HTML report inside specified output directory', async () => {
+  const out = captured();
+  const reportsDir = join(dir, 'reports');
+  await require('node:fs/promises').mkdir(reportsDir, { recursive: true });
+
+  const result = await runDoctor(makeDeps(out), { output: reportsDir });
+  expect(result.exitCode).toBe(0);
+
+  const files = await require('node:fs/promises').readdir(reportsDir);
+  const reportFile = files.find(
+    (f: string) => f.startsWith('gateway-doctor-') && f.endsWith('.html'),
+  );
+  expect(reportFile).toBeDefined();
+  if (reportFile === undefined) {
+    throw new Error('Expected report file to be defined');
+  }
+
+  const fullPath = join(reportsDir, reportFile);
+  const content = await Bun.file(fullPath).text();
+  expect(content).toContain('<!DOCTYPE html>');
+  expect(content).toContain('Diagnostics Signals Appendix');
+});

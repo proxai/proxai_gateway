@@ -6,7 +6,11 @@ import type {
   Finding,
 } from 'cli/commands/doctor/doctor.types.ts';
 import { gatherSignals } from 'cli/commands/doctor/gather-signals.ts';
-import { renderDoctorOutput } from 'cli/commands/doctor/render-doctor.ts';
+import { renderDoctorOutput, generateDoctorHtml } from 'cli/commands/doctor/render-doctor.ts';
+import { homedir } from 'node:os';
+import { resolve, join } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import chalk from 'chalk';
 import {
   checkA1NotSetUp,
   checkA2UnitNotRegistered,
@@ -17,6 +21,7 @@ import {
 import {
   checkB1InvalidKey,
   checkB2AuthUnconfirmedLoop,
+  checkB3IngestionKeyAuthError,
 } from 'cli/commands/doctor/checkers/auth.ts';
 import {
   checkC1RateLimited,
@@ -64,6 +69,7 @@ const ALL_CHECKERS: readonly Checker[] = [
   checkA5Wedged,
   checkB1InvalidKey,
   checkB2AuthUnconfirmedLoop,
+  checkB3IngestionKeyAuthError,
   checkC1RateLimited,
   checkC2NetworkFailure,
   checkC3DrainWedged,
@@ -102,7 +108,7 @@ function runCheckers(signals: DoctorSignals): Finding[] {
 
 export async function runDoctor(
   deps: DoctorCommandDeps,
-  _options: DoctorCommandOptions,
+  options: DoctorCommandOptions,
 ): Promise<CommandResult> {
   deps.output.info('Gathering diagnostic signals...');
 
@@ -111,6 +117,49 @@ export async function runDoctor(
   const output = renderDoctorOutput(findings, signals);
 
   deps.output.info(output);
+
+  if (options.output !== undefined) {
+    const MONTHS = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    const now = new Date();
+    const monthStr = MONTHS[now.getMonth()];
+    const dayStr = String(now.getDate()).padStart(2, '0');
+    const hourStr = String(now.getHours()).padStart(2, '0');
+    const minStr = String(now.getMinutes()).padStart(2, '0');
+    const secStr = String(now.getSeconds()).padStart(2, '0');
+
+    const filename = `gateway-doctor-${monthStr}_${dayStr}_${hourStr}_${minStr}_${secStr}.html`;
+
+    const homedirPath = homedir();
+    let targetPath: string;
+    if (options.output === true || options.output === '') {
+      targetPath = join(homedirPath, 'Desktop', filename);
+    } else {
+      const rawPath = String(options.output);
+      const resolved = resolve(rawPath);
+      if (rawPath.endsWith('/') || !rawPath.split('/').pop()?.includes('.')) {
+        targetPath = join(resolved, filename);
+      } else {
+        targetPath = resolved;
+      }
+    }
+
+    const htmlContent = generateDoctorHtml(findings, signals, now.toLocaleString());
+    await writeFile(targetPath, htmlContent, 'utf-8');
+    deps.output.success(`Diagnostic HTML report exported to: ${chalk.cyan(targetPath)}`);
+  }
 
   return { exitCode: EXIT_CODE.ok };
 }

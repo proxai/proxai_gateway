@@ -5,6 +5,7 @@ import type { DaemonActorsHandle } from 'services/state-machines/daemon-actors';
 import { runCaptureCycle } from 'services/polling/capture-cycle.ts';
 import { runDrainCycle } from 'services/polling/drain-cycle.ts';
 import { runHeartbeatCycle } from 'services/polling/heartbeat-cycle.ts';
+import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 import {
   CAPTURE_INTERVAL_MS,
   DRAIN_INTERVAL_MS,
@@ -40,6 +41,7 @@ export async function runDaemonLoops(
 
   try {
     handle.markReady(nowIsoUtc());
+    contexts.heartbeat.authFailedSentinelPath = contexts.capture.authFailedSentinelPath;
     await Promise.all([
       captureLoop(contexts.capture, captureMs, signal, sleep, options.onCaptureComplete),
       drainLoop(contexts.drain, drainMs, signal, sleep, options.onDrainComplete),
@@ -81,6 +83,9 @@ async function captureLoop(
   onComplete: ((result: CaptureCycleResult) => void) | undefined,
 ): Promise<void> {
   while (!isAborted(signal)) {
+    if (await shouldHalt(ctx.authFailedSentinelPath, signal)) {
+      return;
+    }
     try {
       const result = await runCaptureCycle(ctx);
       notify(onComplete, result, ctx.logger, 'capture.cycle.callback_failed');
@@ -103,6 +108,9 @@ async function drainLoop(
   onComplete: ((result: DrainCycleResult) => void) | undefined,
 ): Promise<void> {
   while (!isAborted(signal)) {
+    if (await shouldHalt(ctx.authFailedSentinelPath, signal)) {
+      return;
+    }
     try {
       const result = await runDrainCycle(ctx);
       notify(onComplete, result, ctx.logger, 'drain.cycle.callback_failed');
@@ -125,6 +133,9 @@ async function heartbeatLoop(
   onComplete: ((result: HeartbeatCycleResult) => void) | undefined,
 ): Promise<void> {
   while (!isAborted(signal)) {
+    if (await shouldHalt(ctx.authFailedSentinelPath, signal)) {
+      return;
+    }
     const result = await runHeartbeatCycle(ctx);
     notify(onComplete, result, ctx.logger, 'heartbeat.cycle.callback_failed');
     if (isAborted(signal)) return;
@@ -144,6 +155,19 @@ function notify<T>(
   } catch (err) {
     logger?.warn({ event: errorEvent, error: (err as Error).message ?? String(err) });
   }
+}
+
+async function shouldHalt(
+  sentinelPath: string | undefined,
+  signal: AbortSignal | undefined,
+): Promise<boolean> {
+  if (isAborted(signal)) {
+    return true;
+  }
+  if (sentinelPath === undefined) {
+    return false;
+  }
+  return isAuthFailed(sentinelPath);
 }
 
 function isAborted(signal: AbortSignal | undefined): boolean {

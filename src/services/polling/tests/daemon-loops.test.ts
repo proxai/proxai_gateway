@@ -16,6 +16,7 @@ import type {
   HeartbeatCycleContext,
   RegisteredSource,
 } from 'services/polling';
+import { writeAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
 
 let dir: string;
 let buffer: Database;
@@ -252,6 +253,37 @@ test('runtime errors in cycle functions are logged as error and loops continue',
   expect(entries.some((e) => e.level === 'error' && e.msg.includes('capture cycle threw'))).toBe(
     true,
   );
+});
+
+test('gracefully exits the loops when shouldHalt (sentinel present) resolves to true', async () => {
+  const ctrl = new AbortController();
+  const ctxs = makeContexts();
+
+  await writeAuthFailedSentinel(ctxs.capture.authFailedSentinelPath, 'sentinel reason');
+
+  let captureCount = 0;
+  let drainCount = 0;
+  let heartbeatCount = 0;
+
+  await runDaemonLoops(ctxs, {
+    abortSignal: ctrl.signal,
+    captureIntervalMs: 1,
+    drainIntervalMs: 1,
+    heartbeatIntervalMs: 1,
+    onCaptureComplete: () => {
+      captureCount++;
+    },
+    onDrainComplete: () => {
+      drainCount++;
+    },
+    onHeartbeatComplete: () => {
+      heartbeatCount++;
+    },
+  });
+
+  expect(captureCount).toBe(0);
+  expect(drainCount).toBe(0);
+  expect(heartbeatCount).toBe(0);
 });
 
 interface FakeLogger {

@@ -1,4 +1,4 @@
-import { confirm, input } from '@inquirer/prompts';
+import { confirm, input, select } from '@inquirer/prompts';
 
 import { UserAbortedError } from 'core/utils';
 
@@ -7,6 +7,7 @@ export interface PromptSink {
   confirmPhrase(message: string, requiredPhrase: string): Promise<boolean>;
   confirmUpgrade(message: string): Promise<boolean>;
   confirmReplace(message: string): Promise<boolean>;
+  askProfile(): Promise<'dev' | 'prod'>;
 }
 
 const ABORT_ERROR_NAMES = new Set(['ExitPromptError', 'AbortPromptError', 'CancelPromptError']);
@@ -50,6 +51,16 @@ export function inquirerPrompts(): PromptSink {
       }),
     confirmUpgrade: (message) => rethrowAborts(() => confirm({ message, default: true })),
     confirmReplace: (message) => rethrowAborts(() => confirm({ message, default: false })),
+    askProfile: () =>
+      rethrowAborts(() =>
+        select({
+          message: 'Select the environment profile to configure:',
+          choices: [
+            { name: 'Developer (dev)', value: 'dev' as const },
+            { name: 'Production (prod)', value: 'prod' as const },
+          ],
+        }),
+      ),
   };
 }
 
@@ -59,6 +70,7 @@ export function scriptedPrompts(answers: {
   phrase?: string | boolean;
   upgrade?: boolean;
   replace?: boolean;
+  profile?: 'dev' | 'prod';
 }): PromptSink {
   const queue: string[] = [
     ...(answers.apiKeys ?? []),
@@ -88,6 +100,12 @@ export function scriptedPrompts(answers: {
         throw new Error('scripted prompt: no replace answer provided');
       }
       return answers.replace;
+    },
+    askProfile: async () => {
+      if (answers.profile === undefined) {
+        throw new Error('scripted prompt: no profile answer provided');
+      }
+      return answers.profile;
     },
   };
 }

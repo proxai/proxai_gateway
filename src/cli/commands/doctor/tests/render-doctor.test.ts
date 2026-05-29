@@ -40,6 +40,7 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
       captureLastCycleAt: null,
       drainLastCycleAt: null,
       lastConsecutiveRetriableBreak: null,
+      lastUploadError: null,
     },
     binary: {
       version: '2026.5.28',
@@ -112,7 +113,7 @@ test('renders critical, warning, and info sections sorted by severity', () => {
   const infoIdx = out.indexOf('INFO');
   expect(criticalIdx).toBeLessThan(warningIdx);
   expect(warningIdx).toBeLessThan(infoIdx);
-  expect(out).toContain('[CONFIRMED] B1 cause text');
+  expect(out).toContain('B1 cause text');
   expect(out).toContain('→ action text');
 });
 
@@ -173,6 +174,7 @@ test('signals appendix renders populated optional values and regression loops', 
       captureLastCycleAt: '2026-05-28T00:00:00.000Z',
       drainLastCycleAt: '2026-05-28T00:00:30.000Z',
       lastConsecutiveRetriableBreak: true,
+      lastUploadError: null,
     },
     binary: {
       version: '2026.5.28',

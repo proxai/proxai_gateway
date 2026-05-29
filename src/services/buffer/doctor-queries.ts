@@ -16,6 +16,7 @@ export interface DoctorDaemonState {
   readonly captureLastCycleAt: string | null;
   readonly drainLastCycleAt: string | null;
   readonly lastConsecutiveRetriableBreak: boolean | null;
+  readonly lastUploadError: string | null;
 }
 
 export interface DoctorRecentEvents {
@@ -57,7 +58,8 @@ const DAEMON_STATE_SQL = `
   SELECT
     last_cycle_completed_at,
     last_drain_attempted,
-    last_consecutive_retriable_break
+    last_consecutive_retriable_break,
+    last_upload_error
   FROM ${BUFFER_TABLES.daemonState}
   WHERE id = 1
 `;
@@ -107,6 +109,7 @@ interface DaemonStateRow {
   last_cycle_completed_at: string | null;
   last_drain_attempted: number | null;
   last_consecutive_retriable_break: number | null;
+  last_upload_error: string | null;
 }
 
 interface FailedErrorRow {
@@ -166,6 +169,7 @@ export function queryDoctorDaemonState(db: Database): DoctorDaemonState {
     captureLastCycleAt,
     drainLastCycleAt,
     lastConsecutiveRetriableBreak,
+    lastUploadError: stateRow?.last_upload_error ?? null,
   };
 }
 
@@ -268,6 +272,7 @@ const EMPTY_DAEMON_STATE: DoctorDaemonState = {
   captureLastCycleAt: null,
   drainLastCycleAt: null,
   lastConsecutiveRetriableBreak: null,
+  lastUploadError: null,
 };
 
 const EMPTY_RECENT_EVENTS: DoctorRecentEvents = {

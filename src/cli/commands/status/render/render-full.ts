@@ -64,7 +64,8 @@ function renderProfileBlock(
         s: inputs.snapshot,
         currentVersion: deps.currentVersion ?? '',
         inferredAlive,
-        isDevLike: inputs.isDevMode || inputs.isLocalBuild,
+        isDevLike: inputs.isDevMode,
+        isLocalBuild: inputs.isLocalBuild,
       }),
     );
   }
@@ -99,7 +100,8 @@ function renderSingleStatus(inputs: RenderInputs, deps: StatusCommandDeps): stri
         s: inputs.snapshot,
         currentVersion: deps.currentVersion ?? '',
         inferredAlive,
-        isDevLike: inputs.isDevMode || inputs.isLocalBuild,
+        isDevLike: inputs.isDevMode,
+        isLocalBuild: inputs.isLocalBuild,
       }),
     );
   }

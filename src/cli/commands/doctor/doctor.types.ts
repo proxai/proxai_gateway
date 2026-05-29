@@ -23,6 +23,7 @@ export type FindingCode =
   | 'A5'
   | 'B1'
   | 'B2'
+  | 'B3'
   | 'C1'
   | 'C2'
   | 'C3'
@@ -80,6 +81,7 @@ export interface DoctorSignals {
     readonly captureLastCycleAt: string | null;
     readonly drainLastCycleAt: string | null;
     readonly lastConsecutiveRetriableBreak: boolean | null;
+    readonly lastUploadError: string | null;
   };
   readonly binary: {
     readonly version: string;
@@ -121,7 +123,8 @@ export interface DoctorSignals {
 }
 
 export interface DoctorCommandOptions {
-  readonly profile?: string;
+  readonly profile?: string | undefined;
+  readonly output?: string | boolean | undefined;
 }
 
 export interface DoctorCommandDeps {

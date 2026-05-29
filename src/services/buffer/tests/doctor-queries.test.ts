@@ -117,6 +117,7 @@ test('queryDoctorDaemonState returns nulls when daemon_state and metadata are ab
     captureLastCycleAt: null,
     drainLastCycleAt: null,
     lastConsecutiveRetriableBreak: null,
+    lastUploadError: null,
   });
 });
 
@@ -141,6 +142,12 @@ test('queryDoctorDaemonState keeps a null retriable break when daemon_state stor
   setDaemonState(db, fullDaemonState({ lastConsecutiveRetriableBreak: null }));
   const state = queryDoctorDaemonState(db);
   expect(state.lastConsecutiveRetriableBreak).toBeNull();
+});
+
+test('queryDoctorDaemonState reads lastUploadError from daemon_state', () => {
+  setDaemonState(db, fullDaemonState({ lastUploadError: 'failed with 403' }));
+  const state = queryDoctorDaemonState(db);
+  expect(state.lastUploadError).toBe('failed with 403');
 });
 
 test('queryDoctorRecentEvents returns empty counts when no failed batches exist', () => {

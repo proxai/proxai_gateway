@@ -179,7 +179,7 @@ test('400 with non-regression body falls through to plain ValidationError -> fat
   expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
 });
 
-test('403 AuthError + verify-key success keeps batch pending (transient)', async () => {
+test('401 AuthError + verify-key success keeps batch pending (transient)', async () => {
   const batch = newClaudeCodeBatch('payload');
   insertBatch(db, batch);
   const stored = requireDefined(getBatch(db, batch.captureId));
@@ -189,7 +189,7 @@ test('403 AuthError + verify-key success keeps batch pending (transient)', async
       if (call.url.includes('/ingestion/verify-key')) {
         return jsonResponse({ success: true, data: { userId: 'u_test' }, message: 'ok' });
       }
-      return emptyResponse(403);
+      return emptyResponse(401);
     }),
   );
   const outcome = await uploadBatch(ctx, stored);
@@ -313,7 +313,7 @@ test('AuthError + verify-key transient-success -> retriable, reason=auth_unconfi
       if (call.url.includes('/ingestion/verify-key')) {
         return jsonResponse({ success: true, data: { userId: 'u_test' }, message: 'ok' });
       }
-      return emptyResponse(403);
+      return emptyResponse(401);
     }),
   );
   const outcome = await uploadBatch(ctx, stored);
@@ -451,7 +451,7 @@ test('AuthError + verify-key returns success: true → retriable, no sentinel', 
               message: 'ok',
             });
           }
-          return emptyResponse(403);
+          return emptyResponse(401);
         }),
       ),
       hostId: TEST_HOST_ID,
@@ -533,7 +533,7 @@ test('AuthError + verify-key throws non-Error → retriable, log uses typeof and
     insertBatch(db, batch);
     const stored = requireDefined(getBatch(db, batch.captureId));
 
-    const http = createTestHttpClient(mockFetch(() => emptyResponse(403)));
+    const http = createTestHttpClient(mockFetch(() => emptyResponse(401)));
     Object.defineProperty(http, 'verifyKey', {
       value: async () => {
         throw 'string-thrown-not-error';
@@ -639,6 +639,47 @@ test('AuthError without authFailedSentinelPath: still classifies, no sentinel si
   const outcome = await uploadBatch(ctx, stored);
 
   expect(outcome.kind).toBe('fatal');
+});
+
+test('403 AuthError immediately fatal, bypasses verify-key and writes sentinel', async () => {
+  const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-upload-auth-403-'));
+  const sentinelPath = join(dirAuth, 'AUTH_FAILED');
+  try {
+    const batch = newClaudeCodeBatch('payload');
+    insertBatch(db, batch);
+    const stored = requireDefined(getBatch(db, batch.captureId));
+
+    let verifyKeyCalled = false;
+    const http = createTestHttpClient(
+      mockFetch((call) => {
+        if (call.url.includes('/ingestion/verify-key')) {
+          verifyKeyCalled = true;
+          return jsonResponse({ success: true, data: { userId: 'u_test' }, message: 'ok' });
+        }
+        return emptyResponse(403);
+      }),
+    );
+
+    const ctx: UploaderContext = {
+      db,
+      http,
+      hostId: TEST_HOST_ID,
+      authFailedSentinelPath: sentinelPath,
+    };
+    const outcome = await uploadBatch(ctx, stored);
+
+    expect(outcome.kind).toBe('fatal');
+    if (outcome.kind === 'fatal') {
+      expect(outcome.error).toContain('ingestion key invalid');
+    }
+    expect(verifyKeyCalled).toBe(false);
+    expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
+    expect(await Bun.file(sentinelPath).exists()).toBe(true);
+    const payload = JSON.parse(await Bun.file(sentinelPath).text()) as Record<string, unknown>;
+    expect(payload['reason']).toContain('server returned 403: ingestion key invalid or revoked');
+  } finally {
+    await rmRecursive(dirAuth);
+  }
 });
 
 test('OversizedDecompressedSliceError thrown by http surfaces raw_bytes/cap/slice_index in fatal log', async () => {

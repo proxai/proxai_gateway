@@ -10,6 +10,7 @@ import type {
   UploaderContext,
 } from 'services/uploader/uploader.types.ts';
 import { uploadBatch } from 'services/uploader/upload-batch.ts';
+import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 
 export async function drainBuffer(
   ctx: UploaderContext,
@@ -35,6 +36,12 @@ export async function drainBuffer(
   let cursor: { createdAt: string; captureId: string } | null = null;
 
   while (result.attempted < cap) {
+    if (
+      ctx.authFailedSentinelPath !== undefined &&
+      (await isAuthFailed(ctx.authFailedSentinelPath))
+    ) {
+      break;
+    }
     const batch: StoredBatch | null =
       cursor === null ? nextPendingBatch(ctx.db) : nextPendingBatchAfter(ctx.db, cursor);
     if (batch === null) break;
@@ -60,6 +67,12 @@ export async function drainBuffer(
       result.fatal++;
       result.lastUploadError = outcome.error;
       consecutiveRetriable = 0;
+      if (
+        ctx.authFailedSentinelPath !== undefined &&
+        (await isAuthFailed(ctx.authFailedSentinelPath))
+      ) {
+        break;
+      }
       continue;
     }
     if (outcome.kind === 'recovered') {

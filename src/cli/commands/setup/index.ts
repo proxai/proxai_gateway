@@ -1,7 +1,10 @@
 import chalk from 'chalk';
 import { createActor } from 'xstate';
+import { join } from 'node:path';
 
 import { sentinelHandle } from 'core/io/fs';
+import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
+import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
 import { nowIsoUtc } from 'core/utils';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
@@ -137,31 +140,74 @@ async function tryLoadExistingConfig(deps: SetupCommandDeps): Promise<GatewayCon
   }
 }
 
+async function tryLoadConfigFromPath(path: string): Promise<GatewayConfig | null> {
+  try {
+    return await loadConfigFromFile(path);
+  } catch {
+    return null;
+  }
+}
+
 async function reportAlreadyConfiguredAndMaybeStart(
   deps: SetupCommandDeps,
   options: SetupCommandOptions,
   existing: GatewayConfig | null,
 ): Promise<CommandResult> {
-  if (existing !== null) {
-    deps.output.info(`already configured (host_id: ${existing.account.hostId})`);
-    deps.output.info(`  installed at  ${existing.account.installedAt}`);
-    deps.output.info(`  install src   ${existing.account.installSource}`);
+  const isDevMode = await readDevModeSentinel(join(profileRootDir(), 'DEV_MODE'));
+  if (isDevMode) {
+    deps.output.info('Configuration status:');
+    const devCtx = buildProfileContext('dev');
+    const prodCtx = buildProfileContext('prod');
+    const [devConfig, prodConfig] = await Promise.all([
+      tryLoadConfigFromPath(devCtx.configFilePath),
+      tryLoadConfigFromPath(prodCtx.configFilePath),
+    ]);
+
+    if (devConfig !== null) {
+      deps.output.info(`  [dev]  already configured (host_id: ${devConfig.account.hostId})`);
+      deps.output.info(`         installed at  ${devConfig.account.installedAt}`);
+      deps.output.info(`         install src   ${devConfig.account.installSource}`);
+    } else {
+      deps.output.info('  [dev]  not configured');
+    }
+
+    if (prodConfig !== null) {
+      deps.output.info(`  [prod] already configured (host_id: ${prodConfig.account.hostId})`);
+      deps.output.info(`         installed at  ${prodConfig.account.installedAt}`);
+      deps.output.info(`         install src   ${prodConfig.account.installSource}`);
+    } else {
+      deps.output.info('  [prod] not configured');
+    }
+    deps.output.info('');
+    deps.output.info(
+      `To override the existing configuration, run ${chalk.cyan('proxai-gateway setup --force')} or ${chalk.cyan('proxai-gateway setup --api-key <new-key>')}.`,
+    );
   } else {
-    deps.output.info('already configured (could not read existing config)');
+    if (existing !== null) {
+      deps.output.info(`already configured (host_id: ${existing.account.hostId})`);
+      deps.output.info(`  installed at  ${existing.account.installedAt}`);
+      deps.output.info(`  install src   ${existing.account.installSource}`);
+    } else {
+      deps.output.info('already configured (could not read existing config)');
+    }
   }
   deps.output.info('');
 
   if (options.noStart === true) {
-    deps.output.info(
-      `Run ${chalk.cyan('proxai-gateway setup --force')} to re-enter your ingestion key, or ${chalk.cyan('proxai-gateway uninstall --reset')} to wipe and start fresh.`,
-    );
+    if (!isDevMode) {
+      deps.output.info(
+        `Run ${chalk.cyan('proxai-gateway setup --force')} to re-enter your ingestion key, or ${chalk.cyan('proxai-gateway uninstall --reset')} to wipe and start fresh.`,
+      );
+    }
     return { exitCode: EXIT_CODE.alreadyInstalled };
   }
 
   if (deps.serviceManager === undefined) {
-    deps.output.info(
-      `Run ${chalk.cyan('proxai-gateway setup --force')} to re-enter your ingestion key, or ${chalk.cyan('proxai-gateway uninstall --reset')} to wipe and start fresh.`,
-    );
+    if (!isDevMode) {
+      deps.output.info(
+        `Run ${chalk.cyan('proxai-gateway setup --force')} to re-enter your ingestion key, or ${chalk.cyan('proxai-gateway uninstall --reset')} to wipe and start fresh.`,
+      );
+    }
     return { exitCode: EXIT_CODE.alreadyInstalled };
   }
 

@@ -110,7 +110,6 @@ async function buildDualFrame(
 async function buildFrame(deps: StatusCommandDeps, isDevMode: boolean): Promise<RenderInputs> {
   const exists = await deps.configExists();
   const isLocalBuild = isLocalBuildPath(deps.binaryPath);
-  const devLike = isDevMode || isLocalBuild;
   const nowLocal = (deps.now ?? ((): Date => new Date()))();
   const version = deps.currentVersion ?? null;
   const binaryPath = deps.binaryPath ?? null;
@@ -119,7 +118,7 @@ async function buildFrame(deps: StatusCommandDeps, isDevMode: boolean): Promise<
     return {
       summary: deriveUnifiedSummary({
         configured: false,
-        isDevMode: devLike,
+        isDevMode,
         daemonRunning: false,
         daemonInferredAlive: false,
         daemonLastCycleAt: null,
@@ -143,7 +142,7 @@ async function buildFrame(deps: StatusCommandDeps, isDevMode: boolean): Promise<
     return {
       summary: deriveUnifiedSummary({
         configured: true,
-        isDevMode: devLike,
+        isDevMode,
         daemonRunning: false,
         daemonInferredAlive: false,
         daemonLastCycleAt: null,
@@ -171,7 +170,7 @@ async function buildFrame(deps: StatusCommandDeps, isDevMode: boolean): Promise<
   );
   const summary = deriveUnifiedSummary({
     configured: true,
-    isDevMode: devLike,
+    isDevMode,
     daemonRunning: snapshot.runtime.isRunning,
     daemonInferredAlive,
     daemonLastCycleAt: snapshot.drainLastCycleAt ?? snapshot.captureLastCycleAt,
