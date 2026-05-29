@@ -82,6 +82,23 @@ function makeDeps(over: Partial<DoctorCommandDeps> = {}): DoctorCommandDeps {
     platform: 'linux',
     binaryPath: join(dir, 'binary'),
     currentVersion: '2026.5.28',
+    profileCtx: {
+      name: 'dev',
+      isDev: true,
+      configDir: dir,
+      configFilePath: join(dir, 'config.toml'),
+      bufferDbPath,
+      logDir: dir,
+      sentinels: {
+        authFailed: join(dir, 'AUTH_FAILED'),
+        bufferFull: join(dir, 'BUFFER_FULL'),
+        sessionStopped: join(dir, 'SESSION_STOPPED'),
+        consent: join(dir, 'CONSENT'),
+        updateAvailable: join(dir, 'UPDATE_AVAILABLE'),
+      },
+      controlSocketPath: join(dir, 'control.sock'),
+      defaultNestBaseUrl: 'https://nest.example',
+    },
   };
   return { ...base, ...over };
 }
@@ -299,5 +316,8 @@ test('buffer/daemon/recent/resync sections populated from query result defaults'
   expect(signals.resyncEvents.totalCount).toBe(0);
   expect(signals.resyncEvents.regressionLoops).toEqual([]);
   expect(signals.clockSkewMs).toBeNull();
-  expect(signals.filesystem.diskFreeBytes).toBeNull();
+  expect(
+    signals.filesystem.diskFreeBytes === null ||
+      typeof signals.filesystem.diskFreeBytes === 'number',
+  ).toBe(true);
 });

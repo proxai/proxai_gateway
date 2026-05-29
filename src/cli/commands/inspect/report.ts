@@ -65,7 +65,7 @@ export function buildMarkdownReport(input: MarkdownReportInput): string {
   const totalRatio = formatRatio(summary.totalRawBytes, summary.totalCompressedBytes);
   const warningsSection =
     warnings.length > 0
-      ? `\n## ⚠ Warnings\n\n${warnings
+      ? `\n## Warnings\n\n${warnings
           .map((w) => `* **${formatSourceLabel(w.source)}:** ${w.message}`)
           .join('\n')}\n`
       : '';
@@ -79,21 +79,21 @@ export function buildMarkdownReport(input: MarkdownReportInput): string {
 * **Total Captured Events:** ${summary.totalTelemetryRecords}
 * **Total Disk Footprint:** ${formatBytes(summary.totalBytes)}
 
-## 💾 Telemetry Sources on Disk (Historical Raw Data)
+## Telemetry Sources on Disk (Historical Raw Data)
 
 | Source | Files | Prompts | Log Events | Data Size | Oldest Record Date |
 | :--- | :---: | :---: | :---: | :---: | :--- |
 ${diskRows}
 | **TOTAL** | **${summary.totalFiles.toLocaleString()}** | **${summary.totalPrompts.toLocaleString()}** | **${summary.totalRecords.toLocaleString()}** | **${formatBytes(summary.totalBytes)}** | **${diskOldest}** |
 
-## 🚀 Estimated Upload Metrics (If Fully Uploaded)
+## Estimated Upload Metrics (If Fully Uploaded)
 
 | Source | Prompts | Captured Events | Uncompressed Payload Size | Est. Upload Size (Compressed) | Compression Ratio |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 ${uploadRows}
 | **TOTAL** | **${summary.totalPrompts.toLocaleString()}** | **${summary.totalTelemetryRecords.toLocaleString()}** | **${formatBytes(summary.totalRawBytes)}** | **${formatBytes(summary.totalCompressedBytes)}** | **${totalRatio}x** |
 
-## 💡 Key Highlights
+## Key Highlights
 
 * **Oldest Telemetry Record:** ${oldestText}
 * **Newest Telemetry Record:** ${newestText}

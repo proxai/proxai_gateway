@@ -85,6 +85,7 @@ test('queryUploaded maps receipt columns and idempotentOnServer flag', () => {
     watermarkKind: 'rowid_range',
     sourcePathHash: 'b'.repeat(64),
     idempotentOnServer: true,
+    sourcePath: null,
   });
 });
 
@@ -153,6 +154,7 @@ test('queryFailed maps failed batch columns including a populated lastError', ()
     sourcePath: '/Users/test/state.vscdb',
     attempts: 1,
     lastError: 'boom',
+    sourcePathHash: 'a'.repeat(64),
   });
 });
 
@@ -242,6 +244,7 @@ test('queryQuarantined maps quarantine columns', () => {
     redactedSizeBytes: 9_000_000,
     reason: 'oversized_decompressed',
     quarantinedAtUtc: '2026-05-08T13:25:42.000Z',
+    sourcePathHash: 'a'.repeat(64),
   });
   expect(typeof first.id).toBe('number');
 });
@@ -291,6 +294,7 @@ test('queryPending maps pending batch columns', () => {
     capturedAtUtc: batch.capturedAtUtc,
     sourcePath: '/Users/test/g.log',
     attempts: 0,
+    sourcePathHash: 'a'.repeat(64),
   });
 });
 

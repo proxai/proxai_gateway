@@ -10,6 +10,7 @@ import {
   renderLastUploadsSection,
   renderResyncNote,
   renderUploadSection,
+  maskApiKey,
 } from 'cli/commands/status/render/render-sections.ts';
 import type { RenderInputs } from 'cli/commands/status/render/render.types.ts';
 import type { StatusCommandDeps } from 'cli/commands/status/status.types.ts';
@@ -20,20 +21,39 @@ const LOCAL_BUILD_BADGE = chalk.bgCyan.black(' LOCAL BUILD ');
 const FOOTER_HINT = 'Press q or Esc to quit';
 
 export function renderFullStatus(inputs: RenderInputs, deps: StatusCommandDeps): string {
-  if (inputs.compact === true) {
-    return renderCompactStatus(inputs);
+  const cleanInputs: RenderInputs = {
+    summary: cleanSummaryJargon(inputs.summary),
+    snapshot: inputs.snapshot,
+    notConfigured: inputs.notConfigured,
+    isDevMode: inputs.isDevMode,
+    isLocalBuild: inputs.isLocalBuild,
+    binaryPath: inputs.binaryPath,
+    nowLocal: inputs.nowLocal,
+    version: inputs.version,
+    ...(inputs.compact !== undefined ? { compact: inputs.compact } : {}),
+    ...(inputs.secondProfile !== undefined
+      ? {
+          secondProfile: {
+            ...inputs.secondProfile,
+            summary: cleanSummaryJargon(inputs.secondProfile.summary),
+          },
+        }
+      : {}),
+  };
+
+  if (cleanInputs.compact === true) {
+    return renderCompactStatus(cleanInputs);
   }
-  if (inputs.secondProfile !== undefined) {
-    return renderDualStatus(inputs, inputs.secondProfile, deps);
+  if (cleanInputs.secondProfile !== undefined) {
+    return renderDualStatus(cleanInputs, cleanInputs.secondProfile, deps);
   }
-  return renderSingleStatus(inputs, deps);
+  return renderSingleStatus(cleanInputs, deps);
 }
 
 function cleanSummaryJargon(summary: RenderInputs['summary']): RenderInputs['summary'] {
   let headline = summary.headline;
   let hint = summary.hint;
 
-  // Headline replacements to strip daemon, background service, or sentinel jargon
   if (
     headline.includes('Background service is running') ||
     headline.includes('Dev daemon active') ||
@@ -49,13 +69,12 @@ function cleanSummaryJargon(summary: RenderInputs['summary']): RenderInputs['sum
     headline.includes('Dev daemon is not running')
   ) {
     headline = 'App is not running.';
-  } else if (headline.includes('Session stopped')) {
+  } else if (headline.includes('Session stopped') || headline.includes('Dev daemon stopped')) {
     headline = 'App is stopped.';
   } else if (headline.includes('Buffer almost full')) {
     headline = headline.replace('Buffer almost full', 'System buffer is almost full');
   }
 
-  // Hint replacements to simplify phrasing
   if (hint !== null) {
     if (hint.includes('dev daemon')) {
       hint = hint.replace('Restart your dev daemon to resume.', 'Restart the app to resume.');
@@ -65,6 +84,12 @@ function cleanSummaryJargon(summary: RenderInputs['summary']): RenderInputs['sum
     }
     if (hint.includes('register with launchd/systemd')) {
       hint = 'Run `proxai-gateway start` to enable auto-restart.';
+    }
+    if (hint.includes('background service')) {
+      hint = hint.replace('background service', 'app');
+    }
+    if (hint.includes('daemon terminal')) {
+      hint = hint.replace('daemon terminal', 'terminal');
     }
   }
 
@@ -82,7 +107,7 @@ function renderCompactStatus(inputs: RenderInputs): string {
   lines.push(`  ${chalk.bold(HEADER_LABEL)}${version}    ${ts}`);
   lines.push('');
 
-  const cleanSummary = cleanSummaryJargon(inputs.summary);
+  const cleanSummary = inputs.summary;
   const glyph = glyphForLevel(cleanSummary.level);
   const color = colorForLevel(cleanSummary.level);
   lines.push(`  ${glyph} ${chalk.bold(color(cleanSummary.headline))}`);
@@ -91,7 +116,9 @@ function renderCompactStatus(inputs: RenderInputs): string {
   }
 
   if (inputs.snapshot !== null) {
-    // Only show last successful uploads and history all-time sections
+    const maskedKey = maskApiKey(inputs.snapshot.cfg?.account.apiKey);
+    lines.push(`     ${dim('Ingestion Key:')} ${maskedKey}`);
+    lines.push('');
     lines.push(...renderLastUploadsSection(inputs.snapshot));
     lines.push(...renderHistorySection(inputs.snapshot));
   }
@@ -207,7 +234,7 @@ function renderDevBanner(inputs: RenderInputs): string[] {
   if (inputs.isDevMode) {
     const backend = ingest === null ? '' : `  ${dim('backend:')} ${chalk.cyan(ingest)}`;
     lines.push(
-      `  ${chalk.yellow('⚠ DEV MODE')}    ${dim('localhost backend sentinel active')}${backend}`,
+      `  ${chalk.yellow('! DEV MODE')}    ${dim('localhost backend sentinel active')}${backend}`,
     );
   } else if (inputs.isLocalBuild && ingest !== null) {
     lines.push(`  ${' '.repeat(15)}${dim('backend:')} ${chalk.cyan(ingest)}`);

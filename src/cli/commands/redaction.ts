@@ -119,7 +119,8 @@ function emitCategoryDetail(emit: (line: string) => void, category: RuleCategory
   emit(
     `${chalk.bold.cyan(category.name)}  ${chalk.dim(`(${category.rules.length.toString()} rules)`)}`,
   );
-  emit(chalk.dim('─'.repeat(70)));
+  const terminalWidth = process.stdout.columns || 70;
+  emit(chalk.dim('─'.repeat(terminalWidth)));
   for (const rule of category.rules) {
     emitRule(emit, rule);
     emit('');

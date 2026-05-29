@@ -513,3 +513,77 @@ test('windows writes a sibling .new file and does not overwrite existing binary'
   const oldText = await readFile(binaryPath, 'utf8');
   expect(oldText).toBe('running-exe');
 });
+
+test('local build path upgrade triggers local rebuild flow', async () => {
+  const origSpawn = Bun.spawn;
+  let spawnedCmd: string[] = [];
+  Bun.spawn = ((options: { cmd: string[] }) => {
+    spawnedCmd = options.cmd;
+    return { exited: Promise.resolve(0) } as unknown as ReturnType<typeof Bun.spawn>;
+  }) as unknown as typeof Bun.spawn;
+  const out = captureOutput();
+  const result = await runUpgrade({
+    output: out,
+    currentVersion: '2026.5.7',
+    binaryPath: '/workspace/dist/darwin-arm64/proxai-gateway',
+    platform: 'darwin',
+  });
+  expect(result.exitCode).toBe(0);
+  expect(spawnedCmd).toEqual(['bun', 'scripts/build.ts', 'darwin-arm64']);
+  expect(
+    out.lines.some((l) => l.level === 'info' && l.msg.includes('Local development build detected')),
+  ).toBe(true);
+  expect(
+    out.lines.some(
+      (l) => l.level === 'success' && l.msg.includes('Local build upgraded successfully'),
+    ),
+  ).toBe(true);
+  Bun.spawn = origSpawn;
+});
+
+test('local build path upgrade resolves repository root correctly', async () => {
+  const origSpawn = Bun.spawn;
+  let spawnedCmd: string[] = [];
+  let spawnedCwd: string | undefined;
+  Bun.spawn = ((options: { cmd: string[]; cwd?: string }) => {
+    spawnedCmd = options.cmd;
+    spawnedCwd = options.cwd;
+
+    return { exited: Promise.resolve(0) } as unknown as ReturnType<typeof Bun.spawn>;
+  }) as unknown as typeof Bun.spawn;
+
+  await mkdir(join(dir, 'scripts'), { recursive: true });
+  await writeFile(join(dir, 'package.json'), JSON.stringify({ name: '@proxai/gateway' }));
+  await writeFile(join(dir, 'scripts/build.ts'), 'console.log("build mock")');
+
+  const origArgv = process.argv;
+  process.argv = ['/usr/local/bin/bun', '/outside/of/any/repo/script.ts'];
+
+  const binaryPath = join(dir, 'dist/darwin-arm64/proxai-gateway');
+  const out1 = captureOutput();
+  const result1 = await runUpgrade({
+    output: out1,
+    currentVersion: '2026.5.7',
+    binaryPath,
+    platform: 'darwin',
+  });
+  expect(result1.exitCode).toBe(0);
+  expect(spawnedCmd).toEqual(['bun', 'scripts/build.ts', 'darwin-arm64']);
+  expect(spawnedCwd).toBe(dir);
+
+  process.argv = ['/usr/local/bin/bun', join(dir, 'src/main.ts')];
+
+  const out2 = captureOutput();
+  const result2 = await runUpgrade({
+    output: out2,
+    currentVersion: '2026.5.7',
+    binaryPath: '/usr/local/bin/bun',
+    platform: 'darwin',
+  });
+  expect(result2.exitCode).toBe(0);
+  expect(spawnedCmd).toEqual(['bun', 'scripts/build.ts', 'darwin-arm64']);
+  expect(spawnedCwd).toBe(dir);
+
+  Bun.spawn = origSpawn;
+  process.argv = origArgv;
+});

@@ -22,5 +22,6 @@ export function buildStartDeps(inputs: BuildStartDepsInputs): StartCommandDeps {
     invokeSetup: inputs.invokeSetup,
     serviceUnitRecreate: inputs.serviceUnitRecreate,
     runAutoUpgrade: inputs.runAutoUpgrade,
+    profileName: inputs.profileCtx.name,
   };
 }

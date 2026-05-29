@@ -113,6 +113,8 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
     systemdLingerEnabled: true,
     macOsQuarantineXattr: null,
     clockSkewMs: null,
+    bufferDbReadable: true,
+    receiptsTableReadable: true,
   };
   return { ...base, ...overrides };
 }
@@ -237,7 +239,7 @@ test('B2: auth-unconfirmed loop only when NO AUTH_FAILED and count>0', () => {
     ),
   );
   expect(f.code).toBe('B2');
-  expect(f.cause).toContain('3 occurrences');
+  expect(f.cause).toContain('API key network verification');
 });
 
 test('B3: ingestion key authentication error based on lastUploadError', () => {
@@ -597,7 +599,7 @@ test('E1: falls back to generic cause when find returns undefined despite some-m
       }),
     ),
   );
-  expect(f.cause).toContain('auto-upgrade failed: check_failed');
+  expect(f.cause).toContain('check_failed');
 });
 
 test('E2: brew update pending only when sentinel present and install_source=brew', () => {
@@ -648,7 +650,7 @@ test('E3: write_failed disambiguated by disk-full, then config-dir, then unclear
       }),
     ),
   );
-  expect(permMismatch.cause).toContain('configDir not writable');
+  expect(permMismatch.cause).toContain('not writable');
 
   const unclear = requireDefined(
     checkE3WriteFailed(
@@ -663,7 +665,7 @@ test('E3: write_failed disambiguated by disk-full, then config-dir, then unclear
     ),
   );
   expect(unclear.confidence).toBe(Confidence.likely);
-  expect(unclear.cause).toContain('cause unclear');
+  expect(unclear.cause).toContain('write error');
 });
 
 test('E4: success but old binary mtime suggests no clean restart', () => {
@@ -763,43 +765,20 @@ test('F7: macos quarantine xattr', () => {
   expect(f.severity).toBe(Severity.critical);
 });
 
-test('G1: receipts-table-readable always returns null on both branches', () => {
-  expect(checkG1ReceiptsTableReadable(withBuffer({ receiptCount: 5 }))).toBeNull();
-  expect(
-    checkG1ReceiptsTableReadable(withBuffer({ receiptCount: 0, pendingCount: 0, failedCount: 0 })),
-  ).toBeNull();
-  expect(checkG1ReceiptsTableReadable(withBuffer({ receiptCount: 0, pendingCount: 1 }))).toBeNull();
+test('G1: receipts-table-readable returns null when readable, finding when unreadable', () => {
+  expect(checkG1ReceiptsTableReadable(baseSignals({ receiptsTableReadable: true }))).toBeNull();
+  const f = requireDefined(
+    checkG1ReceiptsTableReadable(baseSignals({ receiptsTableReadable: false })),
+  );
+  expect(f.code).toBe('G1');
+  expect(f.severity).toBe(Severity.critical);
 });
 
-test('G2: buffer-db-corrupt always returns null on each guarded branch', () => {
-  expect(checkG2BufferDbCorrupt(withBuffer({ pendingCount: 1 }))).toBeNull();
-  expect(checkG2BufferDbCorrupt(withBuffer({ pendingCount: 0, receiptCount: 1 }))).toBeNull();
-  expect(
-    checkG2BufferDbCorrupt(
-      baseSignals({
-        buffer: { ...baseSignals().buffer, pendingCount: 0, receiptCount: 0 },
-        configExists: false,
-      }),
-    ),
-  ).toBeNull();
-  expect(
-    checkG2BufferDbCorrupt(
-      baseSignals({
-        buffer: { ...baseSignals().buffer, pendingCount: 0, receiptCount: 0 },
-        configExists: true,
-        daemonRunning: false,
-      }),
-    ),
-  ).toBeNull();
-  expect(
-    checkG2BufferDbCorrupt(
-      baseSignals({
-        buffer: { ...baseSignals().buffer, pendingCount: 0, receiptCount: 0 },
-        configExists: true,
-        daemonRunning: true,
-      }),
-    ),
-  ).toBeNull();
+test('G2: buffer-db-corrupt returns null when readable, finding when unreadable', () => {
+  expect(checkG2BufferDbCorrupt(baseSignals({ bufferDbReadable: true }))).toBeNull();
+  const f = requireDefined(checkG2BufferDbCorrupt(baseSignals({ bufferDbReadable: false })));
+  expect(f.code).toBe('G2');
+  expect(f.severity).toBe(Severity.critical);
 });
 
 test('G3: regression loop above threshold', () => {

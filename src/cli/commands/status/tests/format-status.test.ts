@@ -313,6 +313,7 @@ test('renderHealthSection covers running daemon, no sentinels, current=latest, f
       pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
       now: NOW,
     },
+    apiKey: 'my-secret-ingestion-key-with-length',
   });
   const joined = lines.join('\n');
   expect(joined).toContain('Daemon');
@@ -325,6 +326,8 @@ test('renderHealthSection covers running daemon, no sentinels, current=latest, f
   expect(joined).toContain('up to date');
   expect(joined).toContain('Binary age');
   expect(joined).toContain('14 days');
+  expect(joined).toContain('Ingestion Key');
+  expect(joined).toContain('my-s*****ngth');
 });
 
 test('renderHealthSection covers update sentinel, missing pid, and stale binary', () => {
@@ -522,4 +525,93 @@ test('renderHealthSection shows configured stale-binary thresholds via constants
 test('formatSourceLabel default case fallback for custom name', () => {
   const { formatSourceLabel } = require('../layout.ts');
   expect(formatSourceLabel('my-custom-source')).toBe('My Custom Source');
+});
+
+test('renderHealthSection in jargon-free standard user mode', () => {
+  const lines = renderHealthSection({
+    daemon: {
+      isRunning: false,
+      pid: 78321,
+      inferredAlive: true,
+      isDevMode: false,
+      startedAt: null,
+      now: NOW,
+      installSource: null,
+    },
+    sentinels: {
+      authFailed: true,
+      bufferFull: true,
+      sessionStopped: true,
+      updateAvailable: true,
+    },
+    autoUpgrade: {
+      lastCheckAt: null,
+      currentVersion: '2026.5.9-3',
+      latestKnownVersion: '2026.5.10',
+      installSource: null,
+      updateAvailableSentinelPresent: true,
+      now: NOW,
+    },
+    binaryAge: {
+      installedAt: new Date(NOW.getTime() - 14 * 86_400_000).toISOString(),
+      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
+      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
+      now: NOW,
+    },
+  });
+  const joined = lines.join('\n');
+  expect(joined).toContain('App');
+  expect(joined).not.toContain('Daemon');
+  expect(joined).toContain('running');
+  expect(joined).not.toContain('running (not registered)');
+  expect(joined).not.toContain('pid');
+  expect(joined).toContain('Status flags');
+  expect(joined).not.toContain('Sentinels');
+  expect(joined).toContain('authentication failed');
+  expect(joined).not.toContain('auth-failed');
+  expect(joined).toContain('buffer full');
+  expect(joined).not.toContain('buffer-full');
+  expect(joined).toContain('stopped');
+  expect(joined).not.toContain('session-stopped');
+  expect(joined).toContain('update available');
+  expect(joined).not.toContain('update-available');
+});
+
+test('sectionDivider is responsive to process.stdout.columns', () => {
+  const { sectionDivider } = require('../render/format-rows.ts');
+  const originalColumns = process.stdout.columns;
+
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      get: () => 100,
+      configurable: true,
+    });
+    const result100 = sectionDivider('Capture');
+
+    const esc = String.fromCharCode(27);
+    const cleanResult100 = result100.replace(new RegExp(esc + '\\[[0-9;]*m', 'g'), '');
+    expect(cleanResult100).toContain('Capture');
+    expect(cleanResult100.replace('\n', '').length).toBe(100);
+
+    Object.defineProperty(process.stdout, 'columns', {
+      get: () => 60,
+      configurable: true,
+    });
+    const result60 = sectionDivider('Capture');
+    const cleanResult60 = result60.replace(new RegExp(esc + '\\[[0-9;]*m', 'g'), '');
+    expect(cleanResult60.replace('\n', '').length).toBe(60);
+
+    Object.defineProperty(process.stdout, 'columns', {
+      get: () => undefined,
+      configurable: true,
+    });
+    const resultUndefined = sectionDivider('Capture');
+    const cleanResultUndefined = resultUndefined.replace(new RegExp(esc + '\\[[0-9;]*m', 'g'), '');
+    expect(cleanResultUndefined.replace('\n', '').length).toBe(82);
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+    });
+  }
 });

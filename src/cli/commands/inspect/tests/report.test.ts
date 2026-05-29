@@ -62,7 +62,7 @@ test('buildMarkdownReport: renders all sections with results and warnings', () =
   expect(markdown).toContain('# ProxAI Telemetry Inspection Report');
   expect(markdown).toContain('Telemetry Sources on Disk');
   expect(markdown).toContain('Estimated Upload Metrics');
-  expect(markdown).toContain('## ⚠ Warnings');
+  expect(markdown).toContain('## Warnings');
   expect(markdown).toContain('boom');
   expect(markdown).toContain('Gemini CLI');
 });
@@ -76,7 +76,7 @@ test('buildMarkdownReport: omits warnings and handles null dates', () => {
     now: new Date('2026-05-21T10:00:00.000Z'),
   });
   expect(markdown).toContain('None found');
-  expect(markdown).not.toContain('## ⚠ Warnings');
+  expect(markdown).not.toContain('## Warnings');
 });
 
 test('writeMarkdownReport: creates the directory and writes the file', async () => {

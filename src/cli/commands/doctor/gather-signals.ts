@@ -1,4 +1,4 @@
-import { access, constants as fsConstants, stat as fsStat } from 'node:fs/promises';
+import { access, constants as fsConstants, stat as fsStat, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -15,15 +15,108 @@ async function probeWritable(dirPath: string): Promise<boolean> {
   }
 }
 
-async function probeNestReachable(url: string): Promise<boolean | null> {
+async function probeNestReachable(url: string): Promise<{
+  reachable: boolean | null;
+  clockSkewMs: number | null;
+}> {
   try {
+    const start = Date.now();
     const resp = await fetch(url, {
       method: 'GET',
       signal: AbortSignal.timeout(5_000),
     });
-    return resp.status < 600;
+    const end = Date.now();
+    const reachable = resp.status < 600;
+    const dateHeader = resp.headers.get('date');
+    let clockSkewMs: number | null = null;
+    if (dateHeader) {
+      const serverTime = Date.parse(dateHeader);
+      if (Number.isFinite(serverTime)) {
+        const rtt = end - start;
+        const estimatedServerTime = serverTime + rtt / 2;
+        clockSkewMs = estimatedServerTime - end;
+      }
+    }
+    return { reachable, clockSkewMs };
   } catch {
-    return false;
+    return { reachable: false, clockSkewMs: null };
+  }
+}
+
+async function probeDiskFreeBytes(
+  dirPath: string,
+  platform: NodeJS.Platform,
+): Promise<number | null> {
+  if (platform === 'win32') {
+    try {
+      const proc = Bun.spawn(
+        [
+          'powershell',
+          '-Command',
+          `Get-Volume -FilePath '${dirPath}' | Select-Object -ExpandProperty SizeRemaining`,
+        ],
+        {
+          stdout: 'pipe',
+          stderr: 'pipe',
+        },
+      );
+      const text = await new Response(proc.stdout).text();
+      await proc.exited;
+      const num = Number.parseInt(text.trim(), 10);
+      return Number.isFinite(num) ? num : null;
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    const proc = Bun.spawn(['df', '-k', dirPath], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const text = await new Response(proc.stdout).text();
+    await proc.exited;
+
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) return null;
+    const targetLine = lines[1];
+    if (!targetLine) return null;
+    const parts = targetLine.trim().split(/\s+/);
+    if (parts.length >= 4) {
+      const part = parts[3];
+      if (part !== undefined) {
+        const kb = Number.parseInt(part, 10);
+        if (Number.isFinite(kb)) {
+          return kb * 1024;
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function probeInstallSource(
+  binaryPath: string,
+  platform: NodeJS.Platform,
+): Promise<string | null> {
+  if (platform === 'win32') return 'msi';
+  try {
+    const resolvedPath = await realpath(binaryPath);
+    if (
+      resolvedPath.includes('homebrew') ||
+      resolvedPath.includes('Cellar') ||
+      resolvedPath.includes('.linuxbrew')
+    ) {
+      return 'brew';
+    }
+    if (resolvedPath.includes('node_modules') || resolvedPath.includes('.bun')) {
+      return 'npm';
+    }
+    return 'manual';
+  } catch {
+    return null;
   }
 }
 
@@ -130,7 +223,9 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     cursorExists,
     codexExists,
     geminiCliExists,
-    nestReachable,
+    networkResult,
+    diskFreeBytes,
+    installSource,
   ] = await Promise.all([
     Bun.file(deps.configFilePath).exists(),
     readSentinelFlag(deps.authFailedSentinelPath),
@@ -148,6 +243,8 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     probeSourcePathExists([homedir(), '.codex']),
     probeSourcePathExists([homedir(), '.config', 'gemini']),
     probeNestReachable(deps.nestVerifyKeyUrl),
+    probeDiskFreeBytes(deps.configDirPath, deps.platform),
+    probeInstallSource(deps.binaryPath, deps.platform),
   ]);
 
   let configParses = false;
@@ -187,7 +284,7 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     binary: {
       version: deps.currentVersion,
       mtime: binaryMtime,
-      installSource: null,
+      installSource,
     },
     recentEvents: {
       authUnconfirmedCount: dbData.recentEvents.authUnconfirmedCount,
@@ -199,10 +296,10 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     filesystem: {
       configDirWritable,
       logDirWritable,
-      diskFreeBytes: null,
+      diskFreeBytes,
     },
     network: {
-      nestReachable,
+      nestReachable: networkResult.reachable,
     },
     sourcePaths: {
       claudeCodeExists,
@@ -217,7 +314,9 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     platform: deps.platform,
     systemdLingerEnabled,
     macOsQuarantineXattr,
-    clockSkewMs: null,
+    clockSkewMs: networkResult.clockSkewMs,
+    bufferDbReadable: dbData.dbReadable,
+    receiptsTableReadable: dbData.receiptsTableReadable,
   };
 
   return signals;

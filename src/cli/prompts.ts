@@ -43,7 +43,16 @@ export function inquirerPrompts(): PromptSink {
           message,
           validate: (v) => {
             const trimmed = v.trim();
-            if (trimmed === '' || trimmed === requiredPhrase) return true;
+            const lower = trimmed.toLowerCase();
+            if (
+              trimmed === '' ||
+              trimmed === requiredPhrase ||
+              lower === 'q' ||
+              lower === 'abort' ||
+              lower === 'esc'
+            ) {
+              return true;
+            }
             return `type '${requiredPhrase}' to confirm, or leave empty to abort`;
           },
         });

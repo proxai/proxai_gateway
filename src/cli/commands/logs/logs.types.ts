@@ -29,6 +29,7 @@ export interface UploadedRecord {
   readonly watermarkKind: string;
   readonly sourcePathHash: string;
   readonly idempotentOnServer: boolean;
+  readonly sourcePath?: string | null;
 }
 
 export interface FailedRecord {
@@ -36,6 +37,7 @@ export interface FailedRecord {
   readonly sourceApp: string;
   readonly capturedAtUtc: string;
   readonly sourcePath: string;
+  readonly sourcePathHash?: string | null;
   readonly attempts: number;
   readonly lastError: string | null;
 }
@@ -44,6 +46,7 @@ export interface QuarantinedRecord {
   readonly id: number;
   readonly sourceApp: string;
   readonly sourcePath: string;
+  readonly sourcePathHash?: string | null;
   readonly redactedSizeBytes: number;
   readonly reason: string;
   readonly quarantinedAtUtc: string;
@@ -54,6 +57,7 @@ export interface PendingRecord {
   readonly sourceApp: string;
   readonly capturedAtUtc: string;
   readonly sourcePath: string;
+  readonly sourcePathHash?: string | null;
   readonly attempts: number;
 }
 

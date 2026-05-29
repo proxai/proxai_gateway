@@ -29,15 +29,14 @@ export function checkE1StaleBinary(signals: DoctorSignals): Finding | null {
       e.includes('write_failed'),
   );
 
-  const specificCause =
-    firstEvent !== undefined ? `auto-upgrade failed: ${firstEvent}` : 'auto-upgrade failing';
+  const errorDetail = firstEvent ?? 'unknown auto-upgrade failure';
 
   return {
     code: 'E1',
     severity: Severity.warning,
     confidence: Confidence.confirmed,
-    cause: `Binary is ${Math.floor(ageMs / MS_PER_DAY)} days old and ${specificCause}`,
-    action: 'Run: proxai-gateway upgrade  or reinstall manually',
+    cause: `The gateway binary is outdated (${Math.floor(ageMs / MS_PER_DAY)} days old) and background auto-upgrades are failing: ${errorDetail}.`,
+    action: 'Run "proxai-gateway upgrade" to manually upgrade, or perform a manual reinstallation.',
   };
 }
 
@@ -48,8 +47,8 @@ export function checkE2BrewUpdatePending(signals: DoctorSignals): Finding | null
     code: 'E2',
     severity: Severity.info,
     confidence: Confidence.confirmed,
-    cause: 'UPDATE_AVAILABLE sentinel present with install_source=brew',
-    action: 'Run: brew upgrade proxai-gateway',
+    cause: 'A newer version of proxai-gateway is available via Homebrew.',
+    action: 'Run "brew upgrade proxai-gateway" to update to the latest version.',
   };
 }
 
@@ -67,8 +66,9 @@ export function checkE3WriteFailed(signals: DoctorSignals): Finding | null {
       code: 'E3',
       severity: Severity.critical,
       confidence: Confidence.confirmed,
-      cause: 'Auto-upgrade write_failed — disk is nearly full',
-      action: 'Free disk space; the binary cannot be replaced until space is available',
+      cause: 'Auto-upgrade failed because the disk is nearly full.',
+      action:
+        'Free up disk space on the installation drive to allow the binary upgrade to complete.',
     };
   }
 
@@ -77,8 +77,9 @@ export function checkE3WriteFailed(signals: DoctorSignals): Finding | null {
       code: 'E3',
       severity: Severity.critical,
       confidence: Confidence.confirmed,
-      cause: 'Auto-upgrade write_failed — configDir not writable (permission mismatch)',
-      action: 'Fix permissions on the gateway config directory',
+      cause: 'Auto-upgrade failed because the gateway configuration directory is not writable.',
+      action:
+        'Grant write permissions to the current user for the gateway configuration directory.',
     };
   }
 
@@ -86,9 +87,8 @@ export function checkE3WriteFailed(signals: DoctorSignals): Finding | null {
     code: 'E3',
     severity: Severity.critical,
     confidence: Confidence.likely,
-    cause:
-      'Auto-upgrade write_failed — cause unclear (check disk space, binary path permissions, install/runtime uid)',
-    action: 'Run: proxai-gateway upgrade  or reinstall manually',
+    cause: 'Auto-upgrade failed to write the updated binary due to a filesystem write error.',
+    action: 'Manually upgrade the binary by running "proxai-gateway upgrade" or reinstalling.',
   };
 }
 
@@ -105,9 +105,8 @@ export function checkE4SuccessOldVersionRunning(signals: DoctorSignals): Finding
       code: 'E4',
       severity: Severity.warning,
       confidence: Confidence.likely,
-      cause:
-        'Auto-upgrade success logged but binary mtime is old — service manager may not have restarted cleanly',
-      action: 'Run: proxai-gateway restart',
+      cause: 'Auto-upgrade succeeded, but the active binary has not been updated.',
+      action: 'Restart the gateway service by running: proxai-gateway restart',
     };
   }
 

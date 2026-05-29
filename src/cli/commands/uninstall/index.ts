@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { createActor } from 'xstate';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
-import type { CommandResult } from 'cli/cli.types.ts';
-import { rmRecursive } from 'core/io/fs';
+import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
+import { readDevModeSentinel, rmRecursive } from 'core/io/fs';
 import { uninstallMachine } from 'services/state-machines/uninstall';
 
 import { buildConfirmationMessage } from 'cli/commands/uninstall/confirmation-message.ts';
@@ -52,6 +52,23 @@ export async function runUninstall(
   const machine = createActor(uninstallMachine, { input: { resetMode: reset } });
   machine.start();
 
+  const isDevMode =
+    deps.isDevMode ?? (await readDevModeSentinel(join(deps.profileRootDir, 'DEV_MODE')));
+
+  const uninstallOutput: OutputSink = isDevMode
+    ? deps.output
+    : {
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        success: () => {},
+      };
+
+  const uninstallDeps: UninstallCommandDeps = {
+    ...deps,
+    output: uninstallOutput,
+  };
+
   const cfgExists = await deps.configExists();
   const unitFileExists =
     deps.serviceUnitPath !== null ? await Bun.file(deps.serviceUnitPath).exists() : false;
@@ -63,17 +80,25 @@ export async function runUninstall(
   }
 
   if (!cfgExists && !unitFileExists && !registered) {
-    deps.output.info('no installation found');
+    if (isDevMode) {
+      deps.output.info('no installation found');
+    } else {
+      if (reset) {
+        deps.output.success('uninstalled and reset');
+      } else {
+        deps.output.success('uninstalled');
+      }
+    }
     machine.stop();
     return { exitCode: EXIT_CODE.ok };
   }
 
-  if (options.yes !== true) {
-    const message = buildConfirmationMessage(deps, reset);
-    const phrase = reset ? 'uninstall --reset' : 'uninstall';
+  if (reset && options.yes !== true) {
+    const message = buildConfirmationMessage(deps, isDevMode);
+    const phrase = 'uninstall --reset';
     const confirmed = await deps.prompts.confirmPhrase(message, phrase);
     if (!confirmed) {
-      deps.output.info('aborted — nothing changed');
+      uninstallDeps.output.info('aborted — nothing changed');
       machine.stop();
       return { exitCode: EXIT_CODE.alreadyInstalled };
     }
@@ -90,24 +115,24 @@ export async function runUninstall(
       await deps.devServiceManager.unregister();
     } catch {}
 
-    await removeUnitFile(deps, deps.devServiceUnitPath);
+    await removeUnitFile(uninstallDeps, deps.devServiceUnitPath);
   }
 
   try {
     await deps.serviceManager.stop();
-    deps.output.info('daemon stopped');
+    uninstallDeps.output.info('daemon stopped');
   } catch {
-    deps.output.info('daemon was not running');
+    uninstallDeps.output.info('daemon was not running');
   }
 
   try {
     await deps.serviceManager.unregister();
-    deps.output.info('service unregistered');
+    uninstallDeps.output.info('service unregistered');
   } catch {
-    deps.output.info('service was not registered');
+    uninstallDeps.output.info('service was not registered');
   }
 
-  await removeUnitFile(deps, deps.serviceUnitPath);
+  await removeUnitFile(uninstallDeps, deps.serviceUnitPath);
   machine.send({ type: 'SERVICE_STOPPED' });
 
   let pathsSwept = 0;
@@ -120,18 +145,18 @@ export async function runUninstall(
       rmSync(join(deps.profileRootDir, file), { force: true });
     }
     pathsSwept += 4;
-    deps.output.success('local state wiped');
+    uninstallDeps.output.success('local state wiped');
   }
 
   if (deps.sweep !== undefined) {
-    await runSweep(deps, deps.sweep);
+    await runSweep(uninstallDeps, deps.sweep);
     pathsSwept += 1;
   }
   machine.send({ type: 'PATHS_SWEPT', count: pathsSwept });
 
-  await runBinaryRemoval(deps);
+  await runBinaryRemoval(uninstallDeps);
   machine.send({ type: 'BUFFER_REMOVED' });
-  await runPathCleanup(deps);
+  await runPathCleanup(uninstallDeps);
   machine.send({ type: 'SENTINELS_REMOVED', count: 0 });
 
   if (reset) {

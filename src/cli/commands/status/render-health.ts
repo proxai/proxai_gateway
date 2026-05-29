@@ -39,30 +39,43 @@ export interface BinaryAgeInput {
   now: Date;
 }
 
+function maskApiKey(key?: string | null): string {
+  if (!key) return 'none';
+  if (key.length <= 8) return '*****';
+  return `${key.slice(0, 4)}*****${key.slice(-4)}`;
+}
+
 export function renderHealthSection(input: {
   daemon: HealthDaemonInput;
   sentinels: ActiveSentinels;
   autoUpgrade: AutoUpgradeInput;
   binaryAge: BinaryAgeInput;
+  apiKey?: string | null | undefined;
 }): string[] {
+  const isDevLike = input.daemon.isDevMode !== false;
   const lines: string[] = [sectionHeader('Health')];
-  lines.push(`  ${keyCol('Daemon')}${renderDaemonLine(input.daemon)}`);
-  lines.push(`  ${keyCol('Sentinels')}${renderSentinelsLine(input.sentinels)}`);
+  lines.push(
+    `  ${keyCol(isDevLike ? 'Daemon' : 'App')}${renderDaemonLine(input.daemon, isDevLike)}`,
+  );
+  lines.push(
+    `  ${keyCol(isDevLike ? 'Sentinels' : 'Status flags')}${renderSentinelsLine(input.sentinels, isDevLike)}`,
+  );
   lines.push(`  ${keyCol('Auto-upgrade')}${renderAutoUpgradeLine(input.autoUpgrade)}`);
   lines.push(`  ${keyCol('Binary age')}${renderBinaryAgeLine(input.binaryAge)}`);
+  lines.push(`  ${keyCol('Ingestion Key')}${maskApiKey(input.apiKey)}`);
   return lines;
 }
 
-function renderDaemonLine(d: HealthDaemonInput): string {
+function renderDaemonLine(d: HealthDaemonInput, isDevLike: boolean): string {
   if (!d.isRunning) {
     if (d.inferredAlive === true) {
-      const label = d.isDevMode === true ? 'running (dev)' : 'running (not registered)';
+      const label = d.isDevMode === true ? 'running (dev)' : 'running';
       return chalk.green(label);
     }
     return chalk.dim('not running');
   }
   const parts: string[] = [];
-  if (d.pid !== null) parts.push(`pid ${d.pid.toString()}`);
+  if (isDevLike && d.pid !== null) parts.push(`pid ${d.pid.toString()}`);
   if (d.startedAt !== null) {
     const ms = d.now.getTime() - d.startedAt.getTime();
     if (ms >= 0) parts.push(`uptime ${formatDuration(ms)}`);
@@ -71,12 +84,12 @@ function renderDaemonLine(d: HealthDaemonInput): string {
   return `${chalk.green('running')}${detail}`;
 }
 
-function renderSentinelsLine(s: ActiveSentinels): string {
+function renderSentinelsLine(s: ActiveSentinels, isDevLike: boolean): string {
   const active: string[] = [];
-  if (s.authFailed) active.push('auth-failed');
-  if (s.bufferFull) active.push('buffer-full');
-  if (s.sessionStopped) active.push('session-stopped');
-  if (s.updateAvailable) active.push('update-available');
+  if (s.authFailed) active.push(isDevLike ? 'auth-failed' : 'authentication failed');
+  if (s.bufferFull) active.push(isDevLike ? 'buffer-full' : 'buffer full');
+  if (s.sessionStopped) active.push(isDevLike ? 'session-stopped' : 'stopped');
+  if (s.updateAvailable) active.push(isDevLike ? 'update-available' : 'update available');
   if (active.length === 0) return chalk.dim('none active');
   return chalk.yellow(active.join(', '));
 }

@@ -10,8 +10,10 @@ export function checkF1ConfigDirNotWritable(signals: DoctorSignals): Finding | n
     code: 'F1',
     severity: Severity.critical,
     confidence: Confidence.confirmed,
-    cause: 'configDir is not writable (EACCES) — daemon cannot write sentinels or buffer',
-    action: 'Fix permissions: chmod u+w <configDir>',
+    cause:
+      'The gateway configuration directory (~/.proxai) is not writable due to restricted file permissions.',
+    action:
+      'Grant read and write permissions by running "chmod -R u+rw ~/.proxai" (macOS/Linux) or adjusting folder security access settings (Windows).',
   };
 }
 
@@ -23,8 +25,9 @@ export function checkF2DiskSpaceLow(signals: DoctorSignals): Finding | null {
     code: 'F2',
     severity: Severity.critical,
     confidence: Confidence.confirmed,
-    cause: `Disk space critically low: ${mb.toString()} MiB free`,
-    action: 'Free disk space; the buffer cannot grow and upgrades will fail',
+    cause: `The primary storage partition is critically low on space, with only ${mb.toString()} MiB free.`,
+    action:
+      'Free up at least 500 MiB of disk space on the primary partition to allow the gateway local database and log writer to operate safely.',
   };
 }
 
@@ -34,8 +37,10 @@ export function checkF3LogDirNotWritable(signals: DoctorSignals): Finding | null
     code: 'F3',
     severity: Severity.warning,
     confidence: Confidence.confirmed,
-    cause: 'logDir is not writable — structured logging is degraded',
-    action: 'Fix permissions on the gateway log directory',
+    cause:
+      'The gateway log directory (~/.proxai) is not writable due to restricted file permissions.',
+    action:
+      'Grant write permissions to the log directory by running "chmod -R u+rw ~/.proxai" (macOS/Linux) or adjusting folder security access settings (Windows).',
   };
 }
 
@@ -47,8 +52,9 @@ export function checkF4ClockSkew(signals: DoctorSignals): Finding | null {
     code: 'F4',
     severity: Severity.warning,
     confidence: Confidence.likely,
-    cause: `System clock may be skewed by ~${skewMin.toString()} min — watermark/timestamp anomalies possible`,
-    action: 'Check NTP sync; ensure system clock is accurate',
+    cause: `The system clock is inaccurate by approximately ${skewMin.toString()} minutes, which can cause API request signature and authentication failures.`,
+    action:
+      'Enable automatic date and time synchronization (NTP) in your operating system settings to align the system clock.',
   };
 }
 
@@ -60,8 +66,10 @@ export function checkF5LinuxNoLinger(signals: DoctorSignals): Finding | null {
     code: 'F5',
     severity: Severity.warning,
     confidence: Confidence.confirmed,
-    cause: 'Systemd linger is disabled — daemon stops when you log out',
-    action: 'Run: loginctl enable-linger $USER',
+    cause:
+      'Systemd user linger is disabled, which terminates the background gateway service when your SSH or terminal session logs out.',
+    action:
+      'Enable user lingering by running "loginctl enable-linger $USER" to keep the background daemon running continuously after logout.',
   };
 }
 
@@ -79,7 +87,9 @@ export function checkF7MacOsQuarantine(signals: DoctorSignals): Finding | null {
     code: 'F7',
     severity: Severity.critical,
     confidence: Confidence.confirmed,
-    cause: 'com.apple.quarantine xattr present on binary — macOS Gatekeeper may block execution',
-    action: 'Run: xattr -d com.apple.quarantine <binary-path>',
+    cause:
+      'macOS has placed a quarantine flag on the gateway binary, preventing Gatekeeper from executing unsigned code.',
+    action:
+      'Clear the macOS quarantine flag by running: "xattr -d com.apple.quarantine $(which proxai-gateway)"',
   };
 }

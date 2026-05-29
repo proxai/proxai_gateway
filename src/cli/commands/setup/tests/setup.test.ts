@@ -860,7 +860,7 @@ test('setup with different api-key and user accepting replace runs full replace 
   expect(updated.account.apiKey).toBe(NEW_KEY);
 });
 
-test('setup with existing config and local build path rejects with error', async () => {
+test('setup with existing config and local build path redirects to upgrade flow', async () => {
   const control = newControl();
   const out = captureOutput();
   const d = {
@@ -870,14 +870,12 @@ test('setup with existing config and local build path rejects with error', async
     configExists: async () => true,
   };
   const result = await runSetup(d, {});
-  expect(result.exitCode).toBe(1);
+  expect(result.exitCode).toBe(0);
   expect(
     out.lines.some(
       (l) =>
-        l.level === 'error' &&
-        l.msg.includes(
-          "Re-installation blocked: A local development build is already installed. Please run 'proxai-gateway uninstall' first.",
-        ),
+        l.level === 'info' &&
+        l.msg.includes('Gateway is already installed. Redirecting smoothly to upgrade flow...'),
     ),
   ).toBe(true);
 });

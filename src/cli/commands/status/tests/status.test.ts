@@ -201,7 +201,7 @@ test('watch mode renders the configured-but-buffer-unavailable summary', async (
   const result = await runStatus(bufferlessDeps);
   expect(result.exitCode).toBe(0);
   const all = out.lines.map((l) => l.msg).join('\n');
-  expect(all).toContain('Account configured');
+  expect(all).toContain('App is not running.');
   buffer = await import('services/buffer').then((m) => m.openInMemoryBufferDb());
 });
 
@@ -234,8 +234,6 @@ test('watch mode renders the full breakdown by default', async () => {
 });
 
 test('watch mode renders simplified compact status when compact option is true', async () => {
-  const bootId = await readBootId();
-  await writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
   setDaemonState(buffer, {
     lastCycleStartedAt: '2026-05-08T02:40:13.100Z',
     lastCycleCompletedAt: '2026-05-08T02:46:52.293Z',
@@ -253,6 +251,34 @@ test('watch mode renders simplified compact status when compact option is true',
   });
   const out = captureOutput();
   const result = await runStatus(makeDeps({ output: out }), { compact: true });
+  expect(result.exitCode).toBe(0);
+  const all = out.lines.map((l) => l.msg).join('\n');
+  expect(all).not.toContain('──  Capture  ──');
+  expect(all).not.toContain('──  Buffer  ──');
+  expect(all).not.toContain('──  Upload  ──');
+  expect(all).not.toContain('──  Health  ──');
+  expect(all).not.toContain('──  Resync  ──');
+  expect(all).toContain('App is');
+});
+
+test('watch mode renders compact status for regular users when isDevMode is false even if compact option is false', async () => {
+  setDaemonState(buffer, {
+    lastCycleStartedAt: '2026-05-08T02:40:13.100Z',
+    lastCycleCompletedAt: '2026-05-08T02:46:52.293Z',
+    lastCycleDurationMs: 5000,
+    lastDrainAttempted: 1,
+    lastDrainAccepted: 1,
+    lastDrainRetriable: 0,
+    lastDrainFatal: 0,
+    lastDrainRecovered: 0,
+    lastUploadError: null,
+    lastConsecutiveRetriableBreak: false,
+    lastSourceCaptures: {
+      'claude-code': { filesProcessed: 1, capturedBatches: 1, capturedBytes: 100, errorsCount: 0 },
+    },
+  });
+  const out = captureOutput();
+  const result = await runStatus(makeDeps({ output: out }), { compact: false });
   expect(result.exitCode).toBe(0);
   const all = out.lines.map((l) => l.msg).join('\n');
   expect(all).not.toContain('──  Capture  ──');
@@ -568,4 +594,65 @@ test('inferDaemonAlive: both nulls returns false', () => {
 
 test('inferDaemonAlive: malformed iso strings return false', () => {
   expect(inferDaemonAlive('not-a-date', 'also-bad', new Date())).toBe(false);
+});
+
+test('watch mode renders in full when isDevMode is true even if compact option is true', async () => {
+  const bootId = await readBootId();
+  await writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
+  setDaemonState(buffer, {
+    lastCycleStartedAt: '2026-05-08T02:40:13.100Z',
+    lastCycleCompletedAt: '2026-05-08T02:46:52.293Z',
+    lastCycleDurationMs: 5000,
+    lastDrainAttempted: 1,
+    lastDrainAccepted: 1,
+    lastDrainRetriable: 0,
+    lastDrainFatal: 0,
+    lastDrainRecovered: 0,
+    lastUploadError: null,
+    lastConsecutiveRetriableBreak: false,
+    lastSourceCaptures: {
+      'claude-code': { filesProcessed: 1, capturedBatches: 1, capturedBytes: 100, errorsCount: 0 },
+    },
+  });
+  const out = captureOutput();
+  const result = await runStatus(makeDeps({ output: out }), { compact: true });
+  expect(result.exitCode).toBe(0);
+  const all = out.lines.map((l) => l.msg).join('\n');
+  expect(all).toContain('──  Capture  ──');
+  expect(all).toContain('──  Buffer  ──');
+  expect(all).toContain('──  Upload  ──');
+  expect(all).toContain('──  Health  ──');
+});
+
+test('watch mode stacks production and development profiles when isDevMode is true and devDeps is provided', async () => {
+  const bootId = await readBootId();
+  await writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
+  setDaemonState(buffer, {
+    lastCycleStartedAt: '2026-05-08T02:40:13.100Z',
+    lastCycleCompletedAt: '2026-05-08T02:46:52.293Z',
+    lastCycleDurationMs: 5000,
+    lastDrainAttempted: 1,
+    lastDrainAccepted: 1,
+    lastDrainRetriable: 0,
+    lastDrainFatal: 0,
+    lastDrainRecovered: 0,
+    lastUploadError: null,
+    lastConsecutiveRetriableBreak: false,
+    lastSourceCaptures: {
+      'claude-code': { filesProcessed: 1, capturedBatches: 1, capturedBytes: 100, errorsCount: 0 },
+    },
+  });
+
+  const out = captureOutput();
+  const devDeps = makeDeps({
+    output: out,
+    configPath: join(dir, 'config-dev.toml'),
+  });
+
+  const result = await runStatus(makeDeps({ output: out }), { devDeps });
+  expect(result.exitCode).toBe(0);
+  const all = out.lines.map((l) => l.msg).join('\n');
+  expect(all).toContain('[prod]');
+  expect(all).toContain('[dev]');
+  expect(all).toContain('DEV MODE');
 });

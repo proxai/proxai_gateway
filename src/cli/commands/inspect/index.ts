@@ -31,15 +31,16 @@ export type {
   InspectCommandOptions,
 } from 'cli/commands/inspect/inspect.types.ts';
 
-const RULE = '─'.repeat(80);
-
 export async function runInspect(
   deps: InspectCommandDeps,
   options: InspectCommandOptions = {},
 ): Promise<CommandResult> {
   const { output } = deps;
+  const cols = process.stdout.columns;
+  const terminalWidth = typeof cols === 'number' && cols > 0 ? Math.min(80, cols) : 80;
+  const RULE = '─'.repeat(terminalWidth);
 
-  output.info(chalk.bold('🔍 ProxAI Telemetry Dry-Run Inspection'));
+  output.info(chalk.bold('ProxAI Telemetry Dry-Run Inspection'));
   output.info('');
 
   const startMs = performance.now();
@@ -93,7 +94,7 @@ export async function runInspect(
     }
 
     output.info(chalk.dim(RULE));
-    output.info(`✨ Inspection completed in ${chalk.bold.yellow(durationMs.toFixed(2) + ' ms')}`);
+    output.info(`Inspection completed in ${chalk.bold.yellow(durationMs.toFixed(2) + ' ms')}`);
     output.info(chalk.dim(RULE));
     output.info('');
     return { exitCode: EXIT_CODE.ok };
@@ -102,7 +103,7 @@ export async function runInspect(
     const durationMs = performance.now() - startMs;
     output.error(`Unexpected inspect error: ${err instanceof Error ? err.message : String(err)}`);
     output.info(chalk.dim(RULE));
-    output.info(`✨ Inspection failed after ${chalk.bold.yellow(durationMs.toFixed(2) + ' ms')}`);
+    output.info(`Inspection failed after ${chalk.bold.yellow(durationMs.toFixed(2) + ' ms')}`);
     output.info(chalk.dim(RULE));
     output.info('');
     return { exitCode: EXIT_CODE.error };

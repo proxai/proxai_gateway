@@ -28,5 +28,6 @@ export function buildDoctorDeps(inputs: BuildDoctorDepsInputs): DoctorCommandDep
     platform: inputs.platform ?? process.platform,
     binaryPath: process.execPath,
     currentVersion: PACKAGE_VERSION,
+    profileCtx,
   };
 }

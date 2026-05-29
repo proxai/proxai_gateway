@@ -140,3 +140,31 @@ test('defaultReplayDeps.output methods write through process streams without thr
   expect(() => defaultReplayDeps.output.error('test-error')).not.toThrow();
   expect(() => defaultReplayDeps.output.success('test-success')).not.toThrow();
 });
+
+test('renderReport divider respects process.stdout.columns', () => {
+  const events = parseLog(SAMPLE_LOG);
+  const report = buildReport(events);
+  const originalColumns = process.stdout.columns;
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 60,
+      configurable: true,
+    });
+    const text60 = renderReport(report);
+    expect(text60).toContain('─'.repeat(60));
+    expect(text60).not.toContain('─'.repeat(80));
+
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 40,
+      configurable: true,
+    });
+    const text40 = renderReport(report);
+    expect(text40).toContain('─'.repeat(40));
+    expect(text40).not.toContain('─'.repeat(60));
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+    });
+  }
+});

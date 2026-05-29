@@ -31,50 +31,58 @@ function makeDeps(isDevMode: boolean): LogsCommandDeps {
 }
 
 function uploaded(overrides: Partial<UploadedRecord> = {}): UploadedRecord {
-  return {
+  const record: UploadedRecord = {
     captureId: '0190abcd-0000-7000-8000-000000000001',
     sourceApp: 'claude-code',
     deliveredAt: '2026-05-08T02:46:52.293Z',
     watermarkKind: 'byte_range',
     sourcePathHash: 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
     idempotentOnServer: false,
+    sourcePath: null,
     ...overrides,
   };
+  return record;
 }
 
 function failed(overrides: Partial<FailedRecord> = {}): FailedRecord {
-  return {
+  const record: FailedRecord = {
     captureId: '0190abcd-0000-7000-8000-000000000002',
     sourceApp: 'codex',
     capturedAtUtc: '2026-05-08T02:40:00.000Z',
     sourcePath: '/home/user/project/session.jsonl',
     attempts: 3,
     lastError: 'server returned 500',
+    sourcePathHash: null,
     ...overrides,
   };
+  return record;
 }
 
 function quarantined(overrides: Partial<QuarantinedRecord> = {}): QuarantinedRecord {
-  return {
+  const record: QuarantinedRecord = {
     id: 1,
     sourceApp: 'cursor',
     sourcePath: '/home/user/project/state.vscdb',
     redactedSizeBytes: 3 * 1024 * 1024,
     reason: 'redacted body exceeds 2 MiB compressed limit',
     quarantinedAtUtc: '2026-05-08T02:30:00.000Z',
+    sourcePathHash: null,
     ...overrides,
   };
+  return record;
 }
 
 function pending(overrides: Partial<PendingRecord> = {}): PendingRecord {
-  return {
+  const record: PendingRecord = {
     captureId: '0190abcd-0000-7000-8000-000000000003',
     sourceApp: 'gemini-cli',
     capturedAtUtc: '2026-05-08T02:20:00.000Z',
     sourcePath: '/home/user/project/chat.jsonl',
     attempts: 0,
+    sourcePathHash: null,
     ...overrides,
   };
+  return record;
 }
 
 function emptyFrame(): LogsFrame {
@@ -135,12 +143,47 @@ test('renderLogsFrame renders quarantined rows with size and reason', () => {
   expect(out).toContain('redacted body exceeds');
 });
 
-test('renderLogsFrame truncates an overlong source path', () => {
-  const longPath = '/very/deep/' + 'segment/'.repeat(20) + 'file.jsonl';
-  const frame: LogsFrame = { ...emptyFrame(), failed: [failed({ sourcePath: longPath })] };
-  const out = stripAnsi(renderLogsFrame(frame, { error: true }, makeDeps(true)));
-  expect(out).toContain('…');
-  expect(out).not.toContain(longPath);
+test('renderLogsFrame dynamically truncates overlong source paths in dev mode on narrow terminals', () => {
+  const originalColumns = process.stdout.columns;
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 80,
+      configurable: true,
+      writable: true,
+    });
+    const longPath = '/very/deep/' + 'segment/'.repeat(20) + 'file.jsonl';
+    const frame: LogsFrame = { ...emptyFrame(), failed: [failed({ sourcePath: longPath })] };
+    const out = stripAnsi(renderLogsFrame(frame, { error: true }, makeDeps(true)));
+    expect(out).toContain('…');
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+      writable: true,
+    });
+  }
+});
+
+test('renderLogsFrame does not truncate source paths in dev mode on wide terminals', () => {
+  const originalColumns = process.stdout.columns;
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 500,
+      configurable: true,
+      writable: true,
+    });
+    const longPath = '/very/deep/' + 'segment/'.repeat(20) + 'file.jsonl';
+    const frame: LogsFrame = { ...emptyFrame(), failed: [failed({ sourcePath: longPath })] };
+    const out = stripAnsi(renderLogsFrame(frame, { error: true }, makeDeps(true)));
+    expect(out).not.toContain('…');
+    expect(out).toContain('very/deep');
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+      writable: true,
+    });
+  }
 });
 
 test('renderLogsFrame renders pending rows with attempts when present', () => {
@@ -177,18 +220,34 @@ test('renderLogsFrame shows no-pending message for empty pending frame', () => {
 });
 
 test('renderLogsFrame compact mode hides dev details even when isDevMode is true', () => {
-  const frame: LogsFrame = {
-    uploaded: [uploaded()],
-    failed: [failed()],
-    quarantined: [quarantined()],
-    pending: [pending()],
-  };
-  const out = stripAnsi(renderLogsFrame(frame, { compact: true }, makeDeps(true)));
+  const originalColumns = process.stdout.columns;
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 500,
+      configurable: true,
+      writable: true,
+    });
+    const frame: LogsFrame = {
+      uploaded: [uploaded()],
+      failed: [failed()],
+      quarantined: [quarantined()],
+      pending: [pending()],
+    };
+    const out = stripAnsi(renderLogsFrame(frame, { compact: true }, makeDeps(true)));
 
-  // Hides captureId, sourcePathHash, sourcePath for all rows
-  expect(out).not.toContain('0190abcd-0000-7000-8000-000000000001');
-  expect(out).not.toContain('hash:');
-  expect(out).not.toContain('/home/user/project');
+    expect(out).not.toContain('0190abcd-0000-7000-8000-000000000001');
+    expect(out).not.toContain('hash:');
+    expect(out).not.toContain('id:1');
+    expect(out).toContain('session.jsonl');
+    expect(out).toContain('state.vscdb');
+    expect(out).toContain('chat.jsonl');
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+      writable: true,
+    });
+  }
 });
 
 test('renderLogsJson serializes the frame to JSON', () => {
@@ -196,4 +255,181 @@ test('renderLogsJson serializes the frame to JSON', () => {
   const json = JSON.parse(renderLogsJson(frame)) as LogsFrame;
   expect(json.uploaded[0]?.sourceApp).toBe('claude-code');
   expect(json.failed).toEqual([]);
+});
+
+test('renderLogsFrame fully restores and displays all diagnostic details in Developer Mode', () => {
+  const originalColumns = process.stdout.columns;
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 500,
+      configurable: true,
+      writable: true,
+    });
+    const frame: LogsFrame = {
+      uploaded: [
+        uploaded({
+          sourcePath: '/home/user/project/uploaded.jsonl',
+          sourcePathHash: 'uploadedhashvalue',
+        }),
+      ],
+      failed: [
+        failed({
+          sourcePath: '/home/user/project/failed.jsonl',
+          sourcePathHash: 'failedhashvalue',
+        }),
+      ],
+      quarantined: [
+        quarantined({
+          sourcePath: '/home/user/project/quarantined.jsonl',
+          sourcePathHash: 'quarantinedhashvalue',
+        }),
+      ],
+      pending: [
+        pending({
+          sourcePath: '/home/user/project/pending.jsonl',
+          sourcePathHash: 'pendinghashvalue',
+        }),
+      ],
+    };
+    const out = stripAnsi(renderLogsFrame(frame, {}, makeDeps(true)));
+
+    expect(out).toContain('0190abcd-0000-7000-8000-000000000001');
+    expect(out).toContain('0190abcd-0000-7000-8000-000000000002');
+    expect(out).toContain('id:1');
+    expect(out).toContain('0190abcd-0000-7000-8000-000000000003');
+
+    expect(out).toContain('hash:uploadedhashvalue');
+    expect(out).toContain('hash:failedhashvalue');
+    expect(out).toContain('hash:quarantinedhashvalue');
+    expect(out).toContain('hash:pendinghashvalue');
+
+    expect(out).toContain('uploaded.jsonl');
+    expect(out).toContain('failed.jsonl');
+    expect(out).toContain('quarantined.jsonl');
+    expect(out).toContain('pending.jsonl');
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+      writable: true,
+    });
+  }
+});
+
+test('renderLogsFrame renders file paths correctly for regular users on wide viewports without truncation', () => {
+  const originalColumns = process.stdout.columns;
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 500,
+      configurable: true,
+      writable: true,
+    });
+    const frame: LogsFrame = {
+      uploaded: [uploaded({ sourcePath: '/home/user/project/uploaded.jsonl' })],
+      failed: [failed({ sourcePath: '/home/user/project/failed.jsonl' })],
+      quarantined: [quarantined({ sourcePath: '/home/user/project/quarantined.jsonl' })],
+      pending: [pending({ sourcePath: '/home/user/project/pending.jsonl' })],
+    };
+    const out = stripAnsi(renderLogsFrame(frame, {}, makeDeps(false)));
+
+    expect(out).toContain('uploaded.jsonl');
+    expect(out).toContain('failed.jsonl');
+    expect(out).toContain('quarantined.jsonl');
+    expect(out).toContain('pending.jsonl');
+    expect(out).not.toContain('…');
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+      writable: true,
+    });
+  }
+});
+
+test('renderLogsFrame renders file paths correctly for regular users on narrow viewports with middle truncation', () => {
+  const originalColumns = process.stdout.columns;
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 80,
+      configurable: true,
+      writable: true,
+    });
+    const longPath =
+      '/home/user/project/very/long/nested/directory/structure/and/file/name/to/force/truncation.jsonl';
+    const frame: LogsFrame = {
+      uploaded: [uploaded({ sourcePath: longPath })],
+      failed: [failed({ sourcePath: longPath })],
+      quarantined: [quarantined({ sourcePath: longPath })],
+      pending: [pending({ sourcePath: longPath })],
+    };
+    const out = stripAnsi(renderLogsFrame(frame, {}, makeDeps(false)));
+
+    expect(out).toContain('…');
+    expect(out).toContain('.jsonl');
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+      writable: true,
+    });
+  }
+});
+
+test('renderLogsFrame renders file paths correctly for dev users on wide viewports without truncation', () => {
+  const originalColumns = process.stdout.columns;
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 500,
+      configurable: true,
+      writable: true,
+    });
+    const frame: LogsFrame = {
+      uploaded: [uploaded({ sourcePath: '/home/user/project/uploaded.jsonl' })],
+      failed: [failed({ sourcePath: '/home/user/project/failed.jsonl' })],
+      quarantined: [quarantined({ sourcePath: '/home/user/project/quarantined.jsonl' })],
+      pending: [pending({ sourcePath: '/home/user/project/pending.jsonl' })],
+    };
+    const out = stripAnsi(renderLogsFrame(frame, {}, makeDeps(true)));
+
+    expect(out).toContain('uploaded.jsonl');
+    expect(out).toContain('failed.jsonl');
+    expect(out).toContain('quarantined.jsonl');
+    expect(out).toContain('pending.jsonl');
+    expect(out).not.toContain('…');
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+      writable: true,
+    });
+  }
+});
+
+test('renderLogsFrame renders file paths correctly for dev users on narrow viewports with middle truncation', () => {
+  const originalColumns = process.stdout.columns;
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 80,
+      configurable: true,
+      writable: true,
+    });
+    const longPath =
+      '/home/user/project/very/long/nested/directory/structure/and/file/name/to/force/truncation.jsonl';
+    const frame: LogsFrame = {
+      uploaded: [uploaded({ sourcePath: longPath })],
+      failed: [failed({ sourcePath: longPath })],
+      quarantined: [quarantined({ sourcePath: longPath })],
+      pending: [pending({ sourcePath: longPath })],
+    };
+    const out = stripAnsi(renderLogsFrame(frame, {}, makeDeps(true)));
+
+    expect(out).toContain('…');
+    expect(out).toContain('.jsonl');
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+      writable: true,
+    });
+  }
 });

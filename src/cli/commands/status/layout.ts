@@ -2,7 +2,7 @@ import chalk from 'chalk';
 
 import { formatBytes } from 'core/utils';
 
-export const KEY_WIDTH = 14;
+export const KEY_WIDTH = 19;
 export const SUB_LABEL_WIDTH = 15;
 export const COUNT_COL = 5;
 export const BYTES_COL = 9;

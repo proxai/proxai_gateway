@@ -143,6 +143,7 @@ export function renderHumanStatus(
       pauseAfterDays: snapshot.cfg?.staleBinary.pauseAfterDays ?? DEFAULT_STALE_PAUSE_DAYS,
       now: snapshot.now,
     },
+    apiKey: snapshot.cfg?.account.apiKey,
   })) {
     out.info(line);
   }

@@ -12,6 +12,9 @@ import { captureOutput } from 'cli/output.ts';
 import type { OutputSink } from 'cli/cli.types.ts';
 import type { DoctorCommandDeps } from 'cli/commands/doctor/doctor.types.ts';
 import type { ServiceManager } from 'cli/service-manager';
+import { readBootId } from 'core/system/boot-id.ts';
+import { profileRootDir } from 'core/io/fs/profile.ts';
+import { writeFileSync, rmSync } from 'node:fs';
 
 let dir: string;
 let bufferDbPath: string;
@@ -62,6 +65,23 @@ function makeDeps(output: OutputSink, over: Partial<DoctorCommandDeps> = {}): Do
     platform: 'linux',
     binaryPath: join(dir, 'binary'),
     currentVersion: '2026.5.28',
+    profileCtx: {
+      name: 'dev',
+      isDev: true,
+      configDir: dir,
+      configFilePath: join(dir, 'config.toml'),
+      bufferDbPath,
+      logDir: dir,
+      sentinels: {
+        authFailed: join(dir, 'AUTH_FAILED'),
+        bufferFull: join(dir, 'BUFFER_FULL'),
+        sessionStopped: join(dir, 'SESSION_STOPPED'),
+        consent: join(dir, 'CONSENT'),
+        updateAvailable: join(dir, 'UPDATE_AVAILABLE'),
+      },
+      controlSocketPath: join(dir, 'control.sock'),
+      defaultNestBaseUrl: 'https://nest.example',
+    },
   };
   return { ...base, ...over };
 }
@@ -162,4 +182,22 @@ test('doctor writes HTML report inside specified output directory', async () => 
   const content = await Bun.file(fullPath).text();
   expect(content).toContain('<!DOCTYPE html>');
   expect(content).toContain('Diagnostics Signals Appendix');
+});
+
+test('in dev mode without explicit profile option, runs diagnostics for both profiles, prefixes, and deduplicates generic findings', async () => {
+  const bootId = await readBootId();
+  const sentinelPath = join(profileRootDir(), 'DEV_MODE');
+  writeFileSync(sentinelPath, JSON.stringify({ bootId }));
+
+  try {
+    const out = captured();
+    const result = await runDoctor(makeDeps(out), {});
+    expect(result.exitCode).toBe(0);
+
+    const joined = stripAnsi(out.lines.map((l) => l.msg).join('\n'));
+    expect(joined).toContain('[dev]');
+    expect(joined).toContain('[prod]');
+  } finally {
+    rmSync(sentinelPath, { force: true });
+  }
 });

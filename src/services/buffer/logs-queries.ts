@@ -21,6 +21,7 @@ interface UploadedRow {
   watermark_kind: string;
   source_path_hash: string;
   idempotent_on_server: number;
+  source_path: string | null;
 }
 
 interface FailedRow {
@@ -28,6 +29,7 @@ interface FailedRow {
   source_app: string;
   captured_at_utc: string;
   source_path: string;
+  source_path_hash: string | null;
   attempts: number;
   last_error: string | null;
 }
@@ -36,6 +38,7 @@ interface QuarantinedRow {
   id: number;
   source_app: string;
   source_path: string;
+  source_path_hash: string | null;
   redacted_size_bytes: number;
   reason: string;
   quarantined_at_utc: string;
@@ -46,6 +49,7 @@ interface PendingRow {
   source_app: string;
   captured_at_utc: string;
   source_path: string;
+  source_path_hash: string | null;
   attempts: number;
 }
 
@@ -81,7 +85,8 @@ export function queryUploaded(db: Database, opts: LogsQueryOptions): UploadedRec
       ${RECEIPT_COLS.deliveredAt} AS delivered_at,
       ${RECEIPT_COLS.watermarkKind} AS watermark_kind,
       ${RECEIPT_COLS.sourcePathHash} AS source_path_hash,
-      ${RECEIPT_COLS.idempotentOnServer} AS idempotent_on_server
+      ${RECEIPT_COLS.idempotentOnServer} AS idempotent_on_server,
+      ${RECEIPT_COLS.sourcePath} AS source_path
     FROM ${BUFFER_TABLES.receipts}
     ${where}
     ORDER BY ${RECEIPT_COLS.deliveredAt} DESC
@@ -110,6 +115,7 @@ export function queryFailed(db: Database, opts: LogsQueryOptions): FailedRecord[
       ${BATCH_COLS.sourceApp} AS source_app,
       ${BATCH_COLS.capturedAtUtc} AS captured_at_utc,
       ${BATCH_COLS.sourcePath} AS source_path,
+      ${BATCH_COLS.sourcePathHash} AS source_path_hash,
       ${BATCH_COLS.attempts} AS attempts,
       ${BATCH_COLS.lastError} AS last_error
     FROM ${BUFFER_TABLES.batches}
@@ -140,6 +146,7 @@ export function queryQuarantined(db: Database, opts: LogsQueryOptions): Quaranti
       ${QUARANTINE_COLS.id} AS id,
       ${QUARANTINE_COLS.sourceApp} AS source_app,
       ${QUARANTINE_COLS.sourcePath} AS source_path,
+      ${QUARANTINE_COLS.sourcePathHash} AS source_path_hash,
       ${QUARANTINE_COLS.redactedSizeBytes} AS redacted_size_bytes,
       ${QUARANTINE_COLS.reason} AS reason,
       ${QUARANTINE_COLS.quarantinedAtUtc} AS quarantined_at_utc
@@ -171,6 +178,7 @@ export function queryPending(db: Database, opts: LogsQueryOptions): PendingRecor
       ${BATCH_COLS.sourceApp} AS source_app,
       ${BATCH_COLS.capturedAtUtc} AS captured_at_utc,
       ${BATCH_COLS.sourcePath} AS source_path,
+      ${BATCH_COLS.sourcePathHash} AS source_path_hash,
       ${BATCH_COLS.attempts} AS attempts
     FROM ${BUFFER_TABLES.batches}
     WHERE ${conditions.join(' AND ')}
@@ -188,6 +196,7 @@ function rowToUploaded(row: UploadedRow): UploadedRecord {
     watermarkKind: row.watermark_kind,
     sourcePathHash: row.source_path_hash,
     idempotentOnServer: row.idempotent_on_server !== 0,
+    sourcePath: row.source_path,
   };
 }
 
@@ -197,6 +206,7 @@ function rowToFailed(row: FailedRow): FailedRecord {
     sourceApp: row.source_app,
     capturedAtUtc: row.captured_at_utc,
     sourcePath: row.source_path,
+    sourcePathHash: row.source_path_hash,
     attempts: row.attempts,
     lastError: row.last_error,
   };
@@ -207,6 +217,7 @@ function rowToQuarantined(row: QuarantinedRow): QuarantinedRecord {
     id: row.id,
     sourceApp: row.source_app,
     sourcePath: row.source_path,
+    sourcePathHash: row.source_path_hash,
     redactedSizeBytes: row.redacted_size_bytes,
     reason: row.reason,
     quarantinedAtUtc: row.quarantined_at_utc,
@@ -219,6 +230,7 @@ function rowToPending(row: PendingRow): PendingRecord {
     sourceApp: row.source_app,
     capturedAtUtc: row.captured_at_utc,
     sourcePath: row.source_path,
+    sourcePathHash: row.source_path_hash,
     attempts: row.attempts,
   };
 }

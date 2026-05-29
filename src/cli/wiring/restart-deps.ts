@@ -20,5 +20,6 @@ export function buildRestartDeps(inputs: BuildRestartDepsInputs): RestartCommand
     sessionStoppedSentinelPath: inputs.profileCtx.sentinels.sessionStopped,
     invokeSetup: inputs.invokeSetup,
     serviceUnitRecreate: inputs.serviceUnitRecreate,
+    profileName: inputs.profileCtx.name,
   };
 }

@@ -287,6 +287,8 @@ test('queryAllDoctorData returns all-empty defaults when the database file canno
   expect(result.daemonState.captureLastCycleAt).toBeNull();
   expect(result.recentEvents.failedBatchLastErrors).toEqual([]);
   expect(result.resyncStats.totalCount).toBe(0);
+  expect(result.dbReadable).toBe(false);
+  expect(result.receiptsTableReadable).toBe(false);
 });
 
 test('queryAllDoctorData reads a fully seeded buffer database by file path', async () => {
@@ -326,6 +328,8 @@ test('queryAllDoctorData reads a fully seeded buffer database by file path', asy
     expect(result.recentEvents.retriableCount).toBe(1);
     expect(result.recentEvents.failedBatchLastErrors).toEqual(['retriable network blip']);
     expect(result.resyncStats.totalCount).toBe(1);
+    expect(result.dbReadable).toBe(true);
+    expect(result.receiptsTableReadable).toBe(true);
   } finally {
     await rmRecursive(dir);
   }
@@ -350,6 +354,8 @@ test('queryAllDoctorData swallows per-query failures when core tables are missin
     expect(result.daemonState.captureLastCycleAt).toBeNull();
     expect(result.recentEvents.failedBatchLastErrors).toEqual([]);
     expect(result.resyncStats.totalCount).toBe(0);
+    expect(result.dbReadable).toBe(true);
+    expect(result.receiptsTableReadable).toBe(false);
   } finally {
     await rmRecursive(dir);
   }

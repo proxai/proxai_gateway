@@ -201,7 +201,7 @@ export function renderUploadSection(s: StatusSnapshot): string[] {
   }
   if (s.daemonState !== null && s.daemonState.lastConsecutiveRetriableBreak === true) {
     lines.push(
-      `  ${chalk.yellow('⚠')} ${chalk.yellow('Drain backed off after consecutive retriable failures; will retry next cycle')}`,
+      `  ${chalk.yellow('!')} ${chalk.yellow('Drain backed off after consecutive retriable failures; will retry next cycle')}`,
     );
   }
 
@@ -230,10 +230,16 @@ export function renderHistorySection(s: StatusSnapshot): string[] {
     if (app === 'cursor') suffix = 'workspaces';
     if (app === 'codex') suffix = 'threads / rollouts';
     lines.push(
-      `       ${formatSourceLabel(app).padEnd(SUB_LABEL_WIDTH)}${count.toString().padStart(6)} ${chalk.dim(suffix)}`,
+      `    ${formatSourceLabel(app).padEnd(SUB_LABEL_WIDTH)}${count.toString().padStart(6)} ${chalk.dim(suffix)}`,
     );
   }
   return lines;
+}
+
+export function maskApiKey(key?: string | null): string {
+  if (!key) return 'none';
+  if (key.length <= 8) return '*****';
+  return `${key.slice(0, 4)}*****${key.slice(-4)}`;
 }
 
 export function renderHealthSection(input: {
@@ -248,16 +254,22 @@ export function renderHealthSection(input: {
   const lines: string[] = [sectionDivider('Health')];
   lines.push(
     rowText(
-      'Daemon',
+      input.isDevLike ? 'Daemon' : 'App',
       renderDaemonLine(s, input.inferredAlive, input.isDevLike, input.isLocalBuild),
     ),
   );
-  lines.push(rowText('Sentinels', renderSentinelsLine(s)));
+  lines.push(
+    rowText(
+      input.isDevLike ? 'Sentinels' : 'Status flags',
+      renderSentinelsLine(s, input.isDevLike),
+    ),
+  );
   lines.push(
     rowText('Auto-upgrade', renderAutoUpgradeLine(s, input.currentVersion, installSource)),
   );
   lines.push(rowText('Binary age', renderBinaryAgeLine(s)));
-  if (s.runtime.pid !== null) {
+  lines.push(rowText('Ingestion Key', maskApiKey(s.cfg?.account.apiKey)));
+  if (input.isDevLike && s.runtime.pid !== null) {
     lines.push(rowText('PID', chalk.dim(s.runtime.pid.toString())));
   }
   return lines;
@@ -282,18 +294,18 @@ function renderDaemonLine(
       ? 'running (local build)'
       : isDevLike
         ? 'running (dev mode)'
-        : 'running (not registered)';
+        : 'running';
     return chalk.green(`● ${tag}`);
   }
   return chalk.red('○ not running');
 }
 
-function renderSentinelsLine(s: StatusSnapshot): string {
+function renderSentinelsLine(s: StatusSnapshot, isDevLike: boolean): string {
   const active: string[] = [];
-  if (s.authFailed) active.push('auth-failed');
-  if (s.bufferFull) active.push('buffer-full');
-  if (s.sessionStopped) active.push('session-stopped');
-  if (s.updateAvailable !== null) active.push('update-available');
+  if (s.authFailed) active.push(isDevLike ? 'auth-failed' : 'authentication failed');
+  if (s.bufferFull) active.push(isDevLike ? 'buffer-full' : 'buffer full');
+  if (s.sessionStopped) active.push(isDevLike ? 'session-stopped' : 'stopped');
+  if (s.updateAvailable !== null) active.push(isDevLike ? 'update-available' : 'update available');
   if (active.length === 0) return chalk.dim('○ none active');
   return chalk.yellow(`● ${active.join(', ')}`);
 }
@@ -384,7 +396,7 @@ function renderLastUploadRow(row: LastUploadRow, now: Date): string {
             : row.userPrompt,
         )
       : '';
-  return `       ${when.padEnd(12)}  ${source}  ${bytes}  ${prompt}`;
+  return `    ${when.padEnd(14)}  ${source}  ${bytes}  ${prompt}`;
 }
 
 export function renderResyncNote(s: StatusSnapshot): string[] {

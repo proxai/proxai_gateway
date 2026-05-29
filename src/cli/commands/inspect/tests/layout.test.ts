@@ -1,13 +1,16 @@
 import { expect, test } from 'bun:test';
 
 import {
+  formatCell,
   formatDiskRow,
   formatRatio,
+  formatTitle,
   formatUploadRow,
   renderDiskTable,
   renderHighlights,
   renderUploadTable,
   renderWarnings,
+  scaleSegments,
   tableDivider,
 } from 'cli/commands/inspect/layout.ts';
 import type { InspectSummary, SourceResult } from 'cli/commands/inspect/inspect.types.ts';
@@ -101,4 +104,44 @@ test('renderHighlights: with dates and without', () => {
 
   const noDates = renderHighlights(makeSummary({ oldestDateIso: null, newestDateIso: null }), 1);
   expect(noDates.some((l) => l.includes('No telemetry records found'))).toBe(true);
+});
+
+test('scaleSegments: handles proportional scaling', () => {
+  const orig = [16, 10, 11, 14, 12, 10];
+
+  expect(scaleSegments(orig, 80)).toEqual([...orig]);
+
+  const scaled60 = scaleSegments(orig, 60);
+  expect(scaled60.reduce((a, b) => a + b, 0)).toBe(53);
+  expect(scaled60.every((w) => w >= 4)).toBe(true);
+
+  const scaled20 = scaleSegments(orig, 20);
+  expect(scaled20).toEqual([4, 4, 4, 4, 4, 4]);
+});
+
+test('formatCell: pads and truncates appropriately', () => {
+  expect(formatCell('abc', 5, 'left')).toBe('abc  ');
+  expect(formatCell('abc', 5, 'right')).toBe('  abc');
+  expect(formatCell('abcdef', 5, 'left')).toBe('abcd…');
+  expect(formatCell('abcdef', 5, 'right')).toBe('…cdef');
+  expect(formatCell('abcdef', 3, 'left')).toBe('abc');
+});
+
+test('formatTitle: pads and truncates titles', () => {
+  expect(formatTitle('Title', 10)).toBe('Title   ');
+  expect(formatTitle('Very Long Title Indeed', 10)).toBe('Very Lo…');
+});
+
+test('renderDiskTable and renderUploadTable: respect responsive width', () => {
+  const disk80 = renderDiskTable([makeResult()], makeSummary(), 80);
+  expect((disk80[0] ?? '').includes('─'.repeat(78))).toBe(true);
+
+  const disk60 = renderDiskTable([makeResult()], makeSummary(), 60);
+  expect((disk60[0] ?? '').includes('─'.repeat(58))).toBe(true);
+
+  const upload80 = renderUploadTable([makeResult()], makeSummary(), 80);
+  expect((upload80[0] ?? '').includes('─'.repeat(78))).toBe(true);
+
+  const upload60 = renderUploadTable([makeResult()], makeSummary(), 60);
+  expect((upload60[0] ?? '').includes('─'.repeat(58))).toBe(true);
 });

@@ -1,5 +1,6 @@
 import type { ServiceManager } from 'cli/service-manager';
 import type { OutputSink } from 'cli/cli.types.ts';
+import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 
 export const Severity = {
   critical: 'critical',
@@ -120,6 +121,8 @@ export interface DoctorSignals {
   readonly systemdLingerEnabled: boolean | null;
   readonly macOsQuarantineXattr: boolean | null;
   readonly clockSkewMs: number | null;
+  readonly bufferDbReadable: boolean;
+  readonly receiptsTableReadable: boolean;
 }
 
 export interface DoctorCommandOptions {
@@ -143,4 +146,5 @@ export interface DoctorCommandDeps {
   readonly platform: NodeJS.Platform;
   readonly binaryPath: string;
   readonly currentVersion: string;
+  readonly profileCtx: ProfileContext;
 }

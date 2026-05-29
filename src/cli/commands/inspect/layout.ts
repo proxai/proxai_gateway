@@ -7,7 +7,6 @@ import {
   DISK_TABLE_SEGMENTS,
   DISK_TITLE,
   FALLBACK_COMPRESSION_RATIO,
-  TABLE_INNER_WIDTH,
   UPLOAD_TABLE_SEGMENTS,
   UPLOAD_TITLE,
 } from 'cli/commands/inspect/inspect.constants.ts';
@@ -38,6 +37,101 @@ export function tableDivider(
   return left + segments.map((width) => '─'.repeat(width)).join(mid) + right;
 }
 
+export function getTerminalWidth(): number {
+  const cols = process.stdout.columns;
+  if (typeof cols === 'number' && cols > 0) {
+    return Math.min(80, cols);
+  }
+  return 80;
+}
+
+export function scaleSegments(
+  originalSegments: readonly number[],
+  targetTotalWidth: number,
+): number[] {
+  const numSegments = originalSegments.length;
+
+  const targetSum = targetTotalWidth - numSegments - 1;
+  const originalSum = originalSegments.reduce((sum, val) => sum + val, 0);
+
+  if (targetSum <= 0) {
+    return originalSegments.map(() => 4);
+  }
+
+  const minWidth = 4;
+
+  const segments = originalSegments.map((orig) => {
+    const val = Math.floor(orig * (targetSum / originalSum));
+    return Math.max(minWidth, val);
+  });
+
+  let currentSum = segments.reduce((sum, val) => sum + val, 0);
+
+  if (currentSum < targetSum) {
+    let remainder = targetSum - currentSum;
+    const fractionalLosses = originalSegments.map((orig, idx) => ({
+      idx,
+      loss: orig * (targetSum / originalSum) - Math.floor(orig * (targetSum / originalSum)),
+    }));
+    fractionalLosses.sort((a, b) => b.loss - a.loss);
+
+    let i = 0;
+    while (remainder > 0) {
+      const item = fractionalLosses[i % numSegments];
+      if (item !== undefined) {
+        const targetIdx = item.idx;
+        const currentVal = segments[targetIdx];
+        if (currentVal !== undefined) {
+          segments[targetIdx] = currentVal + 1;
+        }
+      }
+      remainder--;
+      i++;
+    }
+  } else if (currentSum > targetSum) {
+    let excess = currentSum - targetSum;
+    while (excess > 0) {
+      let reducedAny = false;
+      for (let idx = 0; idx < numSegments; idx++) {
+        const currentVal = segments[idx];
+        if (currentVal !== undefined && currentVal > minWidth) {
+          segments[idx] = currentVal - 1;
+          excess--;
+          reducedAny = true;
+          if (excess === 0) break;
+        }
+      }
+      if (!reducedAny) {
+        break;
+      }
+    }
+  }
+
+  return segments;
+}
+
+export function formatCell(text: string, width: number, align: 'left' | 'right'): string {
+  if (text.length > width) {
+    if (width >= 4) {
+      return align === 'left' ? text.slice(0, width - 1) + '…' : '…' + text.slice(-(width - 1));
+    } else {
+      return text.slice(0, width);
+    }
+  }
+  return align === 'left' ? text.padEnd(width) : text.padStart(width);
+}
+
+export function formatTitle(title: string, innerWidth: number): string {
+  const targetLen = innerWidth - 2;
+  if (title.length > targetLen) {
+    if (targetLen >= 4) {
+      return title.slice(0, targetLen - 1) + '…';
+    }
+    return title.slice(0, targetLen);
+  }
+  return title.padEnd(targetLen);
+}
+
 export function formatDiskRow(
   source: string,
   files: string,
@@ -46,13 +140,22 @@ export function formatDiskRow(
   size: string,
   oldest: string,
   style: RowStyle = {},
+  segments: readonly number[] = DISK_TABLE_SEGMENTS,
 ): string {
-  const c1 = source.padEnd(14);
-  const c2 = files.padStart(8);
-  const c3 = prompts.padStart(9);
-  const c4 = events.padStart(12);
-  const c5 = size.padStart(10);
-  const c6 = oldest.padEnd(8);
+  const w1 = Math.max(0, (segments[0] ?? 0) - 2);
+  const w2 = Math.max(0, (segments[1] ?? 0) - 2);
+  const w3 = Math.max(0, (segments[2] ?? 0) - 2);
+  const w4 = Math.max(0, (segments[3] ?? 0) - 2);
+  const w5 = Math.max(0, (segments[4] ?? 0) - 2);
+  const w6 = Math.max(0, (segments[5] ?? 0) - 2);
+
+  const c1 = formatCell(source, w1, 'left');
+  const c2 = formatCell(files, w2, 'right');
+  const c3 = formatCell(prompts, w3, 'right');
+  const c4 = formatCell(events, w4, 'right');
+  const c5 = formatCell(size, w5, 'right');
+  const c6 = formatCell(oldest, w6, 'left');
+
   if (style.isHeader === true || style.isTotal === true) {
     return `│ ${chalk.bold(c1)} │ ${chalk.bold(c2)} │ ${chalk.bold(c3)} │ ${chalk.bold(c4)} │ ${chalk.bold(c5)} │ ${chalk.bold(c6)} │`;
   }
@@ -66,12 +169,20 @@ export function formatUploadRow(
   uncompressed: string,
   uploadSize: string,
   style: RowStyle = {},
+  segments: readonly number[] = UPLOAD_TABLE_SEGMENTS,
 ): string {
-  const c1 = source.padEnd(12);
-  const c2 = prompts.padStart(8);
-  const c3 = events.padStart(15);
-  const c4 = uncompressed.padStart(13);
-  const c5 = uploadSize.padEnd(16);
+  const w1 = Math.max(0, (segments[0] ?? 0) - 2);
+  const w2 = Math.max(0, (segments[1] ?? 0) - 2);
+  const w3 = Math.max(0, (segments[2] ?? 0) - 2);
+  const w4 = Math.max(0, (segments[3] ?? 0) - 2);
+  const w5 = Math.max(0, (segments[4] ?? 0) - 2);
+
+  const c1 = formatCell(source, w1, 'left');
+  const c2 = formatCell(prompts, w2, 'right');
+  const c3 = formatCell(events, w3, 'right');
+  const c4 = formatCell(uncompressed, w4, 'right');
+  const c5 = formatCell(uploadSize, w5, 'left');
+
   if (style.isHeader === true || style.isTotal === true) {
     return `│ ${chalk.bold(c1)} │ ${chalk.bold(c2)} │ ${chalk.bold(c3)} │ ${chalk.bold(c4)} │ ${chalk.bold(c5)} │`;
   }
@@ -81,17 +192,31 @@ export function formatUploadRow(
 export function renderDiskTable(
   results: readonly SourceResult[],
   summary: InspectSummary,
+  terminalWidth?: number,
 ): string[] {
+  const width = terminalWidth !== undefined ? terminalWidth : getTerminalWidth();
+  const segments = scaleSegments(DISK_TABLE_SEGMENTS, width);
+  const innerWidth = width - 2;
+
   const lines: string[] = [];
-  lines.push(chalk.bold('┌' + '─'.repeat(TABLE_INNER_WIDTH) + '┐'));
-  lines.push(`│ ${chalk.bold.blue(DISK_TITLE.padEnd(76))} │`);
-  lines.push(tableDivider(DISK_TABLE_SEGMENTS, '├', '┼', '┤'));
+  lines.push(chalk.bold('┌' + '─'.repeat(innerWidth) + '┐'));
+  lines.push(`│ ${chalk.bold.blue(formatTitle(DISK_TITLE, innerWidth))} │`);
+  lines.push(tableDivider(segments, '├', '┼', '┤'));
   lines.push(
-    formatDiskRow('Source', 'Files', 'Prompts', 'Log Events', 'Data Size', 'Oldest', {
-      isHeader: true,
-    }),
+    formatDiskRow(
+      'Source',
+      'Files',
+      'Prompts',
+      'Log Events',
+      'Data Size',
+      'Oldest',
+      {
+        isHeader: true,
+      },
+      segments,
+    ),
   );
-  lines.push(tableDivider(DISK_TABLE_SEGMENTS, '├', '┼', '┤'));
+  lines.push(tableDivider(segments, '├', '┼', '┤'));
   for (const r of results) {
     lines.push(
       formatDiskRow(
@@ -101,10 +226,12 @@ export function renderDiskTable(
         r.recordCount.toLocaleString(),
         formatBytes(r.totalBytes),
         r.oldestDate !== null ? formatRelative(r.oldestDate) : 'None',
+        {},
+        segments,
       ),
     );
   }
-  lines.push(tableDivider(DISK_TABLE_SEGMENTS, '├', '┼', '┤'));
+  lines.push(tableDivider(segments, '├', '┼', '┤'));
   lines.push(
     formatDiskRow(
       'TOTAL',
@@ -114,26 +241,40 @@ export function renderDiskTable(
       formatBytes(summary.totalBytes),
       summary.oldestDateIso !== null ? formatRelative(summary.oldestDateIso) : 'None',
       { isTotal: true },
+      segments,
     ),
   );
-  lines.push(tableDivider(DISK_TABLE_SEGMENTS, '└', '┴', '┘'));
+  lines.push(tableDivider(segments, '└', '┴', '┘'));
   return lines;
 }
 
 export function renderUploadTable(
   results: readonly SourceResult[],
   summary: InspectSummary,
+  terminalWidth?: number,
 ): string[] {
+  const width = terminalWidth !== undefined ? terminalWidth : getTerminalWidth();
+  const segments = scaleSegments(UPLOAD_TABLE_SEGMENTS, width);
+  const innerWidth = width - 2;
+
   const lines: string[] = [];
-  lines.push(chalk.bold('┌' + '─'.repeat(TABLE_INNER_WIDTH) + '┐'));
-  lines.push(`│ ${chalk.bold.green(UPLOAD_TITLE.padEnd(76))} │`);
-  lines.push(tableDivider(UPLOAD_TABLE_SEGMENTS, '├', '┼', '┤'));
+  lines.push(chalk.bold('┌' + '─'.repeat(innerWidth) + '┐'));
+  lines.push(`│ ${chalk.bold.green(formatTitle(UPLOAD_TITLE, innerWidth))} │`);
+  lines.push(tableDivider(segments, '├', '┼', '┤'));
   lines.push(
-    formatUploadRow('Source', 'Prompts', 'Captured Events', 'Uncompressed', 'Est. Upload', {
-      isHeader: true,
-    }),
+    formatUploadRow(
+      'Source',
+      'Prompts',
+      'Captured Events',
+      'Uncompressed',
+      'Est. Upload',
+      {
+        isHeader: true,
+      },
+      segments,
+    ),
   );
-  lines.push(tableDivider(UPLOAD_TABLE_SEGMENTS, '├', '┼', '┤'));
+  lines.push(tableDivider(segments, '├', '┼', '┤'));
   for (const r of results) {
     const ratio = formatRatio(r.telemetryRawBytes, r.telemetryCompressedBytes);
     lines.push(
@@ -143,10 +284,12 @@ export function renderUploadTable(
         r.telemetryRecordCount.toLocaleString(),
         formatBytes(r.telemetryRawBytes),
         `${formatBytes(r.telemetryCompressedBytes)} (${ratio}x)`,
+        {},
+        segments,
       ),
     );
   }
-  lines.push(tableDivider(UPLOAD_TABLE_SEGMENTS, '├', '┼', '┤'));
+  lines.push(tableDivider(segments, '├', '┼', '┤'));
   const totalRatio = formatRatio(summary.totalRawBytes, summary.totalCompressedBytes);
   lines.push(
     formatUploadRow(
@@ -156,15 +299,16 @@ export function renderUploadTable(
       formatBytes(summary.totalRawBytes),
       `${formatBytes(summary.totalCompressedBytes)} (${totalRatio}x)`,
       { isTotal: true },
+      segments,
     ),
   );
-  lines.push(tableDivider(UPLOAD_TABLE_SEGMENTS, '└', '┴', '┘'));
+  lines.push(tableDivider(segments, '└', '┴', '┘'));
   return lines;
 }
 
 export function renderWarnings(warnings: readonly SourceWarning[]): string[] {
   if (warnings.length === 0) return [];
-  const lines: string[] = [chalk.bold.yellow('⚠ Warnings')];
+  const lines: string[] = [chalk.bold.yellow('Warnings')];
   for (const w of warnings) {
     lines.push(`  • ${chalk.cyan(formatSourceLabel(w.source))}: ${chalk.yellow(w.message)}`);
   }
@@ -172,7 +316,7 @@ export function renderWarnings(warnings: readonly SourceWarning[]): string[] {
 }
 
 export function renderHighlights(summary: InspectSummary, durationMs: number): string[] {
-  const lines: string[] = [chalk.bold('💡 Highlights')];
+  const lines: string[] = [chalk.bold('Highlights')];
   lines.push(
     `  • Prompts you sent (estimated): ${chalk.green(summary.totalPrompts.toLocaleString())}`,
   );

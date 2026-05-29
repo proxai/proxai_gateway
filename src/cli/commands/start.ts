@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import type { ServiceManager } from 'cli/service-manager';
@@ -18,6 +19,7 @@ export interface StartCommandDeps {
   serviceUnitFileExists?: EnsureServiceUnitDeps['fileExists'];
   writeServiceUnitFn?: EnsureServiceUnitDeps['writer'];
   runAutoUpgrade?: () => Promise<void>;
+  profileName?: string;
 }
 
 export async function runStart(deps: StartCommandDeps): Promise<CommandResult> {
@@ -54,7 +56,17 @@ export async function runStart(deps: StartCommandDeps): Promise<CommandResult> {
     }
     await deps.serviceManager.ensureRegistered();
     await deps.serviceManager.start();
-    deps.output.success('proxai-gateway started');
+    deps.output.success('Daemon started successfully!');
+    deps.output.info('');
+    deps.output.info(`  ${chalk.green('●')} proxai-gateway - Active (Running)`);
+    if (deps.profileName) {
+      deps.output.info(`    ├─ Profile: ${chalk.cyan(deps.profileName)}`);
+      deps.output.info(`    ├─ Status : ${chalk.green('running')}`);
+    } else {
+      deps.output.info(`    ├─ Status : ${chalk.green('running')}`);
+    }
+    deps.output.info(`    └─ Logs   : run ${chalk.cyan('proxai-gateway tail')} to stream logs`);
+    deps.output.info('');
     return { exitCode: EXIT_CODE.ok };
   } catch (err) {
     deps.output.error(formatError('start failed', err));

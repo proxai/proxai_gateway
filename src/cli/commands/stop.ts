@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { readBootId } from 'core/system';
 import { nowIsoUtc } from 'core/utils';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
@@ -29,7 +30,12 @@ export async function runStop(deps: StopCommandDeps): Promise<CommandResult> {
       return { exitCode: EXIT_CODE.ok };
     }
     await deps.serviceManager.stop();
-    deps.output.success('proxai-gateway stopped');
+    deps.output.success('Daemon stopped successfully.');
+    deps.output.info('');
+    deps.output.info(`  ${chalk.red('○')} proxai-gateway - Inactive (Stopped)`);
+    deps.output.info(`    ├─ Status : ${chalk.red('stopped')}`);
+    deps.output.info(`    └─ Start  : run ${chalk.cyan('proxai-gateway start')} to resume`);
+    deps.output.info('');
     return { exitCode: EXIT_CODE.ok };
   } catch (err) {
     deps.output.error(formatError('stop failed', err));

@@ -77,8 +77,11 @@ program
     }),
     '-v, --version',
     'output the version and install source',
-  )
-  .option('--compact', 'simplified regular user view', false);
+  );
+
+if (isDevMode) {
+  program.option('--compact', 'simplified regular user view', false);
+}
 
 function exitUnsupportedPlatform(commandName: string): never {
   console.error(`unsupported platform for ${commandName}: ${process.platform}`);
@@ -360,7 +363,7 @@ program
     process.exit(result.exitCode);
   });
 
-program
+const statusCommand = program
   .command('status')
   .alias('i')
   .description(
@@ -369,50 +372,54 @@ program
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .option('--json', 'emit machine-readable JSON instead of the watch-mode UI', false)
   .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
-  .option('--all', 'show both prod and dev profiles side-by-side', false)
-  .option('--compact', 'simplified regular user view', false)
-  .action(
-    async (opts: {
-      config?: string;
-      json?: boolean;
-      profile?: string;
-      all?: boolean;
-      compact?: boolean;
-    }) => {
-      const compactMode = opts.compact === true || program.opts().compact === true;
-      const ctx = buildPlatformServiceContext(process.platform, process.execPath);
-      const profileCtx = buildProfileContext(parseProfileName(opts.profile));
-      const statusContextInputs: Parameters<typeof buildStatusContext>[0] = {
-        profileCtx,
-        json: opts.json === true,
-        serviceManager: ctx?.serviceManager ?? null,
-        configPath: profileCtx.configFilePath,
-      };
-      if (opts.config !== undefined) statusContextInputs.configOverride = opts.config;
-      const sCtx = await buildStatusContext(statusContextInputs);
-      let devCleanup: (() => void) | null = null;
-      try {
-        if ((opts.all === true || isDevMode) && !compactMode) {
-          const devProfileCtx = buildProfileContext('dev');
-          const devCtx = await buildStatusContext({
-            profileCtx: devProfileCtx,
-            json: opts.json === true,
-            serviceManager: ctx?.serviceManager ?? null,
-            configPath: devProfileCtx.configFilePath,
-          });
-          devCleanup = devCtx.cleanup;
-          sCtx.options.devDeps = devCtx.deps;
-        }
-        if (opts.all === true) sCtx.options.all = true;
-        sCtx.options.compact = compactMode;
-        const result = await runStatus(sCtx.deps, sCtx.options);
-        process.exit(result.exitCode);
-      } finally {
-        sCtx.cleanup();
-        if (devCleanup !== null) devCleanup();
+  .option('--all', 'show both prod and dev profiles side-by-side', false);
+
+if (isDevMode) {
+  statusCommand.option('--compact', 'simplified regular user view', false);
+}
+
+statusCommand.action(
+  async (opts: {
+    config?: string;
+    json?: boolean;
+    profile?: string;
+    all?: boolean;
+    compact?: boolean;
+  }) => {
+    const compactMode = opts.compact === true || program.opts().compact === true;
+    const ctx = buildPlatformServiceContext(process.platform, process.execPath);
+    const profileCtx = buildProfileContext(parseProfileName(opts.profile));
+    const statusContextInputs: Parameters<typeof buildStatusContext>[0] = {
+      profileCtx,
+      json: opts.json === true,
+      serviceManager: ctx?.serviceManager ?? null,
+      configPath: profileCtx.configFilePath,
+    };
+    if (opts.config !== undefined) statusContextInputs.configOverride = opts.config;
+    const sCtx = await buildStatusContext(statusContextInputs);
+    let devCleanup: (() => void) | null = null;
+    try {
+      if ((opts.all === true || isDevMode) && !compactMode) {
+        const devProfileCtx = buildProfileContext('dev');
+        const devCtx = await buildStatusContext({
+          profileCtx: devProfileCtx,
+          json: opts.json === true,
+          serviceManager: ctx?.serviceManager ?? null,
+          configPath: devProfileCtx.configFilePath,
+        });
+        devCleanup = devCtx.cleanup;
+        sCtx.options.devDeps = devCtx.deps;
       }
-    },
-  );
+      if (opts.all === true) sCtx.options.all = true;
+      sCtx.options.compact = compactMode;
+      const result = await runStatus(sCtx.deps, sCtx.options);
+      process.exit(result.exitCode);
+    } finally {
+      sCtx.cleanup();
+      if (devCleanup !== null) devCleanup();
+    }
+  },
+);
 
 program
   .command('inspect', { hidden: !isDevMode })
@@ -593,7 +600,7 @@ redaction
     process.exit(result.exitCode);
   });
 
-program
+const logsCommand = program
   .command('logs')
   .description('Show uploaded records and any errors from the local buffer.')
   .option('--static', 'one-shot output, no live refresh', false)
@@ -606,58 +613,67 @@ program
   .option('--since <dur>', 'show records from the last duration (e.g. 24h, 7d)')
   .option('--pending', 'show queued records not yet uploaded', false)
   .option('--lines <n>', 'number of records to display', '20')
-  .option('--profile <name>', 'profile to query (prod | dev)')
-  .option('--compact', 'simplified regular user view', false)
-  .action(
-    async (opts: {
-      static?: boolean;
-      json?: boolean;
-      error?: boolean;
-      source?: string;
-      since?: string;
-      pending?: boolean;
-      lines?: string;
-      profile?: string;
-      compact?: boolean;
-    }) => {
-      const compactMode = opts.compact === true || program.opts().compact === true;
-      const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
-      const profileName = parseProfileName(opts.profile ?? defaultProfile);
-      const profileCtx = buildProfileContext(profileName);
-      const { deps, cleanup } = await buildLogsDeps({ bufferPath: profileCtx.bufferDbPath });
-      const ctrl = new AbortController();
-      process.on('SIGINT', () => ctrl.abort());
-      process.on('SIGTERM', () => ctrl.abort());
-      try {
-        const parsedLines = opts.lines !== undefined ? parseInt(opts.lines, 10) : 20;
-        const safeLines = Number.isFinite(parsedLines) ? parsedLines : 20;
-        const result = await runLogs(deps, {
-          lines: safeLines,
-          compact: compactMode,
-          ...(opts.static === true ? { static: true as const } : {}),
-          ...(opts.json === true ? { json: true as const } : {}),
-          ...(opts.error === true ? { error: true as const } : {}),
-          ...(opts.pending === true ? { pending: true as const } : {}),
-          ...(opts.source !== undefined ? { source: opts.source } : {}),
-          ...(opts.since !== undefined ? { since: opts.since } : {}),
-        });
-        process.exit(result.exitCode);
-      } finally {
-        cleanup();
-      }
-    },
-  );
+  .option('--profile <name>', 'profile to query (prod | dev)');
 
-program
+if (isDevMode) {
+  logsCommand.option('--compact', 'simplified regular user view', false);
+}
+
+logsCommand.action(
+  async (opts: {
+    static?: boolean;
+    json?: boolean;
+    error?: boolean;
+    source?: string;
+    since?: string;
+    pending?: boolean;
+    lines?: string;
+    profile?: string;
+    compact?: boolean;
+  }) => {
+    const compactMode = opts.compact === true || program.opts().compact === true;
+    const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
+    const profileName = parseProfileName(opts.profile ?? defaultProfile);
+    const profileCtx = buildProfileContext(profileName);
+    const { deps, cleanup } = await buildLogsDeps({ bufferPath: profileCtx.bufferDbPath });
+    const ctrl = new AbortController();
+    process.on('SIGINT', () => ctrl.abort());
+    process.on('SIGTERM', () => ctrl.abort());
+    try {
+      const parsedLines = opts.lines !== undefined ? parseInt(opts.lines, 10) : 20;
+      const safeLines = Number.isFinite(parsedLines) ? parsedLines : 20;
+      const result = await runLogs(deps, {
+        lines: safeLines,
+        compact: compactMode,
+        ...(opts.static === true ? { static: true as const } : {}),
+        ...(opts.json === true ? { json: true as const } : {}),
+        ...(opts.error === true ? { error: true as const } : {}),
+        ...(opts.pending === true ? { pending: true as const } : {}),
+        ...(opts.source !== undefined ? { source: opts.source } : {}),
+        ...(opts.since !== undefined ? { since: opts.since } : {}),
+      });
+      process.exit(result.exitCode);
+    } finally {
+      cleanup();
+    }
+  },
+);
+
+const doctorCommand = program
   .command('doctor')
   .description('Diagnose common failure scenarios and report findings with copy-pasteable output.')
   .option('--profile <name>', 'profile to diagnose (prod | dev)')
   .option(
     '-o, --output [path]',
     'Output diagnostic report to an HTML file (absolute or relative, default: Desktop)',
-  )
-  .option('--compact', 'simplified regular user view', false)
-  .action(async (opts: { profile?: string; output?: string | boolean; compact?: boolean }) => {
+  );
+
+if (isDevMode) {
+  doctorCommand.option('--compact', 'simplified regular user view', false);
+}
+
+doctorCommand.action(
+  async (opts: { profile?: string; output?: string | boolean; compact?: boolean }) => {
     const compactMode = opts.compact === true || program.opts().compact === true;
     const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
     const profileName = parseProfileName(opts.profile ?? defaultProfile);
@@ -675,7 +691,8 @@ program
       compact: compactMode,
     });
     process.exit(result.exitCode);
-  });
+  },
+);
 
 program.parseAsync().catch((err: unknown) => {
   if (err instanceof UserAbortedError) {

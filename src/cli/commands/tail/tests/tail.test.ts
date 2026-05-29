@@ -462,3 +462,33 @@ test('skips malformed JSON lines silently', async () => {
   expect(lines).toHaveLength(1);
   expect(JSON.parse(requireDefined(lines[0])).msg).toBe('good');
 });
+
+test('formatLine layout is responsive to process.stdout.columns', () => {
+  const raw = JSON.stringify({
+    level: 30,
+    time: Date.now(),
+    msg: 'hello',
+    event: 'some-medium-event',
+  });
+  const originalColumns = process.stdout.columns;
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 40,
+      configurable: true,
+    });
+    const out40 = formatLine(raw);
+    expect(out40).toContain('some-me...');
+
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 100,
+      configurable: true,
+    });
+    const out100 = formatLine(raw);
+    expect(out100).toContain('some-medium-event');
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+    });
+  }
+});

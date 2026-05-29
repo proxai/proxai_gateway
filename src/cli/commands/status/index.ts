@@ -89,7 +89,7 @@ async function buildDualFrame(
     deps.devModeSentinelPath ?? join(profileRootDir(), 'DEV_MODE'),
   );
 
-  const showBoth = (options.all === true || isDevMode) && options.compact !== true;
+  const showBoth = isDevMode ? true : options.all === true && options.compact !== true;
   const devDeps = options.devDeps;
 
   if (showBoth && devDeps !== undefined) {
@@ -141,7 +141,7 @@ async function buildFrame(
       binaryPath,
       nowLocal,
       version,
-      compact: compact ?? !isDevMode,
+      compact: isDevMode ? false : compact === true || !isDevMode,
     };
   }
 
@@ -167,7 +167,7 @@ async function buildFrame(
       binaryPath,
       nowLocal,
       version,
-      compact: compact ?? !isDevMode,
+      compact: isDevMode ? false : compact === true || !isDevMode,
     };
   }
 
@@ -199,6 +199,6 @@ async function buildFrame(
     binaryPath,
     nowLocal,
     version,
-    compact: compact ?? !isDevMode,
+    compact: isDevMode ? false : compact === true || !isDevMode,
   };
 }

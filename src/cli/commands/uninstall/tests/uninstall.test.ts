@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runUninstall } from 'cli/commands/uninstall';
+import { buildConfirmationMessage } from 'cli/commands/uninstall/confirmation-message.ts';
 import type { UninstallCommandDeps } from 'cli/commands/uninstall';
 import type { PackageManagerSweep, PmDetection, SweepablePm } from 'services/uninstall';
 import type {
@@ -198,6 +199,7 @@ function depsFor(
     profileRootDir: join(tmpRoot, '.proxai'),
     profileLogDirRoot: join(tmpRoot, 'logs'),
     configExists: () => Bun.file(configPath).exists(),
+    isDevMode: true,
   };
 }
 
@@ -273,44 +275,19 @@ test('swallows unregister errors and continues with file removal', async () => {
   expect(await Bun.file(serviceUnitPath).exists()).toBe(false);
 });
 
-test('plain uninstall requires typed phrase "uninstall"; correct phrase proceeds', async () => {
+test('plain uninstall executes softly, silently, and immediately without prompting', async () => {
   await writeConfig();
   await writeFile(serviceUnitPath, '<plist/>');
   const { sm, calls } = fakeManager();
   const output = captureOutput();
   const result = await runUninstall({
-    ...depsFor(sm, { phrase: 'uninstall' }),
+    ...depsFor(sm, { phrase: false }),
     output,
   });
   expect(result.exitCode).toBe(0);
   expect(calls.stop).toBe(1);
   expect(calls.unregister).toBe(1);
-});
-
-test('plain uninstall: empty input aborts; service untouched and config preserved', async () => {
-  await writeConfig();
-  await writeFile(serviceUnitPath, '<plist/>');
-  const { sm, calls } = fakeManager();
-  const output = captureOutput();
-  const result = await runUninstall({ ...depsFor(sm, { phrase: false }), output });
-  expect(result.exitCode).toBe(5);
-  expect(calls.stop).toBe(0);
-  expect(calls.unregister).toBe(0);
-  expect(await Bun.file(serviceUnitPath).exists()).toBe(true);
-  expect(await Bun.file(configPath).exists()).toBe(true);
-  expect(output.lines.some((l) => l.msg.includes('aborted'))).toBe(true);
-});
-
-test('plain uninstall: wrong phrase string aborts (scripted shortcut)', async () => {
-  await writeConfig();
-  await writeFile(serviceUnitPath, '<plist/>');
-  const { sm } = fakeManager();
-  const output = captureOutput();
-  const result = await runUninstall({
-    ...depsFor(sm, { phrase: 'wrong text' }),
-    output,
-  });
-  expect(result.exitCode).toBe(5);
+  expect(await Bun.file(serviceUnitPath).exists()).toBe(false);
   expect(await Bun.file(configPath).exists()).toBe(true);
 });
 
@@ -463,6 +440,7 @@ test('per-platform smoke: stop + unregister called regardless of platform shim',
         profileRootDir: join(tmpRoot, platform, '.proxai'),
         profileLogDirRoot: join(tmpRoot, platform, 'logs'),
         configExists: () => Bun.file(isolatedConfigPath).exists(),
+        isDevMode: true,
       };
       const result = await runUninstall(deps, { yes: true });
       expect(result.exitCode).toBe(0);
@@ -1028,4 +1006,70 @@ test('path cleaner: skipped when installDir is missing even if cleaner provided'
     { yes: true },
   );
   expect(calls.clean).toHaveLength(0);
+});
+
+test('buildConfirmationMessage handles different dimensions, reset, and path truncation', () => {
+  const originalColumns = process.stdout.columns;
+  try {
+    const deps: UninstallCommandDeps = {
+      output: captureOutput(),
+      prompts: scriptedPrompts({}),
+      configPath,
+      configDir: configDirPath,
+      logDir: logDirPath,
+      serviceUnitPath,
+      serviceManager: fakeManager().sm,
+      devServiceManager: null,
+      devServiceUnitPath: null,
+      devConfigDir: devConfigDirPath,
+      devLogDir: devLogDirPath,
+      profileRootDir: join(tmpRoot, '.proxai'),
+      profileLogDirRoot: join(tmpRoot, 'logs'),
+      configExists: async () => true,
+      currentExecPath:
+        '/very/long/path/to/some/nested/directory/structure/that/is/deep/proxai-gateway',
+      isDevMode: true,
+    };
+
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 50,
+      configurable: true,
+    });
+    const msg50 = buildConfirmationMessage(deps, false);
+    expect(msg50).toContain('WARNING');
+    expect(msg50).toContain('IMPORTANT NOTICE');
+    expect(msg50).toContain('uninstall --reset');
+
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 120,
+      configurable: true,
+    });
+    const msg120 = buildConfirmationMessage(deps, true);
+    expect(msg120).toContain('DEVELOPER TECHNICAL DETAILS');
+    expect(msg120).toContain('uninstall --reset');
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+    });
+  }
+});
+
+test('silent output in regular user flow (isDevMode: false)', async () => {
+  await writeConfig('github_release');
+  await writeFile(serviceUnitPath, '<plist/>');
+  const sm = fakeManager().sm;
+  const output = captureOutput();
+  const result = await runUninstall(
+    {
+      ...depsFor(sm),
+      output,
+      isDevMode: false,
+    },
+    { yes: true },
+  );
+  expect(result.exitCode).toBe(0);
+  expect(output.lines).toHaveLength(1);
+  expect(output.lines[0]?.level).toBe('success');
+  expect(output.lines[0]?.msg).toBe('uninstalled');
 });

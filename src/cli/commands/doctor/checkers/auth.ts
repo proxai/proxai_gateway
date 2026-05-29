@@ -7,8 +7,10 @@ export function checkB1InvalidKey(signals: DoctorSignals): Finding | null {
     code: 'B1',
     severity: Severity.critical,
     confidence: Confidence.confirmed,
-    cause: 'AUTH_FAILED sentinel present — API key rejected by server',
-    action: 'Run: proxai-gateway setup --force with a valid key; verify at proxai.co',
+    cause:
+      'The configured API key has been rejected by the ProxAI server, meaning it is invalid or deleted.',
+    action:
+      'Retrieve a valid API key from your ProxAI dashboard (https://proxai.co) and reconfigure the gateway by running: "proxai-gateway setup --force"',
   };
 }
 
@@ -19,8 +21,9 @@ export function checkB2AuthUnconfirmedLoop(signals: DoctorSignals): Finding | nu
     code: 'B2',
     severity: Severity.warning,
     confidence: Confidence.confirmed,
-    cause: `Auth-unconfirmed loop (${signals.recentEvents.authUnconfirmedCount} occurrences) — network failure during verifyKey, NOT a key problem`,
-    action: `Check connectivity to the nest endpoint; AUTH_FAILED is absent so the key itself is fine`,
+    cause: `API key network verification is looping (${signals.recentEvents.authUnconfirmedCount} occurrences) due to connectivity issues. The local API key is valid, but the verification requests are failing to reach the gateway.`,
+    action:
+      'Check your internet connectivity, proxy configuration, and firewall rules to ensure that the API server is reachable.',
   };
 }
 
@@ -33,8 +36,9 @@ export function checkB3IngestionKeyAuthError(signals: DoctorSignals): Finding | 
       code: 'B3',
       severity: Severity.critical,
       confidence: Confidence.confirmed,
-      cause: `Ingestion key auth error in last upload cycle: ${err}`,
-      action: 'Run: proxai-gateway setup --force with a valid key',
+      cause: 'Log upload failed because the configured ingestion key is invalid or has expired.',
+      action:
+        'Generate a fresh API key from your ProxAI dashboard (https://proxai.co) and reconfigure the gateway by running: "proxai-gateway setup --force"',
     };
   }
   return null;

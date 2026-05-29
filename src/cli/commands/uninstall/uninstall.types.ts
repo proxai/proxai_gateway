@@ -27,6 +27,7 @@ export interface UninstallCommandDeps {
   pathCleaner?: ShellPathCleaner;
   installDir?: string;
   currentExecPath?: string;
+  isDevMode?: boolean;
 }
 
 export interface UninstallCommandOptions {

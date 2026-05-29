@@ -17,8 +17,9 @@ export function checkD1NoAgentActivity(signals: DoctorSignals): Finding | null {
       severity: Severity.info,
       confidence: Confidence.likely,
       cause:
-        'Capture cycling but no records captured — agent directories exist but no sessions recorded yet',
-      action: 'Start a coding session; first capture occurs on the next cycle (within 2 min)',
+        'Coding agent directories exist but no active session or command history has been recorded yet.',
+      action:
+        'Start a coding session by running commands/prompts in your agent; capture will trigger automatically within 2 minutes.',
     };
   }
 
@@ -26,9 +27,10 @@ export function checkD1NoAgentActivity(signals: DoctorSignals): Finding | null {
     code: 'D1',
     severity: Severity.warning,
     confidence: Confidence.likely,
-    cause: 'No agent source directories found — no supported coding agents detected',
+    cause:
+      'No supported coding agents (Claude Code, Cursor, Codex, Gemini CLI) are detected on this system.',
     action:
-      'Install a supported agent (Claude Code, Cursor, Codex, Gemini CLI) and start a session',
+      'Install a supported coding agent, start a session, and run a prompt to begin capturing activity.',
   };
 }
 
@@ -45,7 +47,8 @@ export function checkD2OneSourceErroring(signals: DoctorSignals): Finding | null
     code: 'D2',
     severity: Severity.warning,
     confidence: Confidence.confirmed,
-    cause: `One or more source parsers experiencing poll errors (${signals.recentEvents.retriableCount} retriable events)`,
-    action: 'Check logs for source.poll errors; run proxai-gateway inspect for details',
+    cause: `One or more coding agent parsers encountered log polling errors (${signals.recentEvents.retriableCount} retriable failures).`,
+    action:
+      'Run "proxai-gateway inspect" to diagnose the parser errors and check your agent log file permissions.',
   };
 }

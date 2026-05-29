@@ -1,8 +1,10 @@
 import type { FetchFn } from 'core/utils';
-import { basename } from 'node:path';
+import { existsSync, statSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
+import { isLocalBuildPath } from 'cli/commands/status/local-build.ts';
 import {
   downloadAsset,
   expectedAssetName,
@@ -29,6 +31,68 @@ export async function runUpgrade(
   deps: UpgradeCommandDeps,
   options: UpgradeCommandOptions = {},
 ): Promise<CommandResult> {
+  const isLocal =
+    isLocalBuildPath(deps.binaryPath) ||
+    deps.binaryPath.includes('src/main.ts') ||
+    deps.binaryPath.includes('src\\main.ts') ||
+    (typeof process !== 'undefined' &&
+      typeof process.argv?.[1] === 'string' &&
+      (process.argv[1].includes('src/main.ts') || process.argv[1].includes('src\\main.ts')));
+
+  if (isLocal) {
+    const platform = process.platform === 'win32' ? 'windows' : process.platform;
+    const target = `${platform}-${process.arch}`;
+    let repoRoot = resolve(deps.binaryPath, '..', '..', '..');
+    const pathsToTry = [
+      typeof process !== 'undefined' ? process.argv?.[1] : undefined,
+      deps.binaryPath,
+    ].filter((p): p is string => typeof p === 'string' && p.length > 0);
+
+    for (const startPath of pathsToTry) {
+      let currentDir = resolve(startPath);
+      try {
+        if (existsSync(currentDir) && statSync(currentDir).isFile()) {
+          currentDir = dirname(currentDir);
+        }
+      } catch {
+        currentDir = dirname(currentDir);
+      }
+
+      let found = false;
+      while (currentDir !== dirname(currentDir)) {
+        if (
+          existsSync(join(currentDir, 'scripts/build.ts')) &&
+          existsSync(join(currentDir, 'package.json'))
+        ) {
+          repoRoot = currentDir;
+          found = true;
+          break;
+        }
+        currentDir = dirname(currentDir);
+      }
+      if (found) {
+        break;
+      }
+    }
+
+    deps.output.info(
+      `Local development build detected. Rebuilding target ${target} from source...`,
+    );
+    const proc = Bun.spawn({
+      cmd: ['bun', 'scripts/build.ts', target],
+      cwd: repoRoot,
+      stdout: 'inherit',
+      stderr: 'inherit',
+    });
+    const code = await proc.exited;
+    if (code !== 0) {
+      deps.output.error(`Local rebuild failed with exit code ${code}`);
+      return { exitCode: EXIT_CODE.error };
+    }
+    deps.output.success('Local build upgraded successfully.');
+    return { exitCode: EXIT_CODE.ok };
+  }
+
   const fetchFn = deps.fetch ?? globalThis.fetch;
   const platform = deps.platform ?? process.platform;
   const arch = process.arch;

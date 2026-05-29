@@ -76,6 +76,8 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
     systemdLingerEnabled: null,
     macOsQuarantineXattr: null,
     clockSkewMs: null,
+    bufferDbReadable: true,
+    receiptsTableReadable: true,
   };
   return { ...base, ...overrides };
 }
@@ -89,13 +91,11 @@ function makeFinding(over: Partial<Finding> & Pick<Finding, 'code' | 'severity'>
   };
 }
 
-test('renders no-issues healthy block listing all healthy checks', () => {
+test('renders no-issues healthy block', () => {
   const out = stripAnsi(renderDoctorOutput([], baseSignals()));
   expect(out).toContain('=== proxai-gateway doctor ===');
   expect(out).toContain('No issues found.');
-  expect(out).toContain('Healthy checks:');
-  expect(out).toContain('[OK] A1 Config present');
-  expect(out).toContain('[OK] F2 Disk space adequate');
+  expect(out).not.toContain('Healthy checks');
 });
 
 test('renders critical, warning, and info sections sorted by severity', () => {
@@ -114,25 +114,7 @@ test('renders critical, warning, and info sections sorted by severity', () => {
   expect(criticalIdx).toBeLessThan(warningIdx);
   expect(warningIdx).toBeLessThan(infoIdx);
   expect(out).toContain('B1 cause text');
-  expect(out).toContain('→ action text');
-});
-
-test('lists passing checks excluding ones that produced findings', () => {
-  const findings: Finding[] = [makeFinding({ code: 'A1', severity: Severity.critical })];
-  const out = stripAnsi(renderDoctorOutput(findings, baseSignals()));
-  expect(out).toContain('Passing checks:');
-  expect(out).not.toContain('[OK] A1 Config present');
-  expect(out).toContain('[OK] A2 Service unit registered');
-});
-
-test('always lists the A3/A4 healthy check since no single finding code matches it', () => {
-  const codes: Finding['code'][] = ['A1', 'A2', 'A3', 'B1', 'B2', 'C2', 'F1', 'F2'];
-  const findings: Finding[] = codes.map((code) =>
-    makeFinding({ code, severity: Severity.warning }),
-  );
-  const out = stripAnsi(renderDoctorOutput(findings, baseSignals()));
-  expect(out).toContain('Passing checks:');
-  expect(out).toContain('[OK] A3/A4 Daemon running');
+  expect(out).toContain('-> action text');
 });
 
 test('renders only-critical findings (no warning/info sections)', () => {
@@ -145,7 +127,7 @@ test('renders only-critical findings (no warning/info sections)', () => {
 
 test('signals appendix renders null placeholders for absent optional values', () => {
   const out = stripAnsi(renderDoctorOutput([], baseSignals()));
-  expect(out).toContain('--- Signals ---');
+  expect(out).toContain('SIGNALS');
   expect(out).toContain('last_prune_at:           null');
   expect(out).toContain('capture_last_cycle_at:   null');
   expect(out).toContain('retriable_break:         null');
@@ -153,10 +135,10 @@ test('signals appendix renders null placeholders for absent optional values', ()
   expect(out).toContain('install_source:          null');
   expect(out).toContain('disk_free_bytes:         null');
   expect(out).toContain('nest_reachable:          null');
-  expect(out).not.toContain('regression_loops:');
-  expect(out).not.toContain('systemd_linger:');
-  expect(out).not.toContain('macos_quarantine:');
-  expect(out).not.toContain('clock_skew_ms:');
+  expect(out).toContain('regression_loops:        none');
+  expect(out).toContain('systemd_linger:          null');
+  expect(out).toContain('macos_quarantine:        null');
+  expect(out).toContain('clock_skew_ms:           null');
 });
 
 test('signals appendix renders populated optional values and regression loops', () => {
@@ -220,12 +202,31 @@ test('signals appendix renders populated optional values and regression loops', 
 
 test('renderDoctorOutput compact option hides verbose signals appendix completely', () => {
   const out = stripAnsi(renderDoctorOutput([], baseSignals(), true));
-  expect(out).not.toContain('--- Signals ---');
+  expect(out).not.toContain('SIGNALS');
   expect(out).not.toContain('last_prune_at:');
 
-  // Confirms diagnostics summary is present at both top and bottom (duplicated)
   const firstIndex = out.indexOf('DIAGNOSTICS SUMMARY');
   const lastIndex = out.lastIndexOf('DIAGNOSTICS SUMMARY');
   expect(firstIndex).toBeGreaterThanOrEqual(0);
   expect(lastIndex).toBeGreaterThan(firstIndex);
+});
+
+test('respects process.stdout.columns and shrinks divider width accordingly', () => {
+  const originalColumns = process.stdout.columns;
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 40,
+      configurable: true,
+    });
+
+    const out = stripAnsi(renderDoctorOutput([], baseSignals()));
+    expect(out).toContain('═'.repeat(40));
+    expect(out).not.toContain('═'.repeat(60));
+    expect(out).toContain('          DIAGNOSTICS SUMMARY');
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+    });
+  }
 });

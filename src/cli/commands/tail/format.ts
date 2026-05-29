@@ -39,10 +39,22 @@ export function formatLine(line: string): string {
   const levelLabel = PINO_LEVEL_LABEL[level] ?? String(level);
   const levelColored = colorLevel(level, levelLabel.padEnd(5));
   const sourceTag = sourceApp !== null ? chalk.cyan(`[${sourceApp}] `) : '';
-  const eventTag = event !== null ? `${chalk.dim(event.padEnd(24))} ` : '';
+
+  const cols = process.stdout.columns && process.stdout.columns > 0 ? process.stdout.columns : 80;
+  const eventWidth = Math.max(10, Math.min(24, Math.floor(cols / 4)));
+  let paddedEvent = '';
+  if (event !== null) {
+    if (event.length > eventWidth) {
+      paddedEvent = event.slice(0, eventWidth - 3) + '...';
+    } else {
+      paddedEvent = event.padEnd(eventWidth);
+    }
+  }
+  const eventTag = event !== null ? `${chalk.dim(paddedEvent)} ` : '';
 
   const extras = formatExtras(parsed);
-  return `${chalk.gray(timeStr)}  ${levelColored}  ${sourceTag}${eventTag}${msg}${extras}`;
+  const spacing = cols < 60 ? ' ' : '  ';
+  return `${chalk.gray(timeStr)}${spacing}${levelColored}${spacing}${sourceTag}${eventTag}${msg}${extras}`;
 }
 
 function formatLocalTime(timeMs: number): string {

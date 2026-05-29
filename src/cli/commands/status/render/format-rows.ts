@@ -8,7 +8,7 @@ export const UNIT_WIDTH = 9;
 export const BYTES_WIDTH = 10;
 export const SUB_LABEL_WIDTH = 14;
 export const ROW_INDENT = '  ';
-export const SUB_ROW_INDENT = '       ';
+export const SUB_ROW_INDENT = '    ';
 export const SEP = chalk.dim('·');
 
 export function labelCol(text: string): string {
@@ -60,7 +60,9 @@ export function subRowCountBytes(
 }
 
 export function sectionDivider(title: string): string {
+  const cols = process.stdout.columns || 82;
   const left = chalk.dim('─'.repeat(2));
-  const right = chalk.dim('─'.repeat(74 - title.length));
+  const rightWidth = Math.max(0, cols - 8 - title.length);
+  const right = chalk.dim('─'.repeat(rightWidth));
   return `\n  ${left}  ${chalk.bold(title)}  ${right}`;
 }

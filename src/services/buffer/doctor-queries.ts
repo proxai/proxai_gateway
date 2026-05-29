@@ -256,6 +256,8 @@ export interface DoctorAllQueries {
   readonly daemonState: DoctorDaemonState;
   readonly recentEvents: DoctorRecentEvents;
   readonly resyncStats: DoctorResyncStats;
+  readonly dbReadable: boolean;
+  readonly receiptsTableReadable: boolean;
 }
 
 const EMPTY_BUFFER_STATS: DoctorBufferStats = {
@@ -299,6 +301,8 @@ export function queryAllDoctorData(bufferDbPath: string): DoctorAllQueries {
       daemonState: EMPTY_DAEMON_STATE,
       recentEvents: EMPTY_RECENT_EVENTS,
       resyncStats: EMPTY_RESYNC_STATS,
+      dbReadable: false,
+      receiptsTableReadable: false,
     };
   }
 
@@ -306,10 +310,19 @@ export function queryAllDoctorData(bufferDbPath: string): DoctorAllQueries {
   let daemonState: DoctorDaemonState = EMPTY_DAEMON_STATE;
   let recentEvents: DoctorRecentEvents = EMPTY_RECENT_EVENTS;
   let resyncStats: DoctorResyncStats = EMPTY_RESYNC_STATS;
+  const dbReadable = true;
+  let receiptsTableReadable = false;
 
   try {
     bufferStats = queryDoctorBufferStats(db);
-  } catch {}
+    receiptsTableReadable = true;
+  } catch {
+    try {
+      receiptsTableReadable = checkReceiptsTableReadable(db);
+    } catch {
+      receiptsTableReadable = false;
+    }
+  }
   try {
     daemonState = queryDoctorDaemonState(db);
   } catch {}
@@ -324,5 +337,12 @@ export function queryAllDoctorData(bufferDbPath: string): DoctorAllQueries {
     db.close();
   } catch {}
 
-  return { bufferStats, daemonState, recentEvents, resyncStats };
+  return {
+    bufferStats,
+    daemonState,
+    recentEvents,
+    resyncStats,
+    dbReadable,
+    receiptsTableReadable,
+  };
 }

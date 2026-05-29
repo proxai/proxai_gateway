@@ -20,19 +20,29 @@ function renderFinding(finding: Finding): string {
 
   let prefix = '';
   if (finding.severity === Severity.critical) {
-    prefix = chalk.bold.red('  ❌ ');
+    prefix = chalk.bold.red('  [X] ');
   } else if (finding.severity === Severity.warning) {
-    prefix = chalk.bold.yellow('  ⚠️  ');
+    prefix = chalk.bold.yellow('  [!] ');
   } else {
-    prefix = chalk.bold.blue('  ℹ️  ');
+    prefix = chalk.bold.blue('  [i] ');
   }
 
-  return `${prefix}${codeText} ${causeText}\n     ${chalk.dim('→')} ${actionText}`;
+  return `${prefix}${codeText} ${causeText}\n     ${chalk.dim('->')} ${actionText}`;
 }
 
-function renderSignalsAppendix(signals: DoctorSignals): string {
+function centerText(text: string, width: number): string {
+  if (text.length >= width) {
+    return text;
+  }
+  const padding = Math.floor((width - text.length) / 2);
+  return ' '.repeat(padding) + text;
+}
+
+function renderSignalsAppendix(signals: DoctorSignals, width: number): string {
   const lines: string[] = [];
-  lines.push('--- Signals ---');
+  lines.push('═'.repeat(width));
+  lines.push(centerText('SIGNALS', width));
+  lines.push('═'.repeat(width));
 
   const formatBool = (val: boolean) => (val ? chalk.green('true') : chalk.red('false'));
   const formatStr = (val: string | null) => (val !== null ? chalk.yellow(val) : chalk.dim('null'));
@@ -113,41 +123,27 @@ function renderSignalsAppendix(signals: DoctorSignals): string {
     for (const loop of signals.resyncEvents.regressionLoops) {
       lines.push(`    ${loop.sourcePathHash}: ${formatNum(loop.countInLastHour)} in last hour`);
     }
+  } else {
+    lines.push(`  regression_loops:        ${chalk.dim('none')}`);
   }
-  if (signals.systemdLingerEnabled !== null) {
-    lines.push(`  systemd_linger:          ${formatBool(signals.systemdLingerEnabled)}`);
-  }
-  if (signals.macOsQuarantineXattr !== null) {
-    lines.push(`  macos_quarantine:        ${formatBool(signals.macOsQuarantineXattr)}`);
-  }
-  if (signals.clockSkewMs !== null) {
-    lines.push(`  clock_skew_ms:           ${formatNum(signals.clockSkewMs)}`);
-  }
+  lines.push(
+    `  systemd_linger:          ${signals.systemdLingerEnabled === null ? chalk.dim('null') : formatBool(signals.systemdLingerEnabled)}`,
+  );
+  lines.push(
+    `  macos_quarantine:        ${signals.macOsQuarantineXattr === null ? chalk.dim('null') : formatBool(signals.macOsQuarantineXattr)}`,
+  );
+  lines.push(
+    `  clock_skew_ms:           ${signals.clockSkewMs === null ? chalk.dim('null') : formatNum(signals.clockSkewMs)}`,
+  );
 
   return lines.join('\n');
 }
-
-const HEALTHY_CHECKS: ReadonlyArray<{ code: string; label: string }> = [
-  { code: 'A1', label: 'Config present' },
-  { code: 'A2', label: 'Service unit registered' },
-  { code: 'A3/A4', label: 'Daemon running' },
-  { code: 'B1', label: 'No AUTH_FAILED sentinel' },
-  { code: 'B2', label: 'No auth-unconfirmed loop' },
-  { code: 'C2', label: 'Nest endpoint reachable' },
-  { code: 'F1', label: 'configDir writable' },
-  { code: 'F2', label: 'Disk space adequate' },
-];
 
 function renderSummaryBlock(sorted: readonly Finding[]): string[] {
   const lines: string[] = [];
 
   if (sorted.length === 0) {
     lines.push('No issues found.');
-    lines.push('');
-    lines.push('Healthy checks:');
-    for (const check of HEALTHY_CHECKS) {
-      lines.push(`  [OK] ${check.code} ${check.label}`);
-    }
   } else {
     const criticals = sorted.filter((f) => f.severity === Severity.critical);
     const warnings = sorted.filter((f) => f.severity === Severity.warning);
@@ -176,18 +172,6 @@ function renderSummaryBlock(sorted: readonly Finding[]): string[] {
       }
       lines.push('');
     }
-
-    const findingCodes = new Set(sorted.map((f) => f.code));
-    const passingChecks = HEALTHY_CHECKS.filter(
-      (c) => !findingCodes.has(c.code as Finding['code']),
-    );
-    if (passingChecks.length > 0) {
-      lines.push('Passing checks:');
-      for (const check of passingChecks) {
-        lines.push(`  [OK] ${check.code} ${check.label}`);
-      }
-      lines.push('');
-    }
   }
 
   return lines;
@@ -205,25 +189,23 @@ export function renderDoctorOutput(
   lines.push('');
 
   const summaryBlock = renderSummaryBlock(sorted);
+  const width = process.stdout.columns || 60;
 
-  // Duplicate 1: Summary at the top
-  lines.push('═'.repeat(60));
-  lines.push('                 DIAGNOSTICS SUMMARY');
-  lines.push('═'.repeat(60));
+  lines.push('═'.repeat(width));
+  lines.push(centerText('DIAGNOSTICS SUMMARY', width));
+  lines.push('═'.repeat(width));
   lines.push('');
   lines.push(...summaryBlock);
   lines.push('');
 
   if (!compact) {
-    // Verbose Signals in the middle
-    lines.push(renderSignalsAppendix(signals));
+    lines.push(renderSignalsAppendix(signals, width));
     lines.push('');
   }
 
-  // Duplicate 2: Summary at the bottom
-  lines.push('═'.repeat(60));
-  lines.push('                 DIAGNOSTICS SUMMARY');
-  lines.push('═'.repeat(60));
+  lines.push('═'.repeat(width));
+  lines.push(centerText('DIAGNOSTICS SUMMARY', width));
+  lines.push('═'.repeat(width));
   lines.push('');
   lines.push(...summaryBlock);
 
@@ -242,13 +224,13 @@ export function generateDoctorHtml(
     let icon = '';
     if (f.severity === Severity.critical) {
       badgeClass = 'bg-red-500/10 text-red-400 border-red-500/30';
-      icon = '❌';
+      icon = '[X]';
     } else if (f.severity === Severity.warning) {
       badgeClass = 'bg-amber-500/10 text-amber-400 border-amber-500/30';
-      icon = '⚠️';
+      icon = '[!]';
     } else {
       badgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/30';
-      icon = 'ℹ️';
+      icon = '[i]';
     }
     return `
       <div class="p-5 mb-4 rounded-xl border bg-slate-800/50 border-slate-700/50 hover:border-slate-600 transition duration-200">
@@ -269,8 +251,6 @@ export function generateDoctorHtml(
   const criticals = sorted.filter((f) => f.severity === Severity.critical);
   const warnings = sorted.filter((f) => f.severity === Severity.warning);
   const infos = sorted.filter((f) => f.severity === Severity.info);
-  const findingCodes = new Set(sorted.map((f) => f.code));
-  const passingChecks = HEALTHY_CHECKS.filter((c) => !findingCodes.has(c.code as Finding['code']));
 
   const buildSummaryHtml = () => {
     let html = '';
@@ -317,28 +297,6 @@ export function generateDoctorHtml(
       }
     }
 
-    if (passingChecks.length > 0) {
-      html += `
-        <div class="mb-8 p-6 rounded-xl bg-slate-800/40 border border-slate-700/30">
-          <h3 class="text-sm font-bold uppercase tracking-wider text-emerald-400 mb-4 flex items-center gap-2">
-            ✓ Passing Checks (${passingChecks.length})
-          </h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            ${passingChecks
-              .map(
-                (c) => `
-              <div class="flex items-center gap-2.5 text-slate-300 text-sm">
-                <span class="text-emerald-500 font-bold">✓</span>
-                <span class="font-mono text-slate-500 text-xs">${c.code}</span>
-                <span>${escapeHtml(c.label)}</span>
-              </div>
-            `,
-              )
-              .join('')}
-          </div>
-        </div>
-      `;
-    }
     return html;
   };
 
@@ -375,7 +333,7 @@ export function generateDoctorHtml(
     <div class="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-fuchsia-500/10 to-emerald-500/10 opacity-30 pointer-events-none"></div>
     <div class="relative z-10 max-w-4xl mx-auto flex flex-col items-center">
       <div class="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mb-4">
-        <span class="text-3xl text-cyan-400">🤖</span>
+        <span class="text-2xl font-bold font-mono text-cyan-400">DR</span>
       </div>
       <h1 class="text-3xl font-extrabold tracking-tight text-white mb-2">PROXAI-GATEWAY DOCTOR</h1>
       <p class="text-sm text-slate-400">Diagnostic report compiled on <span class="text-cyan-400 font-medium font-mono">${timestamp}</span></p>
@@ -387,7 +345,7 @@ export function generateDoctorHtml(
       <!-- DUPLICATE 1: Top Diagnostics Summary -->
       <section class="mb-12">
         <h2 class="text-lg font-bold text-white mb-6 border-b border-slate-800 pb-2 flex items-center gap-2">
-          <span>🔍</span> Diagnostics Summary
+          Diagnostics Summary
         </h2>
         ${summarySection}
       </section>
@@ -395,7 +353,7 @@ export function generateDoctorHtml(
       <!-- VERBOSE SIGNALS: In the middle -->
       <section class="mb-12">
         <h2 class="text-lg font-bold text-white mb-6 border-b border-slate-800 pb-2 flex items-center gap-2">
-          <span>📊</span> Diagnostics Signals Appendix
+          Diagnostics Signals Appendix
         </h2>
         <div class="bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-xl">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -460,7 +418,7 @@ export function generateDoctorHtml(
       <!-- DUPLICATE 2: Bottom Diagnostics Summary -->
       <section class="mb-8">
         <h2 class="text-lg font-bold text-white mb-6 border-b border-slate-800 pb-2 flex items-center gap-2">
-          <span>🔍</span> Diagnostics Summary
+          Diagnostics Summary
         </h2>
         ${summarySection}
       </section>

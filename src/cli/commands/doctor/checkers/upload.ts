@@ -7,8 +7,9 @@ export function checkC1RateLimited(signals: DoctorSignals): Finding | null {
     code: 'C1',
     severity: Severity.warning,
     confidence: Confidence.confirmed,
-    cause: `Server is rate-limiting this host (${signals.recentEvents.rateLimitedCount} rate-limit events)`,
-    action: 'Contact ops with your host_id to investigate',
+    cause: `The server is rate-limiting this host's upload requests (${signals.recentEvents.rateLimitedCount} rate-limit events detected).`,
+    action:
+      'Provide the host_id from your config.toml to the operations team to request a rate limit adjustment.',
   };
 }
 
@@ -21,8 +22,10 @@ export function checkC2NetworkFailure(signals: DoctorSignals): Finding | null {
     code: 'C2',
     severity: Severity.critical,
     confidence: Confidence.confirmed,
-    cause: 'Nest endpoint unreachable — network / DNS / TCP / SSL inspection blocking uploads',
-    action: 'Check network connectivity and proxy settings to the nest endpoint',
+    cause:
+      'The Nest API endpoint is unreachable due to a network connection, DNS lookup, firewall, or SSL proxy inspection blockage.',
+    action:
+      'Verify your internet connection and ensure outbound traffic is allowed without SSL inspection or proxy interception to the Nest endpoint.',
   };
 }
 
@@ -45,8 +48,9 @@ export function checkC3DrainWedged(signals: DoctorSignals): Finding | null {
     code: 'C3',
     severity: Severity.warning,
     confidence: Confidence.likely,
-    cause: `Pending batches exist but drain cycle last ran ${Math.round((Date.now() - ms) / 60_000)} min ago with no gating sentinel`,
-    action: 'Run: proxai-gateway restart',
+    cause: `Pending database batches are queued for upload, but the background daemon has stalled and has not performed a drain cycle in ${Math.round((Date.now() - ms) / 60_000)} minutes.`,
+    action:
+      'Restart the background service daemon to force a fresh upload queue cycle by running: proxai-gateway restart',
   };
 }
 
@@ -63,8 +67,10 @@ export function checkC4BufferRecovery(signals: DoctorSignals): Finding | null {
     code: 'C4',
     severity: Severity.info,
     confidence: Confidence.confirmed,
-    cause: 'BUFFER_FULL sentinel active but drain is advancing — buffer recovery in progress',
-    action: 'No action needed; this is working as designed and will self-clear',
+    cause:
+      'The upload buffer is full because telemetry capture exceeded the upload rate, but the daemon is actively draining pending batches',
+    action:
+      'No action required. Wait for the background daemon to finish uploading; the gateway will automatically resume accepting new records.',
   };
 }
 
@@ -83,8 +89,10 @@ export function checkC5BufferOscillating(signals: DoctorSignals): Finding | null
     code: 'C5',
     severity: Severity.warning,
     confidence: Confidence.confirmed,
-    cause: 'Buffer pressure oscillating — drain is slower than capture rate',
-    action: 'Consider raising upload_max_bytes_per_minute in config.toml',
+    cause:
+      'The upload buffer is under heavy pressure because the telemetry capture rate is faster than the background upload speed',
+    action:
+      'Increase upload_max_bytes_per_minute in config.toml, or check if network bandwidth is limited.',
   };
 }
 
@@ -94,8 +102,9 @@ export function checkC6ParserValidationErrors(signals: DoctorSignals): Finding |
     code: 'C6',
     severity: Severity.critical,
     confidence: Confidence.confirmed,
-    cause: `Parser emitting invalid records — ${signals.recentEvents.fatalValidationErrorCount} fatal ValidationError events`,
-    action: 'Send this doctor output to the team; run inspect to examine the failing batches',
+    cause: `The gateway parser is producing malformed telemetry records that fail schema validation (${signals.recentEvents.fatalValidationErrorCount} fatal validation errors)`,
+    action:
+      "Run 'proxai-gateway inspect' to examine the failing batches, and report these validation errors to the development team.",
   };
 }
 
@@ -105,7 +114,8 @@ export function checkC7QuarantinedRows(signals: DoctorSignals): Finding | null {
     code: 'C7',
     severity: Severity.info,
     confidence: Confidence.confirmed,
-    cause: `${signals.buffer.quarantinedCount} oversized row(s) quarantined (>10 MiB decompressed)`,
-    action: 'No action needed; oversized rows are skipped by design',
+    cause: `The upload buffer quarantined ${signals.buffer.quarantinedCount} oversized telemetry row(s) because they exceed the 10 MiB decompressed limit`,
+    action:
+      'No action required. The system skipped these rows to protect the gateway from memory exhaustion. Inspect client payloads to ensure they stay under 10 MiB.',
   };
 }
