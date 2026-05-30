@@ -40,7 +40,7 @@
   },
   "scripts": {
     "dev": "bun run src/main.ts",
-    "test": "bun test --parallel --timeout 30000",
+    "test": "bun test --timeout 30000",
     "test:watch": "bun test --watch",
     "test:cov": "bun scripts/run-coverage.ts",
     "lint": "oxlint --deny-warnings",
