@@ -21,7 +21,14 @@ import {
   BODY_TARGET_COMPRESSED_BYTES,
   BODY_TARGET_DECOMPRESSED_BYTES,
 } from 'services/contract';
-import { collectGeminiCliFile, isGeminiCliDialogueRecord } from 'sources/gemini-cli';
+import {
+  collectGeminiCliFile,
+  isGeminiCliDialogueRecord,
+  trimGeminiToolCallArgs,
+  trimGeminiToolCall,
+  trimGeminiThought,
+  trimGeminiCliRecord,
+} from 'sources/gemini-cli';
 import type { DiscoveredGeminiCliFile, GeminiCliCollectorContext } from 'sources/gemini-cli';
 
 let dir: string;
@@ -399,4 +406,177 @@ test('first poll: file with only non-dialogue events advances cursor past them b
     watermarkTable: null,
   });
   expect(cursor?.watermarkEnd).toBe(content.length);
+});
+
+test('trimGeminiToolCallArgs: returns non-object values unchanged', () => {
+  expect(trimGeminiToolCallArgs(null)).toBeNull();
+  expect(trimGeminiToolCallArgs(42)).toBe(42);
+  expect(trimGeminiToolCallArgs(['a', 'b'])).toEqual(['a', 'b']);
+});
+
+test('trimGeminiToolCallArgs: keeps short string values and trims overlong ones', () => {
+  const shortVal = 'short';
+  const longVal = 'x'.repeat(513);
+  const result = trimGeminiToolCallArgs({ a: shortVal, b: longVal, c: 99 });
+  expect(result).toEqual({ a: shortVal, b: '<trimmed>', c: 99 });
+});
+
+test('trimGeminiToolCallArgs: empty object returns empty object', () => {
+  expect(trimGeminiToolCallArgs({})).toEqual({});
+});
+
+test('trimGeminiToolCall: returns non-object values unchanged', () => {
+  expect(trimGeminiToolCall(null)).toBeNull();
+  expect(trimGeminiToolCall('string')).toBe('string');
+  expect(trimGeminiToolCall([1, 2])).toEqual([1, 2]);
+});
+
+test('trimGeminiToolCall: strips unknown keys and keeps only KEEP_KEYS', () => {
+  const call = {
+    id: 'call-1',
+    name: 'myTool',
+    displayName: 'My Tool',
+    description: 'desc',
+    status: 'done',
+    timestamp: '2026-01-01T00:00:00Z',
+    agentId: 'agent-1',
+    unknownKey: 'should be dropped',
+    extraData: { nested: true },
+  };
+  const result = trimGeminiToolCall(call);
+  expect(result).toEqual({
+    id: 'call-1',
+    name: 'myTool',
+    displayName: 'My Tool',
+    description: 'desc',
+    status: 'done',
+    timestamp: '2026-01-01T00:00:00Z',
+    agentId: 'agent-1',
+  });
+});
+
+test('trimGeminiToolCall: includes trimmed args when present', () => {
+  const longArg = 'y'.repeat(600);
+  const call = { id: 'c1', name: 'tool', args: { code: longArg, small: 'ok' } };
+  const result = trimGeminiToolCall(call) as Record<string, unknown>;
+  expect(result.id).toBe('c1');
+  expect(result.name).toBe('tool');
+  const args = result.args as Record<string, unknown>;
+  expect(args.code).toBe('<trimmed>');
+  expect(args.small).toBe('ok');
+});
+
+test('trimGeminiToolCall: omits args key when not present in source', () => {
+  const call = { id: 'c2', name: 'tool' };
+  const result = trimGeminiToolCall(call) as Record<string, unknown>;
+  expect('args' in result).toBe(false);
+});
+
+test('trimGeminiThought: returns non-object values unchanged', () => {
+  expect(trimGeminiThought(null)).toBeNull();
+  expect(trimGeminiThought('text')).toBe('text');
+  expect(trimGeminiThought([1])).toEqual([1]);
+});
+
+test('trimGeminiThought: keeps only subject and timestamp', () => {
+  const thought = { subject: 'thinking', timestamp: '2026-01-01T00:00:00Z', extra: 'drop me' };
+  expect(trimGeminiThought(thought)).toEqual({
+    subject: 'thinking',
+    timestamp: '2026-01-01T00:00:00Z',
+  });
+});
+
+test('trimGeminiThought: omits missing subject and timestamp', () => {
+  expect(trimGeminiThought({ extra: 'ignored' })).toEqual({});
+});
+
+test('trimGeminiThought: keeps only subject when timestamp absent', () => {
+  expect(trimGeminiThought({ subject: 'plan' })).toEqual({ subject: 'plan' });
+});
+
+test('trimGeminiThought: keeps only timestamp when subject absent', () => {
+  expect(trimGeminiThought({ timestamp: '2026-01-01T00:00:00Z' })).toEqual({
+    timestamp: '2026-01-01T00:00:00Z',
+  });
+});
+
+test('trimGeminiCliRecord: returns primitives and null unchanged', () => {
+  expect(trimGeminiCliRecord(null)).toBeNull();
+  expect(trimGeminiCliRecord('raw string')).toBe('raw string');
+  expect(trimGeminiCliRecord(123)).toBe(123);
+});
+
+test('trimGeminiCliRecord: returns non-gemini records unchanged', () => {
+  const userRecord = { type: 'user', content: [{ text: 'hi' }] };
+  expect(trimGeminiCliRecord(userRecord)).toBe(userRecord);
+});
+
+test('trimGeminiCliRecord: trims toolCalls on gemini records', () => {
+  const longArg = 'z'.repeat(600);
+  const record = {
+    type: 'gemini',
+    id: 'r1',
+    toolCalls: [{ id: 'tc1', name: 'search', args: { q: longArg }, extra: 'drop' }],
+  };
+  const result = trimGeminiCliRecord(record) as Record<string, unknown>;
+  expect(result.type).toBe('gemini');
+  expect(result.id).toBe('r1');
+  const toolCalls = result.toolCalls as Array<Record<string, unknown>>;
+  expect(toolCalls).toHaveLength(1);
+  expect(toolCalls[0]?.id).toBe('tc1');
+  expect(toolCalls[0]?.name).toBe('search');
+  expect('extra' in (toolCalls[0] ?? {})).toBe(false);
+  const args = toolCalls[0]?.args as Record<string, unknown>;
+  expect(args.q).toBe('<trimmed>');
+});
+
+test('trimGeminiCliRecord: trims thoughts on gemini records', () => {
+  const record = {
+    type: 'gemini',
+    thoughts: [
+      { subject: 'step 1', timestamp: '2026-01-01T00:00:00Z', hidden: 'drop' },
+      { subject: 'step 2' },
+    ],
+  };
+  const result = trimGeminiCliRecord(record) as Record<string, unknown>;
+  const thoughts = result.thoughts as Array<Record<string, unknown>>;
+  expect(thoughts).toHaveLength(2);
+  expect(thoughts[0]).toEqual({ subject: 'step 1', timestamp: '2026-01-01T00:00:00Z' });
+  expect(thoughts[1]).toEqual({ subject: 'step 2' });
+});
+
+test('trimGeminiCliRecord: handles gemini record with neither toolCalls nor thoughts', () => {
+  const record = { type: 'gemini', id: 'r2', content: [{ text: 'response' }] };
+  const result = trimGeminiCliRecord(record) as Record<string, unknown>;
+  expect(result.type).toBe('gemini');
+  expect(result.id).toBe('r2');
+  expect(result.content).toEqual([{ text: 'response' }]);
+  expect('toolCalls' in result).toBe(false);
+  expect('thoughts' in result).toBe(false);
+});
+
+test('first poll: gemini event with toolCalls is trimmed before storing', async () => {
+  const longArg = 'z'.repeat(600);
+  const geminiWithTools = JSON.stringify({
+    id: 'g1',
+    timestamp: '2026-01-01T00:00:00Z',
+    type: 'gemini',
+    content: [{ text: 'using tool' }],
+    toolCalls: [{ id: 'tc1', name: 'search', args: { q: longArg }, extra: 'drop' }],
+    thoughts: [{ subject: 'reasoning', timestamp: '2026-01-01T00:00:00Z', hidden: 'drop' }],
+  });
+  const file = await makeFile(`${HEADER_MAIN}\n${geminiWithTools}\n`);
+  await collectGeminiCliFile(file, ctx(buffer));
+  const batch = requireDefined(nextPendingBatch(buffer));
+  const decoded = DECODER.decode(zstdDecompressSync(batch.body));
+  const parsed = JSON.parse(decoded.trim()) as Record<string, unknown>;
+  const toolCalls = parsed.toolCalls as Array<Record<string, unknown>>;
+  expect(toolCalls).toHaveLength(1);
+  expect('extra' in (toolCalls[0] ?? {})).toBe(false);
+  const args = toolCalls[0]?.args as Record<string, unknown>;
+  expect(args.q).toBe('<trimmed>');
+  const thoughts = parsed.thoughts as Array<Record<string, unknown>>;
+  expect(thoughts).toHaveLength(1);
+  expect('hidden' in (thoughts[0] ?? {})).toBe(false);
+  expect(thoughts[0]?.subject).toBe('reasoning');
 });

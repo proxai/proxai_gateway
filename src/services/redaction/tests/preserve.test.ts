@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
+import type { RedactionRule } from 'services/redaction/redaction.types.ts';
 import {
   ALL_RULES,
   auditRulesAgainstFixtures,
@@ -32,5 +33,18 @@ describe('preserve list — realistic JSON contexts are never matched', () => {
       );
     }
     expect(findings).toEqual([]);
+  });
+});
+
+describe('auditRulesAgainstFixtures — match collection path', () => {
+  test('returns a finding for every match when a rule pattern hits a fixture', () => {
+    const matchingRule: RedactionRule = {
+      id: 'test-rule',
+      description: 'matches the literal word user',
+      pattern: /user/g,
+      replacement: '[REDACTED]',
+    };
+    const findings = auditRulesAgainstFixtures([matchingRule], ['{"role": "user"}']);
+    expect(findings).toEqual([{ ruleId: 'test-rule', fixture: '{"role": "user"}', match: 'user' }]);
   });
 });

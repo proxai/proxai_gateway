@@ -409,3 +409,14 @@ test('multiple notifyServiceUnavailable calls before acquire keep the largest fl
   expect(clock.sleeps).not.toContain(40_000);
   expect(clock.sleeps).not.toContain(50_000);
 });
+
+test('stop() shuts down the underlying machine without throwing', () => {
+  const clock = makeClock();
+  const pacer = createPacer({
+    maxBatchesPerSec: 10,
+    maxBytesPerMinute: 10 * 1024 * 1024,
+    now: clock.now,
+    sleep: clock.sleep,
+  });
+  expect(() => pacer.stop()).not.toThrow();
+});

@@ -245,3 +245,27 @@ test('buildProfileContext throws on unsupported platform inside controlSocketPat
     expect(() => buildProfileContext('prod')).toThrow('unsupported platform');
   });
 });
+
+test('profileRootDir returns PROXAI_TEST_PROFILE_ROOT override when set', () => {
+  const original = process.env['PROXAI_TEST_PROFILE_ROOT'];
+  const fakeRoot = join('tmp', 'test-profile-root');
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = fakeRoot;
+  try {
+    expect(profileRootDir()).toBe(fakeRoot);
+  } finally {
+    if (original === undefined) delete process.env['PROXAI_TEST_PROFILE_ROOT'];
+    else process.env['PROXAI_TEST_PROFILE_ROOT'] = original;
+  }
+});
+
+test('profileLogDirRoot returns PROXAI_TEST_PROFILE_ROOT override when set', () => {
+  const original = process.env['PROXAI_TEST_PROFILE_ROOT'];
+  const fakeRoot = join('tmp', 'test-log-dir-root');
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = fakeRoot;
+  try {
+    expect(profileLogDirRoot()).toBe(fakeRoot);
+  } finally {
+    if (original === undefined) delete process.env['PROXAI_TEST_PROFILE_ROOT'];
+    else process.env['PROXAI_TEST_PROFILE_ROOT'] = original;
+  }
+});

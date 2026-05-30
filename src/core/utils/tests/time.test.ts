@@ -1,5 +1,7 @@
 import { test, expect } from 'bun:test';
 
+import { daysSince } from 'core/utils';
+
 import { monotonicMs, nowIsoUtc } from 'core/utils';
 
 test('nowIsoUtc returns RFC 3339 UTC with Z suffix and ms precision', () => {
@@ -17,6 +19,22 @@ test('monotonicMs advances over a sleep', async () => {
   await Bun.sleep(10);
   const b = monotonicMs();
   expect(b - a).toBeGreaterThanOrEqual(8);
+});
+
+test('daysSince returns null for an unparseable date string', () => {
+  expect(daysSince('not-a-date', new Date())).toBeNull();
+});
+
+test('daysSince returns whole days elapsed for a past ISO date', () => {
+  const now = new Date('2025-06-10T12:00:00.000Z');
+  const iso = '2025-06-07T12:00:00.000Z';
+  expect(daysSince(iso, now)).toBe(3);
+});
+
+test('daysSince returns 0 when now is before the given ISO date', () => {
+  const now = new Date('2025-06-01T00:00:00.000Z');
+  const iso = '2025-06-10T00:00:00.000Z';
+  expect(daysSince(iso, now)).toBe(0);
 });
 
 import { abortableSleep } from 'core/utils';

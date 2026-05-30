@@ -2,10 +2,10 @@ import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { mkdir, mkdtemp, utimes, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { discoverGeminiCliFiles } from 'sources/gemini-cli';
+import { defaultGeminiCliTmpRoot, discoverGeminiCliFiles } from 'sources/gemini-cli';
 
 function sortedPaths(xs: Awaited<ReturnType<typeof discoverGeminiCliFiles>>): string[] {
   return xs.map((f) => f.sourcePath).toSorted();
@@ -128,6 +128,12 @@ test('omitting options means no cap (defaults preserved)', async () => {
 
   const found = await discoverGeminiCliFiles(dir);
   expect(found).toHaveLength(1);
+});
+
+test('defaultGeminiCliTmpRoot returns homedir joined with gemini tmp subpath', () => {
+  const result = defaultGeminiCliTmpRoot();
+  const expected = join(homedir(), '.gemini', 'tmp');
+  expect(result).toBe(expected);
 });
 
 test('discovery result is identical regardless of PROXAI_GATEWAY_CAPTURE_SUB_AGENTS env (no-op flag)', async () => {

@@ -24,6 +24,13 @@ test('monthFromIso fallback works', () => {
   expect(result).toContain('May');
 });
 
+test('monthFromIso is used when locale produces a non-English month name', () => {
+  const ts = '2026-05-20T20:30:00.000Z';
+
+  const result = formatLocalTimestamp(ts, { locale: 'fr-FR', timeZone: 'UTC' });
+  expect(result).toContain('May');
+});
+
 test('formatRelative returns relative string', () => {
   const base = new Date('2026-05-20T20:30:00.000Z');
 

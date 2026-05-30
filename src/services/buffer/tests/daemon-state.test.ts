@@ -2,7 +2,13 @@ import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
-import { getDaemonState, openInMemoryBufferDb, setDaemonState } from 'services/buffer';
+import {
+  getDaemonState,
+  getMachineSnapshots,
+  openInMemoryBufferDb,
+  setDaemonState,
+  setMachineSnapshots,
+} from 'services/buffer';
 
 let db: Database;
 
@@ -148,4 +154,39 @@ test('getDaemonState round-trips null consecutiveRetriableBreak as null', () => 
   });
   const round = requireDefined(getDaemonState(db));
   expect(round.lastConsecutiveRetriableBreak).toBeNull();
+});
+
+test('getMachineSnapshots returns null on a fresh buffer', () => {
+  expect(getMachineSnapshots(db)).toBeNull();
+});
+
+test('setMachineSnapshots persists and getMachineSnapshots round-trips', () => {
+  const payload = JSON.stringify({ someMachine: { value: 'idle' } });
+  setMachineSnapshots(db, payload);
+  expect(getMachineSnapshots(db)).toBe(payload);
+});
+
+test('setMachineSnapshots upserts the single row', () => {
+  setMachineSnapshots(db, '{"first":true}');
+  setMachineSnapshots(db, '{"second":true}');
+  expect(getMachineSnapshots(db)).toBe('{"second":true}');
+});
+
+test('getMachineSnapshots coexists with daemon state row', () => {
+  setDaemonState(db, {
+    lastCycleStartedAt: 'x',
+    lastCycleCompletedAt: 'y',
+    lastCycleDurationMs: 0,
+    lastDrainAttempted: 0,
+    lastDrainAccepted: 0,
+    lastDrainRetriable: 0,
+    lastDrainFatal: 0,
+    lastDrainRecovered: 0,
+    lastUploadError: null,
+    lastConsecutiveRetriableBreak: null,
+    lastSourceCaptures: {},
+  });
+  setMachineSnapshots(db, '"coexist"');
+  expect(getMachineSnapshots(db)).toBe('"coexist"');
+  expect(requireDefined(getDaemonState(db)).lastCycleStartedAt).toBe('x');
 });

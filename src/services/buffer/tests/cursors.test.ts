@@ -3,7 +3,9 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 
 import {
+  countCursors,
   getCursor,
+  getCursorWithFallback,
   hasAnyCursor,
   openInMemoryBufferDb,
   setCursor,
@@ -295,4 +297,75 @@ test('setCursorFromRegression with non-null sourceInode and watermarkTable', () 
   expect(after?.watermarkEnd).toBe(12);
   expect(after?.lastSeenSizeBytes).toBeNull();
   expect(after?.lastSeenPageCount).toBeNull();
+});
+
+test('countCursors returns 0 on an empty db', () => {
+  expect(countCursors(db)).toBe(0);
+});
+
+test('countCursors returns the total number of cursor rows', () => {
+  setCursor(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'a'.repeat(64),
+    sourcePath: '/path/a',
+    sourceInode: 1,
+    watermarkTable: null,
+    watermarkEnd: 10,
+  });
+  setCursor(db, {
+    sourceApp: 'cursor',
+    sourcePathHash: 'b'.repeat(64),
+    sourcePath: '/path/b',
+    sourceInode: null,
+    watermarkTable: null,
+    watermarkEnd: 20,
+  });
+  expect(countCursors(db)).toBe(2);
+});
+
+test('getCursorWithFallback returns the exact cursor when it exists', () => {
+  const key: CursorKey = {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'a'.repeat(64),
+    sourceInode: 7,
+    watermarkTable: null,
+  };
+  setCursor(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'a'.repeat(64),
+    sourcePath: '/exact/path',
+    sourceInode: 7,
+    watermarkTable: null,
+    watermarkEnd: 777,
+  });
+  const result = getCursorWithFallback(db, key);
+  expect(result?.watermarkEnd).toBe(777);
+});
+
+test('getCursorWithFallback falls back to inode-less row when exact key is missing', () => {
+  setCursor(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'a'.repeat(64),
+    sourcePath: '/fallback/path',
+    sourceInode: null,
+    watermarkTable: null,
+    watermarkEnd: 555,
+  });
+  const result = getCursorWithFallback(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'a'.repeat(64),
+    sourceInode: 99,
+    watermarkTable: null,
+  });
+  expect(result?.watermarkEnd).toBe(555);
+});
+
+test('getCursorWithFallback returns null when exact key missing and inode is null', () => {
+  const result = getCursorWithFallback(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'z'.repeat(64),
+    sourceInode: null,
+    watermarkTable: null,
+  });
+  expect(result).toBeNull();
 });

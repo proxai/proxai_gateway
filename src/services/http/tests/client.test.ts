@@ -475,3 +475,240 @@ describe('error response parsing', () => {
     await expect(client.verifyKey()).rejects.toThrow(FatalError);
   });
 });
+
+describe('registerHostId', () => {
+  test('returns parsed result on 200 with all fields present', async () => {
+    const client = createClient(
+      mockFetch(() => jsonResponse({ host_id: 'h_abc', user_id: 'u_xyz', registered: true })),
+    );
+    const result = await client.registerHostId();
+    expect(result.hostId).toBe('h_abc');
+    expect(result.userId).toBe('u_xyz');
+    expect(result.registered).toBe(true);
+  });
+
+  test('returns registered: false when server returns false', async () => {
+    const client = createClient(
+      mockFetch(() => jsonResponse({ host_id: 'h_abc', user_id: 'u_xyz', registered: false })),
+    );
+    const result = await client.registerHostId();
+    expect(result.registered).toBe(false);
+  });
+
+  test('falls back to empty string for host_id when field is missing', async () => {
+    const client = createClient(
+      mockFetch(() => jsonResponse({ user_id: 'u_xyz', registered: true })),
+    );
+    const result = await client.registerHostId();
+    expect(result.hostId).toBe('');
+  });
+
+  test('falls back to empty string for user_id when field is missing', async () => {
+    const client = createClient(
+      mockFetch(() => jsonResponse({ host_id: 'h_abc', registered: true })),
+    );
+    const result = await client.registerHostId();
+    expect(result.userId).toBe('');
+  });
+
+  test('falls back to empty string for host_id when field is not a string', async () => {
+    const client = createClient(
+      mockFetch(() => jsonResponse({ host_id: 42, user_id: 'u_xyz', registered: true })),
+    );
+    const result = await client.registerHostId();
+    expect(result.hostId).toBe('');
+  });
+
+  test('falls back to empty string for user_id when field is not a string', async () => {
+    const client = createClient(
+      mockFetch(() => jsonResponse({ host_id: 'h_abc', user_id: null, registered: true })),
+    );
+    const result = await client.registerHostId();
+    expect(result.userId).toBe('');
+  });
+
+  test('registered falls back to false when field is not boolean true', async () => {
+    const client = createClient(
+      mockFetch(() => jsonResponse({ host_id: 'h_abc', user_id: 'u_xyz', registered: 'yes' })),
+    );
+    const result = await client.registerHostId();
+    expect(result.registered).toBe(false);
+  });
+
+  test('POSTs to the registerHostId endpoint with hostId in body', async () => {
+    const log: MockCall[] = [];
+    const client = createClient(
+      mockFetch(() => jsonResponse({ host_id: 'h_test', user_id: 'u_xyz', registered: true }), log),
+    );
+    await client.registerHostId();
+    expect(requireDefined(log[0]).url).toBe(endpoints.registerHostId);
+    expect(requireDefined(log[0]).init.method).toBe('POST');
+    const body = JSON.parse(requireDefined(log[0]).init.body as string);
+    expect(body.host_id).toBe('h_test');
+  });
+
+  test('sends X-API-Key header', async () => {
+    const log: MockCall[] = [];
+    const client = createClient(
+      mockFetch(() => jsonResponse({ host_id: 'h_test', user_id: 'u_xyz', registered: true }), log),
+    );
+    await client.registerHostId();
+    const headers = requireDefined(log[0]).init.headers as Record<string, string>;
+    expect(headers['X-API-Key']).toBe('pxg-20260505-secret');
+  });
+
+  test('throws NetworkError when fetch fails', async () => {
+    const client = createClient(mockFetch(() => new Error('connection refused')));
+    await expect(client.registerHostId()).rejects.toThrow(NetworkError);
+  });
+});
+
+describe('fetchWatermarks', () => {
+  test('returns parsed result with watermarks on 200', async () => {
+    const client = createClient(
+      mockFetch(() =>
+        jsonResponse({
+          host_id: 'h_abc',
+          user_id: 'u_xyz',
+          watermarks: [
+            {
+              source_app: 'claude-code',
+              source_path_hash: VALID_SHA256,
+              watermark_kind: 'byte_range',
+              watermark_end: 4096,
+              watermark_table: null,
+            },
+          ],
+        }),
+      ),
+    );
+    const result = await client.fetchWatermarks();
+    expect(result.hostId).toBe('h_abc');
+    expect(result.userId).toBe('u_xyz');
+    expect(result.watermarks).toHaveLength(1);
+    expect(result.watermarks[0]?.sourceApp).toBe('claude-code');
+    expect(result.watermarks[0]?.sourcePathHash).toBe(VALID_SHA256);
+    expect(result.watermarks[0]?.watermarkKind).toBe('byte_range');
+    expect(result.watermarks[0]?.watermarkEnd).toBe(4096);
+    expect(result.watermarks[0]?.watermarkTable).toBeNull();
+  });
+
+  test('returns watermark with non-null table', async () => {
+    const client = createClient(
+      mockFetch(() =>
+        jsonResponse({
+          host_id: 'h_abc',
+          user_id: 'u_xyz',
+          watermarks: [
+            {
+              source_app: 'cursor',
+              source_path_hash: VALID_SHA256,
+              watermark_kind: 'rowid_range',
+              watermark_end: 100,
+              watermark_table: 'ItemTable',
+            },
+          ],
+        }),
+      ),
+    );
+    const result = await client.fetchWatermarks();
+    expect(result.watermarks[0]?.watermarkKind).toBe('rowid_range');
+    expect(result.watermarks[0]?.watermarkTable).toBe('ItemTable');
+  });
+
+  test('skips malformed watermark items (missing required fields)', async () => {
+    const client = createClient(
+      mockFetch(() =>
+        jsonResponse({
+          host_id: 'h_abc',
+          user_id: 'u_xyz',
+          watermarks: [
+            { source_app: 'claude-code' },
+            {
+              source_app: 'claude-code',
+              source_path_hash: VALID_SHA256,
+              watermark_kind: 'byte_range',
+              watermark_end: 100,
+              watermark_table: null,
+            },
+          ],
+        }),
+      ),
+    );
+    const result = await client.fetchWatermarks();
+    expect(result.watermarks).toHaveLength(1);
+    expect(result.watermarks[0]?.watermarkEnd).toBe(100);
+  });
+
+  test('returns empty watermarks array when watermarks field is not an array', async () => {
+    const client = createClient(
+      mockFetch(() => jsonResponse({ host_id: 'h_abc', user_id: 'u_xyz', watermarks: null })),
+    );
+    const result = await client.fetchWatermarks();
+    expect(result.watermarks).toHaveLength(0);
+  });
+
+  test('returns empty watermarks array when watermarks field is absent', async () => {
+    const client = createClient(
+      mockFetch(() => jsonResponse({ host_id: 'h_abc', user_id: 'u_xyz' })),
+    );
+    const result = await client.fetchWatermarks();
+    expect(result.watermarks).toHaveLength(0);
+  });
+
+  test('falls back to empty string for host_id when field is missing', async () => {
+    const client = createClient(
+      mockFetch(() => jsonResponse({ user_id: 'u_xyz', watermarks: [] })),
+    );
+    const result = await client.fetchWatermarks();
+    expect(result.hostId).toBe('');
+  });
+
+  test('falls back to empty string for user_id when field is missing', async () => {
+    const client = createClient(
+      mockFetch(() => jsonResponse({ host_id: 'h_abc', watermarks: [] })),
+    );
+    const result = await client.fetchWatermarks();
+    expect(result.userId).toBe('');
+  });
+
+  test('GETs the watermarks endpoint with host_id query param', async () => {
+    const log: MockCall[] = [];
+    const client = createClient(
+      mockFetch(() => jsonResponse({ host_id: 'h_test', user_id: 'u_xyz', watermarks: [] }), log),
+    );
+    await client.fetchWatermarks();
+    expect(requireDefined(log[0]).url).toBe(`${endpoints.watermarks}?host_id=h_test`);
+    expect(requireDefined(log[0]).init.method).toBe('GET');
+  });
+
+  test('encodes special characters in host_id query param', async () => {
+    const log: MockCall[] = [];
+    const specialClient = new HttpClient({
+      apiKey: 'pxg-20260505-secret',
+      hostId: 'h test+1',
+      endpoints,
+      fetch: mockFetch(
+        () => jsonResponse({ host_id: 'h test+1', user_id: 'u_xyz', watermarks: [] }),
+        log,
+      ),
+    });
+    await specialClient.fetchWatermarks();
+    expect(requireDefined(log[0]).url).toContain('host_id=h%20test%2B1');
+  });
+
+  test('sends X-API-Key header', async () => {
+    const log: MockCall[] = [];
+    const client = createClient(
+      mockFetch(() => jsonResponse({ host_id: 'h_test', user_id: 'u_xyz', watermarks: [] }), log),
+    );
+    await client.fetchWatermarks();
+    const headers = requireDefined(log[0]).init.headers as Record<string, string>;
+    expect(headers['X-API-Key']).toBe('pxg-20260505-secret');
+  });
+
+  test('throws NetworkError when fetch fails', async () => {
+    const client = createClient(mockFetch(() => new Error('connection refused')));
+    await expect(client.fetchWatermarks()).rejects.toThrow(NetworkError);
+  });
+});

@@ -8,6 +8,7 @@ import { join } from 'node:path';
 
 import {
   buildChildRolloutSet,
+  defaultCodexHome,
   discoverCodexRolloutFiles,
   discoverCodexStateSqlite,
   readChildRolloutPaths,
@@ -314,4 +315,10 @@ test('discoverCodexRolloutFiles with flag off + no state.sqlite + child-looking 
     },
   });
   expect(found).toHaveLength(2);
+});
+
+test('defaultCodexHome returns a path ending with the .codex subpath under homedir', () => {
+  const result = defaultCodexHome();
+  expect(result).toContain(join('.codex'));
+  expect(result.length).toBeGreaterThan(join('.codex').length);
 });

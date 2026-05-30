@@ -912,6 +912,65 @@ test('surfaces OversizedDecompressedSliceError when single row exceeds maxDecomp
   expect(oversized.length).toBeGreaterThanOrEqual(1);
 }, 120_000);
 
+test('records a per-table error and bumps consecutive_errors when collectOneTable throws on a rowid-less table', async () => {
+  const path = join(dir, 'state_without_rowid.sqlite');
+  const db = new Database(path, { create: true });
+  db.run(
+    `CREATE TABLE threads (
+      id TEXT PRIMARY KEY,
+      cli_version TEXT,
+      cwd TEXT,
+      title TEXT,
+      model TEXT
+    )`,
+  );
+  db.query('INSERT INTO threads (id, cli_version, cwd, title, model) VALUES (?, ?, ?, ?, ?)').run(
+    't1',
+    '0.2.0',
+    '/tmp',
+    'test',
+    'gpt-5',
+  );
+  db.run(
+    `CREATE TABLE thread_spawn_edges (
+      parent_thread_id TEXT,
+      child_thread_id TEXT PRIMARY KEY,
+      status TEXT
+    ) WITHOUT ROWID`,
+  );
+  db.query(
+    'INSERT INTO thread_spawn_edges (parent_thread_id, child_thread_id, status) VALUES (?, ?, ?)',
+  ).run('t1', 't2', 'completed');
+  db.close();
+
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('seed missing');
+  const file: DiscoveredCodexStateFile = {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+
+  const { result, agentSchemaVersion } = await collectCodexState(file, ctx(buffer));
+
+  expect(agentSchemaVersion).toBe('0.2.0');
+  expect(result.errors.length).toBeGreaterThanOrEqual(1);
+  const tableError = result.errors.find((e) => e.table === 'thread_spawn_edges');
+  expect(tableError).toBeDefined();
+  expect(tableError?.sourcePath).toBe(path);
+  expect(typeof tableError?.reason).toBe('string');
+
+  const cursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: 'thread_spawn_edges',
+  });
+  expect(cursor?.consecutiveErrors).toBeGreaterThanOrEqual(1);
+});
+
 test('every codex-state batch satisfies BOTH compressed AND decompressed caps', async () => {
   const file = await makeStateDb({
     threads: [

@@ -57,10 +57,22 @@ test('rejects invalid install_source', () => {
   ).toThrow(/install_source/);
 });
 
+test('rejects non-string install_source', () => {
+  expect(() => validateAndCoerce({ account: { ...minimalAccount, install_source: 42 } })).toThrow(
+    /install_source must be a string/,
+  );
+});
+
 test('rejects invalid log level', () => {
   expect(() =>
     validateAndCoerce({ account: minimalAccount, logging: { level: 'verbose' } }),
   ).toThrow(/logging\.level/);
+});
+
+test('rejects non-string log level', () => {
+  expect(() => validateAndCoerce({ account: minimalAccount, logging: { level: 3 } })).toThrow(
+    /logging\.level must be a string/,
+  );
 });
 
 test('rejects upload_max_batches_per_sec below 0.1', () => {

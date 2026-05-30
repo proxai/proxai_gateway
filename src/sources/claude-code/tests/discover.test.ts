@@ -2,10 +2,14 @@ import { requireDefined } from 'core/utils';
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { mkdir, mkdtemp, utimes, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { discoverClaudeCodeFiles } from 'sources/claude-code';
+import { CLAUDE_CODE_PROJECTS_SUBPATH } from 'sources/claude-code/claude-code.constants.ts';
+import {
+  defaultClaudeCodeProjectsRoot,
+  discoverClaudeCodeFiles,
+} from 'sources/claude-code/discover.ts';
 
 let dir: string;
 
@@ -250,4 +254,9 @@ test('captureSubAgents: true dedupes when the same file path is yielded across g
   const found = await discoverClaudeCodeFiles(dir, { captureSubAgents: true });
   const paths = found.map((f) => f.sourcePath);
   expect(new Set(paths).size).toBe(paths.length);
+});
+
+test('defaultClaudeCodeProjectsRoot returns homedir joined with the projects subpath', () => {
+  const result = defaultClaudeCodeProjectsRoot();
+  expect(result).toBe(join(homedir(), CLAUDE_CODE_PROJECTS_SUBPATH));
 });

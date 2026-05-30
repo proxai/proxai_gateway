@@ -4,6 +4,7 @@ import type { Database } from 'bun:sqlite';
 import { generateUuidV7, requireDefined } from 'core/utils';
 import {
   countReceipts,
+  deleteBatch,
   dropOldestPending,
   getBatch,
   getReceipt,
@@ -203,4 +204,19 @@ test('nextPendingBatchAfter returns next pending batch chronologically or by ID 
     captureId: storedB.captureId,
   });
   expect(nextNull).toBeNull();
+});
+
+test('deleteBatch removes the row and getBatch returns null afterwards', () => {
+  const batch = newBatch();
+  insertBatch(db, batch);
+  expect(getBatch(db, batch.captureId)).not.toBeNull();
+  deleteBatch(db, batch.captureId);
+  expect(getBatch(db, batch.captureId)).toBeNull();
+});
+
+test('deleteBatch is a no-op for an unknown id', () => {
+  const batch = newBatch();
+  insertBatch(db, batch);
+  deleteBatch(db, 'non-existent-id');
+  expect(getBatch(db, batch.captureId)).not.toBeNull();
 });

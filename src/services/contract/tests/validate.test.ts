@@ -3,6 +3,7 @@ import { expect, test } from 'bun:test';
 import { ValidationError } from 'core/utils';
 import {
   BODY_MAX_COMPRESSED_BYTES,
+  MAX_SAFE_WATERMARK,
   validateRawRecordDTO,
   type RawRecordDTO,
 } from 'services/contract';
@@ -284,4 +285,83 @@ test('rejects empty source_path and source_path_hash', () => {
   expect(() => validateRawRecordDTO(claudeCodeDto({ source_path_hash: '' }))).toThrow(
     /source_path_hash/,
   );
+});
+
+test('rejects non-string capture_id', () => {
+  const dto = claudeCodeDto();
+  (dto as { capture_id: unknown }).capture_id = 42;
+  expect(() => validateRawRecordDTO(dto)).toThrow(/capture_id/);
+});
+
+test('rejects invalid source_kind', () => {
+  expect(() => validateRawRecordDTO(claudeCodeDto({ source_kind: 'csv_dump' as never }))).toThrow(
+    /source_kind/,
+  );
+});
+
+test('rejects invalid body_format', () => {
+  expect(() => validateRawRecordDTO(claudeCodeDto({ body_format: 'msgpack' as never }))).toThrow(
+    /body_format/,
+  );
+});
+
+test('rejects non-object watermark', () => {
+  const dto = claudeCodeDto();
+  (dto as { watermark: unknown }).watermark = 'byte_range';
+  expect(() => validateRawRecordDTO(dto)).toThrow(/watermark must be an object/);
+});
+
+test('rejects invalid watermark.kind', () => {
+  const dto = claudeCodeDto();
+  (dto as { watermark: unknown }).watermark = {
+    kind: 'unknown_kind',
+    start: 0,
+    end: 1,
+    table: null,
+  };
+  expect(() => validateRawRecordDTO(dto)).toThrow(/watermark\.kind/);
+});
+
+test('rejects watermark values exceeding MAX_SAFE_WATERMARK', () => {
+  expect(() =>
+    validateRawRecordDTO(
+      claudeCodeDto({
+        watermark: { kind: 'byte_range', start: 0, end: MAX_SAFE_WATERMARK + 1, table: null },
+      }),
+    ),
+  ).toThrow(/watermark values must be/);
+  expect(() =>
+    validateRawRecordDTO(
+      claudeCodeDto({
+        watermark: {
+          kind: 'byte_range',
+          start: MAX_SAFE_WATERMARK + 1,
+          end: MAX_SAFE_WATERMARK + 2,
+          table: null,
+        },
+      }),
+    ),
+  ).toThrow(/watermark values must be/);
+});
+
+test('rejects non-string captured_at_utc', () => {
+  const dto = claudeCodeDto();
+  (dto as { captured_at_utc: unknown }).captured_at_utc = 1234567890;
+  expect(() => validateRawRecordDTO(dto)).toThrow(/captured_at_utc/);
+});
+
+test('rejects captured_at_utc that matches regex but is not a real date', () => {
+  expect(() =>
+    validateRawRecordDTO(claudeCodeDto({ captured_at_utc: '9999-99-99T99:99:99Z' })),
+  ).toThrow(/captured_at_utc/);
+});
+
+test('rejects non-string body', () => {
+  const dto = claudeCodeDto();
+  (dto as { body: unknown }).body = 12345;
+  expect(() => validateRawRecordDTO(dto)).toThrow(/body/);
+});
+
+test('rejects body whose base64 length is not a multiple of 4', () => {
+  expect(() => validateRawRecordDTO(claudeCodeDto({ body: 'abc' }))).toThrow(/body/);
 });
