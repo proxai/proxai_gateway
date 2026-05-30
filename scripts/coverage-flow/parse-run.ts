@@ -11,15 +11,20 @@ function stripAnsi(input: string): string {
   return input.replace(ANSI_RE, '');
 }
 
-// The console marker may differ from the JUnit `file` attribute only by an
-// abs/rel prefix; match on a path boundary so `src/a/foo.test.ts` matches
-// `foo.test.ts` but `bfoo.test.ts` does not.
+// The console marker may differ from the JUnit `file` attribute by an abs/rel
+// prefix AND by separator: bun's console prints `/` even on Windows, while
+// JUnit's `file` attribute is the OS-native path (`\` on Windows). Normalize
+// separators first, then match on a path boundary so `src/a/foo.test.ts`
+// matches `foo.test.ts` but `bfoo.test.ts` does not. Without the normalization
+// every Windows failure goes unmatched (console `src/x.test.ts` vs JUnit
+// `src\x.test.ts`), which is exactly what dropped the detail on the Windows job.
 function sameFile(a: string, b: string): boolean {
-  if (a === b) return true;
-  const [longer, shorter] = a.length >= b.length ? [a, b] : [b, a];
+  const na = a.replace(/\\/g, '/');
+  const nb = b.replace(/\\/g, '/');
+  if (na === nb) return true;
+  const [longer, shorter] = na.length >= nb.length ? [na, nb] : [nb, na];
   if (!longer.endsWith(shorter)) return false;
-  const boundary = longer[longer.length - shorter.length - 1];
-  return boundary === '/' || boundary === '\\';
+  return longer[longer.length - shorter.length - 1] === '/';
 }
 
 function nameMatches(consoleName: string, junitLeaf: string): boolean {
