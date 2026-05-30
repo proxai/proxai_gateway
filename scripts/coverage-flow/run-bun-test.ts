@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import {
   BUN_TEST_BASE_ARGS,
   CLEAR_LINE,
+  COVERAGE_ARG,
   GRACE_AFTER_SUMMARY_MS,
   HEARTBEAT_MS,
   OVERALL_TIMEOUT_MS,
@@ -17,12 +18,18 @@ import {
 } from './constants.ts';
 import type { RawRun } from './types.ts';
 
-export function runBunTest(extraArgs: string[], label: string): Promise<RawRun> {
+export function runBunTest(extraArgs: string[], label: string, coverage = true): Promise<RawRun> {
   const junitDir = mkdtempSync(join(tmpdir(), 'proxai-coverage-flow-'));
   const junitPath = join(junitDir, 'junit.xml');
   const child = spawn(
     'bun',
-    [...BUN_TEST_BASE_ARGS, '--reporter=junit', `--reporter-outfile=${junitPath}`, ...extraArgs],
+    [
+      ...BUN_TEST_BASE_ARGS,
+      ...(coverage ? [COVERAGE_ARG] : []),
+      '--reporter=junit',
+      `--reporter-outfile=${junitPath}`,
+      ...extraArgs,
+    ],
     { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' } },
   );
 

@@ -224,6 +224,7 @@ function renderTiming(
   wallClockMs: number,
   heavyShare: number,
   heavyCount: number,
+  coverage: boolean,
 ): void {
   const durationsAsc = executed.map((t) => t.durationMs).toSorted((a, b) => a - b);
   const sumMs = durationsAsc.reduce((acc, v) => acc + v, 0);
@@ -235,7 +236,11 @@ function renderTiming(
     const noteTxt = note === '' ? '' : `  ${chalk.dim(note)}`;
     out.push(`${INDENT}${label.padEnd(16)} ${chalk.bold(value.padStart(9))}${noteTxt}`);
   };
-  timing('Wall-clock:', fmtDur(wallClockMs), 'elapsed (includes load, hooks, coverage)');
+  timing(
+    'Wall-clock:',
+    fmtDur(wallClockMs),
+    coverage ? 'elapsed (includes load, hooks, coverage)' : 'elapsed (includes load + hooks)',
+  );
   timing(
     'Test time (sum):',
     fmtDur(sumMs),
@@ -293,6 +298,7 @@ export function renderReport(
   main: ParsedRun,
   retry: RetryOutcome,
   wallClockMs: number,
+  coverage = true,
 ): { text: string; failing: number } {
   const passed = main.tests.filter((t) => t.status === 'pass');
   const failed = main.tests.filter((t) => t.status === 'fail');
@@ -306,10 +312,10 @@ export function renderReport(
   const heavyCount = passed.filter(
     (t) => (sumMs > 0 ? (t.durationMs / sumMs) * 100 : 0) >= SHARE_THRESHOLD_PCT,
   ).length;
-  renderCoverageGaps(out, main.coverageAll, main.gaps);
+  if (coverage) renderCoverageGaps(out, main.coverageAll, main.gaps);
   renderFailures(out, failed, main.failureDetails);
   renderFlakeCheck(out, retry);
-  renderTiming(out, executed, wallClockMs, heavyShare, heavyCount);
+  renderTiming(out, executed, wallClockMs, heavyShare, heavyCount, coverage);
   renderSummary(
     out,
     passed,

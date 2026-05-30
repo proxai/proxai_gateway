@@ -30,9 +30,13 @@ export const CLEAR_LINE = `\r${ESC}[2K`;
 // flaky failures in-process, so only flaky coverage gaps reach our retry flow.
 export const BUN_TEST_BASE_ARGS = [
   'test',
-  '--coverage',
   '--timeout',
   String(TEST_TIMEOUT_MS),
   '--retry',
   String(FAILURE_RETRY_COUNT),
 ];
+
+// Added only when coverage is requested. The cross-platform CI report runs
+// (test:report --no-coverage) omit it: they want the failure/timing report
+// without redundant, per-platform-divergent coverage measurement.
+export const COVERAGE_ARG = '--coverage';
