@@ -3,14 +3,20 @@
 // lives only in the console. bun prints the block(s) immediately BEFORE the
 // `(fail) <name> [time]` marker; the preceding `<file>:` header names the file.
 //
-// Three console quirks must be handled:
+// Four console quirks must be handled:
 //   1. the marker's name is the full describe path (`describe > leaf`), while
 //      JUnit's `name` attribute is just the leaf — matching happens in
 //      parse-run against the JUnit leaf, so we keep the full name here.
 //   2. under `--retry`, the identical block is reprinted once per attempt and
-//      the marker gains an ` (attempt N)` suffix.
+//      the marker gains an ` (attempt N)` suffix. When several markers are
+//      flushed back-to-back (multiple failures in one file), bun omits the
+//      ` [time]` suffix on all but the last — so the time is optional.
 //   3. a flaky test that recovers prints its failed-attempt block but NO marker,
 //      so that block leaks into the buffer of the next failing test.
+//   4. a TIMEOUT is the one shape whose detail prints AFTER its marker: bun
+//      emits `(fail) <name> [t]` then `^ this test timed out after Nms.` on the
+//      next line (no pre-marker block at all). That trailing line is attached
+//      to the just-emitted block and kept out of the next test's buffer.
 // Both repeats and any leaked prefix are removed by keeping only the block of
 // the LAST `error:` line before the marker (`lastFailureBlock`).
 
@@ -21,11 +27,12 @@ export interface FailureBlock {
 }
 
 const HEADER_RE = /^(\S.*\.(?:test|spec)\.ts):$/;
-const FAIL_RE = /^\(fail\) (.+?)(?: \(attempt \d+\))? \[[\d.]+m?s\]$/;
+const FAIL_RE = /^\(fail\) (.+?)(?: \(attempt \d+\))?(?: \[[\d.]+m?s\])?$/;
 const PASSLIKE_RE = /^\((?:pass|skip|todo)\)/;
 const ERROR_RE = /^error:/;
 const FRAME_RE = /^\s*\d+ \|/;
 const CARET_RE = /^\s*\^\s*$/;
+const TIMEOUT_RE = /this test timed out|timed out after \d/;
 
 // Drop blank lines from both ends but keep each line's indentation (a plain
 // .trim() would strip the first code-frame line's alignment space).
@@ -80,25 +87,36 @@ export function extractFailureBlocks(testSection: string): FailureBlock[] {
   const blocks: FailureBlock[] = [];
   let currentFile = '';
   let buf: string[] = [];
+  // The most recent marker, kept open only until its trailing timeout line
+  // (quirk 4) — cleared by the next marker, header, or pass-like line.
+  let open: FailureBlock | null = null;
   for (const line of testSection.split('\n')) {
     const header = line.match(HEADER_RE)?.[1];
     if (header !== undefined) {
       currentFile = header;
       buf = [];
+      open = null;
       continue;
     }
     const failName = line.match(FAIL_RE)?.[1];
     if (failName !== undefined) {
-      blocks.push({
+      const block: FailureBlock = {
         file: currentFile,
         name: failName,
         detail: trimBlankEdges(lastFailureBlock(buf)).join('\n'),
-      });
+      };
+      blocks.push(block);
       buf = [];
+      open = block;
       continue;
     }
     if (PASSLIKE_RE.test(line)) {
       buf = [];
+      open = null;
+      continue;
+    }
+    if (open !== null && open.detail === '' && TIMEOUT_RE.test(line)) {
+      open.detail = line.trim();
       continue;
     }
     buf.push(line);

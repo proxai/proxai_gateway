@@ -38,7 +38,7 @@ Three jobs:
    outputs. Runs on `ubuntu-latest`.
 2. **build** — matrix of five targets, all on `ubuntu-latest` using Bun's
    cross-compile (no per-OS runners). Each step: checkout, `setup-bun@v2`
-   pinned to 1.3.13, `setup-node@v4` for npm tooling, restore the
+   pinned to 1.3.14, `setup-node@v4` for npm tooling, restore the
    `~/.bun/install/cache` keyed on `bun.lock`, `bun install
    --frozen-lockfile`, `npm version --no-git-tag-version
    --allow-same-version` to stamp the version into `package.json`, then

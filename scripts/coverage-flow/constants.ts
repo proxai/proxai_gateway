@@ -18,7 +18,7 @@ export const FAILURE_RETRY_COUNT = 2;
 // A test is "heavy" (and listed) when its share of total test time is >= this.
 export const SHARE_THRESHOLD_PCT = 0.2;
 
-export const SUMMARY_REGEX = /Ran \d+ tests across \d+ files/;
+export const SUMMARY_REGEX = /Ran \d+ tests? across \d+ files?/;
 export const COVERAGE_HEADER_REGEX = /\|\s*% Funcs\s*\|/;
 
 const ESC = String.fromCharCode(27);

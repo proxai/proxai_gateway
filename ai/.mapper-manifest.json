@@ -1,19 +1,19 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-29T18:02:11.840Z",
-  "sourceHash": "ed1036c8d35386bc67ddb9b1ecf0430f",
+  "generatedAt": "2026-05-30T15:20:06.707Z",
+  "sourceHash": "6c6f79399daaa59ba5ced0a76a3ab25c",
   "files": [
     {
       "path": "CLAUDE.md",
-      "hash": "506a1c7aa176961b"
+      "hash": "32b1571aaa668596"
     },
     {
       "path": "AGENTS.md",
-      "hash": "27cb0bcda3f56c60"
+      "hash": "e0a3fe031701a282"
     },
     {
       "path": ".agents/AGENTS.md",
-      "hash": "3b9cecabdc38ffc6"
+      "hash": "75d3d50e00dbd602"
     },
     {
       "path": ".claude/rules/_always.md",
@@ -673,19 +673,19 @@
     },
     {
       "path": ".claude/knowledge/release/build-and-publish.md",
-      "hash": "9752978005c0d965"
+      "hash": "577e5c6e36203b62"
     },
     {
       "path": ".cursor/knowledge/release/build-and-publish.md",
-      "hash": "9752978005c0d965"
+      "hash": "577e5c6e36203b62"
     },
     {
       "path": ".codex/knowledge/release/build-and-publish.md",
-      "hash": "9752978005c0d965"
+      "hash": "577e5c6e36203b62"
     },
     {
       "path": ".agents/knowledge/release/build-and-publish.md",
-      "hash": "9752978005c0d965"
+      "hash": "577e5c6e36203b62"
     },
     {
       "path": ".claude/knowledge/release/calver-versioning.md",
