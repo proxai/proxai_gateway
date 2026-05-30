@@ -26,7 +26,7 @@ export interface FailureBlock {
   detail: string;
 }
 
-const HEADER_RE = /^(\S.*\.(?:test|spec)\.ts):$/;
+export const HEADER_RE = /^(\S.*\.(?:test|spec)\.ts):$/;
 const FAIL_RE = /^\(fail\) (.+?)(?: \(attempt \d+\))?(?: \[[\d.]+m?s\])?$/;
 const PASSLIKE_RE = /^\((?:pass|skip|todo)\)/;
 const ERROR_RE = /^error:/;

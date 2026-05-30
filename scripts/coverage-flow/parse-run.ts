@@ -3,7 +3,7 @@
 import { ANSI_RE, COVERAGE_HEADER_REGEX } from './constants.ts';
 import { collapseRetries, parseJunit } from './parse-junit.ts';
 import { parseCoverage } from './parse-coverage.ts';
-import { extractFailureBlocks } from './parse-failures.ts';
+import { extractFailureBlocks, HEADER_RE } from './parse-failures.ts';
 import type { FailureBlock } from './parse-failures.ts';
 import type { ParsedRun, RawRun, TestCase } from './types.ts';
 
@@ -41,6 +41,47 @@ function matchFailureDetails(tests: TestCase[], blocks: FailureBlock[]): Map<str
   return details;
 }
 
+// Split the test console into per-file sections (header line -> next header) and
+// return, for each file that still has an unmatched failing test, its raw lines.
+// This is the renderer's last-resort fallback when structured extraction yields
+// nothing for a failure (e.g. an output shape bun changed or one we don't model).
+function rawSectionsForUnmatched(
+  testSection: string,
+  tests: TestCase[],
+  details: Map<string, string>,
+): Map<string, string> {
+  const unmatchedFiles = new Set(
+    tests
+      .filter((t) => t.status === 'fail' && !details.has(`${t.file} ${t.name}`))
+      .map((t) => t.file),
+  );
+  const out = new Map<string, string>();
+  if (unmatchedFiles.size === 0) return out;
+
+  let header = '';
+  let buf: string[] = [];
+  const flush = (): void => {
+    if (header === '') return;
+    const target = [...unmatchedFiles].find((f) => sameFile(header, f));
+    if (target !== undefined) {
+      const body = buf.join('\n').trim();
+      if (body !== '') out.set(target, body);
+    }
+  };
+  for (const line of testSection.split('\n')) {
+    const next = line.match(HEADER_RE)?.[1];
+    if (next !== undefined) {
+      flush();
+      header = next;
+      buf = [];
+      continue;
+    }
+    buf.push(line);
+  }
+  flush();
+  return out;
+}
+
 export function parseRun(raw: RawRun): ParsedRun {
   const consoleText = stripAnsi(raw.consoleText);
   const tests = collapseRetries(parseJunit(raw.junitXml));
@@ -48,12 +89,14 @@ export function parseRun(raw: RawRun): ParsedRun {
   const testSection = covIdx >= 0 ? consoleText.slice(0, covIdx) : consoleText;
   const coverageSection = covIdx >= 0 ? consoleText.slice(covIdx) : '';
   const cov = parseCoverage(coverageSection);
+  const failureDetails = matchFailureDetails(tests, extractFailureBlocks(testSection));
   return {
     tests,
     coverageByFile: cov.byFile,
     coverageAll: cov.all,
     coverageTotal: cov.total,
     gaps: cov.gaps,
-    failureDetails: matchFailureDetails(tests, extractFailureBlocks(testSection)),
+    failureDetails,
+    rawByFile: rawSectionsForUnmatched(testSection, tests, failureDetails),
   };
 }
