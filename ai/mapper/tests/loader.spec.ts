@@ -1,5 +1,7 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, afterEach } from 'bun:test';
 import { join } from 'node:path';
+import { mkdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { loadTree } from '../loader';
 
 const FIXTURE = join(import.meta.dir, 'fixtures/minimal-ai');
@@ -55,5 +57,38 @@ describe('loadTree', () => {
       globs: ['src/**/*.ts'],
     });
     expect(scoped?.body.trim()).toBe('- Scoped rule.');
+  });
+
+  describe('with an ai/ root missing expected subdirectories', () => {
+    let bareRoot: string;
+
+    afterEach(async () => {
+      if (bareRoot) await rm(bareRoot, { recursive: true, force: true });
+    });
+
+    test('listMd on absent dirs yields empty arrays', async () => {
+      bareRoot = join(tmpdir(), `ai-loader-bare-${Date.now()}-${Math.random()}`);
+      await mkdir(bareRoot, { recursive: true });
+
+      const tree = await loadTree(bareRoot);
+      expect(tree.preamble).toBe('');
+      expect(tree.rules).toEqual([]);
+      expect(tree.knowledge).toEqual([]);
+      expect(tree.workflows).toEqual([]);
+      expect(tree.skills).toEqual([]);
+      expect(tree.agents).toEqual([]);
+    });
+  });
+
+  test('skills are sorted by name', async () => {
+    const root = join(tmpdir(), `ai-loader-skills-${Date.now()}-${Math.random()}`);
+    await mkdir(join(root, 'skills', 'zebra-skill'), { recursive: true });
+    await mkdir(join(root, 'skills', 'alpha-skill'), { recursive: true });
+    try {
+      const tree = await loadTree(root);
+      expect(tree.skills.map((s) => s.name)).toEqual(['alpha-skill', 'zebra-skill']);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

@@ -16,6 +16,7 @@ import {
   MIGRATION_LOCK,
   isFlatLayoutPresent,
   relocateFlatToNested,
+  tryAcquire,
 } from 'core/io/fs/migrate-flat-to-nested.ts';
 
 let dir: string;
@@ -173,4 +174,9 @@ test('tryAcquire rethrows errors that are not EEXIST', async () => {
   mkdirSync(join(root, MIGRATION_LOCK));
 
   await expect(relocateFlatToNested(root, { lockAcquisitionTimeoutMs: 500 })).rejects.toThrow();
+});
+
+test('tryAcquire rethrows a non-EEXIST write error (missing parent dir → ENOENT)', () => {
+  const lockPath = join(dir, 'does-not-exist', MIGRATION_LOCK);
+  expect(() => tryAcquire(lockPath)).toThrow();
 });

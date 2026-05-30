@@ -12,6 +12,7 @@ export interface UploaderContext {
   authFailedSentinelPath?: string;
   logger?: MinimalLogger;
   pacer?: Pacer;
+  writeAuthFailedSentinelFn?: (sentinelPath: string, reason: string) => Promise<void>;
 }
 
 export interface AcceptedOutcome {

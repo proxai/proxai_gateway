@@ -2,7 +2,14 @@ import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm, writeFile, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { writeFileAtomic, hashOf, copyDirRecursive, symlinkOrCopy } from '../safe-fs';
+import {
+  writeFileAtomic,
+  hashOf,
+  copyDirRecursive,
+  symlinkOrCopy,
+  exists,
+  safeDelete,
+} from '../safe-fs';
 
 let tmp: string;
 beforeEach(async () => {
@@ -62,5 +69,31 @@ describe('symlinkOrCopy', () => {
     const dst = join(tmp, 'dst.txt');
     await symlinkOrCopy(target, dst, 'copy');
     expect(await readFile(dst, 'utf8')).toBe('Y');
+  });
+});
+
+describe('exists', () => {
+  test('returns true for an existing file', async () => {
+    const p = join(tmp, 'present.txt');
+    await writeFile(p, 'here');
+    expect(await exists(p)).toBe(true);
+  });
+
+  test('returns false for a missing path', async () => {
+    expect(await exists(join(tmp, 'absent.txt'))).toBe(false);
+  });
+});
+
+describe('safeDelete', () => {
+  test('removes an existing file', async () => {
+    const p = join(tmp, 'doomed.txt');
+    await writeFile(p, 'bye');
+    await safeDelete(p);
+    expect(await exists(p)).toBe(false);
+  });
+
+  test('is a no-op for a missing path', async () => {
+    await safeDelete(join(tmp, 'never-existed.txt'));
+    expect(await exists(join(tmp, 'never-existed.txt'))).toBe(false);
   });
 });

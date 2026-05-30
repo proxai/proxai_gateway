@@ -23,7 +23,9 @@ export function startWatchLoop(deps: WatchLoopDeps): WatchLoopHandle {
   const cleanup = (): void => {
     if (stopped) return;
     stopped = true;
-    clearTimeout(scheduled);
+    if (scheduled !== undefined) {
+      clearTimeout(scheduled);
+    }
     keyHandler.stop();
     if (useAltBuffer) {
       deps.output.info(`${SHOW_CURSOR}${LEAVE_ALT_BUFFER}`);
@@ -37,8 +39,7 @@ export function startWatchLoop(deps: WatchLoopDeps): WatchLoopHandle {
     deps.output.info(`${ENTER_ALT_BUFFER}${HIDE_CURSOR}${CURSOR_HOME}`);
   }
 
-  let scheduled: ReturnType<typeof setTimeout> = setTimeout(() => {}, 0);
-  clearTimeout(scheduled);
+  let scheduled: ReturnType<typeof setTimeout> | undefined = undefined;
 
   const tick = async (): Promise<void> => {
     if (stopped) return;

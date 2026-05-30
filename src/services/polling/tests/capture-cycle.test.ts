@@ -24,6 +24,11 @@ import {
 } from 'services/polling';
 import type { CaptureCycleContext, RegisteredSource } from 'services/polling';
 import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.types.ts';
+import { __deps } from 'services/polling/capture-cycle.ts';
+
+const origHandleCapture = __deps.handleCapture;
+const origValidSourceApps = __deps.VALID_SOURCE_APPS;
+const origIsCompiledBinary = __deps.isCompiledBinary;
 
 type WorkerMessageHandler = ((event: MessageEvent<WorkerOutput>) => void) | null;
 type WorkerErrorHandler = ((event: ErrorEvent) => void) | null;
@@ -48,6 +53,9 @@ beforeEach(async () => {
 
 afterEach(async () => {
   buffer.close();
+  __deps.handleCapture = origHandleCapture;
+  __deps.VALID_SOURCE_APPS = origValidSourceApps;
+  __deps.isCompiledBinary = origIsCompiledBinary;
   await rmRecursive(dir);
 });
 
@@ -419,6 +427,16 @@ test('capture-cycle runs worker successfully with cursors, batches, quarantine',
                         lastSeenPageCount: 1,
                         consecutiveErrors: 0,
                       },
+                      {
+                        sourcePathHash: 'c'.repeat(64),
+                        sourcePath: '/tmp/d.db',
+                        sourceInode: 3,
+                        watermarkTable: 'workspace_tabs',
+                        watermarkEnd: 15,
+                        lastSeenSizeBytes: 2000,
+                        lastSeenPageCount: 1,
+                        consecutiveErrors: 1,
+                      },
                     ],
                   },
                 },
@@ -457,6 +475,47 @@ test('capture-cycle runs worker successfully with cursors, batches, quarantine',
     expect(result.sourceResults['cursor']?.filesProcessed).toBe(3);
     expect(result.sourceResults['cursor']?.capturedBatches).toBe(1);
     expect(result.sourceResults['cursor']?.errors.length).toBe(0);
+  } finally {
+    globalThis.Worker = originalWorker;
+  }
+});
+
+test('capture-cycle forwards source.baseDir into worker options when defined', async () => {
+  const originalWorker = globalThis.Worker;
+  let receivedBaseDir: string | undefined = undefined;
+  globalThis.Worker = asWorkerCtor(
+    class MockWorker {
+      onmessage: WorkerMessageHandler = null;
+      postMessage(message: WorkerInput): void {
+        receivedBaseDir = message.options.baseDir;
+        setTimeout(() => {
+          if (this.onmessage) {
+            this.onmessage(
+              asMessageEvent({
+                data: {
+                  sourceName: 'cursor',
+                  success: true,
+                  captureResult: {
+                    filesProcessed: 0,
+                    capturedBytes: 0,
+                    batches: [],
+                    quarantine: [],
+                    cursors: [],
+                  },
+                },
+              }),
+            );
+          }
+        }, 0);
+      }
+      terminate(): void {}
+    },
+  );
+
+  try {
+    const ctx = makeContext([{ name: 'cursor', poll: stubPoll, baseDir: '/tmp/custom-base' }]);
+    await runCaptureCycle(ctx);
+    expect(receivedBaseDir as string | undefined).toBe('/tmp/custom-base');
   } finally {
     globalThis.Worker = originalWorker;
   }
@@ -632,4 +691,84 @@ test('capture-cycle handles worker construction throws exception', async () => {
   } finally {
     globalThis.Worker = originalWorker;
   }
+});
+
+test('capture-cycle handles assertSourceApp throwing Unknown source app error', async () => {
+  __deps.VALID_SOURCE_APPS = [];
+  try {
+    const ctx = makeContext([{ name: 'cursor', poll: stubPoll }]);
+    const result = await runCaptureCycle(ctx);
+    expect(result.sourceResults['cursor']?.errors[0]?.reason).toContain(
+      'Unknown source app: cursor',
+    );
+  } finally {
+    __deps.VALID_SOURCE_APPS = origValidSourceApps;
+  }
+});
+
+test('capture-cycle runInProcessWorker covers compile check and in-process execution with null capture', async () => {
+  __deps.isCompiledBinary = () => true;
+  __deps.handleCapture = (async () => null) as unknown as typeof __deps.handleCapture;
+
+  const ctx = makeContext([{ name: 'cursor', poll: stubPoll }]);
+  const result = await runCaptureCycle(ctx);
+  expect(result.sourceResults['cursor']?.capturedBatches).toBe(0);
+});
+
+test('capture-cycle runInProcessWorker covers compile check and in-process execution with valid capture bundle and baseDir', async () => {
+  __deps.isCompiledBinary = () => true;
+
+  const mockBundle = {
+    filesProcessed: 1,
+    capturedBytes: 100,
+    batches: [
+      {
+        captureId: generateUuidV7(),
+        sourceApp: 'cursor',
+        sourceKind: 'sqlite_kv_snapshot',
+        sourcePath: '/tmp/c.db',
+        sourcePathHash: 'b'.repeat(64),
+        sourceInode: 2,
+        watermarkKind: 'rowid_range',
+        watermarkStart: 1,
+        watermarkEnd: 10,
+        watermarkTable: 'workspace_tabs',
+        agentSchemaVersion: '1.0',
+        gatewayVersion: 'gw-0.1',
+        capturedAtUtc: '2026-05-08T00:00:00Z',
+        bodyFormat: 'jsonl',
+        bodyCompression: 'zstd',
+        body: zstdCompressSync('[]'),
+      },
+    ],
+    quarantine: [],
+    cursors: [
+      {
+        sourcePathHash: 'b'.repeat(64),
+        sourcePath: '/tmp/c.db',
+        sourceInode: 2,
+        watermarkTable: 'workspace_tabs',
+        watermarkEnd: 15,
+        lastSeenSizeBytes: 2000,
+        lastSeenPageCount: 1,
+        consecutiveErrors: 0,
+      },
+    ],
+  };
+
+  __deps.handleCapture = (async () => mockBundle) as unknown as typeof __deps.handleCapture;
+
+  const ctx = makeContext([{ name: 'cursor', poll: stubPoll, baseDir: '/tmp/custom-dir' }]);
+  const result = await runCaptureCycle(ctx);
+  expect(result.sourceResults['cursor']?.capturedBatches).toBe(1);
+});
+
+test('capture-cycle handles synchronous error in pollSourceInWorker catch block', async () => {
+  const closedDb = openInMemoryBufferDb();
+  closedDb.close();
+
+  const ctx = makeContext([{ name: 'cursor', poll: stubPoll }], { buffer: closedDb });
+  const result = await runCaptureCycle(ctx);
+  expect(result.sourceResults['cursor']?.errors.length).toBe(1);
+  expect(result.sourceResults['cursor']?.errors[0]?.reason).toContain('closed');
 });

@@ -98,7 +98,7 @@ async function acquireLockStep(
   return acquireLockStep(lockPath, deadline, timeoutMs);
 }
 
-function tryAcquire(lockPath: string): boolean {
+export function tryAcquire(lockPath: string): boolean {
   try {
     writeFileSync(lockPath, `${process.pid}\n`, { flag: 'wx' });
     return true;

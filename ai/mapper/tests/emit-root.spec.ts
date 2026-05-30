@@ -1,9 +1,9 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm, readFile, lstat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadTree } from '../loader';
-import { loadConfig } from '../config';
+import { loadTree, type AiTree, type RuleFile, type KnowledgeFile } from '../loader';
+import { loadConfig, type MapperConfig } from '../config';
 import { emitRoot } from '../emitters/root';
 import { Manifest } from '../manifest';
 
@@ -346,5 +346,130 @@ describe('emitRoot', () => {
     expect(agents).toContain(
       '| [`nested-rule`](.cursor/rules/auth-nested-rule.mdc) | Nested Rule |',
     );
+  });
+
+  function makeRule(over: Partial<RuleFile>): RuleFile {
+    return {
+      path: `rules/${over.subpath ?? over.basename ?? 'rule'}.md`,
+      basename: over.basename ?? 'rule',
+      subpath: over.subpath ?? over.basename ?? 'rule',
+      frontmatter: over.frontmatter ?? {},
+      body: over.body ?? '# Body',
+    };
+  }
+
+  function makeKnowledge(over: Partial<KnowledgeFile>): KnowledgeFile {
+    return {
+      path: `knowledge/${over.subpath ?? over.basename ?? 'k'}.md`,
+      basename: over.basename ?? 'k',
+      subpath: over.subpath ?? over.basename ?? 'k',
+      body: over.body ?? '# K',
+    };
+  }
+
+  function claudeOnlyConfig(): MapperConfig {
+    return {
+      schemaVersion: 1,
+      tools: { claude: true, codex: false, cursor: false, antigravity: false },
+      paths: {
+        claudeDir: '.claude',
+        cursorDir: '.cursor',
+        codexDir: '.codex',
+        antigravityDir: '.agents',
+      },
+      emitTools: { excludeSubdirs: [] },
+    };
+  }
+
+  function treeWith(rules: RuleFile[], knowledge: KnowledgeFile[]): AiTree {
+    return {
+      preamble: '# fixture-repo\n',
+      rules,
+      knowledge,
+      workflows: [],
+      skills: [],
+      agents: [],
+      tools: { rootDir: join(repo, 'tools') },
+    };
+  }
+
+  test('generateFileTree renders the repo file tree on the git success path', async () => {
+    const git = Bun.which('git');
+    expect(git).not.toBeNull();
+    if (!git) return;
+
+    const gitRepo = join(tmpdir(), `ai-emit-git-${Date.now()}-${Math.random()}`);
+    await mkdir(join(gitRepo, 'alpha', 'beta'), { recursive: true });
+    await writeFile(join(gitRepo, 'alpha', 'top.txt'), 'top\n');
+    await writeFile(join(gitRepo, 'alpha', 'beta', 'leaf.txt'), 'leaf\n');
+
+    const init = Bun.spawn([git, 'init'], { cwd: gitRepo, stdout: 'pipe', stderr: 'pipe' });
+    await init.exited;
+    const add = Bun.spawn([git, 'add', '-A'], { cwd: gitRepo, stdout: 'pipe', stderr: 'pipe' });
+    await add.exited;
+
+    const tree = treeWith([], []);
+    const cfg = claudeOnlyConfig();
+    const mani = new Manifest(repo);
+    await emitRoot(repo, tree, cfg, mani, gitRepo);
+
+    const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
+    expect(claude).toContain(`${basename(gitRepo)}/`);
+    expect(claude).toContain('alpha/');
+    expect(claude).toContain('beta/');
+    expect(claude).not.toContain('file tree unavailable');
+
+    await rm(gitRepo, { recursive: true, force: true });
+  });
+
+  test('knowledge index row falls back to basename when the body is only whitespace', async () => {
+    const tree = treeWith(
+      [],
+      [makeKnowledge({ basename: 'empty-body', subpath: 'empty-body', body: '   \n\n   ' })],
+    );
+    const cfg = claudeOnlyConfig();
+    const mani = new Manifest(repo);
+    await emitRoot(repo, tree, cfg, mani);
+
+    const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
+    expect(claude).toContain('| `.claude/knowledge/empty-body.md` | empty-body |');
+  });
+
+  test('rules index marks lazy-load activation as On-Demand', async () => {
+    const tree = treeWith(
+      [makeRule({ basename: 'lazy', subpath: 'lazy', frontmatter: { activation: 'lazy-load' } })],
+      [],
+    );
+    const cfg = claudeOnlyConfig();
+    const mani = new Manifest(repo);
+    await emitRoot(repo, tree, cfg, mani);
+
+    const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
+    expect(claude).toMatch(/\[`lazy`\]\(\.claude\/rules\/lazy\.md\).*`On-Demand`/);
+  });
+
+  test('rules index renders array scenarios as bulleted list and string scenarios verbatim', async () => {
+    const tree = treeWith(
+      [
+        makeRule({
+          basename: 'arr-scen',
+          subpath: 'arr-scen',
+          frontmatter: { scenarios: ['First case', 'Second case'] },
+        }),
+        makeRule({
+          basename: 'str-scen',
+          subpath: 'str-scen',
+          frontmatter: { scenarios: 'A plain string scenario' },
+        }),
+      ],
+      [],
+    );
+    const cfg = claudeOnlyConfig();
+    const mani = new Manifest(repo);
+    await emitRoot(repo, tree, cfg, mani);
+
+    const claude = await readFile(join(repo, 'CLAUDE.md'), 'utf8');
+    expect(claude).toContain('• First case<br>• Second case');
+    expect(claude).toContain('A plain string scenario');
   });
 });

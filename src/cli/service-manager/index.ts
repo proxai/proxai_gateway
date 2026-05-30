@@ -38,18 +38,16 @@ function platformToServicePlatform(platform: NodeJS.Platform): ServicePlatform {
   throw new Error(`unsupported platform for service-manager: ${platform}`);
 }
 
-function buildInner(deps: ServiceManagerDeps): ServiceManager {
+function buildInner(deps: ServiceManagerDeps, servicePlatform: ServicePlatform): ServiceManager {
   const spawn = deps.spawn ?? defaultSpawn();
   const profile = deps.profile ?? 'prod';
-  switch (deps.platform) {
-    case 'darwin':
+  switch (servicePlatform) {
+    case 'launchd':
       return createLaunchctlManager(spawn, deps.unitPath, profileLaunchdLabel(profile));
-    case 'linux':
+    case 'systemd':
       return createSystemctlManager(spawn, profileSystemdUnitName(profile));
-    case 'win32':
+    case 'windows-task':
       return createSchtasksManager(spawn, deps.unitPath, profileWindowsTaskName(profile));
-    default:
-      throw new Error(`unsupported platform for service-manager: ${deps.platform}`);
   }
 }
 
@@ -117,9 +115,10 @@ function wrapWithMachine(
 }
 
 export function getServiceManager(deps: ServiceManagerDeps): ServiceManager {
-  const inner = buildInner(deps);
+  const servicePlatform = platformToServicePlatform(deps.platform);
+  const inner = buildInner(deps, servicePlatform);
   const actor = createActor(serviceManagerMachine, {
-    input: { platform: platformToServicePlatform(deps.platform) },
+    input: { platform: servicePlatform },
   });
   actor.start();
   return wrapWithMachine(inner, actor);

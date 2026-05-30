@@ -115,6 +115,9 @@ export interface HeartbeatCycleContext {
   binaryPath?: string;
   exitProcess?: () => void;
   coordinatedUpgradeDeps?: CoordinatedUpgradeDeps;
+  coordinatedUpgradeFn?: (
+    deps: CoordinatedUpgradeDeps,
+  ) => Promise<import('services/upgrade/coordinated-upgrade.ts').CoordinatedUpgradeResult>;
 }
 
 export interface HeartbeatCycleResult {

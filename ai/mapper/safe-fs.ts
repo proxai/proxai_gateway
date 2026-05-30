@@ -7,7 +7,7 @@ export async function writeFileAtomic(path: string, content: string): Promise<vo
   const tmpPath = `${path}.tmp-${process.pid}-${Date.now()}`;
   await writeFile(tmpPath, content);
   await Bun.write(path, await Bun.file(tmpPath).text());
-  await unlink(tmpPath).catch(() => {});
+  await safeDelete(tmpPath);
 }
 
 export function hashOf(input: string): string {

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 
 import { Confidence, Severity } from 'cli/commands/doctor/doctor.types.ts';
 import type { DoctorSignals, Finding } from 'cli/commands/doctor/doctor.types.ts';
-import { renderDoctorOutput } from 'cli/commands/doctor/render-doctor.ts';
+import { renderDoctorOutput, generateDoctorHtml } from 'cli/commands/doctor/render-doctor.ts';
 
 function stripAnsi(s: string): string {
   const ESC = String.fromCharCode(27);
@@ -78,6 +78,68 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
     clockSkewMs: null,
     bufferDbReadable: true,
     receiptsTableReadable: true,
+    clockExtended: {
+      localTimeOffsetMinute: 0,
+      timezone: 'UTC',
+    },
+    processExtended: {
+      controlSocketExists: false,
+      controlSocketActive: false,
+      zombieProcessesDetected: false,
+      zombieProcessPids: [],
+      helperProcessHealthy: true,
+      watcherThreadLagMs: 0,
+    },
+    securityExtended: {
+      configUnescapedBackslashes: false,
+      configObsoleteKeys: [],
+      configValueConstraintsViolated: false,
+    },
+    networkExtended: {
+      tlsInspectionDetected: false,
+      tlsInspectionIssuer: null,
+      globalProxyMismatch: false,
+      dnsHijackOrCaptivePortal: false,
+    },
+    filesystemExtended: {
+      symlinkLoopDetected: false,
+      aclWriteBlocked: false,
+      brokenWindowsJunctions: [],
+      writeProbeSuccess: true,
+      writeProbeError: null,
+      sudoOwnershipDrift: false,
+      logInodeDriftDetected: false,
+    },
+    sqliteExtended: {
+      dbJournalMode: 'wal',
+      dbBusyTimeoutMs: 5000,
+      dbTransactionLockup: false,
+      dbWalCheckpointBusy: false,
+      dbWalCheckpointLogPages: 0,
+      dbWalCheckpointDonePages: 0,
+    },
+    performanceExtended: {
+      eventLoopLagMs: 0,
+      heapUsedBytes: 10 * 1024 * 1024,
+      heapTotalBytes: 20 * 1024 * 1024,
+      gcThrashingActive: false,
+      zstdCompressionCpuSpikeSec: 0,
+    },
+    upgradeExtended: {
+      upgradeLockExists: false,
+      upgradeLockStale: false,
+      upgradeRestoreStateExists: false,
+      upgradeStagedBinaryCorrupt: false,
+    },
+    windowsExtended: {
+      windowsServiceUnquotedPath: false,
+      windowsTaskSchedulerXmlCorrupt: false,
+    },
+    systemdExtended: {
+      systemdRuntimeDirMissing: false,
+      systemdRateLimitHit: false,
+      systemdHomeEncryptedTearing: false,
+    },
   };
   return { ...base, ...overrides };
 }
@@ -229,4 +291,71 @@ test('respects process.stdout.columns and shrinks divider width accordingly', ()
       configurable: true,
     });
   }
+});
+
+test('centerText falls back to direct output when text is wider than container width', () => {
+  const originalColumns = process.stdout.columns;
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 4,
+      configurable: true,
+    });
+    const out = stripAnsi(renderDoctorOutput([], baseSignals()));
+    expect(out).toContain('SIGNALS');
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+    });
+  }
+});
+
+test('signals appendix renders last upload error when present', () => {
+  const signals = baseSignals({
+    daemonState: {
+      captureLastCycleAt: null,
+      drainLastCycleAt: null,
+      lastConsecutiveRetriableBreak: null,
+      lastUploadError: 'failed to establish secure connection',
+    },
+  });
+  const out = stripAnsi(renderDoctorOutput([], signals));
+  expect(out).toContain('last_upload_error:       failed to establish secure connection');
+});
+
+test('generateDoctorHtml renders HTML report correctly for healthy system', () => {
+  const html = generateDoctorHtml([], baseSignals(), '2026-05-28T12:00:00Z');
+  expect(html).toContain('<!DOCTYPE html>');
+  expect(html).toContain('System is completely healthy. No issues found!');
+  expect(html).toContain('2026-05-28T12:00:00Z');
+});
+
+test('generateDoctorHtml renders HTML report correctly for multiple issues and escapes HTML characters', () => {
+  const findings: Finding[] = [
+    makeFinding({
+      code: 'B1',
+      severity: Severity.critical,
+      cause: 'API key containing special characters: <>&"\'',
+      action: 'Check ProxAI portal: <>&"\'',
+    }),
+    makeFinding({
+      code: 'F3',
+      severity: Severity.warning,
+      cause: 'Warning issue',
+      action: 'Check warning action',
+    }),
+    makeFinding({
+      code: 'C7',
+      severity: Severity.info,
+      cause: 'Info issue',
+      action: 'Check info action',
+    }),
+  ];
+
+  const html = generateDoctorHtml(findings, baseSignals(), '2026-05-28T12:00:00Z');
+  expect(html).toContain('Critical Issues (1)');
+  expect(html).toContain('Warnings (1)');
+  expect(html).toContain('Info (1)');
+  expect(html).toContain('API key containing special characters: &lt;&gt;&amp;&quot;&#039;');
+  expect(html).toContain('Check ProxAI portal: &lt;&gt;&amp;&quot;&#039;');
 });

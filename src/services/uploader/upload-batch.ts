@@ -328,7 +328,8 @@ async function finalizeAuthFailure(
   markBatchFailed(ctx.db, captureId, message);
   if (ctx.authFailedSentinelPath !== undefined) {
     try {
-      await writeAuthFailedSentinel(ctx.authFailedSentinelPath, reason);
+      const writeSentinel = ctx.writeAuthFailedSentinelFn ?? writeAuthFailedSentinel;
+      await writeSentinel(ctx.authFailedSentinelPath, reason);
     } catch (writeErr) {
       log?.error(
         {

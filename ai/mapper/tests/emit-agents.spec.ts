@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
-import { mkdir, rm, readFile, cp, lstat } from 'node:fs/promises';
+import { mkdir, rm, readFile, cp, lstat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { loadTree } from '../loader';
@@ -45,5 +45,20 @@ describe('emitAgents', () => {
       .then(() => true)
       .catch(() => false);
     expect(antigravityExists).toBe(false);
+  });
+
+  test('omits tools from Codex toml when frontmatter has no tools array', async () => {
+    await writeFile(
+      join(repo, 'ai/agents/notools.md'),
+      '---\nname: notools\ndescription: No tools agent\n---\n\nNo tools here.\n',
+    );
+    const tree = await loadTree(join(repo, 'ai'));
+    const cfg = await loadConfig(join(repo, 'ai'));
+    const mani = new Manifest(repo);
+    await emitAgents(repo, tree, cfg, mani);
+
+    const codex = await readFile(join(repo, '.codex/agents/notools.toml'), 'utf8');
+    expect(codex).toContain('name = "notools"');
+    expect(codex).not.toContain('tools = ');
   });
 });

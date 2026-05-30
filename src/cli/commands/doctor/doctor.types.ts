@@ -47,7 +47,72 @@ export type FindingCode =
   | 'F7'
   | 'G1'
   | 'G2'
-  | 'G3';
+  | 'A6'
+  | 'A7'
+  | 'A8'
+  | 'A9'
+  | 'A10'
+  | 'A11'
+  | 'A12'
+  | 'A13'
+  | 'A14'
+  | 'A15'
+  | 'B1'
+  | 'B2'
+  | 'B3'
+  | 'B4'
+  | 'B5'
+  | 'B6'
+  | 'C1'
+  | 'C2'
+  | 'C3'
+  | 'C4'
+  | 'C5'
+  | 'C6'
+  | 'C7'
+  | 'C8'
+  | 'C9'
+  | 'C10'
+  | 'C11'
+  | 'C12'
+  | 'C13'
+  | 'D1'
+  | 'D2'
+  | 'E1'
+  | 'E2'
+  | 'E3'
+  | 'E4'
+  | 'E5'
+  | 'E6'
+  | 'E7'
+  | 'F1'
+  | 'F2'
+  | 'F3'
+  | 'F4'
+  | 'F5'
+  | 'F6'
+  | 'F7'
+  | 'F8'
+  | 'F9'
+  | 'F10'
+  | 'F11'
+  | 'F12'
+  | 'F13'
+  | 'F14'
+  | 'F15'
+  | 'F16'
+  | 'F17'
+  | 'F18'
+  | 'G1'
+  | 'G2'
+  | 'G3'
+  | 'G4'
+  | 'G5'
+  | 'G6'
+  | 'G7'
+  | 'G8'
+  | 'G9'
+  | 'G10';
 
 export interface Finding {
   readonly code: FindingCode;
@@ -123,6 +188,68 @@ export interface DoctorSignals {
   readonly clockSkewMs: number | null;
   readonly bufferDbReadable: boolean;
   readonly receiptsTableReadable: boolean;
+  readonly clockExtended: {
+    readonly localTimeOffsetMinute: number;
+    readonly timezone: string | null;
+  };
+  readonly processExtended: {
+    readonly controlSocketExists: boolean;
+    readonly controlSocketActive: boolean;
+    readonly zombieProcessesDetected: boolean;
+    readonly zombieProcessPids: readonly number[];
+    readonly helperProcessHealthy: boolean | null;
+    readonly watcherThreadLagMs: number | null;
+  };
+  readonly securityExtended: {
+    readonly configUnescapedBackslashes: boolean;
+    readonly configObsoleteKeys: readonly string[];
+    readonly configValueConstraintsViolated: boolean;
+  };
+  readonly networkExtended: {
+    readonly tlsInspectionDetected: boolean;
+    readonly tlsInspectionIssuer: string | null;
+    readonly globalProxyMismatch: boolean;
+    readonly dnsHijackOrCaptivePortal: boolean;
+  };
+  readonly filesystemExtended: {
+    readonly symlinkLoopDetected: boolean;
+    readonly aclWriteBlocked: boolean;
+    readonly brokenWindowsJunctions: readonly string[];
+    readonly writeProbeSuccess: boolean;
+    readonly writeProbeError: string | null;
+    readonly sudoOwnershipDrift: boolean;
+    readonly logInodeDriftDetected: boolean;
+  };
+  readonly sqliteExtended: {
+    readonly dbJournalMode: string | null;
+    readonly dbBusyTimeoutMs: number | null;
+    readonly dbTransactionLockup: boolean;
+    readonly dbWalCheckpointBusy: boolean | null;
+    readonly dbWalCheckpointLogPages: number | null;
+    readonly dbWalCheckpointDonePages: number | null;
+  };
+  readonly performanceExtended: {
+    readonly eventLoopLagMs: number | null;
+    readonly heapUsedBytes: number | null;
+    readonly heapTotalBytes: number | null;
+    readonly gcThrashingActive: boolean;
+    readonly zstdCompressionCpuSpikeSec: number | null;
+  };
+  readonly upgradeExtended: {
+    readonly upgradeLockExists: boolean;
+    readonly upgradeLockStale: boolean;
+    readonly upgradeRestoreStateExists: boolean;
+    readonly upgradeStagedBinaryCorrupt: boolean;
+  };
+  readonly windowsExtended: {
+    readonly windowsServiceUnquotedPath: boolean;
+    readonly windowsTaskSchedulerXmlCorrupt: boolean;
+  };
+  readonly systemdExtended: {
+    readonly systemdRuntimeDirMissing: boolean | null;
+    readonly systemdRateLimitHit: boolean | null;
+    readonly systemdHomeEncryptedTearing: boolean | null;
+  };
 }
 
 export interface DoctorCommandOptions {

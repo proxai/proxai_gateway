@@ -315,3 +315,47 @@ function makeFakeLogger(entries: { level: string; msg: string }[]): FakeLogger {
   };
   return logger;
 }
+
+test('shouldHalt returns false when no sentinel path is set and signal is live', async () => {
+  const ctrl = new AbortController();
+  const ctxs = makeContexts();
+  delete (ctxs.drain as { authFailedSentinelPath?: string }).authFailedSentinelPath;
+  type Entry = { level: string; msg: string };
+  const entries: Entry[] = [];
+  const fakeLogger = makeFakeLogger(entries);
+  ctxs.drain.logger = fakeLogger;
+  let cycles = 0;
+  await runDaemonLoops(ctxs, {
+    abortSignal: ctrl.signal,
+    captureIntervalMs: 1,
+    drainIntervalMs: 1,
+    heartbeatIntervalMs: 1,
+    sleep: async (_ms, signal) => {
+      cycles++;
+      if (cycles >= 1) ctrl.abort();
+      if (signal?.aborted === true) return;
+    },
+  });
+  expect(cycles).toBeGreaterThanOrEqual(1);
+});
+
+test('daemon-loops covers shouldHalt when signal is aborted inside shouldHalt', async () => {
+  const ctxs = makeContexts();
+  let calls = 0;
+  const signal = {
+    get aborted() {
+      calls++;
+      return calls > 1;
+    },
+    addEventListener() {},
+    removeEventListener() {},
+  } as unknown as AbortSignal;
+
+  await runDaemonLoops(ctxs, {
+    abortSignal: signal,
+    captureIntervalMs: 1,
+    drainIntervalMs: 1,
+    heartbeatIntervalMs: 1,
+  });
+  expect(calls).toBeGreaterThan(1);
+});

@@ -50,9 +50,11 @@ beforeEach(async () => {
   configPath = join(dir, 'config.toml');
   bufferDbPath = join(dir, 'buffer.db');
   logDir = join(dir, 'logs');
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = dir;
 });
 
 afterEach(async () => {
+  delete process.env['PROXAI_TEST_PROFILE_ROOT'];
   await rmRecursive(dir);
 });
 
@@ -898,4 +900,206 @@ test('setup with existing config and production build path redirects to upgrade'
         l.msg.includes('Gateway is already installed. Redirecting smoothly to upgrade flow...'),
     ),
   ).toBe(true);
+});
+
+test('setup in dev mode with configs present', async () => {
+  const { readBootId } = require('core/system/boot-id.ts');
+  const bootId = await readBootId();
+  const fs = require('node:fs/promises');
+  await fs.writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
+
+  await fs.mkdir(join(dir, 'dev'), { recursive: true });
+  await fs.mkdir(join(dir, 'prod'), { recursive: true });
+
+  const devConfig: GatewayConfig = {
+    account: {
+      apiKey: 'dev-key-12345678',
+      userId: 'u_dev',
+      hostId: 'h_dev',
+      installedAt: '2026-05-01T00:00:00Z',
+      installSource: 'github_release',
+    },
+    backend: {
+      ingestUrl: 'http://localhost:3001/v1/raw_records',
+      verifyKeyUrl: 'http://localhost:3001/ingestion/verify-key',
+      watermarksUrl: 'http://localhost:3001/v1/watermarks',
+      registerHostIdUrl: 'http://localhost:3001/v1/host-ids/register',
+    },
+    capture: {
+      pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
+      bufferPath: bufferDbPath,
+      receiptRetentionDays: DEFAULT_RECEIPT_RETENTION_DAYS,
+      failedRetentionDays: DEFAULT_FAILED_RETENTION_DAYS,
+      bufferSoftPauseBytes: DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
+      bufferSoftResumeBytes: DEFAULT_BUFFER_SOFT_RESUME_BYTES,
+      uploadMaxBatchesPerSec: DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
+      uploadMaxBytesPerMinute: DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
+      uploadBackoffOn429Multiplier: DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
+    },
+    logging: { level: 'info', logDir },
+    staleBinary: {
+      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
+      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
+    },
+  };
+
+  const prodConfig: GatewayConfig = {
+    account: {
+      apiKey: 'prod-key-12345678',
+      userId: 'u_prod',
+      hostId: 'h_prod',
+      installedAt: '2026-05-02T00:00:00Z',
+      installSource: 'github_release',
+    },
+    backend: {
+      ingestUrl: 'https://api.example.com/v1/raw_records',
+      verifyKeyUrl: 'https://api.example.com/ingestion/verify-key',
+      watermarksUrl: 'https://api.example.com/v1/watermarks',
+      registerHostIdUrl: 'https://api.example.com/v1/host-ids/register',
+    },
+    capture: {
+      pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
+      bufferPath: bufferDbPath,
+      receiptRetentionDays: DEFAULT_RECEIPT_RETENTION_DAYS,
+      failedRetentionDays: DEFAULT_FAILED_RETENTION_DAYS,
+      bufferSoftPauseBytes: DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
+      bufferSoftResumeBytes: DEFAULT_BUFFER_SOFT_RESUME_BYTES,
+      uploadMaxBatchesPerSec: DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
+      uploadMaxBytesPerMinute: DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
+      uploadBackoffOn429Multiplier: DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
+    },
+    logging: { level: 'info', logDir },
+    staleBinary: {
+      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
+      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
+    },
+  };
+
+  await writeConfigToFile(devConfig, join(dir, 'dev', 'config.toml'));
+  await writeConfigToFile(prodConfig, join(dir, 'prod', 'config.toml'));
+
+  const control = newControl();
+  const sm = fakeServiceManager();
+  const out = captureOutput();
+  const d = {
+    ...deps(control),
+    output: out,
+    serviceManager: sm,
+    configExists: async () => true,
+  };
+
+  const result = await runSetup(d, { noStart: true, apiKey: 'dev-key-12345678' });
+  expect(result.exitCode).toBe(5);
+  expect(out.lines.some((l) => l.msg.includes('[dev]  already configured (host_id: h_dev)'))).toBe(
+    true,
+  );
+  expect(out.lines.some((l) => l.msg.includes('[prod] already configured (host_id: h_prod)'))).toBe(
+    true,
+  );
+});
+
+test('setup in dev mode with configs absent', async () => {
+  const { readBootId } = require('core/system/boot-id.ts');
+  const bootId = await readBootId();
+  const fs = require('node:fs/promises');
+  await fs.writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
+
+  const control = newControl();
+  const sm = fakeServiceManager();
+  const out = captureOutput();
+  const d = {
+    ...deps(control),
+    output: out,
+    serviceManager: sm,
+    configExists: async () => true,
+  };
+
+  const result = await runSetup(d, { noStart: true, apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(5);
+  expect(out.lines.some((l) => l.msg.includes('[dev]  not configured'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('[prod] not configured'))).toBe(true);
+});
+
+test('setup with invalid existing config', async () => {
+  await Bun.write(configPath, 'invalid toml content [[[}');
+
+  const control = newControl();
+  const sm = fakeServiceManager();
+  const out = captureOutput();
+  const d = {
+    ...deps(control),
+    output: out,
+    serviceManager: sm,
+    configExists: async () => true,
+  };
+
+  const result = await runSetup(d, { noStart: true, apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(5);
+  expect(
+    out.lines.some((l) => l.msg.includes('already configured (could not read existing config)')),
+  ).toBe(true);
+});
+
+test('setup with existing config and same api-key and noStart but not in dev mode', async () => {
+  await writeExistingConfig();
+
+  const control = newControl();
+  const out = captureOutput();
+  const { serviceManager: _, ...restDeps } = deps(control);
+  const d = {
+    ...restDeps,
+    output: out,
+  };
+
+  const result = await runSetup(d, { apiKey: VALID_KEY, noStart: true });
+  expect(result.exitCode).toBe(5);
+  expect(
+    out.lines.some((l) =>
+      l.msg.includes('Run proxai-gateway setup --force to re-enter your ingestion key'),
+    ),
+  ).toBe(true);
+});
+
+test('setup with existing config and same api-key and undefined serviceManager not in dev mode and not noStart', async () => {
+  await writeExistingConfig();
+
+  const control = newControl();
+  const out = captureOutput();
+  const { serviceManager: _, ...restDeps } = deps(control);
+  const d = {
+    ...restDeps,
+    output: out,
+  };
+
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(5);
+  expect(
+    out.lines.some((l) =>
+      l.msg.includes('Run proxai-gateway setup --force to re-enter your ingestion key'),
+    ),
+  ).toBe(true);
+});
+
+test('setup with existing config and same api-key handles isRunning throwing and starts daemon', async () => {
+  await writeExistingConfig();
+  const control = newControl();
+  const sm = fakeServiceManager();
+  sm.isRunning = async () => {
+    throw new Error('service manager error');
+  };
+  const out = captureOutput();
+  const d = { ...deps(control), output: out, serviceManager: sm };
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(sm.calls.start).toBe(1);
+});
+
+test('maybeWriteConsentSentinel handles write error gracefully', async () => {
+  const control = newControl();
+  const d = {
+    ...deps(control),
+    consentSentinelPath: join(dir, 'non-existent-subfolder', 'CONSENT_ACCEPTED'),
+  };
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
 });

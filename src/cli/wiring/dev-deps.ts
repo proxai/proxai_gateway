@@ -16,25 +16,64 @@ import { buildGatewayConfig } from 'cli/commands/setup/build-config.ts';
 import { readMachineUuid, deriveHostId } from 'core/system';
 import { nowIsoUtc, GATEWAY_USER_AGENT } from 'core/utils';
 import { HttpClient } from 'services/http';
+import type { ServiceManagerDeps } from 'cli/service-manager';
+import type { WriteServiceUnitInput } from 'cli/service-unit/writer.ts';
+import type { GatewayConfig } from 'services/config';
 
-function buildDevServiceUnitPath(platform: NodeJS.Platform, devConfigDir: string): string | null {
-  if (platform === 'darwin') return defaultLaunchdPlistPath(devLaunchdLabel());
-  if (platform === 'linux') return defaultSystemdUnitPath(devSystemdUnitName());
-  if (platform === 'win32') return defaultScheduledTaskXmlPath(devConfigDir);
+/** Seam for tests — swap individual deps without mock.module. */
+export const __deps = {
+  getServiceManager: (deps: ServiceManagerDeps): ServiceManager => getServiceManager(deps),
+  createHttpClient: (options: {
+    apiKey: string;
+    hostId: string;
+    endpoints: { ingest: string; verifyKey: string; watermarks: string; registerHostId: string };
+    gatewayVersion: string;
+  }) => new HttpClient(options),
+  writeServiceUnit: (input: WriteServiceUnitInput): Promise<void> => writeServiceUnit(input),
+  readMachineUuid: (): Promise<string> => readMachineUuid(),
+  deriveHostId: (machineUuid: string, userId: string): string => deriveHostId(machineUuid, userId),
+  buildGatewayConfig: (input: {
+    apiKey: string;
+    userId: string;
+    hostId: string;
+    installedAt: string;
+    installSource: 'github_release';
+    bufferDbPath: string;
+    logDir: string;
+    defaultNestBaseUrl: string;
+  }): GatewayConfig => buildGatewayConfig(input),
+  writeConfigToFile: (config: GatewayConfig, path: string): Promise<void> =>
+    writeConfigToFile(config, path),
+  nowIsoUtc: (): string => nowIsoUtc(),
+  defaultLaunchdPlistPath: (label: string): string => defaultLaunchdPlistPath(label),
+  defaultSystemdUnitPath: (unitName: string): string => defaultSystemdUnitPath(unitName),
+  defaultScheduledTaskXmlPath: (configDir: string): string =>
+    defaultScheduledTaskXmlPath(configDir),
+  devLaunchdLabel: (): string => devLaunchdLabel(),
+  devSystemdUnitName: (): string => devSystemdUnitName(),
+};
+
+export function buildDevServiceUnitPath(
+  platform: NodeJS.Platform,
+  devConfigDir: string,
+): string | null {
+  if (platform === 'darwin') return __deps.defaultLaunchdPlistPath(__deps.devLaunchdLabel());
+  if (platform === 'linux') return __deps.defaultSystemdUnitPath(__deps.devSystemdUnitName());
+  if (platform === 'win32') return __deps.defaultScheduledTaskXmlPath(devConfigDir);
   return null;
 }
 
-function buildDevServiceManager(
+export function buildDevServiceManager(
   platform: NodeJS.Platform,
   devConfigDir: string,
 ): ServiceManager | null {
   const unitPath = buildDevServiceUnitPath(platform, devConfigDir);
   if (unitPath === null) return null;
-  return getServiceManager({ platform, unitPath, profile: 'dev' });
+  return __deps.getServiceManager({ platform, unitPath, profile: 'dev' });
 }
 
-async function verifyKeySimple(url: string, apiKey: string): Promise<{ success: boolean }> {
-  const http = new HttpClient({
+export async function verifyKeySimple(url: string, apiKey: string): Promise<{ success: boolean }> {
+  const http = __deps.createHttpClient({
     apiKey,
     hostId: '',
     endpoints: {
@@ -49,21 +88,24 @@ async function verifyKeySimple(url: string, apiKey: string): Promise<{ success: 
   return { success: result.success };
 }
 
-async function writeDevConfigFull(profileCtx: ProfileContext, apiKey: string): Promise<void> {
-  const machineUuid = await readMachineUuid();
+export async function writeDevConfigFull(
+  profileCtx: ProfileContext,
+  apiKey: string,
+): Promise<void> {
+  const machineUuid = await __deps.readMachineUuid();
   const userId = 'dev';
-  const hostId = deriveHostId(machineUuid, userId);
-  const config = buildGatewayConfig({
+  const hostId = __deps.deriveHostId(machineUuid, userId);
+  const config = __deps.buildGatewayConfig({
     apiKey,
     userId,
     hostId,
-    installedAt: nowIsoUtc(),
+    installedAt: __deps.nowIsoUtc(),
     installSource: 'github_release',
     bufferDbPath: profileCtx.bufferDbPath,
     logDir: profileCtx.logDir,
     defaultNestBaseUrl: profileCtx.defaultNestBaseUrl,
   });
-  await writeConfigToFile(config, profileCtx.configFilePath);
+  await __deps.writeConfigToFile(config, profileCtx.configFilePath);
 }
 
 export function buildDevDeps(): DevCommandDeps {
@@ -81,7 +123,7 @@ export function buildDevDeps(): DevCommandDeps {
     writeDevConfig: writeDevConfigFull,
     registerDevServiceUnit: async () => {
       if (devServiceUnitPath === null) return;
-      await writeServiceUnit({
+      await __deps.writeServiceUnit({
         serviceUnitPath: devServiceUnitPath,
         programPath: process.execPath,
         platform: process.platform,

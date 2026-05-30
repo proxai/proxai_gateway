@@ -22,6 +22,14 @@ import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.typ
 import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 import { isBufferFull, writeBufferFullSentinel } from 'services/polling/buffer-full-sentinel.ts';
 import { handleCapture } from 'services/polling/poll-worker.ts';
+
+/** Seam for tests — swap individual deps without mock.module. */
+export const __deps = {
+  handleCapture,
+  VALID_SOURCE_APPS: VALID_SOURCE_APPS as readonly string[],
+  isCompiledBinary: (): boolean =>
+    import.meta.url.includes('$bunfs') || import.meta.url.includes('bun:wrap'),
+};
 import {
   captureLoopMachine,
   type CaptureGateBlockReason,
@@ -60,14 +68,14 @@ interface SourceCursorRow {
 }
 
 function assertSourceApp(name: string): SourceApp {
-  if ((VALID_SOURCE_APPS as readonly string[]).includes(name)) {
+  if (__deps.VALID_SOURCE_APPS.includes(name)) {
     return name as SourceApp;
   }
   throw new Error(`Unknown source app: ${name}`);
 }
 
 function tryStartPollActor(name: string): Actor<SourcePollMachine> | null {
-  if (!(VALID_SOURCE_APPS as readonly string[]).includes(name)) return null;
+  if (!__deps.VALID_SOURCE_APPS.includes(name)) return null;
   const actor = createActor(sourcePollMachine, { input: { sourceApp: name as SourceApp } });
   actor.start();
   return actor;
@@ -412,7 +420,7 @@ async function pollSourceInWorker(
       consecutiveErrors: c.consecutive_errors,
     }));
 
-    const isCompiled = import.meta.url.includes('$bunfs') || import.meta.url.includes('bun:wrap');
+    const isCompiled = __deps.isCompiledBinary();
     if (isCompiled) {
       return runInProcessWorker(source, ctx, priorCursors, pollActor);
     }
@@ -457,7 +465,7 @@ async function runInProcessWorker(
   if (source.baseDir !== undefined) {
     optionsObj.baseDir = source.baseDir;
   }
-  const capture = await handleCapture(source.name, optionsObj);
+  const capture = await __deps.handleCapture(source.name, optionsObj);
   if (!capture) {
     workerActor.send({
       type: 'RESULT_POSTED',

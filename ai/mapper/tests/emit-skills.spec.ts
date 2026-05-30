@@ -1,4 +1,5 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
+import * as realFsPromises from 'node:fs/promises';
 import { mkdir, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -8,6 +9,14 @@ import { emitSkills } from '../emitters/skills';
 import { Manifest } from '../manifest';
 
 const FIXTURE = join(import.meta.dir, 'fixtures/minimal-ai');
+
+const realFsSnapshot = { ...realFsPromises };
+let readFileShouldThrow = false;
+mock.module('node:fs/promises', () => ({
+  ...realFsSnapshot,
+  readFile: (...args: Parameters<typeof realFsSnapshot.readFile>) =>
+    readFileShouldThrow ? Promise.reject(new Error('boom')) : realFsSnapshot.readFile(...args),
+}));
 
 let repo: string;
 beforeEach(async () => {
@@ -49,4 +58,20 @@ describe('emitSkills', () => {
     const paths = mani.files().map((f) => f.path);
     expect(paths.some((p) => p.startsWith('.agents/'))).toBe(false);
   });
+
+  test('completes when readFile rejects, hashing empty content', async () => {
+    const tree = await loadTree(FIXTURE);
+    const cfg = await loadConfig(FIXTURE);
+    const mani = new Manifest(repo);
+
+    readFileShouldThrow = true;
+    await emitSkills(repo, tree, cfg, mani);
+
+    const paths = mani.files().map((f) => f.path);
+    expect(paths).toContain('.claude/skills/sample-skill/SKILL.md');
+  });
+});
+
+afterEach(() => {
+  readFileShouldThrow = false;
 });

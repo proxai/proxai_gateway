@@ -1073,3 +1073,72 @@ test('silent output in regular user flow (isDevMode: false)', async () => {
   expect(output.lines[0]?.level).toBe('success');
   expect(output.lines[0]?.msg).toBe('uninstalled');
 });
+
+test('handles devServiceManager stop, unregister and dev unit-file cleanup', async () => {
+  await writeConfig('github_release');
+  const devUnitPath = join(tmpRoot, 'dev_unit.plist');
+  await writeFile(devUnitPath, '<plist/>');
+
+  const { sm: devSm, calls: devCalls } = fakeManager();
+  const { sm: prodSm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall(
+    {
+      ...depsFor(prodSm),
+      output,
+      devServiceManager: devSm,
+      devServiceUnitPath: devUnitPath,
+    },
+    { yes: true },
+  );
+
+  expect(result.exitCode).toBe(0);
+  expect(devCalls.stop).toBe(1);
+  expect(devCalls.unregister).toBe(1);
+  expect(await Bun.file(devUnitPath).exists()).toBe(false);
+});
+
+test('sentinel reading for isDevMode resolves based on DEV_MODE file', async () => {
+  const { sm } = fakeManager();
+  const { readBootId } = await import('core/system/boot-id.ts');
+  const bootId = await readBootId();
+
+  // 1. DEV_MODE sentinel exists -> isDevMode is true
+  await writeFile(join(tmpRoot, '.proxai', 'DEV_MODE'), JSON.stringify({ bootId }));
+  const depsWithDevSentinel = depsFor(sm);
+  delete (depsWithDevSentinel as { isDevMode?: unknown }).isDevMode; // force sentinel read
+  const output1 = captureOutput();
+  await runUninstall({ ...depsWithDevSentinel, output: output1 }, { yes: true });
+  expect(output1.lines.some((l) => l.msg === 'daemon stopped')).toBe(true);
+
+  // 2. DEV_MODE sentinel does not exist -> isDevMode is false (silent output except final success)
+  await rm(join(tmpRoot, '.proxai', 'DEV_MODE'), { force: true });
+  const depsNoSentinel = depsFor(sm);
+  delete (depsNoSentinel as { isDevMode?: unknown }).isDevMode; // force sentinel read
+  const output2 = captureOutput();
+  await runUninstall({ ...depsNoSentinel, output: output2 }, { yes: true });
+  expect(output2.lines.some((l) => l.msg === 'daemon stopped')).toBe(false);
+});
+
+test('idempotent non-dev: prints "uninstalled" when nothing exists and reset is false', async () => {
+  const { sm } = fakeManager({ registered: false });
+  const output = captureOutput();
+  const result = await runUninstall({ ...depsFor(sm), output, isDevMode: false }, { yes: true });
+  expect(result.exitCode).toBe(0);
+  expect(output.lines.some((l) => l.level === 'success' && l.msg === 'uninstalled')).toBe(true);
+  expect(output.lines.some((l) => l.msg === 'no installation found')).toBe(false);
+});
+
+test('idempotent non-dev: prints "uninstalled and reset" when nothing exists and reset is true', async () => {
+  const { sm } = fakeManager({ registered: false });
+  const output = captureOutput();
+  const result = await runUninstall(
+    { ...depsFor(sm), output, isDevMode: false },
+    { reset: true, yes: true },
+  );
+  expect(result.exitCode).toBe(0);
+  expect(output.lines.some((l) => l.level === 'success' && l.msg === 'uninstalled and reset')).toBe(
+    true,
+  );
+  expect(output.lines.some((l) => l.msg === 'no installation found')).toBe(false);
+});

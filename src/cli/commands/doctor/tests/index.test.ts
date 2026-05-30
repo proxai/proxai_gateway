@@ -1,8 +1,25 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
+
+let interceptHtmlWrite = false;
+let capturedWritePath: string | null = null;
+
+mock.module('node:fs/promises', () => {
+  const actual: typeof import('node:fs/promises') = import.meta.require('node:fs/promises');
+  return {
+    ...actual,
+    writeFile: (path: string, data: string, encoding: 'utf-8'): Promise<void> => {
+      if (interceptHtmlWrite && typeof path === 'string' && path.endsWith('.html')) {
+        capturedWritePath = path;
+        return Promise.resolve();
+      }
+      return actual.writeFile(path, data, encoding);
+    },
+  };
+});
 
 import { requireDefined } from 'core/utils';
 import { rmRecursive } from 'core/io/fs';
@@ -14,11 +31,13 @@ import type { DoctorCommandDeps } from 'cli/commands/doctor/doctor.types.ts';
 import type { ServiceManager } from 'cli/service-manager';
 import { readBootId } from 'core/system/boot-id.ts';
 import { profileRootDir } from 'core/io/fs/profile.ts';
-import { writeFileSync, rmSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { writeFileSync, rmSync, mkdirSync } from 'node:fs';
 
 let dir: string;
 let bufferDbPath: string;
 
+const origHome = process.env.HOME;
 const origFetch = globalThis.fetch;
 const origWhich = Bun.which;
 
@@ -88,6 +107,8 @@ function makeDeps(output: OutputSink, over: Partial<DoctorCommandDeps> = {}): Do
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'proxai-doctor-index-'));
+  process.env.HOME = dir;
+  mkdirSync(profileRootDir(), { recursive: true });
   bufferDbPath = join(dir, 'buffer.db');
   const db = openBufferDb(bufferDbPath);
   db.close();
@@ -97,9 +118,17 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  process.env.HOME = origHome;
   globalThis.fetch = origFetch;
   (Bun as unknown as { which: typeof Bun.which }).which = origWhich;
+  interceptHtmlWrite = false;
+  capturedWritePath = null;
   await rmRecursive(dir);
+});
+
+afterAll(async () => {
+  const fsPromisesReal = await import('node:fs/promises');
+  mock.module('node:fs/promises', () => fsPromisesReal);
 });
 
 test('runDoctor emits gathering banner and an output block, returns ok exit code', async () => {
@@ -161,6 +190,33 @@ test('doctor writes HTML report to specified absolute output path', async () => 
   expect(count).toBeGreaterThanOrEqual(2);
 });
 
+test('doctor with bare --output flag targets the home Desktop directory', async () => {
+  interceptHtmlWrite = true;
+  const out = captured();
+  const result = await runDoctor(makeDeps(out), { output: true });
+  expect(result.exitCode).toBe(0);
+
+  const path = requireDefined(capturedWritePath);
+  const segments = path.split(sep);
+  const filename = requireDefined(segments[segments.length - 1]);
+  const parentSegment = requireDefined(segments[segments.length - 2]);
+  expect(parentSegment).toBe('Desktop');
+  expect(filename.startsWith('gateway-doctor-')).toBe(true);
+  expect(filename.endsWith('.html')).toBe(true);
+  expect(path).toBe(join(homedir(), 'Desktop', filename));
+});
+
+test('doctor with empty-string --output flag also targets the home Desktop directory', async () => {
+  interceptHtmlWrite = true;
+  const out = captured();
+  const result = await runDoctor(makeDeps(out), { output: '' });
+  expect(result.exitCode).toBe(0);
+
+  const path = requireDefined(capturedWritePath);
+  expect(path.startsWith(join(homedir(), 'Desktop') + sep)).toBe(true);
+  expect(path.endsWith('.html')).toBe(true);
+});
+
 test('doctor writes HTML report inside specified output directory', async () => {
   const out = captured();
   const reportsDir = join(dir, 'reports');
@@ -198,6 +254,105 @@ test('in dev mode without explicit profile option, runs diagnostics for both pro
     expect(joined).toContain('[dev]');
     expect(joined).toContain('[prod]');
   } finally {
+    rmSync(sentinelPath, { force: true });
+  }
+});
+
+test('in dev mode with explicit profile, applies profile-specific prefix only to non-generic findings', async () => {
+  const bootId = await readBootId();
+  const sentinelPath = join(profileRootDir(), 'DEV_MODE');
+  writeFileSync(sentinelPath, JSON.stringify({ bootId }));
+
+  try {
+    globalThis.fetch = (() =>
+      Promise.reject(new Error('unreachable'))) as unknown as typeof globalThis.fetch;
+
+    const out = captured();
+    const result = await runDoctor(
+      makeDeps(out, { serviceManager: serviceManager(false, false) }),
+      { profile: 'dev' },
+    );
+    expect(result.exitCode).toBe(0);
+
+    const joined = stripAnsi(out.lines.map((l) => l.msg).join('\n'));
+    expect(joined).toContain('[dev] The gateway is not configured');
+    expect(joined).toContain('The Nest API endpoint is unreachable');
+    expect(joined).not.toContain('[dev] The Nest API endpoint is unreachable');
+  } finally {
+    rmSync(sentinelPath, { force: true });
+  }
+});
+
+test('in dev mode without explicit profile option, deduplicates generic findings appearing in both profiles', async () => {
+  const bootId = await readBootId();
+  const sentinelPath = join(profileRootDir(), 'DEV_MODE');
+  writeFileSync(sentinelPath, JSON.stringify({ bootId }));
+
+  const origSpawn = Bun.spawn;
+  try {
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = ((args: string[], options?: object) => {
+      if (args.includes('df')) {
+        return {
+          stdout:
+            new Response(
+              'Filesystem 1K-blocks Used Available Use% Mounted on\n/dev/sda1 1000 990 10 99% /',
+            ).body ?? new ReadableStream(),
+          exited: Promise.resolve(0),
+        };
+      }
+      return origSpawn(args, options);
+    }) as unknown as typeof Bun.spawn;
+
+    const out = captured();
+    const result = await runDoctor(makeDeps(out), {});
+    expect(result.exitCode).toBe(0);
+
+    const joined = stripAnsi(out.lines.map((l) => l.msg).join('\n'));
+    expect(joined).toContain('F2');
+  } finally {
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = origSpawn;
+    rmSync(sentinelPath, { force: true });
+  }
+});
+
+test('in dev mode without explicit profile option, handles generic findings appearing only in prod profile', async () => {
+  const bootId = await readBootId();
+  const sentinelPath = join(profileRootDir(), 'DEV_MODE');
+  writeFileSync(sentinelPath, JSON.stringify({ bootId }));
+
+  const origSpawn = Bun.spawn;
+  try {
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = ((args: string[], options?: object) => {
+      if (args.includes('df')) {
+        const path = args[args.length - 1];
+        if (path && path.includes('prod')) {
+          return {
+            stdout:
+              new Response(
+                'Filesystem 1K-blocks Used Available Use% Mounted on\n/dev/sda1 1000 990 10 99% /',
+              ).body ?? new ReadableStream(),
+            exited: Promise.resolve(0),
+          };
+        }
+        return {
+          stdout:
+            new Response(
+              'Filesystem 1K-blocks Used Available Use% Mounted on\n/dev/sda1 10000000 500 9000000 5% /',
+            ).body ?? new ReadableStream(),
+          exited: Promise.resolve(0),
+        };
+      }
+      return origSpawn(args, options);
+    }) as unknown as typeof Bun.spawn;
+
+    const out = captured();
+    const result = await runDoctor(makeDeps(out), {});
+    expect(result.exitCode).toBe(0);
+
+    const joined = stripAnsi(out.lines.map((l) => l.msg).join('\n'));
+    expect(joined).toContain('F2');
+  } finally {
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = origSpawn;
     rmSync(sentinelPath, { force: true });
   }
 });

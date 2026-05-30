@@ -450,9 +450,25 @@ test('splits an oversized snapshot into multiple batches with contiguous rowid c
   }
   const file = await makeDb(rows, 'big.vscdb');
 
+  const infos: unknown[] = [];
+  const debugs: unknown[] = [];
+  const fakeLogger = {
+    info: (b: unknown, m: unknown) => {
+      infos.push({ b, m });
+    },
+    warn: () => {},
+    error: () => {},
+    debug: (b: unknown, m: unknown) => {
+      debugs.push({ b, m });
+    },
+    trace: () => {},
+    fatal: () => {},
+    child: () => fakeLogger,
+  };
   const customCtx = {
     ...ctx(buffer),
     maxDecompressedBytes: 15_000,
+    logger: fakeLogger,
   };
   const result = await collectCursorFile(file, customCtx);
   expect(result.errors).toEqual([]);
@@ -636,4 +652,22 @@ test('selectCursorSql(false) and selectCursorSql(true) are identical and query c
   expect(selectCursorSql(true)).toBe(selectCursorSql(false));
   expect(selectCursorSql(true)).toContain("key LIKE 'composerData:%'");
   expect(selectCursorSql(true)).toContain("key LIKE 'agentKv:blob:%'");
+});
+
+test('filters out invalid or empty bubbleId rows during processRows', async () => {
+  const file = await makeDb([
+    // invalid JSON
+    { key: 'bubbleId:c1:b1', value: '{invalid' },
+    // valid JSON but not object
+    { key: 'bubbleId:c1:b2', value: '"bare string"' },
+    // valid object but missing text
+    { key: 'bubbleId:c1:b3', value: '{"_v":3}' },
+    // valid object but text is not string
+    { key: 'bubbleId:c1:b4', value: '{"_v":3,"text":123}' },
+    // valid object but text is empty
+    { key: 'bubbleId:c1:b5', value: '{"_v":3,"text":"   "}' },
+  ]);
+  const result = await collectCursorFile(file, ctx(buffer));
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBe(0); // all rows filtered out!
 });

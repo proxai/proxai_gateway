@@ -22,7 +22,7 @@ import {
   BODY_TARGET_COMPRESSED_BYTES,
   BODY_TARGET_DECOMPRESSED_BYTES,
 } from 'services/contract';
-import { collectCodexRollout } from 'sources/codex';
+import { collectCodexRollout, trimCodexRecord } from 'sources/codex';
 import type { CodexCollectorContext, DiscoveredCodexRolloutFile } from 'sources/codex';
 
 let dir: string;
@@ -475,4 +475,25 @@ test('dialogue telemetry filtering, pruning, and discards', async () => {
   expect(decompressed).toContain('"base_instructions":"<trimmed>"');
   expect(decompressed).not.toContain('secret instructions');
   expect(decompressed).toContain('"dynamic_tools":[]');
+});
+
+test('trimCodexRecord returns non-object inputs verbatim', () => {
+  expect(trimCodexRecord(null)).toBeNull();
+  expect(trimCodexRecord(undefined)).toBeUndefined();
+  expect(trimCodexRecord(123)).toBe(123);
+  expect(trimCodexRecord('string')).toBe('string');
+});
+
+test('advances cursor and returns zero batches when no dialogue records are found', async () => {
+  const file = await makeFile('{"type":"other"}\n');
+  const result = await collectCodexRollout(file, ctx(buffer), '0.1.0');
+  expect(result.capturedBatches).toBe(0);
+  expect(result.errors).toEqual([]);
+  const cursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.watermarkEnd).toBeGreaterThan(0);
 });

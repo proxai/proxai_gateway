@@ -49,6 +49,65 @@ import {
   checkG3RegressionLoop,
 } from 'cli/commands/doctor/checkers/data-integrity.ts';
 
+import {
+  checkG4JournalMode,
+  checkG5BusyTimeout,
+  checkG6TransactionLockup,
+  checkG7WalCheckpointStarvation,
+  checkG8UncommittedJournalStaleLock,
+} from 'cli/commands/doctor/checkers/concurrency.ts';
+import {
+  checkB4InsecureApiKeyTransmission,
+  checkB5PermissiveConfigPermissions,
+  checkB6OverlyBroadDirectoryWatches,
+} from 'cli/commands/doctor/checkers/security.ts';
+import {
+  checkF17V8SyncEventLoopLag,
+  checkF18V8HeapExhaustion,
+  checkG10CompressionSpikes,
+} from 'cli/commands/doctor/checkers/performance.ts';
+import {
+  checkC8OutboundTlsInspection,
+  checkC9GlobalProxyMismatch,
+  checkC10DnsHijackCaptivePortal,
+  checkC11ThrottlerResetSkew,
+  checkC12ThunderingHerdJitter,
+  checkC13OutboxTimeout,
+} from 'cli/commands/doctor/checkers/network.ts';
+import {
+  checkA13SystemdRuntimeDirMissing,
+  checkA14SystemdRateLimitHit,
+  checkA15SystemdHomeEncryptedTearing,
+} from 'cli/commands/doctor/checkers/systemd.ts';
+import {
+  checkA11WindowsServiceUnquotedPath,
+  checkA12WindowsTaskSchedulerXmlCorrupt,
+} from 'cli/commands/doctor/checkers/windows.ts';
+import {
+  checkA6AbruptDaemonTermination,
+  checkA7ZombieDaemon,
+  checkA8GracefulTerminationLockup,
+  checkA9HelperProcessHealthy,
+  checkA10ThreadWatcherExhaustion,
+} from 'cli/commands/doctor/checkers/stray-daemon.ts';
+import { checkE7HomebrewRelocationDrift } from 'cli/commands/doctor/checkers/path-drift.ts';
+import {
+  checkE5UpgradeLockStale,
+  checkE6CorruptedUpgradeBinary,
+} from 'cli/commands/doctor/checkers/upgrade-lock.ts';
+import {
+  checkF8MacOsTccFDA,
+  checkF9MacOsGatekeeperTranslocation,
+  checkF10SandboxedTerminalLocks,
+  checkF11SymlinkTraversalLoop,
+  checkF12POSIXExtendedAclBlocked,
+  checkF13BrokenWindowsJunction,
+  checkF14LogRotationInodeDrift,
+  checkF15PhysicalWriteExhaustion,
+  checkF16SudoHijackOwnershipDrift,
+} from 'cli/commands/doctor/checkers/advanced-fs.ts';
+import { checkG9InconsistentSessionUuids } from 'cli/commands/doctor/checkers/data-extended.ts';
+
 const MS_PER_DAY = 86_400_000;
 
 function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
@@ -115,6 +174,68 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
     clockSkewMs: null,
     bufferDbReadable: true,
     receiptsTableReadable: true,
+    clockExtended: {
+      localTimeOffsetMinute: 0,
+      timezone: 'UTC',
+    },
+    processExtended: {
+      controlSocketExists: false,
+      controlSocketActive: false,
+      zombieProcessesDetected: false,
+      zombieProcessPids: [],
+      helperProcessHealthy: true,
+      watcherThreadLagMs: 0,
+    },
+    securityExtended: {
+      configUnescapedBackslashes: false,
+      configObsoleteKeys: [],
+      configValueConstraintsViolated: false,
+    },
+    networkExtended: {
+      tlsInspectionDetected: false,
+      tlsInspectionIssuer: null,
+      globalProxyMismatch: false,
+      dnsHijackOrCaptivePortal: false,
+    },
+    filesystemExtended: {
+      symlinkLoopDetected: false,
+      aclWriteBlocked: false,
+      brokenWindowsJunctions: [],
+      writeProbeSuccess: true,
+      writeProbeError: null,
+      sudoOwnershipDrift: false,
+      logInodeDriftDetected: false,
+    },
+    sqliteExtended: {
+      dbJournalMode: 'wal',
+      dbBusyTimeoutMs: 5000,
+      dbTransactionLockup: false,
+      dbWalCheckpointBusy: false,
+      dbWalCheckpointLogPages: 0,
+      dbWalCheckpointDonePages: 0,
+    },
+    performanceExtended: {
+      eventLoopLagMs: 0,
+      heapUsedBytes: 10 * 1024 * 1024,
+      heapTotalBytes: 20 * 1024 * 1024,
+      gcThrashingActive: false,
+      zstdCompressionCpuSpikeSec: 0,
+    },
+    upgradeExtended: {
+      upgradeLockExists: false,
+      upgradeLockStale: false,
+      upgradeRestoreStateExists: false,
+      upgradeStagedBinaryCorrupt: false,
+    },
+    windowsExtended: {
+      windowsServiceUnquotedPath: false,
+      windowsTaskSchedulerXmlCorrupt: false,
+    },
+    systemdExtended: {
+      systemdRuntimeDirMissing: false,
+      systemdRateLimitHit: false,
+      systemdHomeEncryptedTearing: false,
+    },
   };
   return { ...base, ...overrides };
 }
@@ -808,4 +929,929 @@ test('G3: regression loop above threshold', () => {
   expect(f.code).toBe('G3');
   expect(f.cause).toContain('deadbeef');
   expect(f.cause).toContain('8 regressions');
+});
+
+test('A6: abrupt daemon termination', () => {
+  expect(checkA6AbruptDaemonTermination(baseSignals({ daemonRunning: true }))).toBeNull();
+  expect(
+    checkA6AbruptDaemonTermination(
+      baseSignals({
+        daemonRunning: false,
+        sentinels: { ...baseSignals().sentinels, sessionStopped: true },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkA6AbruptDaemonTermination(
+      baseSignals({
+        daemonRunning: false,
+        sentinels: { ...baseSignals().sentinels, sessionStopped: false },
+        daemonState: { ...baseSignals().daemonState, captureLastCycleAt: '2026-05-28' },
+      }),
+    ),
+  );
+  expect(f.code).toBe('A6');
+});
+
+test('A7: zombie daemon', () => {
+  expect(
+    checkA7ZombieDaemon(
+      baseSignals({
+        processExtended: { ...baseSignals().processExtended, zombieProcessesDetected: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkA7ZombieDaemon(
+      baseSignals({
+        processExtended: { ...baseSignals().processExtended, zombieProcessesDetected: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('A7');
+});
+
+test('A8: graceful termination lockup', () => {
+  expect(checkA8GracefulTerminationLockup(baseSignals({ daemonRunning: false }))).toBeNull();
+  expect(
+    checkA8GracefulTerminationLockup(
+      baseSignals({
+        daemonRunning: true,
+        processExtended: { ...baseSignals().processExtended, controlSocketExists: false },
+      }),
+    ),
+  ).toBeNull();
+  expect(
+    checkA8GracefulTerminationLockup(
+      baseSignals({
+        daemonRunning: true,
+        processExtended: {
+          ...baseSignals().processExtended,
+          controlSocketExists: true,
+          controlSocketActive: true,
+        },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkA8GracefulTerminationLockup(
+      baseSignals({
+        daemonRunning: true,
+        processExtended: {
+          ...baseSignals().processExtended,
+          controlSocketExists: true,
+          controlSocketActive: false,
+        },
+      }),
+    ),
+  );
+  expect(f.code).toBe('A8');
+});
+
+test('A9: helper process healthy', () => {
+  expect(
+    checkA9HelperProcessHealthy(
+      baseSignals({
+        processExtended: { ...baseSignals().processExtended, helperProcessHealthy: true },
+      }),
+    ),
+  ).toBeNull();
+  expect(
+    checkA9HelperProcessHealthy(
+      baseSignals({
+        processExtended: { ...baseSignals().processExtended, helperProcessHealthy: null },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkA9HelperProcessHealthy(
+      baseSignals({
+        processExtended: { ...baseSignals().processExtended, helperProcessHealthy: false },
+      }),
+    ),
+  );
+  expect(f.code).toBe('A9');
+});
+
+test('A10: thread watcher exhaustion', () => {
+  expect(
+    checkA10ThreadWatcherExhaustion(
+      baseSignals({
+        processExtended: { ...baseSignals().processExtended, watcherThreadLagMs: 100 },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkA10ThreadWatcherExhaustion(
+      baseSignals({
+        processExtended: { ...baseSignals().processExtended, watcherThreadLagMs: 600 },
+      }),
+    ),
+  );
+  expect(f.code).toBe('A10');
+});
+
+test('A11: windows service unquoted path', () => {
+  expect(
+    checkA11WindowsServiceUnquotedPath(
+      baseSignals({
+        windowsExtended: { ...baseSignals().windowsExtended, windowsServiceUnquotedPath: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkA11WindowsServiceUnquotedPath(
+      baseSignals({
+        windowsExtended: { ...baseSignals().windowsExtended, windowsServiceUnquotedPath: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('A11');
+});
+
+test('A12: windows task scheduler xml corrupt', () => {
+  expect(
+    checkA12WindowsTaskSchedulerXmlCorrupt(
+      baseSignals({
+        windowsExtended: {
+          ...baseSignals().windowsExtended,
+          windowsTaskSchedulerXmlCorrupt: false,
+        },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkA12WindowsTaskSchedulerXmlCorrupt(
+      baseSignals({
+        windowsExtended: { ...baseSignals().windowsExtended, windowsTaskSchedulerXmlCorrupt: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('A12');
+});
+
+test('A13: systemd runtime dir missing', () => {
+  expect(
+    checkA13SystemdRuntimeDirMissing(
+      baseSignals({
+        systemdExtended: { ...baseSignals().systemdExtended, systemdRuntimeDirMissing: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkA13SystemdRuntimeDirMissing(
+      baseSignals({
+        systemdExtended: { ...baseSignals().systemdExtended, systemdRuntimeDirMissing: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('A13');
+});
+
+test('A14: systemd rate limit hit', () => {
+  expect(
+    checkA14SystemdRateLimitHit(
+      baseSignals({
+        systemdExtended: { ...baseSignals().systemdExtended, systemdRateLimitHit: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkA14SystemdRateLimitHit(
+      baseSignals({
+        systemdExtended: { ...baseSignals().systemdExtended, systemdRateLimitHit: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('A14');
+});
+
+test('A15: systemd home encrypted tearing', () => {
+  expect(
+    checkA15SystemdHomeEncryptedTearing(
+      baseSignals({
+        systemdExtended: { ...baseSignals().systemdExtended, systemdHomeEncryptedTearing: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkA15SystemdHomeEncryptedTearing(
+      baseSignals({
+        systemdExtended: { ...baseSignals().systemdExtended, systemdHomeEncryptedTearing: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('A15');
+});
+
+test('B4: insecure api key transmission', () => {
+  expect(
+    checkB4InsecureApiKeyTransmission(
+      baseSignals({
+        securityExtended: { ...baseSignals().securityExtended, configUnescapedBackslashes: false },
+        networkExtended: { ...baseSignals().networkExtended, tlsInspectionDetected: false },
+      }),
+    ),
+  ).toBeNull();
+  expect(
+    checkB4InsecureApiKeyTransmission(
+      baseSignals({
+        securityExtended: { ...baseSignals().securityExtended, configUnescapedBackslashes: true },
+        networkExtended: { ...baseSignals().networkExtended, tlsInspectionDetected: false },
+      }),
+    ),
+  ).toBeNull();
+  const originalVal = process.env['NODE_TLS_REJECT_UNAUTHORIZED'];
+  try {
+    process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
+    const f = requireDefined(
+      checkB4InsecureApiKeyTransmission(
+        baseSignals({
+          securityExtended: { ...baseSignals().securityExtended, configUnescapedBackslashes: true },
+        }),
+      ),
+    );
+    expect(f.code).toBe('B4');
+  } finally {
+    process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = originalVal;
+  }
+});
+
+test('B5: permissive config permissions', () => {
+  expect(checkB5PermissiveConfigPermissions(baseSignals({ configExists: false }))).toBeNull();
+  expect(
+    checkB5PermissiveConfigPermissions(
+      baseSignals({
+        configExists: true,
+        securityExtended: {
+          ...baseSignals().securityExtended,
+          configValueConstraintsViolated: false,
+        },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkB5PermissiveConfigPermissions(
+      baseSignals({
+        configExists: true,
+        securityExtended: {
+          ...baseSignals().securityExtended,
+          configValueConstraintsViolated: true,
+        },
+      }),
+    ),
+  );
+  expect(f.code).toBe('B5');
+});
+
+test('B6: overly broad directory watches', () => {
+  expect(
+    checkB6OverlyBroadDirectoryWatches(
+      baseSignals({
+        securityExtended: { ...baseSignals().securityExtended, configObsoleteKeys: [] },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkB6OverlyBroadDirectoryWatches(
+      baseSignals({
+        securityExtended: { ...baseSignals().securityExtended, configObsoleteKeys: ['broad_key'] },
+      }),
+    ),
+  );
+  expect(f.code).toBe('B6');
+});
+
+test('C8: outbound tls inspection', () => {
+  expect(
+    checkC8OutboundTlsInspection(
+      baseSignals({
+        networkExtended: { ...baseSignals().networkExtended, tlsInspectionDetected: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkC8OutboundTlsInspection(
+      baseSignals({
+        networkExtended: { ...baseSignals().networkExtended, tlsInspectionDetected: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('C8');
+});
+
+test('C9: global proxy mismatch', () => {
+  expect(
+    checkC9GlobalProxyMismatch(
+      baseSignals({
+        networkExtended: { ...baseSignals().networkExtended, globalProxyMismatch: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkC9GlobalProxyMismatch(
+      baseSignals({
+        networkExtended: { ...baseSignals().networkExtended, globalProxyMismatch: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('C9');
+});
+
+test('C10: dns hijack captive portal', () => {
+  expect(
+    checkC10DnsHijackCaptivePortal(
+      baseSignals({
+        networkExtended: { ...baseSignals().networkExtended, dnsHijackOrCaptivePortal: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkC10DnsHijackCaptivePortal(
+      baseSignals({
+        networkExtended: { ...baseSignals().networkExtended, dnsHijackOrCaptivePortal: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('C10');
+});
+
+test('C11: throttler reset skew', () => {
+  expect(checkC11ThrottlerResetSkew(baseSignals({ clockSkewMs: null }))).toBeNull();
+  expect(checkC11ThrottlerResetSkew(baseSignals({ clockSkewMs: 1000 }))).toBeNull();
+  const f = requireDefined(checkC11ThrottlerResetSkew(baseSignals({ clockSkewMs: 40000 })));
+  expect(f.code).toBe('C11');
+});
+
+test('C12: thundering herd jitter', () => {
+  expect(
+    checkC12ThunderingHerdJitter(
+      baseSignals({ resyncEvents: { ...baseSignals().resyncEvents, regressionLoops: [] } }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkC12ThunderingHerdJitter(
+      baseSignals({
+        resyncEvents: {
+          ...baseSignals().resyncEvents,
+          regressionLoops: [{ sourcePathHash: 'h', countInLastHour: 6 }],
+        },
+      }),
+    ),
+  );
+  expect(f.code).toBe('C12');
+});
+
+test('C13: outbox timeout', () => {
+  expect(
+    checkC13OutboxTimeout(
+      baseSignals({ recentEvents: { ...baseSignals().recentEvents, retriableCount: 2 } }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkC13OutboxTimeout(
+      baseSignals({ recentEvents: { ...baseSignals().recentEvents, retriableCount: 15 } }),
+    ),
+  );
+  expect(f.code).toBe('C13');
+});
+
+test('E5: upgrade lock stale', () => {
+  expect(
+    checkE5UpgradeLockStale(
+      baseSignals({
+        upgradeExtended: { ...baseSignals().upgradeExtended, upgradeLockExists: false },
+      }),
+    ),
+  ).toBeNull();
+  expect(
+    checkE5UpgradeLockStale(
+      baseSignals({
+        upgradeExtended: {
+          ...baseSignals().upgradeExtended,
+          upgradeLockExists: true,
+          upgradeLockStale: false,
+        },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkE5UpgradeLockStale(
+      baseSignals({
+        upgradeExtended: {
+          ...baseSignals().upgradeExtended,
+          upgradeLockExists: true,
+          upgradeLockStale: true,
+        },
+      }),
+    ),
+  );
+  expect(f.code).toBe('E5');
+});
+
+test('E6: corrupted upgrade binary', () => {
+  expect(
+    checkE6CorruptedUpgradeBinary(
+      baseSignals({
+        upgradeExtended: { ...baseSignals().upgradeExtended, upgradeStagedBinaryCorrupt: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkE6CorruptedUpgradeBinary(
+      baseSignals({
+        upgradeExtended: { ...baseSignals().upgradeExtended, upgradeStagedBinaryCorrupt: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('E6');
+});
+
+test('E7: homebrew relocation drift', () => {
+  expect(checkE7HomebrewRelocationDrift(baseSignals({ platform: 'linux' }))).toBeNull();
+  expect(
+    checkE7HomebrewRelocationDrift(baseSignals({ platform: 'darwin', macOsQuarantineXattr: null })),
+  ).toBeNull();
+  const originalArch = process.arch;
+
+  try {
+    Object.defineProperty(process, 'arch', { value: 'arm64', configurable: true });
+    expect(
+      checkE7HomebrewRelocationDrift(
+        baseSignals({ platform: 'darwin', macOsQuarantineXattr: false }),
+      ),
+    ).toBeNull();
+  } finally {
+    Object.defineProperty(process, 'arch', { value: originalArch, configurable: true });
+  }
+
+  try {
+    Object.defineProperty(process, 'arch', { value: 'x64', configurable: true });
+    expect(
+      checkE7HomebrewRelocationDrift(
+        baseSignals({
+          platform: 'darwin',
+          macOsQuarantineXattr: false,
+          filesystem: { ...baseSignals().filesystem, configDirWritable: false },
+        }),
+      ),
+    ).toBeNull();
+  } finally {
+    Object.defineProperty(process, 'arch', { value: originalArch, configurable: true });
+  }
+
+  try {
+    Object.defineProperty(process, 'arch', { value: 'x64', configurable: true });
+    const f = requireDefined(
+      checkE7HomebrewRelocationDrift(
+        baseSignals({
+          platform: 'darwin',
+          macOsQuarantineXattr: false,
+          filesystem: { ...baseSignals().filesystem, configDirWritable: true },
+        }),
+      ),
+    );
+    expect(f.code).toBe('E7');
+  } finally {
+    Object.defineProperty(process, 'arch', { value: originalArch, configurable: true });
+  }
+});
+
+test('F8: macOS TCC FDA check', () => {
+  expect(checkF8MacOsTccFDA(baseSignals({ platform: 'linux' }))).toBeNull();
+  expect(
+    checkF8MacOsTccFDA(
+      baseSignals({
+        platform: 'darwin',
+        filesystem: { ...baseSignals().filesystem, configDirWritable: true },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkF8MacOsTccFDA(
+      baseSignals({
+        platform: 'darwin',
+        filesystem: { ...baseSignals().filesystem, configDirWritable: false },
+      }),
+    ),
+  );
+  expect(f.code).toBe('F8');
+});
+
+test('F9: macOS Gatekeeper translocation', () => {
+  expect(checkF9MacOsGatekeeperTranslocation(baseSignals({ platform: 'linux' }))).toBeNull();
+  expect(
+    checkF9MacOsGatekeeperTranslocation(
+      baseSignals({ platform: 'darwin', macOsQuarantineXattr: false }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkF9MacOsGatekeeperTranslocation(
+      baseSignals({ platform: 'darwin', macOsQuarantineXattr: true }),
+    ),
+  );
+  expect(f.code).toBe('F9');
+});
+
+test('F10: macOS sandboxed terminal locks', () => {
+  expect(checkF10SandboxedTerminalLocks(baseSignals({ platform: 'linux' }))).toBeNull();
+  expect(
+    checkF10SandboxedTerminalLocks(
+      baseSignals({
+        platform: 'darwin',
+        filesystem: { ...baseSignals().filesystem, configDirWritable: true },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkF10SandboxedTerminalLocks(
+      baseSignals({
+        platform: 'darwin',
+        filesystem: { ...baseSignals().filesystem, configDirWritable: false },
+      }),
+    ),
+  );
+  expect(f.code).toBe('F10');
+});
+
+test('F11: symlink traversal loop', () => {
+  expect(
+    checkF11SymlinkTraversalLoop(
+      baseSignals({
+        filesystemExtended: { ...baseSignals().filesystemExtended, symlinkLoopDetected: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkF11SymlinkTraversalLoop(
+      baseSignals({
+        filesystemExtended: { ...baseSignals().filesystemExtended, symlinkLoopDetected: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('F11');
+});
+
+test('F12: POSIX extended ACL blocked', () => {
+  expect(
+    checkF12POSIXExtendedAclBlocked(
+      baseSignals({
+        filesystemExtended: { ...baseSignals().filesystemExtended, aclWriteBlocked: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkF12POSIXExtendedAclBlocked(
+      baseSignals({
+        filesystemExtended: { ...baseSignals().filesystemExtended, aclWriteBlocked: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('F12');
+});
+
+test('F13: broken windows junction', () => {
+  expect(
+    checkF13BrokenWindowsJunction(
+      baseSignals({
+        filesystemExtended: { ...baseSignals().filesystemExtended, brokenWindowsJunctions: [] },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkF13BrokenWindowsJunction(
+      baseSignals({
+        filesystemExtended: {
+          ...baseSignals().filesystemExtended,
+          brokenWindowsJunctions: ['junc'],
+        },
+      }),
+    ),
+  );
+  expect(f.code).toBe('F13');
+});
+
+test('F14: log rotation inode drift', () => {
+  expect(
+    checkF14LogRotationInodeDrift(
+      baseSignals({
+        filesystemExtended: { ...baseSignals().filesystemExtended, logInodeDriftDetected: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkF14LogRotationInodeDrift(
+      baseSignals({
+        filesystemExtended: { ...baseSignals().filesystemExtended, logInodeDriftDetected: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('F14');
+});
+
+test('F15: physical write exhaustion', () => {
+  expect(
+    checkF15PhysicalWriteExhaustion(
+      baseSignals({
+        filesystemExtended: { ...baseSignals().filesystemExtended, writeProbeSuccess: true },
+      }),
+    ),
+  ).toBeNull();
+  expect(
+    checkF15PhysicalWriteExhaustion(
+      baseSignals({
+        filesystemExtended: { ...baseSignals().filesystemExtended, writeProbeSuccess: false },
+        filesystem: { ...baseSignals().filesystem, configDirWritable: false },
+      }),
+    ),
+  ).toBeNull();
+  const f1 = requireDefined(
+    checkF15PhysicalWriteExhaustion(
+      baseSignals({
+        filesystemExtended: {
+          ...baseSignals().filesystemExtended,
+          writeProbeSuccess: false,
+          writeProbeError: 'EROFS',
+        },
+        filesystem: { ...baseSignals().filesystem, configDirWritable: true },
+      }),
+    ),
+  );
+  expect(f1.code).toBe('F15');
+
+  const f2 = requireDefined(
+    checkF15PhysicalWriteExhaustion(
+      baseSignals({
+        filesystemExtended: {
+          ...baseSignals().filesystemExtended,
+          writeProbeSuccess: false,
+          writeProbeError: 'ENOSPC',
+        },
+        filesystem: { ...baseSignals().filesystem, configDirWritable: true },
+      }),
+    ),
+  );
+  expect(f2.code).toBe('F15');
+  expect(f2.cause).toContain('inodes');
+
+  const f3 = requireDefined(
+    checkF15PhysicalWriteExhaustion(
+      baseSignals({
+        filesystemExtended: {
+          ...baseSignals().filesystemExtended,
+          writeProbeSuccess: false,
+          writeProbeError: 'EIO',
+        },
+        filesystem: { ...baseSignals().filesystem, configDirWritable: true },
+      }),
+    ),
+  );
+  expect(f3.code).toBe('F15');
+  expect(f3.cause).toContain('I/O exhaustion');
+});
+
+test('F16: sudo hijack ownership drift', () => {
+  expect(
+    checkF16SudoHijackOwnershipDrift(
+      baseSignals({
+        filesystemExtended: { ...baseSignals().filesystemExtended, sudoOwnershipDrift: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkF16SudoHijackOwnershipDrift(
+      baseSignals({
+        filesystemExtended: { ...baseSignals().filesystemExtended, sudoOwnershipDrift: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('F16');
+});
+
+test('F17: event loop lag', () => {
+  expect(
+    checkF17V8SyncEventLoopLag(
+      baseSignals({
+        performanceExtended: { ...baseSignals().performanceExtended, eventLoopLagMs: 50 },
+      }),
+    ),
+  ).toBeNull();
+  expect(
+    checkF17V8SyncEventLoopLag(
+      baseSignals({
+        performanceExtended: { ...baseSignals().performanceExtended, eventLoopLagMs: null },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkF17V8SyncEventLoopLag(
+      baseSignals({
+        performanceExtended: { ...baseSignals().performanceExtended, eventLoopLagMs: 120 },
+      }),
+    ),
+  );
+  expect(f.code).toBe('F17');
+});
+
+test('F18: V8 heap exhaustion', () => {
+  expect(
+    checkF18V8HeapExhaustion(
+      baseSignals({
+        performanceExtended: {
+          ...baseSignals().performanceExtended,
+          heapUsedBytes: 5,
+          heapTotalBytes: 10,
+        },
+      }),
+    ),
+  ).toBeNull();
+  expect(
+    checkF18V8HeapExhaustion(
+      baseSignals({
+        performanceExtended: { ...baseSignals().performanceExtended, heapUsedBytes: null },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkF18V8HeapExhaustion(
+      baseSignals({
+        performanceExtended: {
+          ...baseSignals().performanceExtended,
+          heapUsedBytes: 9,
+          heapTotalBytes: 10,
+        },
+      }),
+    ),
+  );
+  expect(f.code).toBe('F18');
+});
+
+test('G4: journal mode', () => {
+  expect(checkG4JournalMode(baseSignals({ bufferDbReadable: false }))).toBeNull();
+  expect(
+    checkG4JournalMode(
+      baseSignals({
+        bufferDbReadable: true,
+        sqliteExtended: { ...baseSignals().sqliteExtended, dbJournalMode: 'wal' },
+      }),
+    ),
+  ).toBeNull();
+  expect(
+    checkG4JournalMode(
+      baseSignals({
+        bufferDbReadable: true,
+        sqliteExtended: { ...baseSignals().sqliteExtended, dbJournalMode: 'WAL' },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkG4JournalMode(
+      baseSignals({
+        bufferDbReadable: true,
+        sqliteExtended: { ...baseSignals().sqliteExtended, dbJournalMode: 'delete' },
+      }),
+    ),
+  );
+  expect(f.code).toBe('G4');
+});
+
+test('G5: busy timeout', () => {
+  expect(checkG5BusyTimeout(baseSignals({ bufferDbReadable: false }))).toBeNull();
+  expect(
+    checkG5BusyTimeout(
+      baseSignals({
+        bufferDbReadable: true,
+        sqliteExtended: { ...baseSignals().sqliteExtended, dbBusyTimeoutMs: 3000 },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkG5BusyTimeout(
+      baseSignals({
+        bufferDbReadable: true,
+        sqliteExtended: { ...baseSignals().sqliteExtended, dbBusyTimeoutMs: 500 },
+      }),
+    ),
+  );
+  expect(f.code).toBe('G5');
+});
+
+test('G6: transaction lockup', () => {
+  expect(checkG6TransactionLockup(baseSignals({ bufferDbReadable: false }))).toBeNull();
+  expect(
+    checkG6TransactionLockup(baseSignals({ bufferDbReadable: true, daemonRunning: false })),
+  ).toBeNull();
+  expect(
+    checkG6TransactionLockup(
+      baseSignals({
+        bufferDbReadable: true,
+        daemonRunning: true,
+        sqliteExtended: { ...baseSignals().sqliteExtended, dbTransactionLockup: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkG6TransactionLockup(
+      baseSignals({
+        bufferDbReadable: true,
+        daemonRunning: true,
+        sqliteExtended: { ...baseSignals().sqliteExtended, dbTransactionLockup: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('G6');
+});
+
+test('G7: WAL checkpoint starvation', () => {
+  expect(checkG7WalCheckpointStarvation(baseSignals({ bufferDbReadable: false }))).toBeNull();
+  expect(
+    checkG7WalCheckpointStarvation(
+      baseSignals({
+        bufferDbReadable: true,
+        sqliteExtended: { ...baseSignals().sqliteExtended, dbWalCheckpointBusy: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkG7WalCheckpointStarvation(
+      baseSignals({
+        bufferDbReadable: true,
+        sqliteExtended: { ...baseSignals().sqliteExtended, dbWalCheckpointBusy: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('G7');
+});
+
+test('G8: uncommitted journal stale lock', () => {
+  expect(checkG8UncommittedJournalStaleLock(baseSignals({ daemonRunning: true }))).toBeNull();
+  expect(
+    checkG8UncommittedJournalStaleLock(
+      baseSignals({
+        daemonRunning: false,
+        processExtended: { ...baseSignals().processExtended, zombieProcessesDetected: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkG8UncommittedJournalStaleLock(
+      baseSignals({
+        daemonRunning: false,
+        processExtended: { ...baseSignals().processExtended, zombieProcessesDetected: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('G8');
+});
+
+test('G9: inconsistent session UUIDs', () => {
+  expect(
+    checkG9InconsistentSessionUuids(
+      baseSignals({
+        sqliteExtended: { ...baseSignals().sqliteExtended, dbTransactionLockup: false },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkG9InconsistentSessionUuids(
+      baseSignals({
+        sqliteExtended: { ...baseSignals().sqliteExtended, dbTransactionLockup: true },
+      }),
+    ),
+  );
+  expect(f.code).toBe('G9');
+});
+
+test('G10: compression spikes', () => {
+  expect(
+    checkG10CompressionSpikes(
+      baseSignals({
+        performanceExtended: {
+          ...baseSignals().performanceExtended,
+          zstdCompressionCpuSpikeSec: 0.5,
+        },
+      }),
+    ),
+  ).toBeNull();
+  expect(
+    checkG10CompressionSpikes(
+      baseSignals({
+        performanceExtended: {
+          ...baseSignals().performanceExtended,
+          zstdCompressionCpuSpikeSec: null,
+        },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkG10CompressionSpikes(
+      baseSignals({
+        performanceExtended: {
+          ...baseSignals().performanceExtended,
+          zstdCompressionCpuSpikeSec: 2.0,
+        },
+      }),
+    ),
+  );
+  expect(f.code).toBe('G10');
 });

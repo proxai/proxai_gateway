@@ -1,4 +1,5 @@
-import { expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
+import * as inquirerReal from '@inquirer/prompts';
 
 import { UserAbortedError, requireDefined } from 'core/utils';
 import { inquirerPrompts, scriptedPrompts } from 'cli/prompts.ts';
@@ -221,4 +222,89 @@ test('inquirerPrompts.askApiKey wires up to @inquirer/prompts and accepts a cust
   expect(requireDefined(inputCalls[1]).message).toBe(customMessage);
 
   mock.restore();
+});
+
+test('inquirerPrompts.confirmReplace wires up to @inquirer/prompts confirm with default false', async () => {
+  const calls: { message: string; default?: boolean }[] = [];
+  await mock.module('@inquirer/prompts', () => ({
+    confirm: (opts: { message: string; default?: boolean }) => {
+      calls.push(opts);
+      return Promise.resolve(false);
+    },
+    input: () => Promise.resolve('unused'),
+  }));
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  expect(await fresh().confirmReplace('replace?')).toBe(false);
+  expect(calls).toHaveLength(1);
+  expect(requireDefined(calls[0]).message).toBe('replace?');
+  expect(requireDefined(calls[0]).default).toBe(false);
+  mock.restore();
+});
+
+test('inquirerPrompts.askProfile wires up to @inquirer/prompts select', async () => {
+  const calls: { message: string; choices: { name: string; value: string }[] }[] = [];
+  await mock.module('@inquirer/prompts', () => ({
+    select: (opts: { message: string; choices: { name: string; value: string }[] }) => {
+      calls.push(opts);
+      return Promise.resolve('dev');
+    },
+    input: () => Promise.resolve('unused'),
+  }));
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  expect(await fresh().askProfile()).toBe('dev');
+  expect(calls).toHaveLength(1);
+  expect(requireDefined(calls[0]).message).toBe('Select the environment profile to configure:');
+  mock.restore();
+});
+
+test('scriptedPrompts.confirmReplace returns configured answer or throws', async () => {
+  const yes = scriptedPrompts({ replace: true });
+  expect(await yes.confirmReplace('replace?')).toBe(true);
+  const no = scriptedPrompts({ replace: false });
+  expect(await no.confirmReplace('replace?')).toBe(false);
+  const empty = scriptedPrompts({});
+  await expect(empty.confirmReplace('replace?')).rejects.toThrow('scripted prompt');
+});
+
+test('scriptedPrompts.askProfile returns configured answer or throws', async () => {
+  const dev = scriptedPrompts({ profile: 'dev' });
+  expect(await dev.askProfile()).toBe('dev');
+  const prod = scriptedPrompts({ profile: 'prod' });
+  expect(await prod.askProfile()).toBe('prod');
+  const empty = scriptedPrompts({});
+  await expect(empty.askProfile()).rejects.toThrow('scripted prompt');
+});
+
+test('inquirerPrompts.askApiKey detects abort by message text with "user force"', async () => {
+  await mock.module('@inquirer/prompts', () => ({
+    confirm: () => Promise.resolve(true),
+    input: () => {
+      throw new Error('user force killed it');
+    },
+  }));
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  await expect(fresh().askApiKey()).rejects.toBeInstanceOf(UserAbortedError);
+  mock.restore();
+});
+
+test('inquirerPrompts.confirmPhrase validator permits exit shortcut phrases', async () => {
+  const inputCalls: { message: string; validate?: (v: string) => boolean | string }[] = [];
+  await mock.module('@inquirer/prompts', () => ({
+    confirm: () => Promise.resolve(true),
+    input: (opts: { message: string; validate?: (v: string) => boolean | string }) => {
+      inputCalls.push(opts);
+      return Promise.resolve('uninstall');
+    },
+  }));
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  await fresh().confirmPhrase('Type uninstall:', 'uninstall');
+  const validate = requireDefined(requireDefined(inputCalls[0]).validate);
+  expect(validate('q')).toBe(true);
+  expect(validate('abort')).toBe(true);
+  expect(validate('esc')).toBe(true);
+  mock.restore();
+});
+
+afterAll(() => {
+  mock.module('@inquirer/prompts', () => inquirerReal);
 });

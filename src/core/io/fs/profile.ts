@@ -12,6 +12,9 @@ const PROD_NEST_BASE_URL = 'https://proxainest-production.up.railway.app';
 const DEV_NEST_BASE_URL = 'http://localhost:3001';
 
 export function profileRootDir(): string {
+  if (process.env['PROXAI_TEST_PROFILE_ROOT']) {
+    return process.env['PROXAI_TEST_PROFILE_ROOT'];
+  }
   switch (process.platform) {
     case 'darwin':
     case 'linux':
@@ -28,6 +31,9 @@ export function profileRootDir(): string {
 }
 
 export function profileLogDirRoot(): string {
+  if (process.env['PROXAI_TEST_PROFILE_ROOT']) {
+    return process.env['PROXAI_TEST_PROFILE_ROOT'];
+  }
   switch (process.platform) {
     case 'darwin':
       return join(homedir(), 'Library', 'Logs', ORG_NAME, APP_NAME);

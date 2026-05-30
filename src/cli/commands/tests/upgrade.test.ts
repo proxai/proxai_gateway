@@ -1,10 +1,29 @@
 import { asTimerSetter } from 'core/utils';
 import type { FetchFn } from 'core/utils';
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+
+let statSyncThrowPath: string | null = null;
+
+mock.module('node:fs', () => {
+  const actual: typeof import('node:fs') = import.meta.require('node:fs');
+  return {
+    ...actual,
+    existsSync: (path: string): boolean => {
+      if (statSyncThrowPath !== null && path === statSyncThrowPath) return true;
+      return actual.existsSync(path);
+    },
+    statSync: (path: string, options?: Parameters<typeof actual.statSync>[1]) => {
+      if (statSyncThrowPath !== null && path === statSyncThrowPath) {
+        throw new Error('Mock statSync error');
+      }
+      return actual.statSync(path, options);
+    },
+  };
+});
 
 import { compareVersions, runUpgrade } from 'cli/commands/upgrade.ts';
 import { captureOutput } from 'cli/output.ts';
@@ -17,6 +36,12 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rmRecursive(dir);
+  statSyncThrowPath = null;
+});
+
+afterAll(async () => {
+  const fsReal = await import('node:fs');
+  mock.module('node:fs', () => fsReal);
 });
 
 interface ReleaseAsset {
@@ -586,4 +611,77 @@ test('local build path upgrade resolves repository root correctly', async () => 
 
   Bun.spawn = origSpawn;
   process.argv = origArgv;
+});
+
+test('local build path upgrade reports failure on non-zero exit code', async () => {
+  const origSpawn = Bun.spawn;
+  Bun.spawn = (() => {
+    return { exited: Promise.resolve(42) } as unknown as ReturnType<typeof Bun.spawn>;
+  }) as unknown as typeof Bun.spawn;
+  const out = captureOutput();
+  const result = await runUpgrade({
+    output: out,
+    currentVersion: '2026.5.7',
+    binaryPath: '/workspace/dist/darwin-arm64/proxai-gateway',
+    platform: 'darwin',
+  });
+  expect(result.exitCode).toBe(1);
+  expect(
+    out.lines.some(
+      (l) => l.level === 'error' && l.msg.includes('Local rebuild failed with exit code 42'),
+    ),
+  ).toBe(true);
+  Bun.spawn = origSpawn;
+});
+
+test('compareVersions handles non-finite or invalid version segments correctly', () => {
+  expect(compareVersions('2026.abc', '2026.5')).toBe(-1); // abc parses to NaN -> 0, which is < 5
+  expect(compareVersions('2026.5.abc', '2026.5')).toBe(0); // abc parses to NaN -> 0, matches pb[2] ?? 0
+});
+
+test('local build path upgrade handles repository root not found', async () => {
+  const origSpawn = Bun.spawn;
+  Bun.spawn = (() => {
+    return { exited: Promise.resolve(0) } as unknown as ReturnType<typeof Bun.spawn>;
+  }) as unknown as typeof Bun.spawn;
+  const out = captureOutput();
+  const result = await runUpgrade({
+    output: out,
+    currentVersion: '2026.5.7',
+    binaryPath: '/non/existent/src/main.ts',
+    platform: 'darwin',
+  });
+  expect(result.exitCode).toBe(0);
+  Bun.spawn = origSpawn;
+});
+
+test('local build repo-root finder falls into dirname branch when statSync throws', async () => {
+  const origSpawn = Bun.spawn;
+  Bun.spawn = (() => {
+    return { exited: Promise.resolve(0) } as unknown as ReturnType<typeof Bun.spawn>;
+  }) as unknown as typeof Bun.spawn;
+  const origArgv = process.argv;
+  process.argv = ['/usr/local/bin/bun', '/outside/of/any/repo/script.ts'];
+
+  const binaryPath = join(dir, 'src', 'main.ts');
+  statSyncThrowPath = resolve(binaryPath);
+
+  const out = captureOutput();
+  try {
+    const result = await runUpgrade({
+      output: out,
+      currentVersion: '2026.5.7',
+      binaryPath,
+      platform: 'darwin',
+    });
+    expect(result.exitCode).toBe(0);
+    expect(
+      out.lines.some(
+        (l) => l.level === 'info' && l.msg.includes('Local development build detected'),
+      ),
+    ).toBe(true);
+  } finally {
+    Bun.spawn = origSpawn;
+    process.argv = origArgv;
+  }
 });

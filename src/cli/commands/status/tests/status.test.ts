@@ -656,3 +656,31 @@ test('watch mode stacks production and development profiles when isDevMode is tr
   expect(all).toContain('[dev]');
   expect(all).toContain('DEV MODE');
 });
+
+import { gatherStatusSnapshot } from 'cli/commands/status/gather-snapshot.ts';
+import type { ServiceManager } from 'cli/service-manager';
+
+test('gatherStatusSnapshot handles loadConfig error and serviceManager error cleanly', async () => {
+  const d = makeDeps({
+    loadConfig: () => Promise.reject(new Error('fail')),
+    serviceManager: {
+      ensureRegistered: async () => {},
+      start: async () => {},
+      stop: async () => {},
+      restart: async () => {},
+      unregister: async () => {},
+      isRegistered: async () => true,
+      isRunning: async () => {
+        throw new Error('fail');
+      },
+      runtimeInfo: async () => {
+        throw new Error('fail');
+      },
+    } satisfies ServiceManager,
+  });
+
+  const snapshot = await gatherStatusSnapshot(d, buffer);
+  expect(snapshot.runtime.isRunning).toBe(false);
+  expect(snapshot.runtime.pid).toBeNull();
+  expect(snapshot.runtime.startedAt).toBeNull();
+});

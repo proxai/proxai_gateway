@@ -78,9 +78,6 @@ function isPromptRecord(
   parsed: unknown,
   sourceApp: 'claude-code' | 'gemini-cli' | 'codex' | 'claude-desktop',
 ): boolean {
-  if (parsed === null || typeof parsed !== 'object') {
-    return false;
-  }
   const rec = parsed as Record<string, unknown>;
   if (sourceApp === 'codex') {
     if (rec.type !== 'response_item') {
@@ -142,10 +139,8 @@ async function analyzeJsonlLogFile(
   const sizer = createCompressedSizer();
   try {
     const file = Bun.file(filePath);
-    const stream = file.stream();
-    const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    let partial = '';
+    const content = await file.text();
+    const lines = content.split('\n');
     const processLine = (line: string) => {
       if (line.trim().length === 0) return;
       totalLines++;
@@ -196,18 +191,8 @@ async function analyzeJsonlLogFile(
         }
       }
     };
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = (partial + chunk).split('\n');
-      partial = lines.pop() ?? '';
-      for (const line of lines) {
-        processLine(line);
-      }
-    }
-    if (partial.length > 0) {
-      processLine(partial);
+    for (const line of lines) {
+      processLine(line);
     }
   } catch (err) {
     error = err instanceof Error ? err.message : String(err);
@@ -309,9 +294,7 @@ export async function handleInspect(
       telemetryCompressedBytes += telComp;
       telemetryRecordCount += telCount;
       promptCount += telPrompts;
-      if (error !== null) {
-        errors.push(`${f.sourcePath}: ${error}`);
-      }
+      if (error !== null) errors.push(`${f.sourcePath}: ${error}`);
     }
   } else if (sourceName === 'cursor') {
     const baseDir = options.baseDir ?? defaultCursorUserRoot();

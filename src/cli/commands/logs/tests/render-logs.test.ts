@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import { renderLogsFrame, renderLogsJson } from 'cli/commands/logs/render-logs.ts';
+import { renderLogsFrame, renderLogsJson, shortPath } from 'cli/commands/logs/render-logs.ts';
 import type {
   FailedRecord,
   LogsCommandDeps,
@@ -432,4 +432,60 @@ test('renderLogsFrame renders file paths correctly for dev users on narrow viewp
       writable: true,
     });
   }
+});
+
+test('shortPath: handles edge cases', () => {
+  expect(shortPath('abcdef', 0)).toBe('');
+  expect(shortPath('abcdef', -5)).toBe('');
+  expect(shortPath('abcdef', 3)).toBe('ab…');
+  expect(shortPath('abcdef', 5)).toBe('abcd…');
+  expect(shortPath('abc', 5)).toBe('abc');
+});
+
+test('renderLogsFrame handles empty or relative sourcePath on failed, quarantined, and pending rows', () => {
+  const frame: LogsFrame = {
+    uploaded: [],
+    failed: [
+      failed({ sourcePath: null as unknown as string }),
+      failed({ sourcePath: 'relative/path.json' }),
+    ],
+    quarantined: [
+      quarantined({ sourcePath: null as unknown as string }),
+      quarantined({ sourcePath: 'relative/path.json' }),
+    ],
+    pending: [
+      pending({ sourcePath: null as unknown as string }),
+      pending({ sourcePath: 'relative/path.json' }),
+    ],
+  };
+  const out = stripAnsi(renderLogsFrame(frame, {}, makeDeps(false)));
+  expect(out).toContain('relative/path.json');
+});
+
+test('renderLogsFrame handles columns defaulting when process.stdout.columns is absent or zero', () => {
+  const originalColumns = process.stdout.columns;
+  try {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+    const frame: LogsFrame = {
+      ...emptyFrame(),
+      uploaded: [uploaded({ sourcePath: '/home/user/uploaded.json' })],
+    };
+    const out = stripAnsi(renderLogsFrame(frame, {}, makeDeps(false)));
+    expect(out).toContain('uploaded.json');
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', {
+      value: originalColumns,
+      configurable: true,
+      writable: true,
+    });
+  }
+});
+
+test('renderLogsFrame static mode does not append quit help text', () => {
+  const out = stripAnsi(renderLogsFrame(emptyFrame(), { static: true }, makeDeps(false)));
+  expect(out).not.toContain('Press q or Esc to quit');
 });

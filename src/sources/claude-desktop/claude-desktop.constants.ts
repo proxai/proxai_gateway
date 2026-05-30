@@ -8,6 +8,6 @@ export const CLAUDE_DESKTOP_BODY_COMPRESSION: BodyCompression = 'zstd';
 export const CLAUDE_DESKTOP_SESSIONS_SUBPATH =
   'Library/Application Support/Claude/local-agent-mode-sessions';
 export const CLAUDE_DESKTOP_AUDIT_GLOB_PATTERN = '*/*/local_*/audit.jsonl';
-export const CLAUDE_DESKTOP_TRANSCRIPT_GLOB_PATTERN = '*/*/local_*/.claude/projects/*/*.jsonl';
+export const CLAUDE_DESKTOP_TRANSCRIPT_GLOB_PATTERN = '.claude/projects/*/*.jsonl';
 
 export const CLAUDE_DESKTOP_DEFAULT_AGENT_SCHEMA_VERSION = 'unknown';

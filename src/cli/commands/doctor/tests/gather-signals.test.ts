@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 
 import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,10 +6,34 @@ import { join } from 'node:path';
 
 import { rmRecursive } from 'core/io/fs';
 import { openBufferDb } from 'services/buffer';
+import type { Stats } from 'node:fs';
+
+let rootOwnedStatDir: string | null = null;
+
+mock.module('node:fs/promises', () => {
+  const actual: typeof import('node:fs/promises') = import.meta.require('node:fs/promises');
+  return {
+    ...actual,
+    stat: async (path: string): Promise<Stats> => {
+      const real = await actual.stat(path);
+      if (rootOwnedStatDir !== null && path === rootOwnedStatDir) {
+        const forced: Stats = Object.assign(Object.create(Object.getPrototypeOf(real)), real, {
+          uid: 0,
+        });
+        return forced;
+      }
+      return real;
+    },
+  };
+});
+
 import { gatherSignals } from 'cli/commands/doctor/gather-signals.ts';
+import { __deps } from 'cli/commands/doctor/gather-signals.ts';
 import { captureOutput } from 'cli/output.ts';
 import type { DoctorCommandDeps } from 'cli/commands/doctor/doctor.types.ts';
 import type { ServiceManager } from 'cli/service-manager';
+
+const origRealpath = __deps.realpath;
 
 let dir: string;
 let bufferDbPath: string;
@@ -119,7 +143,14 @@ afterEach(async () => {
   globalThis.fetch = origFetch;
   setWhich(origWhich);
   setSpawn(origSpawn);
+  __deps.realpath = origRealpath;
+  rootOwnedStatDir = null;
   await rmRecursive(dir);
+});
+
+afterAll(async () => {
+  const fsPromisesReal = await import('node:fs/promises');
+  mock.module('node:fs/promises', () => fsPromisesReal);
 });
 
 test('config absent: configParses and apiKeyPresent stay false', async () => {
@@ -320,4 +351,130 @@ test('buffer/daemon/recent/resync sections populated from query result defaults'
     signals.filesystem.diskFreeBytes === null ||
       typeof signals.filesystem.diskFreeBytes === 'number',
   ).toBe(true);
+});
+
+test('nest reachable with clock skew calculation from Date header', async () => {
+  const dateStr = new Date(Date.now() - 10000).toUTCString();
+  setFetch((() =>
+    Promise.resolve(
+      new Response('', {
+        status: 200,
+        headers: new Headers({ date: dateStr }),
+      }),
+    )) as unknown as typeof globalThis.fetch);
+  const signals = await gatherSignals(makeDeps());
+  expect(signals.network.nestReachable).toBe(true);
+  expect(signals.clockSkewMs).not.toBeNull();
+});
+
+test('linux: probeDiskFreeBytes parse success', async () => {
+  setSpawn(
+    fakeSpawn(
+      'Filesystem 1K-blocks Used Available Use% Mounted on\n/dev/sda1 1000 500 500 50% /\n',
+    ),
+  );
+  const signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+  expect(signals.filesystem.diskFreeBytes).toBe(500 * 1024);
+});
+
+test('linux: probeDiskFreeBytes handles malformed output', async () => {
+  setSpawn(fakeSpawn('Filesystem 1K-blocks Used Available Use% Mounted on\n/dev/sda1 1000 500\n'));
+  const signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+  expect(signals.filesystem.diskFreeBytes).toBeNull();
+});
+
+test('win32: probeDiskFreeBytes parses successfully', async () => {
+  setSpawn(fakeSpawn('123456\n'));
+  const signals = await gatherSignals(makeDeps({ platform: 'win32' }));
+  expect(signals.filesystem.diskFreeBytes).toBe(123456);
+});
+
+test('win32: probeDiskFreeBytes powershell handles non-numeric output', async () => {
+  setSpawn(fakeSpawn('not-a-number\n'));
+  const signals = await gatherSignals(makeDeps({ platform: 'win32' }));
+  expect(signals.filesystem.diskFreeBytes).toBeNull();
+});
+
+test('probeInstallSource resolves brew', async () => {
+  __deps.realpath = (() =>
+    Promise.resolve('/opt/homebrew/bin/proxai')) as unknown as typeof __deps.realpath;
+  const signals = await gatherSignals(makeDeps({ binaryPath: '/some/path' }));
+  expect(signals.binary.installSource).toBe('brew');
+});
+
+test('probeInstallSource resolves npm', async () => {
+  __deps.realpath = (() =>
+    Promise.resolve(
+      '/usr/local/lib/node_modules/proxai/bin/proxai',
+    )) as unknown as typeof __deps.realpath;
+  const signals = await gatherSignals(makeDeps({ binaryPath: '/some/path' }));
+  expect(signals.binary.installSource).toBe('npm');
+});
+
+test('probeInstallSource resolves manual', async () => {
+  __deps.realpath = (() =>
+    Promise.resolve('/usr/local/bin/proxai')) as unknown as typeof __deps.realpath;
+  const signals = await gatherSignals(makeDeps({ binaryPath: '/some/path' }));
+  expect(signals.binary.installSource).toBe('manual');
+});
+
+test('linux: probeDiskFreeBytes handles non-numeric available bytes', async () => {
+  setSpawn(
+    fakeSpawn('Filesystem 1K-blocks Used Available Use% Mounted on\n/dev/sda1 1000 500 abc\n'),
+  );
+  const signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+  expect(signals.filesystem.diskFreeBytes).toBeNull();
+});
+
+test('probeInstallSource handles realpath throwing', async () => {
+  __deps.realpath = (() =>
+    Promise.reject(new Error('realpath boom'))) as unknown as typeof __deps.realpath;
+  const signals = await gatherSignals(makeDeps({ binaryPath: '/some/path' }));
+  expect(signals.binary.installSource).toBeNull();
+});
+
+test('control socket exists and active', async () => {
+  await writeFile(join(dir, 'control.sock'), '');
+  const signals = await gatherSignals(makeDeps({ serviceManager: okServiceManager(true, true) }));
+  expect(signals.processExtended.controlSocketExists).toBe(true);
+  expect(signals.processExtended.controlSocketActive).toBe(true);
+});
+
+test('win32: config file has unescaped backslashes and obsolete keys', async () => {
+  await writeFile(
+    join(dir, 'config.toml'),
+    'api_key = "secret"\npath = "C:\\path"\ndeprecated_key = "old"\n',
+  );
+  const signals = await gatherSignals(makeDeps({ platform: 'win32' }));
+  expect(signals.securityExtended.configUnescapedBackslashes).toBe(true);
+  expect(signals.securityExtended.configObsoleteKeys).toContain('deprecated_key');
+});
+
+test('config file obsolete keys and mode restrictions', async () => {
+  if (process.platform === 'win32') return;
+  const configFilePath = join(dir, 'config.toml');
+  await writeFile(configFilePath, 'api_key = "secret"\nobsolete_key = "x"\n');
+  await chmod(configFilePath, 0o777);
+  const signals = await gatherSignals(makeDeps({ configFilePath, platform: 'linux' }));
+  expect(signals.securityExtended.configObsoleteKeys).toContain('deprecated_key');
+  expect(signals.securityExtended.configValueConstraintsViolated).toBe(true);
+});
+
+test('filesystem write probe fails when directory is unwritable', async () => {
+  const badDir = join(dir, 'bad\0path');
+  const signals = await gatherSignals(makeDeps({ configDirPath: badDir }));
+  expect(signals.filesystemExtended.writeProbeSuccess).toBe(false);
+  expect(signals.filesystemExtended.writeProbeError).not.toBeNull();
+});
+
+test('win32: probeDiskFreeBytes handles spawn throwing', async () => {
+  setSpawn(throwingSpawn());
+  const signals = await gatherSignals(makeDeps({ platform: 'win32' }));
+  expect(signals.filesystem.diskFreeBytes).toBeNull();
+});
+
+test('linux: root-owned config dir under non-root process flags sudo ownership drift', async () => {
+  rootOwnedStatDir = dir;
+  const signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+  expect(signals.filesystemExtended.sudoOwnershipDrift).toBe(true);
 });

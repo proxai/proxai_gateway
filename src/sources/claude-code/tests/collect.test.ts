@@ -22,7 +22,7 @@ import {
   BODY_TARGET_COMPRESSED_BYTES,
   BODY_TARGET_DECOMPRESSED_BYTES,
 } from 'services/contract';
-import { collectClaudeCodeFile, isDialogueRecord } from 'sources/claude-code';
+import { collectClaudeCodeFile, isDialogueRecord, claudeFirstText } from 'sources/claude-code';
 import type { ClaudeCodeCollectorContext, DiscoveredClaudeCodeFile } from 'sources/claude-code';
 
 let dir: string;
@@ -264,13 +264,32 @@ test('splits an oversized slice into multiple batches with contiguous watermark 
   const content = `${linesArr.join('\n')}\n`;
   const file = await makeFile(content, 'big.jsonl');
 
+  const loggedInfos: Array<{ obj: unknown; msg: string }> = [];
+  const loggedDebugs: Array<{ obj: unknown; msg: string }> = [];
+  const mockLogger = {
+    info: (obj: unknown, msg: string) => {
+      loggedInfos.push({ obj, msg });
+    },
+    debug: (obj: unknown, msg: string) => {
+      loggedDebugs.push({ obj, msg });
+    },
+    warn: () => undefined,
+    error: () => undefined,
+    fatal: () => undefined,
+    trace: () => undefined,
+    child: () => mockLogger,
+  };
+
   const customCtx = {
     ...ctx(buffer),
     maxDecompressedBytes: 15_000,
+    logger: mockLogger,
   };
   const result = await collectClaudeCodeFile(file, customCtx);
   expect(result.errors).toEqual([]);
   expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
+  expect(loggedInfos.length).toBeGreaterThan(0);
+  expect(loggedDebugs.length).toBeGreaterThan(0);
 
   let prevEnd = 0;
   let scanned = 0;
@@ -520,4 +539,173 @@ test('isDialogueRecord extreme inputs and edge cases', () => {
       },
     }),
   ).toBe(false);
+});
+
+test('extracts first text segment when dealing with diverse input structures', () => {
+  expect(claudeFirstText([])).toBe('');
+});
+
+test('handles metadata-marked records by rejecting them', () => {
+  expect(
+    isDialogueRecord({
+      type: 'user',
+      isMeta: true,
+      message: { content: 'hello' },
+    }),
+  ).toBe(false);
+});
+
+test('identifies and filters synthetic user prompt items', () => {
+  expect(
+    isDialogueRecord({
+      type: 'user',
+      message: { content: '<bash-input> ls' },
+    }),
+  ).toBe(false);
+});
+
+test('excludes synthetic models and error messages for assistant records', () => {
+  expect(
+    isDialogueRecord({
+      type: 'assistant',
+      message: { content: 'hello', model: '<synthetic>' },
+    }),
+  ).toBe(false);
+  expect(
+    isDialogueRecord({
+      type: 'assistant',
+      isApiErrorMessage: true,
+      message: { content: 'hello' },
+    }),
+  ).toBe(false);
+});
+
+test('filters out messages containing non-array object tool results or text elements', () => {
+  expect(
+    isDialogueRecord({
+      type: 'user',
+      message: { content: { type: 'text', text: 'hello' } },
+    }),
+  ).toBe(true);
+});
+
+test('advances cursor and returns zero batches when no dialogue records are found', async () => {
+  const file = await makeFile('{"type":"user","message":{"content":[]}}\n');
+  const result = await collectClaudeCodeFile(file, ctx(buffer));
+  expect(result.capturedBatches).toBe(0);
+  expect(result.errors).toEqual([]);
+  const cursor = getCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.watermarkEnd).toBeGreaterThan(0);
+});
+
+test('collectClaudeCodeFile handles non-Error exception gracefully', async () => {
+  const fakeFile: DiscoveredClaudeCodeFile = {
+    sourcePath: join(dir, 'test-non-error.jsonl'),
+    sourcePathHash: sha256Hex(join(dir, 'test-non-error.jsonl')),
+    inode: 7777,
+    sizeBytes: 100,
+    lastModifiedMs: Date.now(),
+  };
+
+  const fakeDb = {
+    query: () => {
+      throw 'database string exception';
+    },
+  } as unknown as Database;
+
+  const result = await collectClaudeCodeFile(fakeFile, {
+    ...ctx(buffer),
+    buffer: fakeDb,
+  });
+
+  expect(result.errors.length).toBe(1);
+  expect(requireDefined(result.errors[0]).reason).toBe('database string exception');
+});
+
+test('isDialogueRecord with non-string, non-array, non-object actualContent (number)', () => {
+  expect(
+    isDialogueRecord({
+      type: 'user',
+      message: { content: 123 },
+    }),
+  ).toBe(true);
+});
+
+test('isDialogueRecord with array content containing null or non-object', () => {
+  expect(
+    isDialogueRecord({
+      type: 'user',
+      message: { content: [null] },
+    }),
+  ).toBe(false);
+  expect(
+    isDialogueRecord({
+      type: 'user',
+      message: { content: ['hello'] },
+    }),
+  ).toBe(false);
+});
+
+test('claudeFirstText with non-text object returns empty string', () => {
+  expect(claudeFirstText({ type: 'tool_use' })).toBe('');
+});
+
+test('isDialogueRecord covers all permutations of actualContent extraction', () => {
+  expect(isDialogueRecord({ type: 'user', content: 'hello' })).toBe(true);
+  expect(isDialogueRecord({ type: 'user', message: { text: 'hello' } })).toBe(true);
+  expect(isDialogueRecord({ type: 'user', text: 'hello' })).toBe(true);
+});
+
+test('claudeFirstText extra edge cases', () => {
+  expect(claudeFirstText({ type: 'text', text: 123 })).toBe('');
+  expect(claudeFirstText(null)).toBe('');
+  expect(claudeFirstText(undefined)).toBe('');
+});
+
+test('isDialogueRecord extra array content edge cases', () => {
+  expect(
+    isDialogueRecord({
+      type: 'user',
+      message: { content: [{ type: 'tool_use' }] },
+    }),
+  ).toBe(false);
+  expect(
+    isDialogueRecord({
+      type: 'user',
+      message: { content: null },
+    }),
+  ).toBe(false);
+  expect(
+    isDialogueRecord({
+      type: 'assistant',
+      isApiErrorMessage: true,
+      text: 'hello',
+    }),
+  ).toBe(false);
+});
+
+test('extractAgentSchemaVersion with empty string version', async () => {
+  const file = await makeFile('{"type":"user","version":"","text":"hi"}\n');
+  const result = await collectClaudeCodeFile(file, ctx(buffer));
+  expect(result.errors).toEqual([]);
+});
+
+test('extractAgentSchemaVersion with empty string nested version', async () => {
+  const file = await makeFile('{"type":"user","message":{"version":""},"text":"hi"}\n');
+  const result = await collectClaudeCodeFile(file, ctx(buffer));
+  expect(result.errors).toEqual([]);
+});
+
+test('extractAgentSchemaVersion falls back when redaction yields invalid JSON', async () => {
+  const file = await makeFile(
+    '{"type":"user","message":{"content":"password: aaaaaaaaaaaaaaaaaaaaaaaa"},"version":"9.9.9"}\n',
+  );
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const batch = nextPendingBatch(buffer);
+  expect(batch?.agentSchemaVersion).toBe('unknown');
 });

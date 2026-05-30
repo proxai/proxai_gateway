@@ -61,6 +61,65 @@ import {
   checkG3RegressionLoop,
 } from 'cli/commands/doctor/checkers/data-integrity.ts';
 
+import {
+  checkG4JournalMode,
+  checkG5BusyTimeout,
+  checkG6TransactionLockup,
+  checkG7WalCheckpointStarvation,
+  checkG8UncommittedJournalStaleLock,
+} from 'cli/commands/doctor/checkers/concurrency.ts';
+import {
+  checkB4InsecureApiKeyTransmission,
+  checkB5PermissiveConfigPermissions,
+  checkB6OverlyBroadDirectoryWatches,
+} from 'cli/commands/doctor/checkers/security.ts';
+import {
+  checkF17V8SyncEventLoopLag,
+  checkF18V8HeapExhaustion,
+  checkG10CompressionSpikes,
+} from 'cli/commands/doctor/checkers/performance.ts';
+import {
+  checkC8OutboundTlsInspection,
+  checkC9GlobalProxyMismatch,
+  checkC10DnsHijackCaptivePortal,
+  checkC11ThrottlerResetSkew,
+  checkC12ThunderingHerdJitter,
+  checkC13OutboxTimeout,
+} from 'cli/commands/doctor/checkers/network.ts';
+import {
+  checkA13SystemdRuntimeDirMissing,
+  checkA14SystemdRateLimitHit,
+  checkA15SystemdHomeEncryptedTearing,
+} from 'cli/commands/doctor/checkers/systemd.ts';
+import {
+  checkA11WindowsServiceUnquotedPath,
+  checkA12WindowsTaskSchedulerXmlCorrupt,
+} from 'cli/commands/doctor/checkers/windows.ts';
+import {
+  checkA6AbruptDaemonTermination,
+  checkA7ZombieDaemon,
+  checkA8GracefulTerminationLockup,
+  checkA9HelperProcessHealthy,
+  checkA10ThreadWatcherExhaustion,
+} from 'cli/commands/doctor/checkers/stray-daemon.ts';
+import { checkE7HomebrewRelocationDrift } from 'cli/commands/doctor/checkers/path-drift.ts';
+import {
+  checkE5UpgradeLockStale,
+  checkE6CorruptedUpgradeBinary,
+} from 'cli/commands/doctor/checkers/upgrade-lock.ts';
+import {
+  checkF8MacOsTccFDA,
+  checkF9MacOsGatekeeperTranslocation,
+  checkF10SandboxedTerminalLocks,
+  checkF11SymlinkTraversalLoop,
+  checkF12POSIXExtendedAclBlocked,
+  checkF13BrokenWindowsJunction,
+  checkF14LogRotationInodeDrift,
+  checkF15PhysicalWriteExhaustion,
+  checkF16SudoHijackOwnershipDrift,
+} from 'cli/commands/doctor/checkers/advanced-fs.ts';
+import { checkG9InconsistentSessionUuids } from 'cli/commands/doctor/checkers/data-extended.ts';
+
 import type { DoctorSignals } from 'cli/commands/doctor/doctor.types.ts';
 
 type Checker = (signals: DoctorSignals) => Finding | null;
@@ -71,9 +130,22 @@ const ALL_CHECKERS: readonly Checker[] = [
   checkA3StoppedByUser,
   checkA4Crashed,
   checkA5Wedged,
+  checkA6AbruptDaemonTermination,
+  checkA7ZombieDaemon,
+  checkA8GracefulTerminationLockup,
+  checkA9HelperProcessHealthy,
+  checkA10ThreadWatcherExhaustion,
+  checkA11WindowsServiceUnquotedPath,
+  checkA12WindowsTaskSchedulerXmlCorrupt,
+  checkA13SystemdRuntimeDirMissing,
+  checkA14SystemdRateLimitHit,
+  checkA15SystemdHomeEncryptedTearing,
   checkB1InvalidKey,
   checkB2AuthUnconfirmedLoop,
   checkB3IngestionKeyAuthError,
+  checkB4InsecureApiKeyTransmission,
+  checkB5PermissiveConfigPermissions,
+  checkB6OverlyBroadDirectoryWatches,
   checkC1RateLimited,
   checkC2NetworkFailure,
   checkC3DrainWedged,
@@ -81,12 +153,21 @@ const ALL_CHECKERS: readonly Checker[] = [
   checkC5BufferOscillating,
   checkC6ParserValidationErrors,
   checkC7QuarantinedRows,
+  checkC8OutboundTlsInspection,
+  checkC9GlobalProxyMismatch,
+  checkC10DnsHijackCaptivePortal,
+  checkC11ThrottlerResetSkew,
+  checkC12ThunderingHerdJitter,
+  checkC13OutboxTimeout,
   checkD1NoAgentActivity,
   checkD2OneSourceErroring,
   checkE1StaleBinary,
   checkE2BrewUpdatePending,
   checkE3WriteFailed,
   checkE4SuccessOldVersionRunning,
+  checkE5UpgradeLockStale,
+  checkE6CorruptedUpgradeBinary,
+  checkE7HomebrewRelocationDrift,
   checkF1ConfigDirNotWritable,
   checkF2DiskSpaceLow,
   checkF3LogDirNotWritable,
@@ -94,9 +175,27 @@ const ALL_CHECKERS: readonly Checker[] = [
   checkF5LinuxNoLinger,
   checkF6WindowsUserUnresolvable,
   checkF7MacOsQuarantine,
+  checkF8MacOsTccFDA,
+  checkF9MacOsGatekeeperTranslocation,
+  checkF10SandboxedTerminalLocks,
+  checkF11SymlinkTraversalLoop,
+  checkF12POSIXExtendedAclBlocked,
+  checkF13BrokenWindowsJunction,
+  checkF14LogRotationInodeDrift,
+  checkF15PhysicalWriteExhaustion,
+  checkF16SudoHijackOwnershipDrift,
+  checkF17V8SyncEventLoopLag,
+  checkF18V8HeapExhaustion,
   checkG1ReceiptsTableReadable,
   checkG2BufferDbCorrupt,
   checkG3RegressionLoop,
+  checkG4JournalMode,
+  checkG5BusyTimeout,
+  checkG6TransactionLockup,
+  checkG7WalCheckpointStarvation,
+  checkG8UncommittedJournalStaleLock,
+  checkG9InconsistentSessionUuids,
+  checkG10CompressionSpikes,
 ];
 
 function runCheckers(signals: DoctorSignals): Finding[] {

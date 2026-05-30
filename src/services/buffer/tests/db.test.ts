@@ -97,3 +97,43 @@ test('migrates pre-existing buffer DB by adding last_seen_size_bytes / last_seen
     await rmRecursive(dir);
   }
 });
+
+test('migrates pre-existing receipts table by adding user_prompt, source_path, etc.', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'proxai-buffer-migrate-receipts-'));
+  try {
+    const path = join(dir, 'old-buffer-receipts.db');
+
+    const seed = new Database(path, { create: true });
+    seed.run(
+      `CREATE TABLE upload_receipts (
+         capture_id TEXT PRIMARY KEY NOT NULL,
+         source_app TEXT NOT NULL,
+         source_path_hash TEXT NOT NULL,
+         watermark_kind TEXT NOT NULL,
+         watermark_start INTEGER NOT NULL,
+         watermark_end INTEGER NOT NULL,
+         watermark_table TEXT,
+         delivered_at TEXT NOT NULL,
+         idempotent_on_server INTEGER NOT NULL DEFAULT 0
+       )`,
+    );
+    seed.close();
+
+    const opened = openBufferDb(path);
+    try {
+      expect(columnExists(opened, BUFFER_TABLES.receipts, 'user_prompt')).toBe(true);
+      expect(columnExists(opened, BUFFER_TABLES.receipts, 'user_prompt_added_at')).toBe(true);
+      expect(columnExists(opened, BUFFER_TABLES.receipts, 'source_path')).toBe(true);
+      expect(columnExists(opened, BUFFER_TABLES.receipts, 'agent_schema_version')).toBe(true);
+      expect(columnExists(opened, BUFFER_TABLES.receipts, 'gateway_version')).toBe(true);
+      expect(columnExists(opened, BUFFER_TABLES.receipts, 'captured_at_utc')).toBe(true);
+      expect(columnExists(opened, BUFFER_TABLES.receipts, 'attempts')).toBe(true);
+      expect(columnExists(opened, BUFFER_TABLES.receipts, 'source_inode')).toBe(true);
+      expect(columnExists(opened, BUFFER_TABLES.receipts, 'shipped_bytes')).toBe(true);
+    } finally {
+      opened.close();
+    }
+  } finally {
+    await rmRecursive(dir);
+  }
+});

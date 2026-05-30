@@ -3,7 +3,18 @@ import { rmRecursive } from 'core/io/fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { handleInspect } from 'services/polling/poll-worker.ts';
+import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.types.ts';
+
+// Define a mock self at the top of the file so that the dynamic import registers the listener
+const mockSelf = {
+  onmessage: null as ((event: MessageEvent<WorkerInput>) => void) | null,
+  postMessage: (_message: WorkerOutput) => {},
+};
+
+(globalThis as { self?: unknown }).self = mockSelf;
+
+const importPath = 'services/polling/poll-worker.ts?real=true';
+const { handleInspect } = await import(importPath);
 
 let dir: string;
 

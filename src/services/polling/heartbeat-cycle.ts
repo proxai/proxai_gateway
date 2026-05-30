@@ -110,7 +110,8 @@ async function maybeRunAutoUpgrade(ctx: HeartbeatCycleContext): Promise<boolean>
   if (ctx.binaryPath === undefined || ctx.currentVersion === undefined) return false;
 
   if (ctx.devMode !== true && ctx.coordinatedUpgradeDeps !== undefined) {
-    const result = await coordinatedUpgrade(ctx.coordinatedUpgradeDeps);
+    const upgradeFn = ctx.coordinatedUpgradeFn ?? coordinatedUpgrade;
+    const result = await upgradeFn(ctx.coordinatedUpgradeDeps);
     setMetadata(ctx.buffer, METADATA_KEYS.lastVersionCheckAt, nowIsoUtc());
     if (result.upgradeApplied) {
       ctx.exitProcess?.();

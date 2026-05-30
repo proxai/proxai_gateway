@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { asWorkerCtor } from 'core/utils';
 import { mkdtemp } from 'node:fs/promises';
@@ -36,6 +36,11 @@ beforeEach(async () => {
 afterEach(async () => {
   await rmRecursive(tempDir);
   shouldFailFs = false;
+});
+
+afterAll(async () => {
+  const fsPromisesReal = await import('node:fs/promises');
+  mock.module('node:fs/promises', () => fsPromisesReal);
 });
 
 const inspectResultFixture: Required<WorkerOutput>['inspectResult'] = {

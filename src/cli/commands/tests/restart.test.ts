@@ -230,3 +230,18 @@ test('formatError stringifies non-Error throws', async () => {
     output.lines.some((l) => l.level === 'error' && l.msg.includes('restart failed: rope-throw')),
   ).toBe(true);
 });
+
+test('outputs profile name when provided', async () => {
+  const { sm, calls } = fakeManager();
+  const output = captureOutput();
+  const result = await runRestart({
+    output,
+    configExists: async () => true,
+    serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
+    profileName: 'custom-profile',
+  });
+  expect(result.exitCode).toBe(0);
+  expect(calls.restart).toBe(1);
+  expect(output.lines.some((l) => l.msg.includes('Profile: custom-profile'))).toBe(true);
+});

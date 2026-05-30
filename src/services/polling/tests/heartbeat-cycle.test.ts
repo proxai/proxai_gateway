@@ -10,6 +10,7 @@ import { getMetadata, METADATA_KEYS, openInMemoryBufferDb, setMetadata } from 's
 
 import { runHeartbeatCycle, shouldRunAutoUpgrade, writeAuthFailedSentinel } from 'services/polling';
 import type { HeartbeatCycleContext } from 'services/polling';
+import type { CoordinatedUpgradeDeps } from 'services/upgrade/coordinated-upgrade.ts';
 
 let dir: string;
 let buffer: Database;
@@ -306,3 +307,43 @@ function makeFakeLogger(entries: { level: string; msg: string }[]): FakeLogger {
   };
   return logger;
 }
+
+test('non-brew: runs coordinated upgrade and exits when applied', async () => {
+  let exitCalled = false;
+
+  const ctx = makeContext({
+    installSource: 'npm',
+    binaryPath: '/tmp/proxai-bin-noop',
+    currentVersion: '0.0.1',
+    devMode: false,
+    coordinatedUpgradeDeps: {} as unknown as CoordinatedUpgradeDeps,
+    coordinatedUpgradeFn: async () => ({ upgradeApplied: true }),
+    exitProcess: () => {
+      exitCalled = true;
+    },
+  });
+
+  const result = await runHeartbeatCycle(ctx);
+  expect(result.ranAutoUpgrade).toBe(true);
+  expect(exitCalled).toBe(true);
+});
+
+test('non-brew: runs coordinated upgrade and does not exit when not applied', async () => {
+  let exitCalled = false;
+
+  const ctx = makeContext({
+    installSource: 'npm',
+    binaryPath: '/tmp/proxai-bin-noop',
+    currentVersion: '0.0.1',
+    devMode: false,
+    coordinatedUpgradeDeps: {} as unknown as CoordinatedUpgradeDeps,
+    coordinatedUpgradeFn: async () => ({ upgradeApplied: false }),
+    exitProcess: () => {
+      exitCalled = true;
+    },
+  });
+
+  const result = await runHeartbeatCycle(ctx);
+  expect(result.ranAutoUpgrade).toBe(true);
+  expect(exitCalled).toBe(false);
+});

@@ -168,3 +168,23 @@ test('gatherFrame errors are surfaced via output.error and loop keeps trying', a
   expect(calls.some((c) => c.startsWith('ERR'))).toBe(true);
   expect(count).toBeGreaterThanOrEqual(2);
 });
+
+test('watch loop clears screen and paints frame when clearScreen is true', async () => {
+  const stream = makeStream();
+  const { calls, output } = makeOutput();
+  const handle = startWatchLoop({
+    output,
+    stdin: stream,
+    intervalMs: 1000,
+    clearScreen: true,
+    render: () => 'hello\nworld',
+    gatherFrame: async () => frameInputs(),
+  });
+  await sleep(50);
+  stream.emit('q');
+  await handle.wait();
+
+  expect(calls.some((c) => c.includes('\x1b[?1049h'))).toBe(true);
+  expect(calls.some((c) => c.includes('\x1b[?1049l'))).toBe(true);
+  expect(calls.some((c) => c.includes('hello'))).toBe(true);
+});

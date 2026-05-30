@@ -48,7 +48,7 @@ async function loadCliMetadataMap(sessionDir: string): Promise<{
   const assistantMap = new Map<string, CliMetadata>();
 
   const glob = new Bun.Glob(CLAUDE_DESKTOP_TRANSCRIPT_GLOB_PATTERN);
-  for await (const relativePath of glob.scan({ cwd: sessionDir, onlyFiles: true })) {
+  for await (const relativePath of glob.scan({ cwd: sessionDir, onlyFiles: true, dot: true })) {
     const filePath = join(sessionDir, relativePath);
     const stat = await statFile(filePath);
     if (!stat.exists) continue;

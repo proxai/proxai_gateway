@@ -1,4 +1,5 @@
-import { afterEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+import * as decodeReal from 'services/prompt-extract/decode.ts';
 
 import { zstdCompressSync, zstdDecompressSync } from 'core/utils';
 import type { BodyFormat, SourceApp } from 'services/contract';
@@ -104,4 +105,8 @@ test('returns null result when decoding throws unexpectedly', () => {
     userPrompt: null,
     userPromptAddedAt: null,
   });
+});
+
+afterAll(() => {
+  mock.module('services/prompt-extract/decode.ts', () => decodeReal);
 });

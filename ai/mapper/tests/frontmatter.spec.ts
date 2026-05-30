@@ -56,4 +56,35 @@ key: value
 # no closing fence`;
     expect(() => parseFrontmatter(src)).toThrow(/unterminated/i);
   });
+
+  test('appends a continuation line to the active key', () => {
+    const src = `---
+key: value
+  continued text
+---
+body`;
+    expect(parseFrontmatter(src).data).toEqual({ key: 'value continued text' });
+  });
+
+  test('throws when a non-key line appears with no active key', () => {
+    const src = `---
+plain text no colon
+---
+`;
+    expect(() => parseFrontmatter(src)).toThrow(/Malformed frontmatter/);
+  });
+
+  test('throws on an inline array that is invalid JSON both ways', () => {
+    const src = `---
+arr: [foo, bar]
+---`;
+    expect(() => parseFrontmatter(src)).toThrow(/Invalid inline array/);
+  });
+
+  test('throws when an inline array contains non-string entries', () => {
+    const src = `---
+arr: [1, 2]
+---`;
+    expect(() => parseFrontmatter(src)).toThrow(/must contain only strings/);
+  });
 });

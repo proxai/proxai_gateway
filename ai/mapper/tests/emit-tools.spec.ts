@@ -1,4 +1,5 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
+import * as realFsPromises from 'node:fs/promises';
 import { mkdir, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -8,6 +9,14 @@ import { emitTools } from '../emitters/tools';
 import { Manifest } from '../manifest';
 
 const FIXTURE = join(import.meta.dir, 'fixtures/minimal-ai');
+
+const realFsSnapshot = { ...realFsPromises };
+let readFileShouldThrow = false;
+mock.module('node:fs/promises', () => ({
+  ...realFsSnapshot,
+  readFile: (...args: Parameters<typeof realFsSnapshot.readFile>) =>
+    readFileShouldThrow ? Promise.reject(new Error('boom')) : realFsSnapshot.readFile(...args),
+}));
 
 let repo: string;
 beforeEach(async () => {
@@ -100,4 +109,21 @@ describe('emitTools', () => {
     expect(paths).toContain('.claude/tools/big-thing/main.ts');
     expect(paths).toContain('.claude/tools/big-thing/sub/inner.ts');
   });
+
+  test('completes when readFile rejects for both subdir and top-level files', async () => {
+    const tree = await loadTree(FIXTURE);
+    const cfg = await loadConfig(FIXTURE);
+    const mani = new Manifest(repo);
+
+    readFileShouldThrow = true;
+    await emitTools(repo, tree, cfg, mani);
+
+    const paths = mani.files().map((f) => f.path);
+    expect(paths).toContain('.claude/tools/helper.sh');
+    expect(paths).toContain('.claude/tools/big-thing/main.ts');
+  });
+});
+
+afterEach(() => {
+  readFileShouldThrow = false;
 });

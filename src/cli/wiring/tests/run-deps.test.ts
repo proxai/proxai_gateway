@@ -1,6 +1,10 @@
-import { expect, test } from 'bun:test';
+import { afterEach, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { buildRunDeps } from 'cli/wiring/run-deps.ts';
+import { rmRecursive } from 'core/io/fs';
 import { buildProfileContext } from 'core/io/fs/profile.ts';
 import {
   makeTestGatewayConfig,
@@ -51,4 +55,39 @@ test('buildRunDeps: preserves xstateInspect when provided', () => {
     profileCtx: prodCtx,
   });
   expect(deps.xstateInspect).toBe(true);
+});
+
+let profileRoot: string | undefined;
+const origProfileRootEnv = process.env['PROXAI_TEST_PROFILE_ROOT'];
+
+afterEach(async () => {
+  if (origProfileRootEnv === undefined) {
+    delete process.env['PROXAI_TEST_PROFILE_ROOT'];
+  } else {
+    process.env['PROXAI_TEST_PROFILE_ROOT'] = origProfileRootEnv;
+  }
+  if (profileRoot !== undefined) {
+    await rmRecursive(profileRoot);
+    profileRoot = undefined;
+  }
+});
+
+test('buildRunDeps: wires coordinatedUpgradeDeps when non-dev and dev config exists', () => {
+  profileRoot = mkdtempSync(join(tmpdir(), 'proxai-run-deps-'));
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = profileRoot;
+  const devConfigDir = join(profileRoot, 'dev');
+  mkdirSync(devConfigDir, { recursive: true });
+  writeFileSync(join(devConfigDir, 'config.toml'), '');
+
+  const nonDevCtx = buildProfileContext('prod');
+  const ctrl = new AbortController();
+  const deps = buildRunDeps({
+    config: cfg,
+    abortSignal: ctrl.signal,
+    binaryPath: '/bin/p',
+    exitProcess: () => {},
+    profileCtx: nonDevCtx,
+    platform: 'linux',
+  });
+  expect(deps.coordinatedUpgradeDeps).toBeDefined();
 });

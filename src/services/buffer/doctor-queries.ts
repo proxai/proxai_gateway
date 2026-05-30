@@ -317,11 +317,7 @@ export function queryAllDoctorData(bufferDbPath: string): DoctorAllQueries {
     bufferStats = queryDoctorBufferStats(db);
     receiptsTableReadable = true;
   } catch {
-    try {
-      receiptsTableReadable = checkReceiptsTableReadable(db);
-    } catch {
-      receiptsTableReadable = false;
-    }
+    receiptsTableReadable = checkReceiptsTableReadable(db);
   }
   try {
     daemonState = queryDoctorDaemonState(db);

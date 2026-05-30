@@ -437,3 +437,44 @@ test('breaks out of the drainBuffer loop immediately on a fatal auth error', asy
     await rmRecursive(dirAuth);
   }
 });
+
+test('continues past fatal validation errors even when auth failed sentinel path is defined', async () => {
+  await insertN(2);
+  const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-drain-val-'));
+  const sentinelPath = join(dirAuth, 'AUTH_FAILED');
+  try {
+    const ctx = ctxWith(
+      mockFetch(() => emptyResponse(400)), // ValidationError -> fatal, but no sentinel written
+    );
+    ctx.authFailedSentinelPath = sentinelPath;
+
+    const result = await drainBuffer(ctx);
+    expect(result.attempted).toBe(2);
+    expect(result.fatal).toBe(2);
+    expect(await Bun.file(sentinelPath).exists()).toBe(false);
+  } finally {
+    await rmRecursive(dirAuth);
+  }
+});
+
+test('drainBuffer breaks early if AUTH_FAILED sentinel is already present before start', async () => {
+  const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-drain-auth-pre-'));
+  const sentinelPath = join(dirAuth, 'AUTH_FAILED');
+  try {
+    await insertN(1);
+    await require('services/polling/auth-failed-sentinel.ts').writeAuthFailedSentinel(
+      sentinelPath,
+      'pre-existing',
+    );
+    const ctx = {
+      db,
+      http: createTestHttpClient(mockFetch(() => emptyResponse(200))),
+      hostId: TEST_HOST_ID,
+      authFailedSentinelPath: sentinelPath,
+    };
+    const result = await drainBuffer(ctx);
+    expect(result.attempted).toBe(0);
+  } finally {
+    await rmRecursive(dirAuth);
+  }
+});

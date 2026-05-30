@@ -68,3 +68,21 @@ test('no-ops when the unit file does not exist', async () => {
     }),
   ).resolves.toBeUndefined();
 });
+
+test('forwards windowsUserId to writer on win32 platform', async () => {
+  const unitPath = join(dir, 'co.proxai.gateway.xml');
+  const programPath = join(dir, 'proxai-gateway');
+  writeFileSync(unitPath, 'legacy content without profile');
+
+  await refreshServiceUnitIfLegacy({
+    serviceUnitPath: unitPath,
+    programPath,
+    platform: 'win32',
+    profileName: 'prod',
+    windowsUserId: 'mock-user-123',
+  });
+
+  const updated = readFileSync(unitPath, 'utf16le');
+  expect(updated).toContain('--profile');
+  expect(updated).toContain('mock-user-123');
+});

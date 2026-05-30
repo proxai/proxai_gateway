@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import * as bootIdReal from 'core/system/boot-id.ts';
 import { rmRecursive } from 'core/io/fs';
 import { readBootId } from 'core/system';
 import { mkdtemp, writeFile } from 'node:fs/promises';
@@ -227,3 +228,7 @@ async function waitUntilTrue(check: () => boolean, timeoutMs = 5_000, stepMs = 2
   };
   return step();
 }
+
+afterAll(() => {
+  mock.module('core/system/boot-id.ts', () => bootIdReal);
+});

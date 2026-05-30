@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import * as codexReal from 'sources/codex';
 import type { Database } from 'bun:sqlite';
 import { rmRecursive } from 'core/io/fs';
 import { mkdtemp } from 'node:fs/promises';
@@ -48,4 +49,8 @@ test('captures errors when state collection throws synchronously', async () => {
     maxDecompressedBytes: 9 * 1024 * 1024,
   });
   expect(result.errors.some((e) => e.reason.includes('forced state failure'))).toBe(true);
+});
+
+afterAll(() => {
+  mock.module('sources/codex', () => codexReal);
 });

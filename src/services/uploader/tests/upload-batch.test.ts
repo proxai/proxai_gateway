@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import * as promptExtractReal from 'services/prompt-extract';
 import type { Database } from 'bun:sqlite';
 import { rmRecursive } from 'core/io/fs';
 import { mkdtemp } from 'node:fs/promises';
@@ -28,12 +29,23 @@ import {
 
 let db: Database;
 
+const realPromptExtract = { ...promptExtractReal };
+let forceExtractUserPromptThrow = false;
+mock.module('services/prompt-extract', () => ({
+  ...realPromptExtract,
+  extractUserPrompt: ((input) => {
+    if (forceExtractUserPromptThrow) throw new Error('forced extract failure');
+    return realPromptExtract.extractUserPrompt(input);
+  }) satisfies typeof promptExtractReal.extractUserPrompt,
+}));
+
 beforeEach(() => {
   db = openInMemoryBufferDb();
 });
 
 afterEach(() => {
   db.close();
+  forceExtractUserPromptThrow = false;
 });
 
 function ctxWith(fetchFn: FetchFn): UploaderContext {
@@ -736,4 +748,117 @@ test('OversizedDecompressedSliceError thrown by http surfaces raw_bytes/cap/slic
   expect(requireDefined(fatalLog).obj['slice_index']).toBe(2);
   expect(requireDefined(fatalLog).obj['source_path_hash']).toBe(stored.sourcePathHash);
   expect(requireDefined(fatalLog).obj['compressed_bytes']).toBe(stored.body.byteLength);
+});
+
+test('extractUserPrompt throwing is gracefully handled in uploadBatch', async () => {
+  const batch = newClaudeCodeBatch('payload');
+  batch.body = new Uint8Array([1, 2, 3, 4]); // non-zstd bytes trigger decompression throws inside extractUserPrompt
+  insertBatch(db, batch);
+  const stored = requireDefined(getBatch(db, batch.captureId));
+
+  const ctx = ctxWith(
+    mockFetch(() =>
+      jsonResponse({ capture_id: batch.captureId, accepted: true, idempotent: false }),
+    ),
+  );
+  const outcome = await uploadBatch(ctx, stored);
+  expect(outcome.kind).toBe('accepted');
+  expect(getBatch(db, batch.captureId)).toBeNull();
+  expect(getReceipt(db, batch.captureId)).not.toBeNull();
+});
+
+test('extractUserPrompt throwing from the module is caught and delivery uses null prompt', async () => {
+  forceExtractUserPromptThrow = true;
+  const { uploadBatch: uploadBatchMocked } = await import('services/uploader/upload-batch.ts');
+
+  const batch = newClaudeCodeBatch('payload');
+  insertBatch(db, batch);
+  const stored = requireDefined(getBatch(db, batch.captureId));
+
+  const ctx = ctxWith(
+    mockFetch(() =>
+      jsonResponse({ capture_id: batch.captureId, accepted: true, idempotent: false }),
+    ),
+  );
+  const outcome = await uploadBatchMocked(ctx, stored);
+
+  expect(outcome.kind).toBe('accepted');
+  expect(getBatch(db, batch.captureId)).toBeNull();
+  const receipt = requireDefined(getReceipt(db, batch.captureId));
+  expect(receipt.userPrompt).toBeNull();
+});
+
+test('handleAuthError verification throwing AuthError is finalized as fatal', async () => {
+  const batch = newClaudeCodeBatch('payload');
+  insertBatch(db, batch);
+  const stored = requireDefined(getBatch(db, batch.captureId));
+
+  const ctx = ctxWith(
+    mockFetch(() => {
+      return emptyResponse(401);
+    }),
+  );
+  const outcome = await uploadBatch(ctx, stored);
+  expect(outcome.kind).toBe('fatal');
+  if (outcome.kind === 'fatal') {
+    expect(outcome.error).toBe('ingestion key invalid');
+  }
+  expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
+});
+
+test('finalizeAuthFailure logs correctly when writeAuthFailedSentinel throws a non-Error', async () => {
+  const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-upload-auth-fail-nonerror-'));
+  const sentinelPath = join(dirAuth, 'trigger-non-error-throw');
+  try {
+    const batch = newClaudeCodeBatch('payload');
+    insertBatch(db, batch);
+    const stored = requireDefined(getBatch(db, batch.captureId));
+
+    const http = createTestHttpClient(
+      mockFetch((call) => {
+        if (call.url.includes('/ingestion/verify-key')) {
+          return jsonResponse({ success: false, message: 'revoked' });
+        }
+        return emptyResponse(401);
+      }),
+    );
+
+    const loggedErrors: Array<{ obj: unknown; msg: string }> = [];
+    const fakeLogger = {
+      child: () => fakeLogger,
+      fatal: () => undefined,
+      error: (obj: unknown, msg: string) => {
+        loggedErrors.push({ obj, msg });
+      },
+      warn: () => undefined,
+      info: () => undefined,
+      debug: () => undefined,
+      trace: () => undefined,
+    };
+
+    const ctx: UploaderContext = {
+      db,
+      http,
+      hostId: TEST_HOST_ID,
+      authFailedSentinelPath: sentinelPath,
+      logger: fakeLogger,
+      writeAuthFailedSentinelFn: async () => {
+        throw 'sentinel_write_failed_string';
+      },
+    };
+    const outcome = await uploadBatch(ctx, stored);
+
+    expect(outcome.kind).toBe('fatal');
+    expect(loggedErrors.some((e) => e.msg.includes('failed to write AUTH_FAILED sentinel'))).toBe(
+      true,
+    );
+    const writeFailLog = requireDefined(
+      loggedErrors.find((e) => e.msg.includes('failed to write AUTH_FAILED sentinel')),
+    );
+    expect((writeFailLog.obj as Record<string, unknown>).error).toBe(
+      'sentinel_write_failed_string',
+    );
+  } finally {
+    await rmRecursive(dirAuth);
+  }
 });

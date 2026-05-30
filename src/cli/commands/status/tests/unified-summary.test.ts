@@ -125,3 +125,29 @@ test('dev profile: healthy state returns dev-specific running headline', () => {
   expect(s.level).toBe('ok');
   expect(s.headline).toContain('Dev daemon is running');
 });
+
+test('daemonLastCycleAt various age brackets and invalid formatting', () => {
+  const s1 = deriveUnifiedSummary({
+    ...BASE,
+    daemonRunning: false,
+    daemonInferredAlive: true,
+    daemonLastCycleAt: 'invalid-date',
+  });
+  expect(s1.hint).not.toContain('ago');
+
+  const s2 = deriveUnifiedSummary({
+    ...BASE,
+    daemonRunning: false,
+    daemonInferredAlive: true,
+    daemonLastCycleAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+  });
+  expect(s2.hint).toContain('5m ago');
+
+  const s3 = deriveUnifiedSummary({
+    ...BASE,
+    daemonRunning: false,
+    daemonInferredAlive: true,
+    daemonLastCycleAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+  });
+  expect(s3.hint).toContain('2h ago');
+});

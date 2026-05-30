@@ -1,9 +1,12 @@
 #!/usr/bin/env bun
-// Runs `bun test --coverage --parallel --timeout 30000` and force-exits after
-// the test summary has been printed. Bun's coverage worker pool occasionally
-// deadlocks during finalization on GitHub-hosted ubuntu runners — the actual
-// tests have already passed by then, so we detect the summary line and give
-// the process a short grace period to exit cleanly before sending SIGTERM.
+// Runs `bun test --coverage --timeout 30000` (serial — NO --parallel) and
+// force-exits after the test summary has been printed. `--parallel` is
+// deliberately omitted: Bun's parallel coverage merge undercounts any source
+// file imported by tests across multiple workers (each worker's per-file
+// coverage fails to union), producing wildly wrong per-file numbers. Serial
+// coverage is accurate. Bun's coverage finalization can still occasionally
+// hang, so we detect the summary line and give the process a short grace
+// period to exit cleanly before sending SIGTERM.
 //
 // Exit code:
 //   - bun's own exit code if it completes naturally
@@ -18,11 +21,9 @@ const GRACE_AFTER_SUMMARY_MS = 15_000;
 const SUMMARY_REGEX = /Ran \d+ tests across \d+ files/;
 const FAILURE_REGEX = /\b\d+ fail\b/;
 
-const child = spawn(
-  'bun',
-  ['test', '--coverage', '--parallel', '--timeout', '30000', ...process.argv.slice(2)],
-  { stdio: ['ignore', 'pipe', 'pipe'] },
-);
+const child = spawn('bun', ['test', '--coverage', '--timeout', '30000', ...process.argv.slice(2)], {
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
 
 let summarySeen = false;
 let sawFailure = false;

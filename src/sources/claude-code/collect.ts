@@ -70,7 +70,7 @@ function claudeTextItemValue(item: unknown): string | null {
   return obj.text;
 }
 
-function claudeFirstText(content: unknown): string {
+export function claudeFirstText(content: unknown): string {
   if (typeof content === 'string') {
     return content;
   }

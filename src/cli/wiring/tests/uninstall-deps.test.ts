@@ -66,3 +66,15 @@ test('buildUninstallDeps: configExists() resolves to a boolean', async () => {
   });
   await expect(deps.configExists()).resolves.toEqual(expect.any(Boolean));
 });
+
+test('buildUninstallDeps: handles unsupported platform gracefully', () => {
+  const deps = buildUninstallDeps({
+    platform: 'freebsd' as NodeJS.Platform,
+    programPath: '/bin/p',
+    serviceUnitPath: '/tmp/x',
+    serviceManager: sm,
+    profileCtx,
+  });
+  expect(deps.devServiceManager).toBeNull();
+  expect(deps.devServiceUnitPath).toBeNull();
+});

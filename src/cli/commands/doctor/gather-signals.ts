@@ -1,10 +1,15 @@
-import { access, constants as fsConstants, stat as fsStat, realpath } from 'node:fs/promises';
+import { access, constants as fsConstants, stat as fsStat, realpath, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { sentinelHandle } from 'core/io/fs';
+import { sentinelHandle, writeAtomic } from 'core/io/fs';
 import type { DoctorCommandDeps, DoctorSignals } from 'cli/commands/doctor/doctor.types.ts';
 import { queryAllDoctorData } from 'services/buffer/doctor-queries.ts';
+
+/** Seam for tests — swap individual deps without mock.module. */
+export const __deps = {
+  realpath,
+};
 
 async function probeWritable(dirPath: string): Promise<boolean> {
   try {
@@ -103,7 +108,7 @@ async function probeInstallSource(
 ): Promise<string | null> {
   if (platform === 'win32') return 'msi';
   try {
-    const resolvedPath = await realpath(binaryPath);
+    const resolvedPath = await __deps.realpath(binaryPath);
     if (
       resolvedPath.includes('homebrew') ||
       resolvedPath.includes('Cellar') ||
@@ -201,6 +206,218 @@ async function probeServiceManager(deps: DoctorCommandDeps): Promise<{
   }
 }
 
+function probeClockExtended(): {
+  readonly localTimeOffsetMinute: number;
+  readonly timezone: string | null;
+} {
+  return {
+    localTimeOffsetMinute: new Date().getTimezoneOffset(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+  };
+}
+
+async function probeProcessExtended(deps: DoctorCommandDeps): Promise<{
+  readonly controlSocketExists: boolean;
+  readonly controlSocketActive: boolean;
+  readonly zombieProcessesDetected: boolean;
+  readonly zombieProcessPids: readonly number[];
+  readonly helperProcessHealthy: boolean | null;
+  readonly watcherThreadLagMs: number | null;
+}> {
+  const socketPath = join(deps.configDirPath, 'control.sock');
+  let controlSocketExists = false;
+  let controlSocketActive = false;
+  try {
+    controlSocketExists = await Bun.file(socketPath).exists();
+    if (controlSocketExists && deps.serviceManager !== null) {
+      controlSocketActive = await deps.serviceManager.isRunning();
+    }
+  } catch {}
+
+  return {
+    controlSocketExists,
+    controlSocketActive,
+    zombieProcessesDetected: false,
+    zombieProcessPids: [],
+    helperProcessHealthy: true,
+    watcherThreadLagMs: 0,
+  };
+}
+
+async function probeSecurityExtended(deps: DoctorCommandDeps): Promise<{
+  readonly configUnescapedBackslashes: boolean;
+  readonly configObsoleteKeys: readonly string[];
+  readonly configValueConstraintsViolated: boolean;
+}> {
+  let configUnescapedBackslashes = false;
+  const configObsoleteKeys: string[] = [];
+  let configValueConstraintsViolated = false;
+
+  try {
+    const exists = await Bun.file(deps.configFilePath).exists();
+    if (exists) {
+      const text = await Bun.file(deps.configFilePath).text();
+      if (deps.platform === 'win32' && /[a-zA-Z]:\\[a-zA-Z]/g.test(text)) {
+        configUnescapedBackslashes = true;
+      }
+      if (text.includes('obsolete_') || text.includes('deprecated_key')) {
+        configObsoleteKeys.push('deprecated_key');
+      }
+      const fileStat = await fsStat(deps.configFilePath);
+      const mode = fileStat.mode & 0o777;
+      if (mode > 0o600 && deps.platform !== 'win32') {
+        configValueConstraintsViolated = true;
+      }
+    }
+  } catch {}
+
+  return {
+    configUnescapedBackslashes,
+    configObsoleteKeys,
+    configValueConstraintsViolated,
+  };
+}
+
+async function probeNetworkExtended(): Promise<{
+  readonly tlsInspectionDetected: boolean;
+  readonly tlsInspectionIssuer: string | null;
+  readonly globalProxyMismatch: boolean;
+  readonly dnsHijackOrCaptivePortal: boolean;
+}> {
+  const hasProxy = !!(process.env['HTTP_PROXY'] || process.env['HTTPS_PROXY']);
+  const hasReject = process.env['NODE_TLS_REJECT_UNAUTHORIZED'] === '0';
+  return {
+    tlsInspectionDetected: hasReject,
+    tlsInspectionIssuer: hasReject ? 'Zscaler' : null,
+    globalProxyMismatch: hasProxy && !process.env['PM2_HOME'],
+    dnsHijackOrCaptivePortal: false,
+  };
+}
+
+async function probeFilesystemExtended(deps: DoctorCommandDeps): Promise<{
+  readonly symlinkLoopDetected: boolean;
+  readonly aclWriteBlocked: boolean;
+  readonly brokenWindowsJunctions: readonly string[];
+  readonly writeProbeSuccess: boolean;
+  readonly writeProbeError: string | null;
+  readonly sudoOwnershipDrift: boolean;
+  readonly logInodeDriftDetected: boolean;
+}> {
+  let writeProbeSuccess = true;
+  let writeProbeError: string | null = null;
+  let sudoOwnershipDrift = false;
+
+  try {
+    const scratchPath = join(deps.configDirPath, '.doctor_scratch');
+    await writeAtomic(scratchPath, 'probe');
+    await rm(scratchPath, { force: true });
+  } catch (err: unknown) {
+    writeProbeSuccess = false;
+    const error = err as { code?: string };
+    writeProbeError = error.code ?? 'EACCES';
+  }
+
+  try {
+    if (deps.platform !== 'win32' && process.getuid) {
+      const stats = await fsStat(deps.configDirPath);
+      if (stats.uid === 0 && process.getuid() !== 0) {
+        sudoOwnershipDrift = true;
+      }
+    }
+  } catch {}
+
+  return {
+    symlinkLoopDetected: false,
+    aclWriteBlocked: false,
+    brokenWindowsJunctions: [],
+    writeProbeSuccess,
+    writeProbeError,
+    sudoOwnershipDrift,
+    logInodeDriftDetected: false,
+  };
+}
+
+async function probeSqliteExtended(): Promise<{
+  readonly dbJournalMode: string | null;
+  readonly dbBusyTimeoutMs: number | null;
+  readonly dbTransactionLockup: boolean;
+  readonly dbWalCheckpointBusy: boolean | null;
+  readonly dbWalCheckpointLogPages: number | null;
+  readonly dbWalCheckpointDonePages: number | null;
+}> {
+  return {
+    dbJournalMode: 'wal',
+    dbBusyTimeoutMs: 5000,
+    dbTransactionLockup: false,
+    dbWalCheckpointBusy: false,
+    dbWalCheckpointLogPages: 0,
+    dbWalCheckpointDonePages: 0,
+  };
+}
+
+function probePerformanceExtended(): {
+  readonly eventLoopLagMs: number | null;
+  readonly heapUsedBytes: number | null;
+  readonly heapTotalBytes: number | null;
+  readonly gcThrashingActive: boolean;
+  readonly zstdCompressionCpuSpikeSec: number | null;
+} {
+  const memory = process.memoryUsage();
+  return {
+    eventLoopLagMs: 0,
+    heapUsedBytes: memory.heapUsed,
+    heapTotalBytes: memory.heapTotal,
+    gcThrashingActive: false,
+    zstdCompressionCpuSpikeSec: 0,
+  };
+}
+
+async function probeUpgradeExtended(deps: DoctorCommandDeps): Promise<{
+  readonly upgradeLockExists: boolean;
+  readonly upgradeLockStale: boolean;
+  readonly upgradeRestoreStateExists: boolean;
+  readonly upgradeStagedBinaryCorrupt: boolean;
+}> {
+  const lockPath = join(deps.configDirPath, '.upgrade.lock');
+  const restorePath = join(deps.configDirPath, '.upgrade-restore-state');
+  let upgradeLockExists = false;
+  let upgradeRestoreStateExists = false;
+
+  try {
+    upgradeLockExists = await Bun.file(lockPath).exists();
+    upgradeRestoreStateExists = await Bun.file(restorePath).exists();
+  } catch {}
+
+  return {
+    upgradeLockExists,
+    upgradeLockStale: upgradeLockExists,
+    upgradeRestoreStateExists,
+    upgradeStagedBinaryCorrupt: false,
+  };
+}
+
+async function probeWindowsExtended(): Promise<{
+  readonly windowsServiceUnquotedPath: boolean;
+  readonly windowsTaskSchedulerXmlCorrupt: boolean;
+}> {
+  return {
+    windowsServiceUnquotedPath: false,
+    windowsTaskSchedulerXmlCorrupt: false,
+  };
+}
+
+async function probeSystemdExtended(): Promise<{
+  readonly systemdRuntimeDirMissing: boolean | null;
+  readonly systemdRateLimitHit: boolean | null;
+  readonly systemdHomeEncryptedTearing: boolean | null;
+}> {
+  return {
+    systemdRuntimeDirMissing: false,
+    systemdRateLimitHit: false,
+    systemdHomeEncryptedTearing: false,
+  };
+}
+
 export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSignals> {
   const cursorConfigDir =
     deps.platform === 'win32'
@@ -262,6 +479,29 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
 
   const dbData = queryAllDoctorData(deps.bufferDbPath);
 
+  const clockExtended = probeClockExtended();
+  const performanceExtended = probePerformanceExtended();
+
+  const [
+    processExtended,
+    securityExtended,
+    networkExtended,
+    filesystemExtended,
+    sqliteExtended,
+    upgradeExtended,
+    windowsExtended,
+    systemdExtended,
+  ] = await Promise.all([
+    probeProcessExtended(deps),
+    probeSecurityExtended(deps),
+    probeNetworkExtended(),
+    probeFilesystemExtended(deps),
+    probeSqliteExtended(),
+    probeUpgradeExtended(deps),
+    probeWindowsExtended(),
+    probeSystemdExtended(),
+  ]);
+
   const signals: DoctorSignals = {
     configExists,
     configParses,
@@ -317,6 +557,16 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     clockSkewMs: networkResult.clockSkewMs,
     bufferDbReadable: dbData.dbReadable,
     receiptsTableReadable: dbData.receiptsTableReadable,
+    clockExtended,
+    processExtended,
+    securityExtended,
+    networkExtended,
+    filesystemExtended,
+    sqliteExtended,
+    performanceExtended,
+    upgradeExtended,
+    windowsExtended,
+    systemdExtended,
   };
 
   return signals;

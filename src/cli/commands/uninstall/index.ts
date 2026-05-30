@@ -30,6 +30,9 @@ export type {
   UninstallCommandOptions,
 } from 'cli/commands/uninstall/uninstall.types.ts';
 
+const noop = (): void => {};
+const SILENT_OUTPUT: OutputSink = { info: noop, warn: noop, error: noop, success: noop };
+
 async function removeUnitFile(deps: UninstallCommandDeps, unitPath: string | null): Promise<void> {
   if (unitPath === null) return;
   try {
@@ -55,14 +58,7 @@ export async function runUninstall(
   const isDevMode =
     deps.isDevMode ?? (await readDevModeSentinel(join(deps.profileRootDir, 'DEV_MODE')));
 
-  const uninstallOutput: OutputSink = isDevMode
-    ? deps.output
-    : {
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-        success: () => {},
-      };
+  const uninstallOutput: OutputSink = isDevMode ? deps.output : SILENT_OUTPUT;
 
   const uninstallDeps: UninstallCommandDeps = {
     ...deps,
