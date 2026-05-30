@@ -40,8 +40,14 @@ export async function runUpgrade(
       (process.argv[1].includes('src/main.ts') || process.argv[1].includes('src\\main.ts')));
 
   if (isLocal) {
-    const platform = process.platform === 'win32' ? 'windows' : process.platform;
-    const target = `${platform}-${process.arch}`;
+    const platformOverride = deps.platform ?? process.platform;
+    const platform = platformOverride === 'win32' ? 'windows' : platformOverride;
+    let target = `${platform}-${process.arch}`;
+    const distMatch = deps.binaryPath.match(/[/\\]dist[/\\]([^/\\]+)[/\\]/);
+    if (distMatch?.[1]) {
+      target = distMatch[1];
+    }
+
     let repoRoot = resolve(deps.binaryPath, '..', '..', '..');
     const pathsToTry = [
       typeof process !== 'undefined' ? process.argv?.[1] : undefined,

@@ -36,9 +36,10 @@ export function defaultWhich(cmd: string): string | null {
 export async function defaultSpawn(argv: string[]): Promise<{ stdout: string; exitCode: number }> {
   const proc = Bun.spawn(argv, {
     stdout: 'pipe',
-    stderr: 'pipe',
+    stderr: 'ignore',
     signal: AbortSignal.timeout(SPAWN_TIMEOUT_MS),
   });
+
   const stdout = await new Response(proc.stdout).text();
   const exitCode = await proc.exited;
   return { stdout, exitCode };

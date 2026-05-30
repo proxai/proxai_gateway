@@ -64,7 +64,8 @@ export const realCommandRunner: CommandRunner = {
   exec: async (file, args) => {
     const resolved = Bun.which(file);
     if (resolved === null) return { stdout: '', ok: false };
-    const proc = Bun.spawn([resolved, ...args], { stdout: 'pipe', stderr: 'pipe' });
+    const proc = Bun.spawn([resolved, ...args], { stdout: 'pipe', stderr: 'ignore' });
+
     const stdout = await new Response(proc.stdout).text();
     await proc.exited;
     return { stdout, ok: proc.exitCode === 0 };

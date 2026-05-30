@@ -30,11 +30,16 @@ import { captureOutput } from 'cli/output.ts';
 
 let dir: string;
 
+const realBunSpawn = Bun.spawn;
+const realArgv = process.argv;
+
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'proxai-cli-upgrade-'));
 });
 
 afterEach(async () => {
+  Bun.spawn = realBunSpawn;
+  process.argv = realArgv;
   await rmRecursive(dir);
   statSyncThrowPath = null;
 });
@@ -606,7 +611,7 @@ test('local build path upgrade resolves repository root correctly', async () => 
     platform: 'darwin',
   });
   expect(result2.exitCode).toBe(0);
-  expect(spawnedCmd).toEqual(['bun', 'scripts/build.ts', 'darwin-arm64']);
+  expect(spawnedCmd).toEqual(['bun', 'scripts/build.ts', `darwin-${process.arch}`]);
   expect(spawnedCwd).toBe(dir);
 
   Bun.spawn = origSpawn;

@@ -1,0 +1,40 @@
+# Local cross-platform unit-test image for proxai_gateway, orchestrated by
+# proxai_ops (`po gateway test`). Runs the Linux test:report suite for one
+# architecture (linux/arm64 native, linux/amd64 under emulation on Apple
+# Silicon).
+#
+# This is a STABLE BASE image — it bakes only the runtime + tools + user, never
+# the source or the test logic:
+#   - source is bind-mounted at /app at run time (live; no rebuild on edits)
+#   - the entrypoint runs from the bind-mounted /app/scripts/docker-test/
+#     entrypoint.sh, so a reused container (docker start) never runs a stale
+#     copy
+#   - /app/node_modules is a per-arch anonymous volume (Linux-native deps,
+#     never the host's macOS-arm64 modules); it persists across reuse and is
+#     removed with the container by `po clean`.
+#
+# Fidelity notes — shaped to match the GitHub Actions ubuntu runner, NOT a bare
+# bun image, so results mirror CI:
+#   - runs as the non-root `bun` user (CI runs non-root; several doctor signal
+#     tests read the real process uid via process.getuid()).
+#   - installs git (repo-root / file-tree / upgrade tests shell out to it).
+#
+# It is NOT a deployment image and is never published.
+FROM oven/bun:1.3.14
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN echo "3277341234567890abcdef1234567890" > /etc/machine-id
+
+
+WORKDIR /app
+# Pre-own /app/node_modules so the fresh per-arch volume mounts as the non-root
+# bun user (Docker seeds an empty volume from the image path's ownership).
+RUN mkdir -p /app/node_modules && chown -R bun:bun /app
+
+USER bun
+# Source + this script are bind-mounted at run time; reuse re-reads the live
+# copy. GATEWAY_TEST_ARCH is supplied via `docker run -e` by proxai_ops.
+CMD ["bash", "scripts/docker-test/entrypoint.sh"]

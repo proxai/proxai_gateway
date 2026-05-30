@@ -1,0 +1,10 @@
+# Build context for Dockerfile.test only needs scripts/docker-test/entrypoint.sh
+# (source + deps are mounted at run time). Keep the context tiny.
+node_modules
+dist
+.git
+.tmp
+scratch
+coverage
+*.log
+.DS_Store

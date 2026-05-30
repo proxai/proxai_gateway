@@ -100,11 +100,12 @@ const POWERSHELL_SCRIPT =
 
 export const realPowershellSpawn: SpawnPathCleaner = async (file, args, env) => {
   const proc = Bun.spawn([file, ...args], {
-    stdout: 'pipe',
+    stdout: 'ignore',
     stderr: 'pipe',
     stdin: 'ignore',
     env,
   });
+
   const stderr = await new Response(proc.stderr).text();
   await proc.exited;
   return { ok: proc.exitCode === 0, stderr };
