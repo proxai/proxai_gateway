@@ -14,8 +14,11 @@ function pct(value: number): string {
 
 function colorizeDiffLine(line: string): string {
   if (line.startsWith('error:')) return chalk.red(line);
-  if (/^[-]\s/.test(line) || line.startsWith('- Expected')) return chalk.red(line);
-  if (/^[+]\s/.test(line) || line.startsWith('+ Received')) return chalk.green(line);
+  if (line.startsWith('Expected:') || /^[-]\s/.test(line) || line.startsWith('- Expected'))
+    return chalk.green(line);
+  if (line.startsWith('Received:') || /^[+]\s/.test(line) || line.startsWith('+ Received'))
+    return chalk.red(line);
+  if (/^\s*\d+ \|/.test(line)) return chalk.dim(line);
   if (/^\s*at\b.*:\d+:\d+/.test(line)) return chalk.dim(line);
   return line;
 }
