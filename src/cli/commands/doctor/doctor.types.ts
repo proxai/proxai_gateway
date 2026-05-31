@@ -277,4 +277,7 @@ export interface DoctorCommandDeps {
   // Injectable so the sudo-ownership check is testable on a Windows runner,
   // where the real process.getuid is undefined. Defaults to process.getuid.
   readonly getuid?: () => number;
+  // Injectable so DEV_MODE detection is deterministic in tests — the real
+  // readBootId throws on CI Linux (empty /proc boot_id). Defaults to readBootId.
+  readonly readBootId?: () => Promise<string>;
 }

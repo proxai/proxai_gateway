@@ -31,6 +31,9 @@ const prodBaseUrl = buildProfileContext('prod').defaultNestBaseUrl;
 import type { GatewayConfig } from 'services/config';
 
 const TEST_MACHINE_UUID = 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE';
+// Injected as deps.readBootId so DEV_MODE detection is deterministic — the real
+// readBootId throws on CI Linux (empty /proc boot_id) and is slow on Windows.
+const SETUP_BOOT_ID = 'test-boot-id-setup';
 const TEST_USER_ID = 'u_1';
 const TEST_USER_ID_OTHER = 'u_2';
 const EXPECTED_HOST_ID = deriveHostId(TEST_MACHINE_UUID, TEST_USER_ID);
@@ -177,6 +180,7 @@ function deps(control: MockHttpControl): Parameters<typeof runSetup>[0] {
     configExists: () => Bun.file(configPath).exists(),
     httpClientFactory: mockFactory(control),
     readMachineUuid: async () => TEST_MACHINE_UUID,
+    readBootId: () => Promise.resolve(SETUP_BOOT_ID),
     now: () => '2026-04-29T10:42:00.123Z',
     platform: 'linux',
     runUpgrade: async () => ({ exitCode: 0 }),
@@ -903,8 +907,7 @@ test('setup with existing config and production build path redirects to upgrade'
 });
 
 test('setup in dev mode with configs present', async () => {
-  const { readBootId } = require('core/system/boot-id.ts');
-  const bootId = await readBootId();
+  const bootId = SETUP_BOOT_ID;
   const fs = require('node:fs/promises');
   await fs.writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
 
@@ -999,8 +1002,7 @@ test('setup in dev mode with configs present', async () => {
 });
 
 test('setup in dev mode with configs absent', async () => {
-  const { readBootId } = require('core/system/boot-id.ts');
-  const bootId = await readBootId();
+  const bootId = SETUP_BOOT_ID;
   const fs = require('node:fs/promises');
   await fs.writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
 

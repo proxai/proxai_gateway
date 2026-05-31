@@ -1100,12 +1100,14 @@ test('handles devServiceManager stop, unregister and dev unit-file cleanup', asy
 
 test('sentinel reading for isDevMode resolves based on DEV_MODE file', async () => {
   const { sm } = fakeManager();
-  const { readBootId } = await import('core/system/boot-id.ts');
-  const bootId = await readBootId();
+  // Inject readBootId so the DEV_MODE sentinel match is deterministic — the real
+  // one throws on CI Linux (empty /proc boot_id) and is slow on Windows.
+  const bootId = 'test-boot-id-uninstall';
+  const readBootId = (): Promise<string> => Promise.resolve(bootId);
 
   // 1. DEV_MODE sentinel exists -> isDevMode is true
   await writeFile(join(tmpRoot, '.proxai', 'DEV_MODE'), JSON.stringify({ bootId }));
-  const depsWithDevSentinel = depsFor(sm);
+  const depsWithDevSentinel = { ...depsFor(sm), readBootId };
   delete (depsWithDevSentinel as { isDevMode?: unknown }).isDevMode; // force sentinel read
   const output1 = captureOutput();
   await runUninstall({ ...depsWithDevSentinel, output: output1 }, { yes: true });
@@ -1113,7 +1115,7 @@ test('sentinel reading for isDevMode resolves based on DEV_MODE file', async () 
 
   // 2. DEV_MODE sentinel does not exist -> isDevMode is false (silent output except final success)
   await rm(join(tmpRoot, '.proxai', 'DEV_MODE'), { force: true });
-  const depsNoSentinel = depsFor(sm);
+  const depsNoSentinel = { ...depsFor(sm), readBootId };
   delete (depsNoSentinel as { isDevMode?: unknown }).isDevMode; // force sentinel read
   const output2 = captureOutput();
   await runUninstall({ ...depsNoSentinel, output: output2 }, { yes: true });

@@ -5,7 +5,10 @@ import { rmRecursive } from 'core/io/fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readBootId } from 'core/system/boot-id.ts';
+// Injected as deps.readBootId so DEV_MODE detection is deterministic — the real
+// readBootId throws on CI Linux (empty /proc boot_id) and the slow Windows WMI
+// read lets watch mode auto-quit before the first frame renders.
+const STATUS_BOOT_ID = 'test-boot-id-status';
 
 import {
   inferDaemonAlive,
@@ -88,6 +91,7 @@ function makeDeps(
     authFailedSentinelPath: join(dir, 'AUTH_FAILED'),
     sessionStoppedSentinelPath: join(dir, 'SESSION_STOPPED'),
     devModeSentinelPath: join(dir, 'DEV_MODE'),
+    readBootId: () => Promise.resolve(STATUS_BOOT_ID),
     ...extras,
   };
 }
@@ -192,7 +196,7 @@ test('JSON mode returns error when configured but buffer is undefined', async ()
 });
 
 test('watch mode renders the configured-but-buffer-unavailable summary', async () => {
-  const bootId = await readBootId();
+  const bootId = STATUS_BOOT_ID;
   await writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
   const out = captureOutput();
   buffer.close();
@@ -206,7 +210,7 @@ test('watch mode renders the configured-but-buffer-unavailable summary', async (
 });
 
 test('watch mode renders the full breakdown by default', async () => {
-  const bootId = await readBootId();
+  const bootId = STATUS_BOOT_ID;
   await writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
   setDaemonState(buffer, {
     lastCycleStartedAt: '2026-05-08T02:40:13.100Z',
@@ -597,7 +601,7 @@ test('inferDaemonAlive: malformed iso strings return false', () => {
 });
 
 test('watch mode renders in full when isDevMode is true even if compact option is true', async () => {
-  const bootId = await readBootId();
+  const bootId = STATUS_BOOT_ID;
   await writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
   setDaemonState(buffer, {
     lastCycleStartedAt: '2026-05-08T02:40:13.100Z',
@@ -625,7 +629,7 @@ test('watch mode renders in full when isDevMode is true even if compact option i
 });
 
 test('watch mode stacks production and development profiles when isDevMode is true and devDeps is provided', async () => {
-  const bootId = await readBootId();
+  const bootId = STATUS_BOOT_ID;
   await writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
   setDaemonState(buffer, {
     lastCycleStartedAt: '2026-05-08T02:40:13.100Z',

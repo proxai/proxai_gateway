@@ -28,6 +28,7 @@ export interface UninstallCommandDeps {
   installDir?: string;
   currentExecPath?: string;
   isDevMode?: boolean;
+  readBootId?: () => Promise<string>;
 }
 
 export interface UninstallCommandOptions {

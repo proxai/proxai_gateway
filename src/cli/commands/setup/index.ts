@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { sentinelHandle } from 'core/io/fs';
 import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
+import { readBootId } from 'core/system/boot-id.ts';
 import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
 import { nowIsoUtc } from 'core/utils';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
@@ -167,7 +168,10 @@ async function reportAlreadyConfiguredAndMaybeStart(
   options: SetupCommandOptions,
   existing: GatewayConfig | null,
 ): Promise<CommandResult> {
-  const isDevMode = await readDevModeSentinel(join(profileRootDir(), 'DEV_MODE'));
+  const isDevMode = await readDevModeSentinel(
+    join(profileRootDir(), 'DEV_MODE'),
+    deps.readBootId ?? readBootId,
+  );
   if (isDevMode) {
     deps.output.info('Configuration status:');
     const devCtx = buildProfileContext('dev');

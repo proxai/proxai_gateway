@@ -12,6 +12,7 @@ import { resolve, join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import chalk from 'chalk';
 import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
+import { readBootId } from 'core/system/boot-id.ts';
 import { profileRootDir, buildProfileContext } from 'core/io/fs/profile.ts';
 import { nestVerifyKeyUrl } from 'services/config';
 import { buildPlatformServiceContext, platformServiceUnitPath } from 'cli/wiring/platform.ts';
@@ -215,7 +216,10 @@ export async function runDoctor(
 ): Promise<CommandResult> {
   deps.output.info('Gathering diagnostic signals...');
 
-  const isDevMode = await readDevModeSentinel(join(profileRootDir(), 'DEV_MODE'));
+  const isDevMode = await readDevModeSentinel(
+    join(profileRootDir(), 'DEV_MODE'),
+    deps.readBootId ?? readBootId,
+  );
   let findings: Finding[];
   let signals: DoctorSignals;
 

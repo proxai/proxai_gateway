@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
+import { readBootId } from 'core/system/boot-id.ts';
 import { profileRootDir } from 'core/io/fs/profile.ts';
 import type { ProfileName } from 'core/io/fs/profile.types.ts';
 
@@ -157,6 +158,7 @@ export async function gatherStatusSnapshot(
 
   const isDevMode = await readDevModeSentinel(
     deps.devModeSentinelPath ?? join(profileRootDir(), 'DEV_MODE'),
+    deps.readBootId ?? readBootId,
   );
 
   return {

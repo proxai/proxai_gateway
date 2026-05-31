@@ -29,10 +29,13 @@ import { captureOutput } from 'cli/output.ts';
 import type { OutputSink } from 'cli/cli.types.ts';
 import type { DoctorCommandDeps } from 'cli/commands/doctor/doctor.types.ts';
 import type { ServiceManager } from 'cli/service-manager';
-import { readBootId } from 'core/system/boot-id.ts';
 import { profileRootDir } from 'core/io/fs/profile.ts';
 import { homedir } from 'node:os';
 import { writeFileSync, rmSync, mkdirSync } from 'node:fs';
+
+// Injected as deps.readBootId so DEV_MODE detection is deterministic — the real
+// readBootId throws on CI Linux (empty /proc boot_id) and is slow on Windows.
+const DOCTOR_BOOT_ID = 'test-boot-id-doctor';
 
 let dir: string;
 let bufferDbPath: string;
@@ -84,6 +87,7 @@ function makeDeps(output: OutputSink, over: Partial<DoctorCommandDeps> = {}): Do
     platform: 'linux',
     binaryPath: join(dir, 'binary'),
     currentVersion: '2026.5.28',
+    readBootId: () => Promise.resolve(DOCTOR_BOOT_ID),
     profileCtx: {
       name: 'dev',
       isDev: true,
@@ -241,7 +245,7 @@ test('doctor writes HTML report inside specified output directory', async () => 
 });
 
 test('in dev mode without explicit profile option, runs diagnostics for both profiles, prefixes, and deduplicates generic findings', async () => {
-  const bootId = await readBootId();
+  const bootId = DOCTOR_BOOT_ID;
   const sentinelPath = join(profileRootDir(), 'DEV_MODE');
   writeFileSync(sentinelPath, JSON.stringify({ bootId }));
 
@@ -259,7 +263,7 @@ test('in dev mode without explicit profile option, runs diagnostics for both pro
 });
 
 test('in dev mode with explicit profile, applies profile-specific prefix only to non-generic findings', async () => {
-  const bootId = await readBootId();
+  const bootId = DOCTOR_BOOT_ID;
   const sentinelPath = join(profileRootDir(), 'DEV_MODE');
   writeFileSync(sentinelPath, JSON.stringify({ bootId }));
 
@@ -284,7 +288,7 @@ test('in dev mode with explicit profile, applies profile-specific prefix only to
 });
 
 test('in dev mode without explicit profile option, deduplicates generic findings appearing in both profiles', async () => {
-  const bootId = await readBootId();
+  const bootId = DOCTOR_BOOT_ID;
   const sentinelPath = join(profileRootDir(), 'DEV_MODE');
   writeFileSync(sentinelPath, JSON.stringify({ bootId }));
 
@@ -316,7 +320,7 @@ test('in dev mode without explicit profile option, deduplicates generic findings
 });
 
 test('in dev mode without explicit profile option, handles generic findings appearing only in prod profile', async () => {
-  const bootId = await readBootId();
+  const bootId = DOCTOR_BOOT_ID;
   const sentinelPath = join(profileRootDir(), 'DEV_MODE');
   writeFileSync(sentinelPath, JSON.stringify({ bootId }));
 

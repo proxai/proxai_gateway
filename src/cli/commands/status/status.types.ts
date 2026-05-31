@@ -25,6 +25,7 @@ export interface StatusCommandDeps {
   sessionStoppedSentinelPath: string;
   updateAvailableSentinelPath?: string;
   devModeSentinelPath?: string;
+  readBootId?: () => Promise<string>;
   serviceManager?: ServiceManager;
   loadConfig?: (path?: string) => Promise<GatewayConfig>;
   currentVersion?: string;

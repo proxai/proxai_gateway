@@ -20,6 +20,7 @@ export interface SetupCommandDeps {
   configExists: () => Promise<boolean>;
   httpClientFactory: (apiKey: string, hostId: string) => HttpClient;
   readMachineUuid?: () => Promise<string>;
+  readBootId?: () => Promise<string>;
   now?: () => string;
   platform: NodeJS.Platform;
   windowsUserId?: string;

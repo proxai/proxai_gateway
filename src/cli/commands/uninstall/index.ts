@@ -6,6 +6,7 @@ import { createActor } from 'xstate';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import { readDevModeSentinel, rmRecursive } from 'core/io/fs';
+import { readBootId } from 'core/system/boot-id.ts';
 import { uninstallMachine } from 'services/state-machines/uninstall';
 
 import { buildConfirmationMessage } from 'cli/commands/uninstall/confirmation-message.ts';
@@ -56,7 +57,11 @@ export async function runUninstall(
   machine.start();
 
   const isDevMode =
-    deps.isDevMode ?? (await readDevModeSentinel(join(deps.profileRootDir, 'DEV_MODE')));
+    deps.isDevMode ??
+    (await readDevModeSentinel(
+      join(deps.profileRootDir, 'DEV_MODE'),
+      deps.readBootId ?? readBootId,
+    ));
 
   const uninstallOutput: OutputSink = isDevMode ? deps.output : SILENT_OUTPUT;
 

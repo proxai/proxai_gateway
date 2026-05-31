@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
+import { readBootId } from 'core/system/boot-id.ts';
 import { profileRootDir } from 'core/io/fs/profile.ts';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
@@ -47,6 +48,7 @@ async function runJsonStatus(deps: StatusCommandDeps): Promise<CommandResult> {
   if (!exists) {
     const isDevMode = await readDevModeSentinel(
       deps.devModeSentinelPath ?? join(profileRootDir(), 'DEV_MODE'),
+      deps.readBootId ?? readBootId,
     );
     const emptyJson = buildEmptyStatusJson();
     emptyJson.isDevMode = isDevMode;
@@ -87,6 +89,7 @@ async function buildDualFrame(
 ): Promise<RenderInputs> {
   const isDevMode = await readDevModeSentinel(
     deps.devModeSentinelPath ?? join(profileRootDir(), 'DEV_MODE'),
+    deps.readBootId ?? readBootId,
   );
 
   const showBoth = isDevMode ? true : options.all === true && options.compact !== true;
