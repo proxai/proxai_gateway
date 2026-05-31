@@ -1,28 +1,9 @@
-import { afterAll, afterEach, expect, mock, test } from 'bun:test';
-import * as decodeReal from 'services/prompt-extract/decode.ts';
+import { expect, test } from 'bun:test';
 
-import { zstdCompressSync, zstdDecompressSync } from 'core/utils';
+import { zstdCompressSync } from 'core/utils';
 import type { BodyFormat, SourceApp } from 'services/contract';
 
-const DECODER = new TextDecoder('utf-8', { fatal: false });
-let decodeShouldThrow = false;
-
-mock.module('services/prompt-extract/decode.ts', () => ({
-  decompressBody: (body: Uint8Array): string | null => {
-    if (decodeShouldThrow) throw new Error('synthetic decode failure');
-    try {
-      return DECODER.decode(zstdDecompressSync(body));
-    } catch {
-      return null;
-    }
-  },
-}));
-
 import { extractUserPrompt } from 'services/prompt-extract';
-
-afterEach(() => {
-  decodeShouldThrow = false;
-});
 
 function input(text: string, sourceApp: SourceApp, bodyFormat: BodyFormat) {
   return { sourceApp, bodyFormat, body: zstdCompressSync(text) };
@@ -99,14 +80,12 @@ test('returns null result for the codex sqlite_rows_json fallthrough', () => {
 });
 
 test('returns null result when decoding throws unexpectedly', () => {
-  decodeShouldThrow = true;
   const text = JSON.stringify({ type: 'user', content: 'hello claude' });
-  expect(extractUserPrompt(input(text, 'claude-code', 'jsonl'))).toEqual({
+  const throwingDecode = (): string | null => {
+    throw new Error('synthetic decode failure');
+  };
+  expect(extractUserPrompt(input(text, 'claude-code', 'jsonl'), throwingDecode)).toEqual({
     userPrompt: null,
     userPromptAddedAt: null,
   });
-});
-
-afterAll(() => {
-  mock.module('services/prompt-extract/decode.ts', () => decodeReal);
 });

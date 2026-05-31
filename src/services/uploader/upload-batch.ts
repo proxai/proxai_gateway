@@ -60,7 +60,7 @@ export async function uploadBatch(
     const result = await ctx.http.uploadRawRecord(dto);
     let extracted;
     try {
-      extracted = extractUserPrompt({
+      extracted = (ctx.extractUserPrompt ?? extractUserPrompt)({
         sourceApp: batch.sourceApp,
         bodyFormat: batch.bodyFormat,
         body: batch.body,

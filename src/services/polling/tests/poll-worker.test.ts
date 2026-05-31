@@ -214,24 +214,29 @@ test('handleInspect: gemini-cli inspect block coverage', async () => {
 });
 
 test('handleInspect: handles file inspect errors and codex errors gracefully', async () => {
-  // 1. Claude Code error: Seed a file and make it unreadable
-  const projectDir = join(dir, 'proj-err');
-  await mkdir(projectDir, { recursive: true });
-  const errLogPath = join(projectDir, 'session.jsonl');
-  await writeFile(errLogPath, 'invalid-log-data');
-  await chmod(errLogPath, 0o000);
+  // chmod 0o000 only blocks reads on POSIX; Windows ignores the bits, so the
+  // file-read-error scenarios (1, 4, 5) can't be reproduced there.
+  const posix = process.platform !== 'win32';
 
-  const result = await handleInspect('claude-code', {
-    baseDir: dir,
-    captureSubAgents: false,
-    priorCursors: [],
-    gatewayVersion: 'gw-0.1',
-    maxDecompressedBytes: 9 * 1024 * 1024,
-  });
-  console.log('Claude Code Errors:', result.errors);
-  expect(result.errors.length).toBe(1);
+  // 1. Claude Code error: an unreadable session file (POSIX only)
+  if (posix) {
+    const projectDir = join(dir, 'proj-err');
+    await mkdir(projectDir, { recursive: true });
+    const errLogPath = join(projectDir, 'session.jsonl');
+    await writeFile(errLogPath, 'invalid-log-data');
+    await chmod(errLogPath, 0o000);
 
-  // 2. Codex SQLite state database error: Seed an invalid file (not a valid SQLite DB)
+    const result = await handleInspect('claude-code', {
+      baseDir: dir,
+      captureSubAgents: false,
+      priorCursors: [],
+      gatewayVersion: 'gw-0.1',
+      maxDecompressedBytes: 9 * 1024 * 1024,
+    });
+    expect(result.errors.length).toBe(1);
+  }
+
+  // 2. Codex SQLite state database error: an invalid SQLite file (cross-platform)
   const errStatePath = join(dir, 'state_1.sqlite');
   await writeFile(errStatePath, 'invalid-sqlite-db-data');
 
@@ -242,10 +247,9 @@ test('handleInspect: handles file inspect errors and codex errors gracefully', a
     gatewayVersion: 'gw-0.1',
     maxDecompressedBytes: 9 * 1024 * 1024,
   });
-  console.log('Codex Errors:', resultCodex.errors);
   expect(resultCodex.errors.length).toBe(1);
 
-  // 3. Cursor SQLite read error: Seed an invalid state.vscdb
+  // 3. Cursor SQLite read error: an invalid state.vscdb (cross-platform)
   const cursorGlobalDir = join(dir, 'globalStorage');
   await mkdir(cursorGlobalDir, { recursive: true });
   const errCursorPath = join(cursorGlobalDir, 'state.vscdb');
@@ -257,45 +261,46 @@ test('handleInspect: handles file inspect errors and codex errors gracefully', a
     gatewayVersion: 'gw-0.1',
     maxDecompressedBytes: 9 * 1024 * 1024,
   });
-  console.log('Cursor Errors:', resultCursor.errors);
   expect(resultCursor.errors.length).toBe(1);
 
   // Clean up cursor invalid file before next tests so they don't interfere
   await rmRecursive(cursorGlobalDir);
 
-  // 4. Gemini-CLI chats file read error: Seed a chats file and make it unreadable
-  const geminiDir = join(dir, 'gemini-proj-err', 'chats');
-  await mkdir(geminiDir, { recursive: true });
-  const errGeminiPath = join(geminiDir, 'session-1.jsonl');
-  await writeFile(errGeminiPath, 'invalid-log-data');
-  await chmod(errGeminiPath, 0o000);
+  // 4. Gemini-CLI chats file read error: an unreadable chats file (POSIX only)
+  if (posix) {
+    const geminiDir = join(dir, 'gemini-proj-err', 'chats');
+    await mkdir(geminiDir, { recursive: true });
+    const errGeminiPath = join(geminiDir, 'session-1.jsonl');
+    await writeFile(errGeminiPath, 'invalid-log-data');
+    await chmod(errGeminiPath, 0o000);
 
-  const resultGemini = await handleInspect('gemini-cli', {
-    baseDir: dir,
-    priorCursors: [],
-    gatewayVersion: 'gw-0.1',
-    maxDecompressedBytes: 9 * 1024 * 1024,
-  });
-  console.log('Gemini Errors:', resultGemini.errors);
-  expect(resultGemini.errors.length).toBe(1);
+    const resultGemini = await handleInspect('gemini-cli', {
+      baseDir: dir,
+      priorCursors: [],
+      gatewayVersion: 'gw-0.1',
+      maxDecompressedBytes: 9 * 1024 * 1024,
+    });
+    expect(resultGemini.errors.length).toBe(1);
+  }
 
-  // 5. Codex rollout session file inspect error: Seed a rollout file and make it unreadable
-  const codexDir = join(dir, 'codex-proj-err');
-  const rolloutDir = join(codexDir, 'sessions', '2026', '05', '21');
-  await mkdir(rolloutDir, { recursive: true });
-  const errRolloutPath = join(rolloutDir, 'rollout-1.jsonl');
-  await writeFile(errRolloutPath, 'invalid-log-data');
-  await chmod(errRolloutPath, 0o000);
+  // 5. Codex rollout session file inspect error: an unreadable rollout (POSIX only)
+  if (posix) {
+    const codexDir = join(dir, 'codex-proj-err');
+    const rolloutDir = join(codexDir, 'sessions', '2026', '05', '21');
+    await mkdir(rolloutDir, { recursive: true });
+    const errRolloutPath = join(rolloutDir, 'rollout-1.jsonl');
+    await writeFile(errRolloutPath, 'invalid-log-data');
+    await chmod(errRolloutPath, 0o000);
 
-  const resultCodexRollout = await handleInspect('codex', {
-    baseDir: codexDir,
-    captureSubAgents: true,
-    priorCursors: [],
-    gatewayVersion: 'gw-0.1',
-    maxDecompressedBytes: 9 * 1024 * 1024,
-  });
-  console.log('Codex Rollout Errors:', resultCodexRollout.errors);
-  expect(resultCodexRollout.errors.length).toBe(1);
+    const resultCodexRollout = await handleInspect('codex', {
+      baseDir: codexDir,
+      captureSubAgents: true,
+      priorCursors: [],
+      gatewayVersion: 'gw-0.1',
+      maxDecompressedBytes: 9 * 1024 * 1024,
+    });
+    expect(resultCodexRollout.errors.length).toBe(1);
+  }
 });
 
 test('handleInspect: codex rollout discovery error is recorded as codex rollout', async () => {

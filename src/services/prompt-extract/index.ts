@@ -23,9 +23,15 @@ function isJsonlSourceApp(app: SourceApp): app is JsonlSourceApp {
   return JSONL_SOURCE_APPS.has(app);
 }
 
-export function extractUserPrompt(input: PromptExtractInput): PromptExtractResult {
+export function extractUserPrompt(
+  input: PromptExtractInput,
+  // Injectable so tests can force a decode failure without globally mocking
+  // decode.ts — a process-wide mock leaks into decode.test.ts and drops the
+  // real decompressBody's coverage on CI. Defaults to the real decoder.
+  decompress: (body: Uint8Array) => string | null = decompressBody,
+): PromptExtractResult {
   try {
-    const text = decompressBody(input.body);
+    const text = decompress(input.body);
     if (text === null) return NULL_RESULT;
 
     if (input.bodyFormat === 'jsonl' && isJsonlSourceApp(input.sourceApp)) {

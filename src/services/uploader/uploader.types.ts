@@ -4,6 +4,7 @@ import type { MinimalLogger } from 'core/log';
 import type { SourceApp } from 'services/contract';
 import type { HttpClient } from 'services/http';
 import type { Pacer } from 'services/uploader/pacer.ts';
+import type { PromptExtractInput, PromptExtractResult } from 'services/prompt-extract';
 
 export interface UploaderContext {
   db: Database;
@@ -13,6 +14,10 @@ export interface UploaderContext {
   logger?: MinimalLogger;
   pacer?: Pacer;
   writeAuthFailedSentinelFn?: (sentinelPath: string, reason: string) => Promise<void>;
+  // Injectable so tests force an extract failure without globally mocking
+  // services/prompt-extract — a process-wide mock leaks into other files'
+  // prompt-extract tests. Defaults to the real extractUserPrompt.
+  extractUserPrompt?: (input: PromptExtractInput) => PromptExtractResult;
 }
 
 export interface AcceptedOutcome {

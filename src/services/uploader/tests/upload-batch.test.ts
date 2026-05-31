@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
 import * as promptExtractReal from 'services/prompt-extract';
 import type { Database } from 'bun:sqlite';
 import { rmRecursive } from 'core/io/fs';
@@ -31,13 +31,6 @@ let db: Database;
 
 const realPromptExtract = { ...promptExtractReal };
 let forceExtractUserPromptThrow = false;
-mock.module('services/prompt-extract', () => ({
-  ...realPromptExtract,
-  extractUserPrompt: ((input) => {
-    if (forceExtractUserPromptThrow) throw new Error('forced extract failure');
-    return realPromptExtract.extractUserPrompt(input);
-  }) satisfies typeof promptExtractReal.extractUserPrompt,
-}));
 
 beforeEach(() => {
   db = openInMemoryBufferDb();
@@ -49,7 +42,17 @@ afterEach(() => {
 });
 
 function ctxWith(fetchFn: FetchFn): UploaderContext {
-  return { db, http: createTestHttpClient(fetchFn), hostId: TEST_HOST_ID };
+  return {
+    db,
+    http: createTestHttpClient(fetchFn),
+    hostId: TEST_HOST_ID,
+    // Injected (not mock.module) so a forced extract failure stays local to
+    // this file and never leaks into other prompt-extract tests.
+    extractUserPrompt: (input) => {
+      if (forceExtractUserPromptThrow) throw new Error('forced extract failure');
+      return realPromptExtract.extractUserPrompt(input);
+    },
+  };
 }
 
 test('uploadRawRecord passes UPLOAD_TIMEOUT_MS to AbortSignal.timeout', async () => {
