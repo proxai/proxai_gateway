@@ -21,7 +21,7 @@ const mockSelf = {
 (globalThis as { self?: unknown }).self = mockSelf;
 
 const importPath = 'services/polling/poll-worker.ts?real=true';
-const { handleCapture, handleInspect } = await import(importPath);
+const { handleCapture, handleInspect, dispatchWorkerMessage } = await import(importPath);
 
 let dir: string;
 
@@ -421,8 +421,11 @@ test('handleCapture: runs capture for codex successfully', async () => {
   expect(codexOutcome.filesProcessed).toBe(1);
 });
 test('Web Worker Listener: handles inspect, capture, unknown task, and capture errors', async () => {
-  const onmessage = mockSelf.onmessage;
-  if (!onmessage) throw new Error('mockSelf.onmessage is not defined');
+  // Point the global `self` at THIS file's mock (another test file may have set
+  // it last), then drive the routing directly — order-independent, no reliance
+  // on which file's mock won the shared module evaluation.
+  (globalThis as { self?: unknown }).self = mockSelf;
+  const onmessage = dispatchWorkerMessage;
 
   // 1. Test inspect task
   postMessageCalled = false;

@@ -189,16 +189,16 @@ function renderFailures(
       if (detail !== undefined && detail !== '') {
         for (const dl of detail.split('\n')) out.push(`${INDENT}    ${colorizeDiffLine(dl)}`);
       } else {
-        out.push(`${INDENT}    ${chalk.dim('(no structured detail — see raw bun console below)')}`);
+        out.push(`${INDENT}    ${chalk.dim('(no structured detail captured)')}`);
       }
     }
   }
-  // Guaranteed fallback: when any failure matched no structured block, append
-  // bun's verbatim console for every failing section. Content-based, so it
-  // shows the real error even when path-separator/format drift defeats the
-  // structured matcher.
+  // Fallback: append bun's verbatim console only for the files whose failures
+  // couldn't be paired with a structured block (or the whole console when bun
+  // emitted nothing parseable). Empty when every failure matched, so it never
+  // re-prints detail already shown above.
   if (rawUnmatched !== '') {
-    out.push(`\n${INDENT}${chalk.yellow.bold('── raw bun console (failing sections) ──')}`);
+    out.push(`\n${INDENT}${chalk.yellow.bold('── raw bun console (unmatched failures) ──')}`);
     for (const rl of rawUnmatched.split('\n')) out.push(`${INDENT}  ${colorizeDiffLine(rl)}`);
   }
 }

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import * as codexReal from 'sources/codex';
 import type { Database } from 'bun:sqlite';
 import { rmRecursive } from 'core/io/fs';
@@ -19,6 +19,11 @@ beforeEach(async () => {
 afterEach(async () => {
   buffer.close();
   await rmRecursive(dir);
+  // Restore the global module mock after EVERY test, awaited — bun's
+  // mock.module is async, and an unawaited afterAll restore can lose the race
+  // on slower CI runners, leaking the fake sources/codex (fake-state.sqlite,
+  // empty rollouts) into later files' real codex tests.
+  await mock.module('sources/codex', () => codexReal);
 });
 
 test('captures errors when state collection throws synchronously', async () => {
@@ -49,8 +54,4 @@ test('captures errors when state collection throws synchronously', async () => {
     maxDecompressedBytes: 9 * 1024 * 1024,
   });
   expect(result.errors.some((e) => e.reason.includes('forced state failure'))).toBe(true);
-});
-
-afterAll(() => {
-  mock.module('sources/codex', () => codexReal);
 });

@@ -368,6 +368,8 @@ test('runDevSetup: service unit registration non-Error failure is warned but set
   ).toBe(true);
 });
 
-afterAll(() => {
-  mock.module('core/system/boot-id.ts', () => bootIdReal);
+afterAll(async () => {
+  // Awaited: bun's mock.module is async; an unawaited restore can leak this
+  // file's boot-id mock into other files (e.g. boot-id.test.ts) on CI.
+  await mock.module('core/system/boot-id.ts', () => bootIdReal);
 });

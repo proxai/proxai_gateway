@@ -31,6 +31,16 @@ function nameMatches(consoleName: string, junitLeaf: string): boolean {
   return consoleName === junitLeaf || consoleName.endsWith(` > ${junitLeaf}`);
 }
 
+// A real failure block carries an `error:` line, a `<n> |` code frame, or a
+// timeout note. Windows' name-only reporter emits a consolidated `(fail) <name>`
+// list with NO such content — guarding on a signal stops those bare names from
+// matching with garbage detail (and keeps the name-list fallback alive).
+function hasFailureSignal(detail: string): boolean {
+  return (
+    /(?:^|\n)\s*error:/.test(detail) || /(?:^|\n)\s*\d+ \|/.test(detail) || /timed out/.test(detail)
+  );
+}
+
 // JUnit reports the leaf test name; the console block carries the full describe
 // path. Match each failing case to its block and key the detail by the same
 // `<file> <leaf>` the renderer looks up.
@@ -39,47 +49,55 @@ function matchFailureDetails(tests: TestCase[], blocks: FailureBlock[]): Map<str
   for (const t of tests) {
     if (t.status !== 'fail') continue;
     const block = blocks.find(
-      (b) => b.detail !== '' && sameFile(b.file, t.file) && nameMatches(b.name, t.name),
+      (b) => hasFailureSignal(b.detail) && sameFile(b.file, t.file) && nameMatches(b.name, t.name),
     );
     if (block !== undefined) details.set(`${t.file} ${t.name}`, block.detail);
   }
   return details;
 }
 
-const FAIL_LINE_RE = /^\(fail\) /;
-const PASSLIKE_LINE_RE = /^\((?:pass|skip|todo)\)/;
+const FAIL_LINE_RE = /^\s*\(fail\) /;
+const PASSLIKE_LINE_RE = /^\s*\((?:pass|skip|todo)\)/;
 
-// Last-resort fallback when structured extraction yields nothing for some
-// failure (an output shape bun changed, or path separators that defeat
-// matching). Deliberately CONTENT-based — it never matches console paths to
-// JUnit `file` attributes (the Windows `/` vs `\` mismatch is exactly what
-// emptied the per-file approach). Returns the verbatim console for every
-// section (header -> next header) that contains a `(fail)` marker; if no
-// section parses, falls back to the whole console minus per-test pass/skip/todo
-// noise. Empty string when every failure already matched a structured block.
+// Fallback verbatim console for failures the structured matcher couldn't pair
+// with a block. Dumps the raw section (header -> next header) only for files
+// that still have an UNMATCHED failure, so it never re-prints detail already
+// shown structurally. If no such section parses AND nothing matched at all
+// (e.g. Windows name-only output), it dumps the whole console minus per-test
+// pass/skip/todo noise so at least the failed names/counts survive. Empty when
+// every failure already matched a structured block.
 function rawForUnmatched(
   testSection: string,
   tests: TestCase[],
   details: Map<string, string>,
 ): string {
-  const hasUnmatched = tests.some(
-    (t) => t.status === 'fail' && !details.has(`${t.file} ${t.name}`),
+  const unmatchedFiles = new Set(
+    tests
+      .filter((t) => t.status === 'fail' && !details.has(`${t.file} ${t.name}`))
+      .map((t) => t.file),
   );
-  if (!hasUnmatched) return '';
+  if (unmatchedFiles.size === 0) return '';
 
   const lines = testSection.split('\n');
   const sections: string[] = [];
-  let header = '';
+  let headerLine = '';
+  let headerPath = '';
   let buf: string[] = [];
   const flush = (): void => {
-    if (header !== '' && buf.some((l) => FAIL_LINE_RE.test(l))) {
-      sections.push([header, ...buf].join('\n').trim());
+    if (
+      headerPath !== '' &&
+      buf.some((l) => FAIL_LINE_RE.test(l)) &&
+      [...unmatchedFiles].some((f) => sameFile(headerPath, f))
+    ) {
+      sections.push([headerLine, ...buf].join('\n').trim());
     }
   };
   for (const line of lines) {
-    if (HEADER_RE.test(line)) {
+    const path = line.match(HEADER_RE)?.[1];
+    if (path !== undefined) {
       flush();
-      header = line;
+      headerLine = line;
+      headerPath = path;
       buf = [];
       continue;
     }
@@ -87,6 +105,10 @@ function rawForUnmatched(
   }
   flush();
   if (sections.length > 0) return sections.join('\n\n');
+  // No per-file section parsed. Only dump the whole console when NOTHING matched
+  // structurally (Windows name-only); otherwise the structured detail already
+  // covers what bun emitted and there is nothing useful to add.
+  if (details.size > 0) return '';
   return lines
     .filter((l) => !PASSLIKE_LINE_RE.test(l))
     .join('\n')

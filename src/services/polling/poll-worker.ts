@@ -1,5 +1,5 @@
 import { openReadOnly, snapshotSqlite } from 'core/io/sqlite';
-import { zstdCompressSync } from 'core/utils';
+import { requireDefined, zstdCompressSync } from 'core/utils';
 import { openInMemoryBufferDb } from 'services/buffer/db.ts';
 import type {
   BodyCompression,
@@ -663,34 +663,38 @@ export async function handleCapture(
   }
 }
 
-if (typeof self !== 'undefined' && typeof self.postMessage === 'function') {
-  const worker = self;
-  worker.onmessage = async (event: MessageEvent<WorkerInput>) => {
-    const { task, sourceName, options } = event.data;
-    try {
-      if (task === 'inspect') {
-        const inspectResult = await handleInspect(sourceName, options);
-        worker.postMessage({
-          sourceName,
-          success: true,
-          inspectResult,
-        });
-      } else if (task === 'capture') {
-        const captureResult = await handleCapture(sourceName, options);
-        worker.postMessage({
-          sourceName,
-          success: true,
-          captureResult,
-        });
-      } else {
-        throw new Error(`Unknown task: ${task}`);
-      }
-    } catch (err) {
+// Exported so tests can drive the worker message routing directly, independent
+// of which test file's `self` won the once-per-process module evaluation (the
+// listener is registered a single time). Reads `self` at call time, so it works
+// in the real worker and when a test points `globalThis.self` at a mock.
+export async function dispatchWorkerMessage(event: MessageEvent<WorkerInput>): Promise<void> {
+  const worker = requireDefined(self);
+  const { task, sourceName, options } = event.data;
+  try {
+    if (task === 'inspect') {
       worker.postMessage({
         sourceName,
-        success: false,
-        error: err instanceof Error ? err.message : String(err),
+        success: true,
+        inspectResult: await handleInspect(sourceName, options),
       });
+    } else if (task === 'capture') {
+      worker.postMessage({
+        sourceName,
+        success: true,
+        captureResult: await handleCapture(sourceName, options),
+      });
+    } else {
+      throw new Error(`Unknown task: ${task}`);
     }
-  };
+  } catch (err) {
+    worker.postMessage({
+      sourceName,
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+if (typeof self !== 'undefined' && typeof self.postMessage === 'function') {
+  self.onmessage = dispatchWorkerMessage;
 }

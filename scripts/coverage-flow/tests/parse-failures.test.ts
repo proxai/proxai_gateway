@@ -124,4 +124,26 @@ describe('extractFailureBlocks', () => {
     const blocks = extractFailureBlocks(section('src/i.test.ts:', '(pass) i ok [0.10ms]'));
     expect(blocks).toHaveLength(0);
   });
+
+  test('parses bun GitHub-reporter output: indented lines, dedented detail', () => {
+    const blocks = extractFailureBlocks(
+      section(
+        '  src/j.test.ts:', // header + results indented by the GH-Actions reporter
+        '    (pass) j passes [0.50ms]',
+        '    7 |   expect(result.count).toBe(2);',
+        '                              ^',
+        '    error: expect(received).toBe(expected)',
+        '    Expected: 2',
+        '    Received: 1',
+        '    (fail) j counts wrong [1.00ms]',
+      ),
+    );
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.file).toBe('src/j.test.ts');
+    expect(blocks[0]?.name).toBe('j counts wrong');
+    // The shared 4-space indent is stripped; the caret stays aligned to the code.
+    expect(blocks[0]?.detail.startsWith('7 |   expect(result.count).toBe(2);')).toBe(true);
+    expect(blocks[0]?.detail).toContain('\n                          ^');
+    expect(blocks[0]?.detail).toContain('\nerror: expect(received).toBe(expected)');
+  });
 });

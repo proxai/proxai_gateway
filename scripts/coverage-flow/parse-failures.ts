@@ -26,10 +26,14 @@ export interface FailureBlock {
   detail: string;
 }
 
-export const HEADER_RE = /^(\S.*\.(?:test|spec)\.ts):$/;
-const FAIL_RE = /^\(fail\) (.+?)(?: \(attempt \d+\))?(?: \[[\d.]+m?s\])?$/;
-const PASSLIKE_RE = /^\((?:pass|skip|todo)\)/;
-const ERROR_RE = /^error:/;
+// Every anchor tolerates leading whitespace: bun's GitHub Actions reporter
+// indents test output under file headers (and emits `::error::` annotations),
+// so a `^(fail)` / `^error:` pin matches nothing on CI even though the same run
+// is flush-left locally.
+export const HEADER_RE = /^\s*(\S.*\.(?:test|spec)\.ts):$/;
+const FAIL_RE = /^\s*\(fail\) (.+?)(?: \(attempt \d+\))?(?: \[[\d.]+m?s\])?$/;
+const PASSLIKE_RE = /^\s*\((?:pass|skip|todo)\)/;
+const ERROR_RE = /^\s*error:/;
 const FRAME_RE = /^\s*\d+ \|/;
 const CARET_RE = /^\s*\^\s*$/;
 const TIMEOUT_RE = /this test timed out|timed out after \d/;
@@ -41,6 +45,20 @@ function trimBlankEdges(lines: string[]): string[] {
   while (body.length > 0 && (body[0] ?? '').trim() === '') body.shift();
   while (body.length > 0 && (body[body.length - 1] ?? '').trim() === '') body.pop();
   return body;
+}
+
+// Strip the shared leading indentation from a block — bun's GitHub Actions
+// reporter indents every line — while preserving the relative alignment of code
+// frames and the caret. Blank lines don't count toward the shared indent.
+function dedent(lines: string[]): string[] {
+  let min = Infinity;
+  for (const l of lines) {
+    if (l.trim() === '') continue;
+    const lead = l.length - l.trimStart().length;
+    if (lead < min) min = lead;
+  }
+  if (!Number.isFinite(min) || min === 0) return lines;
+  return lines.map((l) => l.slice(min));
 }
 
 // Fallback when no `error:` anchor exists (e.g. a timeout): if the buffer is a
@@ -103,7 +121,7 @@ export function extractFailureBlocks(testSection: string): FailureBlock[] {
       const block: FailureBlock = {
         file: currentFile,
         name: failName,
-        detail: trimBlankEdges(lastFailureBlock(buf)).join('\n'),
+        detail: dedent(trimBlankEdges(lastFailureBlock(buf))).join('\n'),
       };
       blocks.push(block);
       buf = [];
