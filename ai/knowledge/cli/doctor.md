@@ -76,7 +76,9 @@ A checker that reports B1 when `AUTH_FAILED` is absent is **wrong**. B2 must alw
 
 ## Output shape
 
-Per profile: a header (running? version? profile?), then findings as `[CONFIRMED|LIKELY] <code> <one-line cause> → <action>`, then a `Signals` appendix with the raw values doctor read. Healthy checks are listed too — "everything fine" is also a trustworthy, copy-pasteable result.
+Per profile: a header (running? version? profile?), then the `SIGNALS` appendix with the raw values doctor read, then a single `DIAGNOSTICS SUMMARY` of findings as `[CONFIRMED|LIKELY] <code> <one-line cause> → <action>`. Healthy checks are listed too — "everything fine" is also a trustworthy, copy-pasteable result.
+
+Doctor has **one output mode** — always fully verbose, identical for regular and dev-mode users. There is no `--compact` flag and no abbreviated regular-user view: the whole point is that any user can paste the complete signals + summary for the team to debug. (The `--compact` global flag still applies to `status`/`logs`, just not `doctor`.) The summary is rendered once, not duplicated. In dev mode doctor additionally folds in the prod profile's findings with `[dev]`/`[prod]` prefixes (two daemons), but the section layout is the same.
 
 ## Files
 

@@ -309,8 +309,7 @@ export async function runDoctor(
     }
   }
 
-  const isCompact = options.compact === true || !isDevMode;
-  const output = renderDoctorOutput(findings, signals, isCompact);
+  const output = renderDoctorOutput(findings, signals);
 
   deps.output.info(output);
 

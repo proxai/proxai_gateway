@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-31T12:09:19.025Z",
-  "sourceHash": "912a5a2a6bb76cc7ade35a9cd6394760",
+  "generatedAt": "2026-05-31T12:44:56.101Z",
+  "sourceHash": "73ae5e82bca95168a277e2d59a8b78bd",
   "files": [
     {
       "path": "CLAUDE.md",
@@ -385,35 +385,35 @@
     },
     {
       "path": ".claude/knowledge/cli/dev-mode.md",
-      "hash": "5f7506f27c2dfb41"
+      "hash": "a48a0f917cf6f74f"
     },
     {
       "path": ".cursor/knowledge/cli/dev-mode.md",
-      "hash": "5f7506f27c2dfb41"
+      "hash": "a48a0f917cf6f74f"
     },
     {
       "path": ".codex/knowledge/cli/dev-mode.md",
-      "hash": "5f7506f27c2dfb41"
+      "hash": "a48a0f917cf6f74f"
     },
     {
       "path": ".agents/knowledge/cli/dev-mode.md",
-      "hash": "5f7506f27c2dfb41"
+      "hash": "a48a0f917cf6f74f"
     },
     {
       "path": ".claude/knowledge/cli/doctor.md",
-      "hash": "2a422380770e24de"
+      "hash": "0f67e996cf732a6d"
     },
     {
       "path": ".cursor/knowledge/cli/doctor.md",
-      "hash": "2a422380770e24de"
+      "hash": "0f67e996cf732a6d"
     },
     {
       "path": ".codex/knowledge/cli/doctor.md",
-      "hash": "2a422380770e24de"
+      "hash": "0f67e996cf732a6d"
     },
     {
       "path": ".agents/knowledge/cli/doctor.md",
-      "hash": "2a422380770e24de"
+      "hash": "0f67e996cf732a6d"
     },
     {
       "path": ".claude/knowledge/cli/service-unit.md",

@@ -191,7 +191,7 @@ test('doctor writes HTML report to specified absolute output path', async () => 
   expect(content).toContain('<!DOCTYPE html>');
   expect(content).toContain('PROXAI-GATEWAY DOCTOR');
   const count = content.split('Diagnostics Summary').length - 1;
-  expect(count).toBeGreaterThanOrEqual(2);
+  expect(count).toBe(1);
 });
 
 test('doctor with bare --output flag targets the home Desktop directory', async () => {

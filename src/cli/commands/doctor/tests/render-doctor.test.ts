@@ -262,15 +262,12 @@ test('signals appendix renders populated optional values and regression loops', 
   expect(out).toContain('clock_skew_ms:           4000');
 });
 
-test('renderDoctorOutput compact option hides verbose signals appendix completely', () => {
-  const out = stripAnsi(renderDoctorOutput([], baseSignals(), true));
-  expect(out).not.toContain('SIGNALS');
-  expect(out).not.toContain('last_prune_at:');
-
-  const firstIndex = out.indexOf('DIAGNOSTICS SUMMARY');
-  const lastIndex = out.lastIndexOf('DIAGNOSTICS SUMMARY');
-  expect(firstIndex).toBeGreaterThanOrEqual(0);
-  expect(lastIndex).toBeGreaterThan(firstIndex);
+test('renderDoctorOutput always shows the signals appendix and a single summary', () => {
+  const out = stripAnsi(renderDoctorOutput([], baseSignals()));
+  expect(out).toContain('SIGNALS');
+  expect(out).toContain('last_prune_at:');
+  const summaryCount = out.split('DIAGNOSTICS SUMMARY').length - 1;
+  expect(summaryCount).toBe(1);
 });
 
 test('respects process.stdout.columns and shrinks divider width accordingly', () => {

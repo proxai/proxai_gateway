@@ -22,7 +22,7 @@ The CLI is "in dev mode" iff the flag is present **and** its boot id matches the
 
 The flag controls CLI **perspective** only:
 
-1. **Dev-mode command visibility.** When `isDevMode === true`, the hidden commands (`dev`, `run`, `xstate`, `tail`, `inspect`, `redaction`, `replay`) become visible in `--help`. This is evaluated once at `main.ts` startup.
+1. **Dev-mode command & option visibility.** When `isDevMode === true`, the dev-only commands (`dev`, `xstate`, `tail`, `inspect`, `redaction`, `replay`) become visible in `--help` (the internal `run` command is always hidden regardless of mode), and the dev-only options become visible: `--profile (prod | dev)` on every command, plus `--all` and `--compact` on `status` (and `--compact` on `logs`). When dev mode is **off** a regular user must see **zero** dev surface area — no dev commands, no `--profile`, no `--all`, no `--compact`. `--profile` is hidden via a post-registration `Option.hideHelp(true)` sweep over `program.commands` (NOT unregistered) so the service-manager-invoked `run --profile <name>` still parses; `--all`/`--compact` are simply not registered when dev mode is off. Evaluated once at `main.ts` startup.
 2. **Default profile for commands.** `setup`, `logs`, and `doctor` default to the `dev` profile when in dev mode. All other commands still default to `prod`; use `--profile dev` to override.
 3. **Status detail level.** `status` shows both prod and dev profiles with full detail when in dev mode (equivalent to `--all`).
 

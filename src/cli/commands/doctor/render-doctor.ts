@@ -177,11 +177,7 @@ function renderSummaryBlock(sorted: readonly Finding[]): string[] {
   return lines;
 }
 
-export function renderDoctorOutput(
-  findings: readonly Finding[],
-  signals: DoctorSignals,
-  compact?: boolean,
-): string {
+export function renderDoctorOutput(findings: readonly Finding[], signals: DoctorSignals): string {
   const sorted = sortFindings(findings);
   const lines: string[] = [];
 
@@ -191,17 +187,8 @@ export function renderDoctorOutput(
   const summaryBlock = renderSummaryBlock(sorted);
   const width = process.stdout.columns || 60;
 
-  lines.push('═'.repeat(width));
-  lines.push(centerText('DIAGNOSTICS SUMMARY', width));
-  lines.push('═'.repeat(width));
+  lines.push(renderSignalsAppendix(signals, width));
   lines.push('');
-  lines.push(...summaryBlock);
-  lines.push('');
-
-  if (!compact) {
-    lines.push(renderSignalsAppendix(signals, width));
-    lines.push('');
-  }
 
   lines.push('═'.repeat(width));
   lines.push(centerText('DIAGNOSTICS SUMMARY', width));
@@ -342,15 +329,6 @@ export function generateDoctorHtml(
 
   <main class="flex-1 overflow-y-auto py-10 px-6">
     <div class="max-w-4xl mx-auto">
-      <!-- DUPLICATE 1: Top Diagnostics Summary -->
-      <section class="mb-12">
-        <h2 class="text-lg font-bold text-white mb-6 border-b border-slate-800 pb-2 flex items-center gap-2">
-          Diagnostics Summary
-        </h2>
-        ${summarySection}
-      </section>
-
-      <!-- VERBOSE SIGNALS: In the middle -->
       <section class="mb-12">
         <h2 class="text-lg font-bold text-white mb-6 border-b border-slate-800 pb-2 flex items-center gap-2">
           Diagnostics Signals Appendix
@@ -415,7 +393,6 @@ export function generateDoctorHtml(
         </div>
       </section>
 
-      <!-- DUPLICATE 2: Bottom Diagnostics Summary -->
       <section class="mb-8">
         <h2 class="text-lg font-bold text-white mb-6 border-b border-slate-800 pb-2 flex items-center gap-2">
           Diagnostics Summary

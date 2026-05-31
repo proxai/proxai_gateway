@@ -371,10 +371,10 @@ const statusCommand = program
   )
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .option('--json', 'emit machine-readable JSON instead of the watch-mode UI', false)
-  .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
-  .option('--all', 'show both prod and dev profiles side-by-side', false);
+  .option('--profile <name>', 'profile to target (prod | dev)', 'prod');
 
 if (isDevMode) {
+  statusCommand.option('--all', 'show both prod and dev profiles side-by-side', false);
   statusCommand.option('--compact', 'simplified regular user view', false);
 }
 
@@ -668,31 +668,33 @@ const doctorCommand = program
     'Output diagnostic report to an HTML file (absolute or relative, default: Desktop)',
   );
 
-if (isDevMode) {
-  doctorCommand.option('--compact', 'simplified regular user view', false);
-}
+doctorCommand.action(async (opts: { profile?: string; output?: string | boolean }) => {
+  const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
+  const profileName = parseProfileName(opts.profile ?? defaultProfile);
+  const profileCtx = buildProfileContext(profileName);
+  const platform = process.platform;
+  const unitPath = platformServiceUnitPath(platform, profileCtx.configDir);
+  const serviceManager =
+    unitPath !== null
+      ? (buildPlatformServiceContext(platform, process.execPath, profileCtx.configDir)
+          ?.serviceManager ?? null)
+      : null;
+  const result = await runDoctor(buildDoctorDeps({ serviceManager, platform, profileCtx }), {
+    profile: opts.profile,
+    output: opts.output,
+  });
+  process.exit(result.exitCode);
+});
 
-doctorCommand.action(
-  async (opts: { profile?: string; output?: string | boolean; compact?: boolean }) => {
-    const compactMode = opts.compact === true || program.opts().compact === true;
-    const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
-    const profileName = parseProfileName(opts.profile ?? defaultProfile);
-    const profileCtx = buildProfileContext(profileName);
-    const platform = process.platform;
-    const unitPath = platformServiceUnitPath(platform, profileCtx.configDir);
-    const serviceManager =
-      unitPath !== null
-        ? (buildPlatformServiceContext(platform, process.execPath, profileCtx.configDir)
-            ?.serviceManager ?? null)
-        : null;
-    const result = await runDoctor(buildDoctorDeps({ serviceManager, platform, profileCtx }), {
-      profile: opts.profile,
-      output: opts.output,
-      compact: compactMode,
-    });
-    process.exit(result.exitCode);
-  },
-);
+if (!isDevMode) {
+  for (const command of program.commands) {
+    for (const option of command.options) {
+      if (option.long === '--profile') {
+        option.hideHelp(true);
+      }
+    }
+  }
+}
 
 program.parseAsync().catch((err: unknown) => {
   if (err instanceof UserAbortedError) {
