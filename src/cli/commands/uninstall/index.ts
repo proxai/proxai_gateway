@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { unlink } from 'node:fs/promises';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -95,9 +96,12 @@ export async function runUninstall(
   }
 
   if (reset && options.yes !== true) {
-    const message = buildConfirmationMessage(deps, isDevMode);
-    const phrase = 'uninstall --reset';
-    const confirmed = await deps.prompts.confirmPhrase(message, phrase);
+    deps.output.info(buildConfirmationMessage());
+    const phrase = 'uninstall';
+    const confirmed = await deps.prompts.confirmPhrase(
+      `Type ${chalk.cyan('uninstall')} to confirm this reset, or press Enter to abort.`,
+      phrase,
+    );
     if (!confirmed) {
       uninstallDeps.output.info('aborted — nothing changed');
       machine.stop();

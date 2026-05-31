@@ -291,14 +291,14 @@ test('plain uninstall executes softly, silently, and immediately without prompti
   expect(await Bun.file(configPath).exists()).toBe(true);
 });
 
-test('--reset requires typed phrase "uninstall --reset"; matching phrase wipes', async () => {
+test('--reset requires typed phrase "uninstall"; matching phrase wipes', async () => {
   await writeConfig();
   await writeFile(serviceUnitPath, '<plist/>');
   await writeFile(join(logDirPath, 'app.log'), 'log content');
   const { sm } = fakeManager();
   const output = captureOutput();
   const result = await runUninstall(
-    { ...depsFor(sm, { phrase: 'uninstall --reset' }), output },
+    { ...depsFor(sm, { phrase: 'uninstall' }), output },
     { reset: true },
   );
   expect(result.exitCode).toBe(0);
@@ -310,6 +310,7 @@ test('--reset requires typed phrase "uninstall --reset"; matching phrase wipes',
   expect(output.lines.some((l) => l.level === 'success' && l.msg === 'uninstalled and reset')).toBe(
     true,
   );
+  expect(output.lines.some((l) => l.msg.includes('IMPORTANT NOTICE'))).toBe(true);
 });
 
 test('--reset: empty input aborts; configDir preserved', async () => {
@@ -323,13 +324,13 @@ test('--reset: empty input aborts; configDir preserved', async () => {
   expect(output.lines.some((l) => l.msg.includes('aborted'))).toBe(true);
 });
 
-test('--reset: typing plain "uninstall" (insufficient phrase) aborts', async () => {
+test('--reset: typing a non-matching phrase aborts', async () => {
   await writeConfig();
   await writeFile(serviceUnitPath, '<plist/>');
   const { sm } = fakeManager();
   const output = captureOutput();
   const result = await runUninstall(
-    { ...depsFor(sm, { phrase: 'uninstall' }), output },
+    { ...depsFor(sm, { phrase: 'uninstall --reset' }), output },
     { reset: true },
   );
   expect(result.exitCode).toBe(5);
@@ -1008,45 +1009,25 @@ test('path cleaner: skipped when installDir is missing even if cleaner provided'
   expect(calls.clean).toHaveLength(0);
 });
 
-test('buildConfirmationMessage handles different dimensions, reset, and path truncation', () => {
+test('buildConfirmationMessage renders the same notice box at different terminal widths', () => {
   const originalColumns = process.stdout.columns;
   try {
-    const deps: UninstallCommandDeps = {
-      output: captureOutput(),
-      prompts: scriptedPrompts({}),
-      configPath,
-      configDir: configDirPath,
-      logDir: logDirPath,
-      serviceUnitPath,
-      serviceManager: fakeManager().sm,
-      devServiceManager: null,
-      devServiceUnitPath: null,
-      devConfigDir: devConfigDirPath,
-      devLogDir: devLogDirPath,
-      profileRootDir: join(tmpRoot, '.proxai'),
-      profileLogDirRoot: join(tmpRoot, 'logs'),
-      configExists: async () => true,
-      currentExecPath:
-        '/very/long/path/to/some/nested/directory/structure/that/is/deep/proxai-gateway',
-      isDevMode: true,
-    };
-
     Object.defineProperty(process.stdout, 'columns', {
       value: 50,
       configurable: true,
     });
-    const msg50 = buildConfirmationMessage(deps, false);
+    const msg50 = buildConfirmationMessage();
     expect(msg50).toContain('WARNING');
     expect(msg50).toContain('IMPORTANT NOTICE');
-    expect(msg50).toContain('uninstall --reset');
+    expect(msg50).toContain('RECOMMENDED ALTERNATIVE');
 
     Object.defineProperty(process.stdout, 'columns', {
       value: 120,
       configurable: true,
     });
-    const msg120 = buildConfirmationMessage(deps, true);
-    expect(msg120).toContain('DEVELOPER TECHNICAL DETAILS');
-    expect(msg120).toContain('uninstall --reset');
+    const msg120 = buildConfirmationMessage();
+    expect(msg120).toContain('IMPORTANT NOTICE');
+    expect(msg120).toContain('RECOMMENDED ALTERNATIVE');
   } finally {
     Object.defineProperty(process.stdout, 'columns', {
       value: originalColumns,
