@@ -87,6 +87,45 @@ test('runDev action="off" disables dev mode', async () => {
   expect(successMsgs.join(' ')).toContain('Dev mode off');
 });
 
+test('runDevOff: notes the dev daemon keeps running when it is up', async () => {
+  const sm = {
+    ensureRegistered: async () => {},
+    start: async () => {},
+    stop: async () => {},
+    restart: async () => {},
+    unregister: async () => {},
+    isRegistered: async () => true,
+    isRunning: async () => true,
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
+  };
+  const deps = makeDevDeps({ devServiceManager: sm });
+  const result = await runDev(deps, 'off');
+  expect(result.exitCode).toBe(EXIT_CODE.ok);
+  const msgs = (deps.output as ReturnType<typeof captureOutput>).lines.map((l) => l.msg).join(' ');
+  expect(msgs).toContain('continues running');
+});
+
+test('runDevOff: tolerates an isRunning failure and reports plain dev mode off', async () => {
+  const sm = {
+    ensureRegistered: async () => {},
+    start: async () => {},
+    stop: async () => {},
+    restart: async () => {},
+    unregister: async () => {},
+    isRegistered: async () => true,
+    isRunning: async () => {
+      throw new Error('launchctl unavailable');
+    },
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
+  };
+  const deps = makeDevDeps({ devServiceManager: sm });
+  const result = await runDev(deps, 'off');
+  expect(result.exitCode).toBe(EXIT_CODE.ok);
+  const msgs = (deps.output as ReturnType<typeof captureOutput>).lines.map((l) => l.msg).join(' ');
+  expect(msgs).toContain('Dev mode off');
+  expect(msgs).not.toContain('continues running');
+});
+
 test('runDev toggles dev mode (action undefined)', async () => {
   const deps = makeDevDeps();
 

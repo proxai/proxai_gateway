@@ -4,6 +4,7 @@ import type { DoctorSignals, Finding } from 'cli/commands/doctor/doctor.types.ts
 const REGRESSION_LOOP_THRESHOLD = 3;
 
 export function checkG1ReceiptsTableReadable(signals: DoctorSignals): Finding | null {
+  if (!signals.configExists) return null;
   if (signals.receiptsTableReadable) return null;
 
   return {
@@ -18,6 +19,7 @@ export function checkG1ReceiptsTableReadable(signals: DoctorSignals): Finding | 
 }
 
 export function checkG2BufferDbCorrupt(signals: DoctorSignals): Finding | null {
+  if (!signals.configExists) return null;
   if (signals.bufferDbReadable) return null;
 
   return {

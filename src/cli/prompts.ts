@@ -39,23 +39,7 @@ export function inquirerPrompts(): PromptSink {
       ),
     confirmPhrase: (message, requiredPhrase) =>
       rethrowAborts(async () => {
-        const answer = await input({
-          message,
-          validate: (v) => {
-            const trimmed = v.trim();
-            const lower = trimmed.toLowerCase();
-            if (
-              trimmed === '' ||
-              trimmed === requiredPhrase ||
-              lower === 'q' ||
-              lower === 'abort' ||
-              lower === 'esc'
-            ) {
-              return true;
-            }
-            return `type '${requiredPhrase}' to confirm, or leave empty to abort`;
-          },
-        });
+        const answer = await input({ message });
         return answer.trim() === requiredPhrase;
       }),
     confirmUpgrade: (message) => rethrowAborts(() => confirm({ message, default: true })),

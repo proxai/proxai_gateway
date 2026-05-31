@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { ensureDir, setMode, writeAtomic } from 'core/io/fs';
 import type { ProfileName } from 'core/io/fs/profile.types.ts';
 import { buildLaunchdPlist } from 'cli/service-unit/launchd-plist.ts';
+import { profileLaunchdLabel } from 'cli/service-unit/dev-labels.ts';
 import {
   buildScheduledTaskXml,
   encodeScheduledTaskXml,
@@ -35,7 +36,11 @@ export async function writeServiceUnit(input: WriteServiceUnitInput): Promise<vo
   }
   const unit =
     input.platform === 'darwin'
-      ? buildLaunchdPlist({ programPath: input.programPath, programArgs })
+      ? buildLaunchdPlist({
+          programPath: input.programPath,
+          programArgs,
+          label: profileLaunchdLabel(profileName),
+        })
       : buildSystemdUnit({ programPath: input.programPath, programArgs });
   await writeAtomic(input.serviceUnitPath, unit);
   await setMode(input.serviceUnitPath, 0o644);

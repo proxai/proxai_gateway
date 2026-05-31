@@ -58,24 +58,28 @@ test('scriptedPrompts.confirmUpgrade throws when no upgrade answer is configured
 });
 
 test('inquirerPrompts.confirmPhrase: typing the exact phrase resolves to true', async () => {
-  const inputCalls: { message: string; validate?: (v: string) => boolean | string }[] = [];
+  const inputCalls: { message: string }[] = [];
   await mock.module('@inquirer/prompts', () => ({
     confirm: () => Promise.resolve(true),
-    input: (opts: { message: string; validate?: (v: string) => boolean | string }) => {
+    input: (opts: { message: string }) => {
       inputCalls.push(opts);
-      return Promise.resolve('uninstall');
+      return Promise.resolve('  uninstall  ');
     },
   }));
   const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
   expect(await fresh().confirmPhrase('Type uninstall:', 'uninstall')).toBe(true);
   expect(inputCalls).toHaveLength(1);
   expect(requireDefined(inputCalls[0]).message).toBe('Type uninstall:');
-  const validate = requireDefined(requireDefined(inputCalls[0]).validate);
-  expect(validate('uninstall')).toBe(true);
-  expect(validate('   uninstall   ')).toBe(true);
-  expect(validate('')).toBe(true);
-  expect(validate('   ')).toBe(true);
-  expect(validate('something else')).toBe("type 'uninstall' to confirm, or leave empty to abort");
+  mock.restore();
+});
+
+test('inquirerPrompts.confirmPhrase: any non-matching input aborts (false)', async () => {
+  await mock.module('@inquirer/prompts', () => ({
+    confirm: () => Promise.resolve(true),
+    input: () => Promise.resolve('nope'),
+  }));
+  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
+  expect(await fresh().confirmPhrase('Type uninstall:', 'uninstall')).toBe(false);
   mock.restore();
 });
 
@@ -284,24 +288,6 @@ test('inquirerPrompts.askApiKey detects abort by message text with "user force"'
   }));
   const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
   await expect(fresh().askApiKey()).rejects.toBeInstanceOf(UserAbortedError);
-  mock.restore();
-});
-
-test('inquirerPrompts.confirmPhrase validator permits exit shortcut phrases', async () => {
-  const inputCalls: { message: string; validate?: (v: string) => boolean | string }[] = [];
-  await mock.module('@inquirer/prompts', () => ({
-    confirm: () => Promise.resolve(true),
-    input: (opts: { message: string; validate?: (v: string) => boolean | string }) => {
-      inputCalls.push(opts);
-      return Promise.resolve('uninstall');
-    },
-  }));
-  const { inquirerPrompts: fresh } = await import('cli/prompts.ts');
-  await fresh().confirmPhrase('Type uninstall:', 'uninstall');
-  const validate = requireDefined(requireDefined(inputCalls[0]).validate);
-  expect(validate('q')).toBe(true);
-  expect(validate('abort')).toBe(true);
-  expect(validate('esc')).toBe(true);
   mock.restore();
 });
 

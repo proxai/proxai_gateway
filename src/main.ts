@@ -88,11 +88,25 @@ function exitUnsupportedPlatform(commandName: string): never {
   process.exit(EXIT_CODE.error);
 }
 
-function parseProfileName(raw: string | undefined): ProfileName {
+function requireDevMode(commandName: string): void {
+  if (isDevMode) return;
+  console.error(`error: unknown command '${commandName}'`);
+  process.exit(EXIT_CODE.error);
+}
+
+function parseProfileNameInternal(raw: string | undefined): ProfileName {
   const candidate = (raw ?? 'prod').trim();
   if (candidate === 'prod' || candidate === 'dev') return candidate;
   console.error(`invalid --profile value: '${raw}'. Expected one of: ${VALID_PROFILES.join(', ')}`);
   process.exit(EXIT_CODE.error);
+}
+
+function parseProfileName(raw: string | undefined): ProfileName {
+  if ((raw ?? 'prod').trim() === 'dev' && !isDevMode) {
+    console.error(`invalid --profile value: 'dev'. Expected one of: prod`);
+    process.exit(EXIT_CODE.error);
+  }
+  return parseProfileNameInternal(raw);
 }
 
 program
@@ -265,7 +279,7 @@ program
   .option('--profile <name>', 'profile to run as (prod | dev)', 'prod')
   .action(async (opts: { config?: string; profile?: string }) => {
     await runDaemonStartupRelocation();
-    const profileName = parseProfileName(opts.profile);
+    const profileName = parseProfileNameInternal(opts.profile);
     const profileCtx = buildProfileContext(profileName);
     const platformCtx = buildPlatformServiceContext(process.platform, process.execPath);
     if (platformCtx !== null) {
@@ -329,21 +343,12 @@ program
 program
   .command('xstate', { hidden: !isDevMode })
   .description(
-    'Start the gateway daemon in the foreground with the Stately browser visualizer enabled (only available in development mode).',
+    'Start the gateway daemon in the foreground with the Stately browser visualizer enabled.',
   )
   .option('--config <path>', 'override the default ~/.proxai/proxai-gateway/config.toml path')
   .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
   .action(async (opts: { config?: string; profile?: string }) => {
-    if (!isDevMode) {
-      console.error(
-        chalk.red(
-          'Error: "xstate" command is only available in development mode.\n' +
-            'Please run "proxai-gateway dev on" first to activate development mode.',
-        ),
-      );
-      process.exit(EXIT_CODE.error);
-    }
-
+    requireDevMode('xstate');
     const profileCtx = buildProfileContext(parseProfileName(opts.profile));
     const config = await loadConfigFromFile(opts.config ?? profileCtx.configFilePath);
     const ctrl = new AbortController();
@@ -429,6 +434,7 @@ program
   )
   .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
   .action(async (opts: { profile?: string }) => {
+    requireDevMode('inspect');
     const profileCtx = buildProfileContext(parseProfileName(opts.profile));
     const result = await runInspect({
       output: consoleOutput(),
@@ -525,6 +531,7 @@ program
       config?: string;
       profile?: string;
     }) => {
+      requireDevMode('tail');
       const profileCtx = buildProfileContext(parseProfileName(opts.profile));
       let dir = profileCtx.logDir;
       try {
@@ -558,6 +565,7 @@ redaction
   )
   .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
   .action(async (filePath: string, opts: { showRules?: boolean; profile?: string }) => {
+    requireDevMode('redaction');
     parseProfileName(opts.profile);
     const result = await runRedactionTest(
       buildRedactionTestDeps(),
@@ -574,6 +582,7 @@ program
   .option('--machine <name>', 'limit the replay to a single machine')
   .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
   .action(async (logPath: string, opts: { machine?: string; profile?: string }) => {
+    requireDevMode('replay');
     parseProfileName(opts.profile);
     const replayOptions: { logPath: string; machine?: string } = { logPath };
     if (opts.machine !== undefined) replayOptions.machine = opts.machine;
@@ -595,6 +604,7 @@ redaction
   )
   .option('--profile <name>', 'profile to target (prod | dev)', 'prod')
   .action((opts: { categories?: boolean; category?: string; json?: boolean; profile?: string }) => {
+    requireDevMode('redaction');
     parseProfileName(opts.profile);
     const result = runRedactionList(buildRedactionListDeps(), buildRedactionListOptions(opts));
     process.exit(result.exitCode);

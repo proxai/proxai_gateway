@@ -17,20 +17,15 @@ export function checkF17V8SyncEventLoopLag(signals: DoctorSignals): Finding | nu
 }
 
 export function checkF18V8HeapExhaustion(signals: DoctorSignals): Finding | null {
-  const used = signals.performanceExtended.heapUsedBytes;
-  const total = signals.performanceExtended.heapTotalBytes;
-  if (used === null || total === null) {
-    return null;
-  }
-  const ratio = used / total;
-  if (ratio < 0.85 && !signals.performanceExtended.gcThrashingActive) {
+  if (!signals.performanceExtended.gcThrashingActive) {
     return null;
   }
   return {
     code: 'F18',
     severity: Severity.critical,
     confidence: Confidence.confirmed,
-    cause: `V8 heap space is critically exhausted (${Math.round(ratio * 100).toString()}% utilized), causing engine thrashing.`,
+    cause:
+      'The JavaScript engine is thrashing on garbage collection, indicating sustained memory pressure.',
     action:
       'Prune large logs, restart the background service, and add standard folder ignore arrays to config.toml.',
   };

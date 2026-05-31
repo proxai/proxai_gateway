@@ -272,18 +272,25 @@ test('A1: returns null when config exists, finding when absent', () => {
   expect(f.confidence).toBe(Confidence.confirmed);
 });
 
-test('A2: null when config absent, null when registered, finding when present-but-unregistered', () => {
+test('A2: null when config absent, registered, or intentionally stopped; finding otherwise', () => {
   expect(checkA2UnitNotRegistered(baseSignals({ configExists: false }))).toBeNull();
   expect(checkA2UnitNotRegistered(baseSignals({ serviceUnitRegistered: true }))).toBeNull();
+  expect(
+    checkA2UnitNotRegistered(
+      baseSignals({
+        serviceUnitRegistered: false,
+        sentinels: { ...baseSignals().sentinels, sessionStopped: true },
+      }),
+    ),
+  ).toBeNull();
   const f = requireDefined(
     checkA2UnitNotRegistered(baseSignals({ configExists: true, serviceUnitRegistered: false })),
   );
   expect(f.code).toBe('A2');
 });
 
-test('A3: stopped-by-user requires config + registered + not-running + sessionStopped', () => {
+test('A3: stopped-by-user fires on sessionStopped even when the unit is not registered', () => {
   expect(checkA3StoppedByUser(baseSignals({ configExists: false }))).toBeNull();
-  expect(checkA3StoppedByUser(baseSignals({ serviceUnitRegistered: false }))).toBeNull();
   expect(checkA3StoppedByUser(baseSignals({ daemonRunning: true }))).toBeNull();
   expect(
     checkA3StoppedByUser(
@@ -296,6 +303,7 @@ test('A3: stopped-by-user requires config + registered + not-running + sessionSt
   const f = requireDefined(
     checkA3StoppedByUser(
       baseSignals({
+        serviceUnitRegistered: false,
         daemonRunning: false,
         sentinels: { ...baseSignals().sentinels, sessionStopped: true },
       }),
@@ -886,7 +894,12 @@ test('F7: macos quarantine xattr', () => {
   expect(f.severity).toBe(Severity.critical);
 });
 
-test('G1: receipts-table-readable returns null when readable, finding when unreadable', () => {
+test('G1: null when not configured or readable, finding when configured + unreadable', () => {
+  expect(
+    checkG1ReceiptsTableReadable(
+      baseSignals({ configExists: false, receiptsTableReadable: false }),
+    ),
+  ).toBeNull();
   expect(checkG1ReceiptsTableReadable(baseSignals({ receiptsTableReadable: true }))).toBeNull();
   const f = requireDefined(
     checkG1ReceiptsTableReadable(baseSignals({ receiptsTableReadable: false })),
@@ -895,7 +908,10 @@ test('G1: receipts-table-readable returns null when readable, finding when unrea
   expect(f.severity).toBe(Severity.critical);
 });
 
-test('G2: buffer-db-corrupt returns null when readable, finding when unreadable', () => {
+test('G2: null when not configured or readable, finding when configured + unreadable', () => {
+  expect(
+    checkG2BufferDbCorrupt(baseSignals({ configExists: false, bufferDbReadable: false })),
+  ).toBeNull();
   expect(checkG2BufferDbCorrupt(baseSignals({ bufferDbReadable: true }))).toBeNull();
   const f = requireDefined(checkG2BufferDbCorrupt(baseSignals({ bufferDbReadable: false })));
   expect(f.code).toBe('G2');
@@ -1653,33 +1669,23 @@ test('F17: event loop lag', () => {
   expect(f.code).toBe('F17');
 });
 
-test('F18: V8 heap exhaustion', () => {
+test('F18: fires on GC thrashing, not on the heap ratio (invalid on Bun/JSC)', () => {
   expect(
-    checkF18V8HeapExhaustion(
-      baseSignals({
-        performanceExtended: {
-          ...baseSignals().performanceExtended,
-          heapUsedBytes: 5,
-          heapTotalBytes: 10,
-        },
-      }),
-    ),
-  ).toBeNull();
-  expect(
-    checkF18V8HeapExhaustion(
-      baseSignals({
-        performanceExtended: { ...baseSignals().performanceExtended, heapUsedBytes: null },
-      }),
-    ),
-  ).toBeNull();
-  const f = requireDefined(
     checkF18V8HeapExhaustion(
       baseSignals({
         performanceExtended: {
           ...baseSignals().performanceExtended,
           heapUsedBytes: 9,
           heapTotalBytes: 10,
+          gcThrashingActive: false,
         },
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkF18V8HeapExhaustion(
+      baseSignals({
+        performanceExtended: { ...baseSignals().performanceExtended, gcThrashingActive: true },
       }),
     ),
   );

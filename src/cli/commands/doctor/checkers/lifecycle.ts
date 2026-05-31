@@ -18,6 +18,7 @@ export function checkA1NotSetUp(signals: DoctorSignals): Finding | null {
 export function checkA2UnitNotRegistered(signals: DoctorSignals): Finding | null {
   if (!signals.configExists) return null;
   if (signals.serviceUnitRegistered) return null;
+  if (signals.sentinels.sessionStopped) return null;
   return {
     code: 'A2',
     severity: Severity.critical,
@@ -31,7 +32,6 @@ export function checkA2UnitNotRegistered(signals: DoctorSignals): Finding | null
 
 export function checkA3StoppedByUser(signals: DoctorSignals): Finding | null {
   if (!signals.configExists) return null;
-  if (!signals.serviceUnitRegistered) return null;
   if (signals.daemonRunning) return null;
   if (!signals.sentinels.sessionStopped) return null;
   return {

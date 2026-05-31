@@ -82,7 +82,17 @@ async function runDevOn(deps: DevCommandDeps): Promise<CommandResult> {
 
 async function runDevOff(deps: DevCommandDeps): Promise<CommandResult> {
   await sentinelHandle(deps.devModeSentinelPath).remove();
-  deps.output.success('Dev mode off. Dev daemon continues running in the background.');
+  let running = false;
+  if (deps.devServiceManager !== null) {
+    try {
+      running = await deps.devServiceManager.isRunning();
+    } catch {}
+  }
+  if (running) {
+    deps.output.success('Dev mode off. The dev daemon continues running in the background.');
+  } else {
+    deps.output.success('Dev mode off.');
+  }
   return { exitCode: EXIT_CODE.ok };
 }
 
@@ -124,10 +134,12 @@ async function runDevSetup(
     return { exitCode: EXIT_CODE.error };
   }
 
+  let daemonStarted = false;
   if (deps.devServiceManager !== null) {
     try {
       await deps.registerDevServiceUnit();
       await deps.devServiceManager.start();
+      daemonStarted = true;
     } catch (err) {
       deps.output.warn(
         `dev service unit registration failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -138,6 +150,12 @@ async function runDevSetup(
   const devOnResult = await runDevOn(deps);
   if (devOnResult.exitCode !== EXIT_CODE.ok) return devOnResult;
 
-  deps.output.success('Dev setup complete. Dev daemon started.');
+  if (daemonStarted) {
+    deps.output.success('Dev setup complete. Dev daemon started.');
+  } else {
+    deps.output.warn(
+      `Dev setup complete — config saved, but the dev daemon did not start. Resolve the error above, then run ${chalk.cyan('proxai-gateway dev on')}.`,
+    );
+  }
   return { exitCode: EXIT_CODE.ok };
 }
