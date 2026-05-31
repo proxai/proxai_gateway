@@ -1,6 +1,11 @@
 import { Severity } from 'cli/commands/doctor/doctor.types.ts';
 import type { DoctorSignals, Finding } from 'cli/commands/doctor/doctor.types.ts';
+import { formatLocalTimestamp } from 'core/utils/format.ts';
 import chalk from 'chalk';
+
+function localTime(iso: string | null): string | null {
+  return iso === null ? null : formatLocalTimestamp(iso);
+}
 
 const SEVERITY_ORDER: Record<Severity, number> = {
   [Severity.critical]: 0,
@@ -67,12 +72,16 @@ function renderSignalsAppendix(signals: DoctorSignals, width: number): string {
   lines.push(`  failed_count:            ${formatNum(signals.buffer.failedCount)}`);
   lines.push(`  quarantined_count:       ${formatNum(signals.buffer.quarantinedCount)}`);
   lines.push(`  receipt_count:           ${formatNum(signals.buffer.receiptCount)}`);
-  lines.push(`  last_prune_at:           ${formatStr(signals.buffer.lastPruneAt)}`);
-  lines.push(`  last_success_at:         ${formatStr(signals.buffer.lastSuccessAt)}`);
+  lines.push(`  last_prune_at:           ${formatStr(localTime(signals.buffer.lastPruneAt))}`);
+  lines.push(`  last_success_at:         ${formatStr(localTime(signals.buffer.lastSuccessAt))}`);
   lines.push('');
   lines.push('Daemon state:');
-  lines.push(`  capture_last_cycle_at:   ${formatStr(signals.daemonState.captureLastCycleAt)}`);
-  lines.push(`  drain_last_cycle_at:     ${formatStr(signals.daemonState.drainLastCycleAt)}`);
+  lines.push(
+    `  capture_last_cycle_at:   ${formatStr(localTime(signals.daemonState.captureLastCycleAt))}`,
+  );
+  lines.push(
+    `  drain_last_cycle_at:     ${formatStr(localTime(signals.daemonState.drainLastCycleAt))}`,
+  );
   lines.push(
     `  retriable_break:         ${signals.daemonState.lastConsecutiveRetriableBreak === null ? chalk.dim('null') : formatBool(signals.daemonState.lastConsecutiveRetriableBreak)}`,
   );
@@ -83,7 +92,7 @@ function renderSignalsAppendix(signals: DoctorSignals, width: number): string {
   lines.push('Binary:');
   lines.push(`  version:                 ${chalk.yellow(signals.binary.version)}`);
   lines.push(
-    `  mtime:                   ${formatStr(signals.binary.mtime?.toISOString() ?? null)}`,
+    `  mtime:                   ${formatStr(localTime(signals.binary.mtime?.toISOString() ?? null))}`,
   );
   lines.push(`  install_source:          ${formatStr(signals.binary.installSource)}`);
   lines.push('');
@@ -370,14 +379,14 @@ export function generateDoctorHtml(
                 <div class="flex justify-between"><span class="text-slate-400">failed_count:</span><span class="font-mono">${formatHtmlNum(signals.buffer.failedCount)}</span></div>
                 <div class="flex justify-between"><span class="text-slate-400">quarantined_count:</span><span class="font-mono">${formatHtmlNum(signals.buffer.quarantinedCount)}</span></div>
                 <div class="flex justify-between"><span class="text-slate-400">receipt_count:</span><span class="font-mono">${formatHtmlNum(signals.buffer.receiptCount)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">last_prune_at:</span><span class="font-mono">${formatHtmlStr(signals.buffer.lastPruneAt)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">last_success_at:</span><span class="font-mono">${formatHtmlStr(signals.buffer.lastSuccessAt)}</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">last_prune_at:</span><span class="font-mono">${formatHtmlStr(localTime(signals.buffer.lastPruneAt))}</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">last_success_at:</span><span class="font-mono">${formatHtmlStr(localTime(signals.buffer.lastSuccessAt))}</span></div>
               </div>
 
               <h3 class="text-xs font-bold uppercase tracking-wider text-cyan-400 mt-6 mb-4 border-b border-slate-800 pb-2">Daemon State Machine</h3>
               <div class="space-y-2 text-sm">
-                <div class="flex justify-between"><span class="text-slate-400">capture_last_cycle:</span><span class="font-mono">${formatHtmlStr(signals.daemonState.captureLastCycleAt)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">drain_last_cycle:</span><span class="font-mono">${formatHtmlStr(signals.daemonState.drainLastCycleAt)}</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">capture_last_cycle:</span><span class="font-mono">${formatHtmlStr(localTime(signals.daemonState.captureLastCycleAt))}</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">drain_last_cycle:</span><span class="font-mono">${formatHtmlStr(localTime(signals.daemonState.drainLastCycleAt))}</span></div>
                 <div class="flex justify-between"><span class="text-slate-400">last_upload_error:</span><span class="font-mono">${formatHtmlStr(signals.daemonState.lastUploadError)}</span></div>
                 <div class="flex justify-between"><span class="text-slate-400">retriable_break:</span><span class="font-mono">${signals.daemonState.lastConsecutiveRetriableBreak === null ? '<span class="text-slate-500">null</span>' : formatHtmlBool(signals.daemonState.lastConsecutiveRetriableBreak)}</span></div>
               </div>
@@ -385,7 +394,7 @@ export function generateDoctorHtml(
               <h3 class="text-xs font-bold uppercase tracking-wider text-cyan-400 mt-6 mb-4 border-b border-slate-800 pb-2">Binary</h3>
               <div class="space-y-2 text-sm">
                 <div class="flex justify-between"><span class="text-slate-400">version:</span><span class="font-mono text-amber-300">${escapeHtml(signals.binary.version)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">mtime:</span><span class="font-mono">${formatHtmlStr(signals.binary.mtime?.toISOString() ?? null)}</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">mtime:</span><span class="font-mono">${formatHtmlStr(localTime(signals.binary.mtime?.toISOString() ?? null))}</span></div>
                 <div class="flex justify-between"><span class="text-slate-400">install_source:</span><span class="font-mono">${formatHtmlStr(signals.binary.installSource)}</span></div>
               </div>
             </div>

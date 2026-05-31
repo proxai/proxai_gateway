@@ -72,7 +72,7 @@ export function buildMarkdownReport(input: MarkdownReportInput): string {
 
   return `# ProxAI Telemetry Inspection Report
 
-* **Generated At:** ${now.toLocaleString()} (${now.toISOString()})
+* **Generated At:** ${now.toLocaleString()}
 * **Scan Duration:** ${durationMs.toFixed(2)} ms
 * **Total Scanned Files:** ${summary.totalFiles}
 * **Total Prompts:** ${summary.totalPrompts}

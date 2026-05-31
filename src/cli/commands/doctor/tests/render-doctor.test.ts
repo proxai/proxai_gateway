@@ -3,6 +3,7 @@ import { expect, test } from 'bun:test';
 import { Confidence, Severity } from 'cli/commands/doctor/doctor.types.ts';
 import type { DoctorSignals, Finding } from 'cli/commands/doctor/doctor.types.ts';
 import { renderDoctorOutput, generateDoctorHtml } from 'cli/commands/doctor/render-doctor.ts';
+import { formatLocalTimestamp } from 'core/utils/format.ts';
 
 function stripAnsi(s: string): string {
   const ESC = String.fromCharCode(27);
@@ -248,9 +249,13 @@ test('signals appendix renders populated optional values and regression loops', 
     clockSkewMs: 4000,
   });
   const out = stripAnsi(renderDoctorOutput([], signals));
-  expect(out).toContain('last_prune_at:           2026-05-28T00:00:00.000Z');
+  expect(out).toContain(
+    `last_prune_at:           ${formatLocalTimestamp('2026-05-28T00:00:00.000Z')}`,
+  );
   expect(out).toContain('retriable_break:         true');
-  expect(out).toContain('mtime:                   2026-05-28T00:00:00.000Z');
+  expect(out).toContain(
+    `mtime:                   ${formatLocalTimestamp('2026-05-28T00:00:00.000Z')}`,
+  );
   expect(out).toContain('install_source:          npm');
   expect(out).toContain('disk_free_bytes:         12345');
   expect(out).toContain('nest_reachable:          true');
