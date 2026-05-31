@@ -176,7 +176,9 @@ test('renderLogsFrame does not truncate source paths in dev mode on wide termina
     const frame: LogsFrame = { ...emptyFrame(), failed: [failed({ sourcePath: longPath })] };
     const out = stripAnsi(renderLogsFrame(frame, { error: true }, makeDeps(true)));
     expect(out).not.toContain('…');
-    expect(out).toContain('very/deep');
+    // Normalize separators: the renderer relativizes the path with the native
+    // separator, so this segment is `very\deep` on Windows.
+    expect(out.replace(/\\/g, '/')).toContain('very/deep');
   } finally {
     Object.defineProperty(process.stdout, 'columns', {
       value: originalColumns,

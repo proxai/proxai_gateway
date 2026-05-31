@@ -1,5 +1,4 @@
-import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
-import * as codexReal from 'sources/codex';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database } from 'bun:sqlite';
 import { rmRecursive } from 'core/io/fs';
 import { mkdtemp } from 'node:fs/promises';
@@ -7,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { openInMemoryBufferDb } from 'services/buffer';
+import { makeCodexSourcePoller } from 'services/polling/poll-codex.ts';
 
 let dir: string;
 let buffer: Database;
@@ -19,35 +19,29 @@ beforeEach(async () => {
 afterEach(async () => {
   buffer.close();
   await rmRecursive(dir);
-  // Restore the global module mock after EVERY test, awaited — bun's
-  // mock.module is async, and an unawaited afterAll restore can lose the race
-  // on slower CI runners, leaking the fake sources/codex (fake-state.sqlite,
-  // empty rollouts) into later files' real codex tests.
-  await mock.module('sources/codex', () => codexReal);
 });
 
 test('captures errors when state collection throws synchronously', async () => {
-  await mock.module('sources/codex', () => ({
-    collectCodexRollout: async () => ({
-      capturedBatches: 0,
-      capturedBytes: 0,
-      errors: [],
-    }),
-    collectCodexState: () => {
-      throw new Error('forced state failure');
+  // Inject a throwing state collector instead of mock.module('sources/codex'):
+  // a global module mock leaks the fake into other files' real codex tests
+  // under CI's load order.
+  const poller = makeCodexSourcePoller({
+    baseDir: dir,
+    deps: {
+      collectCodexState: () => {
+        throw new Error('forced state failure');
+      },
+      collectCodexRollout: async () => ({ capturedBatches: 0, capturedBytes: 0, errors: [] }),
+      discoverCodexRolloutFiles: async () => [],
+      discoverCodexStateSqlite: async () => ({
+        sourcePath: join(dir, 'fake-state.sqlite'),
+        sourcePathHash: 'a'.repeat(64),
+        inode: 1,
+        sizeBytes: 100,
+        lastModifiedMs: Date.now(),
+      }),
     },
-    defaultCodexHome: () => dir,
-    discoverCodexRolloutFiles: async () => [],
-    discoverCodexStateSqlite: async () => ({
-      sourcePath: join(dir, 'fake-state.sqlite'),
-      sourcePathHash: 'a'.repeat(64),
-      inode: 1,
-      sizeBytes: 100,
-      lastModifiedMs: Date.now(),
-    }),
-  }));
-  const mod = await import('services/polling/poll-codex.ts');
-  const poller = mod.makeCodexSourcePoller({ baseDir: dir });
+  });
   const result = await poller({
     buffer,
     gatewayVersion: 'gw-0.1',

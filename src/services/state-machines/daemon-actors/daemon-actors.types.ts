@@ -11,6 +11,7 @@ export interface DaemonActorsInput {
   readonly logger?: MinimalLogger;
   readonly snapshotIntervalMs?: number;
   readonly xstateInspect?: boolean | undefined;
+  readonly readBootId?: () => Promise<string>;
 }
 
 export interface DaemonActorsHandle {

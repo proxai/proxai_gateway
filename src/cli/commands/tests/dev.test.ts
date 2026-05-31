@@ -1,5 +1,4 @@
-import { afterAll, afterEach, beforeEach, expect, test, mock } from 'bun:test';
-import * as bootIdReal from 'core/system/boot-id.ts';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { existsSync, unlinkSync } from 'node:fs';
@@ -8,10 +7,6 @@ import { captureOutput } from 'cli/output.ts';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { DevCommandDeps } from 'cli/commands/dev.ts';
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
-
-mock.module('core/system/boot-id.ts', () => ({
-  readBootId: () => Promise.resolve('mock-boot-id-dev-cmd'),
-}));
 
 const mockSentinelPath = join(tmpdir(), `DEV_MODE_CMD_TEST_${Math.random().toString(36).slice(2)}`);
 
@@ -43,6 +38,7 @@ function makeDevDeps(overrides: Partial<DevCommandDeps> = {}): DevCommandDeps {
     verifyKey: () => Promise.resolve({ success: true }),
     writeDevConfig: () => Promise.resolve(),
     registerDevServiceUnit: () => Promise.resolve(),
+    readBootId: () => Promise.resolve('mock-boot-id-dev-cmd'),
     ...overrides,
   };
 }
@@ -366,10 +362,4 @@ test('runDevSetup: service unit registration non-Error failure is warned but set
       l.msg.includes('dev service unit registration failed: string-registry-error'),
     ),
   ).toBe(true);
-});
-
-afterAll(async () => {
-  // Awaited: bun's mock.module is async; an unawaited restore can leak this
-  // file's boot-id mock into other files (e.g. boot-id.test.ts) on CI.
-  await mock.module('core/system/boot-id.ts', () => bootIdReal);
 });

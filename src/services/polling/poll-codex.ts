@@ -13,16 +13,38 @@ import type {
   SourcePollerResult,
 } from 'services/polling/polling.types.ts';
 
+// Injectable codex boundary. Tests drive failure paths by passing fakes here
+// instead of `mock.module('sources/codex', …)`: a process-wide module mock
+// leaks the fake (throwing state collector, fake-state.sqlite, empty rollouts)
+// into every other file's real codex tests under CI's file-load order.
+export interface CodexSourceDeps {
+  discoverCodexStateSqlite: typeof discoverCodexStateSqlite;
+  collectCodexState: typeof collectCodexState;
+  discoverCodexRolloutFiles: typeof discoverCodexRolloutFiles;
+  collectCodexRollout: typeof collectCodexRollout;
+}
+
 export interface CodexSourcePollerOptions {
   baseDir?: string;
+  deps?: Partial<CodexSourceDeps>;
 }
 
 export function makeCodexSourcePoller(options: CodexSourcePollerOptions = {}): SourcePoller {
   const baseDir = options.baseDir ?? defaultCodexHome();
-  return (ctx) => pollCodex(ctx, baseDir);
+  const deps: CodexSourceDeps = {
+    discoverCodexStateSqlite: options.deps?.discoverCodexStateSqlite ?? discoverCodexStateSqlite,
+    collectCodexState: options.deps?.collectCodexState ?? collectCodexState,
+    discoverCodexRolloutFiles: options.deps?.discoverCodexRolloutFiles ?? discoverCodexRolloutFiles,
+    collectCodexRollout: options.deps?.collectCodexRollout ?? collectCodexRollout,
+  };
+  return (ctx) => pollCodex(ctx, baseDir, deps);
 }
 
-async function pollCodex(ctx: SourcePollerContext, baseDir: string): Promise<SourcePollerResult> {
+async function pollCodex(
+  ctx: SourcePollerContext,
+  baseDir: string,
+  deps: CodexSourceDeps,
+): Promise<SourcePollerResult> {
   const result: SourcePollerResult = {
     filesProcessed: 0,
     capturedBatches: 0,
@@ -34,9 +56,9 @@ async function pollCodex(ctx: SourcePollerContext, baseDir: string): Promise<Sou
   const minimumMtime = resolveMinimumMtime(ctx);
 
   try {
-    const stateFile = await discoverCodexStateSqlite(baseDir, { minimumMtime });
+    const stateFile = await deps.discoverCodexStateSqlite(baseDir, { minimumMtime });
     if (stateFile !== null) {
-      const stateOutcome = await collectCodexState(stateFile, ctx);
+      const stateOutcome = await deps.collectCodexState(stateFile, ctx);
       agentSchemaVersion = stateOutcome.agentSchemaVersion;
       result.filesProcessed++;
       result.capturedBatches += stateOutcome.result.capturedBatches;
@@ -56,7 +78,7 @@ async function pollCodex(ctx: SourcePollerContext, baseDir: string): Promise<Sou
 
   let rolloutFiles;
   try {
-    rolloutFiles = await discoverCodexRolloutFiles(baseDir, { minimumMtime });
+    rolloutFiles = await deps.discoverCodexRolloutFiles(baseDir, { minimumMtime });
   } catch (err) {
     result.errors.push({
       sourcePath: baseDir,
@@ -66,7 +88,7 @@ async function pollCodex(ctx: SourcePollerContext, baseDir: string): Promise<Sou
   }
 
   for (const file of rolloutFiles) {
-    const collectResult = await collectCodexRollout(file, ctx, agentSchemaVersion);
+    const collectResult = await deps.collectCodexRollout(file, ctx, agentSchemaVersion);
     result.filesProcessed++;
     result.capturedBatches += collectResult.capturedBatches;
     result.capturedBytes += collectResult.capturedBytes;

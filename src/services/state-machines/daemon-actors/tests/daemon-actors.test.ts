@@ -1,7 +1,5 @@
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
-import * as bootIdReal from 'core/system/boot-id.ts';
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
-import { readBootId } from 'core/system';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,9 +9,11 @@ import { startDaemonActors } from 'services/state-machines/daemon-actors';
 import type { SentinelWatcherPaths } from 'services/state-machines/sentinel-watcher';
 import type { MinimalLogger } from 'core/log';
 
-mock.module('core/system/boot-id.ts', () => ({
-  readBootId: () => Promise.resolve('mock-boot-id-daemon-actors'),
-}));
+// Inject this fake into startDaemonActors instead of mock.module('boot-id'):
+// a global module mock leaks 'mock-boot-id-daemon-actors' into boot-id.test.ts
+// under CI's file-load order.
+const DAEMON_ACTORS_BOOT_ID = 'mock-boot-id-daemon-actors';
+const fakeReadBootId = (): Promise<string> => Promise.resolve(DAEMON_ACTORS_BOOT_ID);
 
 let dir: string;
 let paths: SentinelWatcherPaths;
@@ -112,7 +112,7 @@ test('writing a sentinel file after boot updates the registry via fs.watch', asy
 });
 
 test('startDaemonActors initializes stately inspector when DEV_MODE is active and xstateInspect is true', async () => {
-  const bootId = await readBootId();
+  const bootId = await fakeReadBootId();
   await writeFile(join(paths.configDir, 'DEV_MODE'), JSON.stringify({ bootId }));
 
   let inspectCalled = false;
@@ -132,6 +132,7 @@ test('startDaemonActors initializes stately inspector when DEV_MODE is active an
     buffer,
     paths,
     xstateInspect: true,
+    readBootId: fakeReadBootId,
   });
 
   expect(inspectCalled).toBe(true);
@@ -140,7 +141,7 @@ test('startDaemonActors initializes stately inspector when DEV_MODE is active an
 });
 
 test('startDaemonActors logs a warning when stately inspector initialization throws', async () => {
-  const bootId = await readBootId();
+  const bootId = await fakeReadBootId();
   await writeFile(join(paths.configDir, 'DEV_MODE'), JSON.stringify({ bootId }));
 
   await mock.module('@statelyai/inspect', () => {
@@ -169,6 +170,7 @@ test('startDaemonActors logs a warning when stately inspector initialization thr
     paths,
     xstateInspect: true,
     logger,
+    readBootId: fakeReadBootId,
   });
 
   expect(warnings.length).toBe(1);
@@ -228,9 +230,3 @@ async function waitUntilTrue(check: () => boolean, timeoutMs = 5_000, stepMs = 2
   };
   return step();
 }
-
-afterAll(async () => {
-  // Awaited: bun's mock.module is async; an unawaited restore can leak this
-  // file's boot-id mock into other files (e.g. boot-id.test.ts) on CI.
-  await mock.module('core/system/boot-id.ts', () => bootIdReal);
-});

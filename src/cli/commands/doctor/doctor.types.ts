@@ -274,4 +274,7 @@ export interface DoctorCommandDeps {
   readonly binaryPath: string;
   readonly currentVersion: string;
   readonly profileCtx: ProfileContext;
+  // Injectable so the sudo-ownership check is testable on a Windows runner,
+  // where the real process.getuid is undefined. Defaults to process.getuid.
+  readonly getuid?: () => number;
 }

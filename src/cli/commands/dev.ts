@@ -18,6 +18,7 @@ export interface DevCommandDeps {
   readonly verifyKey: (url: string, apiKey: string) => Promise<{ success: boolean }>;
   readonly writeDevConfig: (profileCtx: ProfileContext, apiKey: string) => Promise<void>;
   readonly registerDevServiceUnit: () => Promise<void>;
+  readonly readBootId?: () => Promise<string>;
 }
 
 export async function runDev(
@@ -29,7 +30,7 @@ export async function runDev(
     return runDevSetup(deps, args?.apiKey);
   }
 
-  const isOn = await readDevModeSentinel(deps.devModeSentinelPath);
+  const isOn = await readDevModeSentinel(deps.devModeSentinelPath, deps.readBootId ?? readBootId);
 
   let targetState: boolean;
   if (action === 'on') {
@@ -52,7 +53,8 @@ export async function runDev(
 }
 
 async function runDevOn(deps: DevCommandDeps): Promise<CommandResult> {
-  const bootId = await readBootId();
+  const readBootIdFn = deps.readBootId ?? readBootId;
+  const bootId = await readBootIdFn();
   await writeAtomic(deps.devModeSentinelPath, JSON.stringify({ bootId }));
 
   const configExists = await deps.devConfigExists();

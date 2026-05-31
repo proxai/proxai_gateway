@@ -317,10 +317,12 @@ async function probeFilesystemExtended(deps: DoctorCommandDeps): Promise<{
     writeProbeError = error.code ?? 'EACCES';
   }
 
+  const realGetuid = process.getuid;
+  const getuid = deps.getuid ?? (typeof realGetuid === 'function' ? realGetuid : null);
   try {
-    if (deps.platform !== 'win32' && process.getuid) {
+    if (deps.platform !== 'win32' && getuid !== null) {
       const stats = await fsStat(deps.configDirPath);
-      if (stats.uid === 0 && process.getuid() !== 0) {
+      if (stats.uid === 0 && getuid() !== 0) {
         sudoOwnershipDrift = true;
       }
     }

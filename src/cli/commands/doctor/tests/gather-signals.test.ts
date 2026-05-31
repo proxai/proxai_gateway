@@ -475,6 +475,8 @@ test('win32: probeDiskFreeBytes handles spawn throwing', async () => {
 
 test('linux: root-owned config dir under non-root process flags sudo ownership drift', async () => {
   rootOwnedStatDir = dir;
-  const signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+  // Inject getuid: the real process.getuid is undefined on the Windows runner,
+  // so platform:'linux' alone can't exercise the non-root sudo-drift path.
+  const signals = await gatherSignals(makeDeps({ platform: 'linux', getuid: () => 1000 }));
   expect(signals.filesystemExtended.sudoOwnershipDrift).toBe(true);
 });
