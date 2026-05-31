@@ -35,6 +35,10 @@ const retry = coverage
   : noRetry;
 
 const { text, failing } = renderReport(main, retry, mainRaw.wallClockMs, coverage);
-process.stdout.write(text);
+// stdout to a pipe is async on Linux/macOS, so `process.exit()` truncates a
+// large report (a failing run with many detail blocks) at the ~64 KB pipe
+// buffer before it flushes — dropping the Timing and Summary tail. Bun.write
+// resolves only after the whole report reaches the kernel.
+await Bun.write(Bun.stdout, text);
 
 process.exit(failing > 0 || !mainRaw.summarySeen ? 1 : 0);
