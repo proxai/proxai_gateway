@@ -63,7 +63,7 @@ jobs:
           exit 0
       - name: Upload raw bun output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: raw-bun-linux-arm64
           path: raw-bun-output.txt
