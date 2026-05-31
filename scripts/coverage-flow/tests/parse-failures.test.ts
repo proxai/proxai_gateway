@@ -12,6 +12,11 @@ function section(...lines: string[]): string {
   return lines.join('\n');
 }
 
+// Windows bun emits CRLF; the GitHub Actions reporter joins with `\r\n`.
+function crlfSection(...lines: string[]): string {
+  return lines.join('\r\n');
+}
+
 describe('extractFailureBlocks', () => {
   test('captures an assertion failure: frame + error + stack before its marker', () => {
     const blocks = extractFailureBlocks(
@@ -145,5 +150,49 @@ describe('extractFailureBlocks', () => {
     expect(blocks[0]?.detail.startsWith('7 |   expect(result.count).toBe(2);')).toBe(true);
     expect(blocks[0]?.detail).toContain('\n                          ^');
     expect(blocks[0]?.detail).toContain('\nerror: expect(received).toBe(expected)');
+  });
+
+  test('parses real GitHub-reporter Windows output: ::group:: frame, ::error:: noise, CRLF', () => {
+    // Mirrors what bun actually emits on the Windows CI runner: each file wrapped
+    // in `::group::<file>:` / `::endgroup::`, every failure re-encoded as a
+    // `::error file=...::` annotation, backslash paths, CRLF line endings, and a
+    // trailing `N tests failed:` consolidated list that reprints every marker.
+    const blocks = extractFailureBlocks(
+      crlfSection(
+        '::group::src\\cli\\commands\\tests\\upgrade.test.ts:',
+        '(pass) upgrade resolves repository root correctly [3.93ms]',
+        '560 |   });',
+        '561 |   expect(result.exitCode).toBe(0);',
+        '                                ^',
+        'error: expect(received).toBe(expected)',
+        '',
+        'Expected: 0',
+        'Received: 1',
+        '',
+        '      at <anonymous> (D:\\a\\proxai_gateway\\proxai_gateway\\src\\cli\\commands\\tests\\upgrade.test.ts:561:27)',
+        '',
+        '::error file=src\\cli\\commands\\tests\\upgrade.test.ts,line=561,col=27,title=error: expect(received).toBe(expected)::Expected: 0%0AReceived: 1',
+        '(fail) upgrade triggers local rebuild flow (attempt 3) [62.78ms]',
+        '::endgroup::',
+        '88 tests failed:',
+        '(fail) upgrade triggers local rebuild flow (attempt 3) [62.78ms]',
+      ),
+    );
+    const real = blocks.find((b) => b.detail.trim() !== '');
+    // File name is stripped of the `::group::` prefix (backslashes preserved;
+    // parse-run normalizes separators when matching against JUnit).
+    expect(real?.file).toBe('src\\cli\\commands\\tests\\upgrade.test.ts');
+    expect(real?.name).toBe('upgrade triggers local rebuild flow');
+    expect(real?.detail.startsWith('560 |   });')).toBe(true);
+    expect(real?.detail).toContain('\nerror: expect(received).toBe(expected)');
+    expect(real?.detail).toContain('Received: 1');
+    // The `::error::`/`::endgroup::` framing never leaks into the detail.
+    expect(real?.detail).not.toContain('::error');
+    expect(real?.detail).not.toContain('::endgroup');
+    // The consolidated `N tests failed:` reprint carries no failure signal, so it
+    // is not mistaken for real detail.
+    expect(blocks.some((b) => b.detail === '88 tests failed:' || b.detail.includes('error:'))).toBe(
+      true,
+    );
   });
 });

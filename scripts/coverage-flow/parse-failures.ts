@@ -26,11 +26,15 @@ export interface FailureBlock {
   detail: string;
 }
 
-// Every anchor tolerates leading whitespace: bun's GitHub Actions reporter
-// indents test output under file headers (and emits `::error::` annotations),
-// so a `^(fail)` / `^error:` pin matches nothing on CI even though the same run
-// is flush-left locally.
-export const HEADER_RE = /^\s*(\S.*\.(?:test|spec)\.ts):$/;
+// On CI bun emits its GitHub Actions reporter: each file's output is wrapped in
+// `::group::<file>:` … `::endgroup::` and every failure is additionally
+// re-encoded as a one-line `::error file=…::<%0A-escaped message>` annotation.
+// HEADER_RE therefore tolerates an optional `::group::` prefix (the bare
+// `<file>:` form is what a local, non-CI run prints), and WORKFLOW_CMD_RE drops
+// the `::endgroup::`/`::error::` framing lines so they never pollute a detail
+// block. Every anchor also tolerates leading whitespace.
+export const HEADER_RE = /^\s*(?:::group::)?(\S.*\.(?:test|spec)\.ts):$/;
+const WORKFLOW_CMD_RE = /^\s*::(?:endgroup|error|warning|notice|debug|group)\b/;
 const FAIL_RE = /^\s*\(fail\) (.+?)(?: \(attempt \d+\))?(?: \[[\d.]+m?s\])?$/;
 const PASSLIKE_RE = /^\s*\((?:pass|skip|todo)\)/;
 const ERROR_RE = /^\s*error:/;
@@ -108,7 +112,7 @@ export function extractFailureBlocks(testSection: string): FailureBlock[] {
   // The most recent marker, kept open only until its trailing timeout line
   // (quirk 4) — cleared by the next marker, header, or pass-like line.
   let open: FailureBlock | null = null;
-  for (const line of testSection.split('\n')) {
+  for (const line of testSection.split(/\r?\n/)) {
     const header = line.match(HEADER_RE)?.[1];
     if (header !== undefined) {
       currentFile = header;
@@ -133,6 +137,7 @@ export function extractFailureBlocks(testSection: string): FailureBlock[] {
       open = null;
       continue;
     }
+    if (WORKFLOW_CMD_RE.test(line)) continue;
     if (open !== null && open.detail === '' && TIMEOUT_RE.test(line)) {
       open.detail = line.trim();
       continue;

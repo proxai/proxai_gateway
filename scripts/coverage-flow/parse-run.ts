@@ -116,7 +116,9 @@ function rawForUnmatched(
 }
 
 export function parseRun(raw: RawRun): ParsedRun {
-  const consoleText = stripAnsi(raw.consoleText);
+  // bun emits CRLF on Windows; normalize so every `$`-anchored line regex and
+  // `split('\n')` downstream behaves identically to the POSIX runners.
+  const consoleText = stripAnsi(raw.consoleText).replace(/\r\n/g, '\n');
   const tests = collapseRetries(parseJunit(raw.junitXml));
   const covIdx = consoleText.search(COVERAGE_HEADER_REGEX);
   const testSection = covIdx >= 0 ? consoleText.slice(0, covIdx) : consoleText;
