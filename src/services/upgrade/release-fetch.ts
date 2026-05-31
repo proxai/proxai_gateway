@@ -1,3 +1,4 @@
+import { rename } from 'node:fs/promises';
 import type { FetchFn } from 'core/utils';
 import { setMode } from 'core/io/fs';
 
@@ -102,12 +103,13 @@ export async function replaceBinary(
   bytes: Uint8Array,
   platform: NodeJS.Platform,
 ): Promise<ReplaceBinaryResult> {
+  const staged = `${binaryPath}.new`;
   if (platform === 'win32') {
-    const sibling = `${binaryPath}.new`;
-    await Bun.write(sibling, bytes);
-    return { stagedSibling: sibling };
+    await Bun.write(staged, bytes);
+    return { stagedSibling: staged };
   }
-  await Bun.write(binaryPath, bytes);
-  await setMode(binaryPath, 0o755);
+  await Bun.write(staged, bytes);
+  await setMode(staged, 0o755);
+  await rename(staged, binaryPath);
   return { stagedSibling: null };
 }

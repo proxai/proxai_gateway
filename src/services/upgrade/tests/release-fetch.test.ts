@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { asGlobalFetch, asTimerSetter } from 'core/utils';
 import type { FetchFn } from 'core/utils';
+import { existsSync, statSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -208,12 +209,18 @@ test('downloadAsset falls back to globalThis.fetch when fetch dep is omitted', a
   }
 });
 
-test('replaceBinary writes binary in place on linux/darwin and stagedSibling is null', async () => {
+test('replaceBinary swaps in a fresh inode on linux/darwin and stagedSibling is null', async () => {
   const binaryPath = join(dir, 'gw');
   await writeFile(binaryPath, 'old');
+  const posixHost = process.platform !== 'win32';
+  const inodeBefore = posixHost ? statSync(binaryPath).ino : 0;
   const result = await replaceBinary(binaryPath, new TextEncoder().encode('new'), 'linux');
   expect(result.stagedSibling).toBeNull();
   expect(await readFile(binaryPath, 'utf8')).toBe('new');
+  expect(existsSync(`${binaryPath}.new`)).toBe(false);
+  if (posixHost) {
+    expect(statSync(binaryPath).ino).not.toBe(inodeBefore);
+  }
 });
 
 test('replaceBinary writes to .new sibling on win32 and returns its path', async () => {

@@ -2,6 +2,7 @@ import type { FetchFn } from 'core/utils';
 import type { MinimalLogger } from 'core/log';
 import type { InstallSource } from 'services/config';
 import { checkLatestVersion } from 'services/polling/version-check.ts';
+import { isLocalBuildPath } from 'services/upgrade/local-build.ts';
 import { downloadAsset, expectedAssetName, replaceBinary } from 'services/upgrade/release-fetch.ts';
 export interface AutoUpgradeDeps {
   binaryPath: string;
@@ -18,6 +19,7 @@ export interface AutoUpgradeDeps {
 export async function runAutoUpgrade(deps: AutoUpgradeDeps): Promise<void> {
   if (deps.devMode === true) return;
   if (deps.installSource === 'brew') return;
+  if (isLocalBuildPath(deps.binaryPath)) return;
   const log = deps.logger;
   const platform = deps.platform ?? process.platform;
   const arch = deps.arch ?? process.arch;

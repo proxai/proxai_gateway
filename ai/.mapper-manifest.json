@@ -1,19 +1,19 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-30T15:20:06.707Z",
-  "sourceHash": "6c6f79399daaa59ba5ced0a76a3ab25c",
+  "generatedAt": "2026-05-31T12:09:19.025Z",
+  "sourceHash": "912a5a2a6bb76cc7ade35a9cd6394760",
   "files": [
     {
       "path": "CLAUDE.md",
-      "hash": "32b1571aaa668596"
+      "hash": "14f428a5a76295c6"
     },
     {
       "path": "AGENTS.md",
-      "hash": "e0a3fe031701a282"
+      "hash": "416fc0bcd8ebaa71"
     },
     {
       "path": ".agents/AGENTS.md",
-      "hash": "75d3d50e00dbd602"
+      "hash": "791fae85d2b899b7"
     },
     {
       "path": ".claude/rules/_always.md",
@@ -65,19 +65,19 @@
     },
     {
       "path": ".claude/rules/modules/cross-platform.md",
-      "hash": "fdbc5ee8815b53b8"
+      "hash": "ded2563dc9400edc"
     },
     {
       "path": ".cursor/rules/modules-cross-platform.mdc",
-      "hash": "cbda14ba6f085d8a"
+      "hash": "05d3329efb94d52c"
     },
     {
       "path": ".codex/rules/modules/cross-platform.md",
-      "hash": "8ea949e9fe645802"
+      "hash": "41298fe20992f6a4"
     },
     {
       "path": ".agents/rules/modules/cross-platform.md",
-      "hash": "8ea949e9fe645802"
+      "hash": "41298fe20992f6a4"
     },
     {
       "path": ".claude/rules/modules/typescript.md",
@@ -1073,19 +1073,19 @@
     },
     {
       "path": ".claude/knowledge/services/upgrade.md",
-      "hash": "41262440e5d9ed03"
+      "hash": "9b613c33955e1dce"
     },
     {
       "path": ".cursor/knowledge/services/upgrade.md",
-      "hash": "41262440e5d9ed03"
+      "hash": "9b613c33955e1dce"
     },
     {
       "path": ".codex/knowledge/services/upgrade.md",
-      "hash": "41262440e5d9ed03"
+      "hash": "9b613c33955e1dce"
     },
     {
       "path": ".agents/knowledge/services/upgrade.md",
-      "hash": "41262440e5d9ed03"
+      "hash": "9b613c33955e1dce"
     },
     {
       "path": ".claude/knowledge/services/uploader.md",

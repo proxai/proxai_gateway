@@ -89,6 +89,27 @@ test('skips when devMode is true', async () => {
   expect(exitCalls).toBe(0);
 });
 
+test('skips a local /dist/ build without contacting the network', async () => {
+  const entries: LogEntry[] = [];
+  let exitCalls = 0;
+  let fetchCalls = 0;
+  await runAutoUpgrade({
+    binaryPath: join(dir, 'dist', 'darwin-arm64', 'gw'),
+    currentVersion: '2026.5.7',
+    fetch: async () => {
+      fetchCalls++;
+      return new Response('', { status: 200 });
+    },
+    logger: makeLogger(entries),
+    exitProcess: () => {
+      exitCalls++;
+    },
+  });
+  expect(fetchCalls).toBe(0);
+  expect(entries).toHaveLength(0);
+  expect(exitCalls).toBe(0);
+});
+
 test('skips when installSource is brew', async () => {
   const entries: LogEntry[] = [];
   let exitCalls = 0;

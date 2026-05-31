@@ -46,10 +46,32 @@ async function buildOne(target: Target): Promise<number> {
   const code = await proc.exited;
   if (code === 0) {
     console.log(`[build] ${flag} ok`);
+    if (target.platform === 'darwin') {
+      await adhocSignDarwin(outfile);
+    }
   } else {
     console.error(`[build] ${flag} failed with exit code ${code.toString()}`);
   }
   return code;
+}
+
+async function adhocSignDarwin(outfile: string): Promise<void> {
+  const codesign = Bun.which('codesign');
+  if (codesign === null) {
+    console.warn(`[build] codesign unavailable; skipping ad-hoc signing of ${outfile}`);
+    return;
+  }
+  const proc = Bun.spawn({
+    cmd: [codesign, '--force', '--sign', '-', outfile],
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+  const code = await proc.exited;
+  if (code === 0) {
+    console.log(`[build] ad-hoc signed ${outfile}`);
+  } else {
+    console.warn(`[build] codesign failed (exit ${code.toString()}) for ${outfile}`);
+  }
 }
 
 function parseSelection(argv: readonly string[]): readonly Target[] {

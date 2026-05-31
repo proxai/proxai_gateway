@@ -39,7 +39,7 @@ jobs:
 
   build:
     name: build (${{ matrix.target }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     needs: [version]
     timeout-minutes: 15
     strategy:
@@ -48,14 +48,19 @@ jobs:
         include:
           - target: darwin-arm64
             ext: ''
+            runner: macos-latest
           - target: linux-arm64
             ext: ''
+            runner: ubuntu-latest
           - target: linux-x64
             ext: ''
+            runner: ubuntu-latest
           - target: windows-x64
             ext: '.exe'
+            runner: ubuntu-latest
           - target: windows-arm64
             ext: '.exe'
+            runner: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -86,6 +91,10 @@ jobs:
 
       - name: Build ${{ matrix.target }}
         run: bun run build:${{ matrix.target }}
+
+      - name: Verify ad-hoc signature (darwin)
+        if: startsWith(matrix.target, 'darwin')
+        run: codesign --verify --verbose=2 dist/${{ matrix.target }}/proxai-gateway
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

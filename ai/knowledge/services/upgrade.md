@@ -32,7 +32,7 @@ interface AutoUpgradeDeps {
 
 Flow:
 
-1. **Early exit (no-op)**: `devMode === true` OR `installSource === 'brew'`. Returns `void`.
+1. **Early exit (no-op)**: `devMode === true` OR `installSource === 'brew'` OR `isLocalBuildPath(binaryPath)` (a binary running from a `/dist/` path — a local `bun run build` output). Returns `void`. The local-build guard mirrors the CLI `upgrade` command and stops auto-upgrade from clobbering a developer's local build with the published release (whose CalVer version is almost always *higher* than the stale `package.json` version a local build self-reports). `isLocalBuildPath` lives in `services/upgrade/local-build.ts`; `cli/commands/status/local-build.ts` re-exports it.
 2. `checkLatestVersion({ currentVersion, platform, arch, fetch? })`:
    - `kind === 'error'` → log `auto_upgrade.check_failed` (FATAL level) and return.
    - `kind === 'no_release'` → return silently (repo has no published releases; common in dev).
@@ -80,8 +80,9 @@ This works for both SemVer-shaped and CalVer-shaped versions because the compari
 async function replaceBinary(binaryPath, bytes, platform): Promise<{ stagedSibling: string | null }>
 ```
 
-- POSIX: `await Bun.write(binaryPath, bytes)`, then `setMode(binaryPath, 0o755)`. Returns `{ stagedSibling: null }`. Bun's writer overwrites atomically via tmpfile + rename.
-- Windows: a running `.exe` is locked — direct overwrite is impossible. Stage at `${binaryPath}.new` via `Bun.write`. Returns `{ stagedSibling: binaryPath + '.new' }`. The expectation is that the user (or a future supervisor) renames `.new` → real path on next start. **Currently the daemon does NOT itself perform the rename on Windows** — the staging is the upgrade step, and the service manager wrapper handles the rename. The Windows `uninstall` code cleans up any leftover `.exe.new` (see `uninstall.md`).
+- POSIX: stage to `${binaryPath}.new` via `Bun.write`, `setMode(staged, 0o755)`, then `await rename(staged, binaryPath)`. Returns `{ stagedSibling: null }`. The `rename` is the load-bearing detail: `Bun.write(binaryPath, bytes)` truncates the **same inode** in place (verified — it is *not* tmpfile+rename), and modifying an already-executed binary in place leaves the kernel's per-inode code-signing verdict stale, so macOS SIGKILLs the respawn (and Linux throws `ETXTBSY` writing over a running binary). Renaming swaps in a fresh inode — the running daemon holds the old inode until `exitProcess()`, then the service manager respawns on the clean vnode. See `ai/rules/modules/cross-platform.md`.
+- Windows: a running `.exe` is locked — even rename-over is impossible. Stage at `${binaryPath}.new` via `Bun.write` and stop there. Returns `{ stagedSibling: binaryPath + '.new' }`. The expectation is that the user (or a future supervisor) renames `.new` → real path on next start. **Currently the daemon does NOT itself perform the rename on Windows** — the staging is the upgrade step, and the service manager wrapper handles the rename. The Windows `uninstall` code cleans up any leftover `.exe.new` (see `uninstall.md`).
+- Build/release signing: `scripts/build.ts` ad-hoc signs darwin outputs (`codesign --force --sign -`, gated on `Bun.which('codesign')`), and `release.yml` builds the darwin target on a `macos-latest` runner so that signing is native and adds a `codesign --verify` gate. bun's `--compile` produces an ad-hoc/linker-signed Mach-O whose signature fails `codesign --verify` ("code or signature have been modified") — usually benign on a fresh-install inode, but it is the latent hazard the build-time re-sign removes.
 
 ## Brew branch: `UPDATE_AVAILABLE` sentinel
 
