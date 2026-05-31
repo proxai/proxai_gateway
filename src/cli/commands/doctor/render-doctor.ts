@@ -208,214 +208,512 @@ export function renderDoctorOutput(findings: readonly Finding[], signals: Doctor
   return lines.join('\n');
 }
 
+const PROXAI_THEME = {
+  pageBg: '#020c0c',
+  cardBg: '#071717',
+  codeBg: '#0e2424',
+  borderBase: '#122a2a',
+  borderStrong: '#1a3c3c',
+  text: '#f3f4f6',
+  textSecondary: '#9ca3af',
+  textMuted: '#6b7280',
+  mint: '#4ade80',
+  cyan: '#22d3ee',
+  amber: '#fbbf24',
+  rose: '#fb7185',
+  blue: '#60a5fa',
+} as const;
+
+const DARK_POLYGONS: ReadonlyArray<readonly [string, string]> = [
+  ['#888', '90 150 0 300 180 300'],
+  ['', '90 150 180 0 0 0'],
+  ['#555', '270 150 360 0 180 0'],
+  ['#333', '450 150 360 300 540 300'],
+  ['#666', '450 150 540 0 360 0'],
+  ['', '630 150 540 300 720 300'],
+  ['#333', '630 150 720 0 540 0'],
+  ['#888', '810 150 720 300 900 300'],
+  ['#111', '810 150 900 0 720 0'],
+  ['#333', '990 150 900 300 1080 300'],
+  ['#888', '990 150 1080 0 900 0'],
+  ['#333', '90 450 0 600 180 600'],
+  ['', '90 450 180 300 0 300'],
+  ['#999', '270 450 180 600 360 600'],
+  ['#555', '270 450 360 300 180 300'],
+  ['#333', '450 450 360 600 540 600'],
+  ['#666', '450 450 540 300 360 300'],
+  ['#666', '630 450 540 600 720 600'],
+  ['#111', '630 450 720 300 540 300'],
+  ['', '810 450 720 600 900 600'],
+  ['#333', '810 450 900 300 720 300'],
+  ['#555', '990 450 900 600 1080 600'],
+  ['#888', '990 450 1080 300 900 300'],
+  ['#DDD', '90 750 0 900 180 900'],
+  ['', '270 750 180 900 360 900'],
+  ['#333', '270 750 360 600 180 600'],
+  ['', '450 750 540 600 360 600'],
+  ['', '630 750 540 900 720 900'],
+  ['#888', '630 750 720 600 540 600'],
+  ['#555', '810 750 720 900 900 900'],
+  ['#999', '810 750 900 600 720 600'],
+  ['#666', '990 750 900 900 1080 900'],
+  ['#666', '180 0 90 150 270 150'],
+  ['#888', '360 0 270 150 450 150'],
+  ['#111', '540 0 450 150 630 150'],
+  ['', '900 0 810 150 990 150'],
+  ['#DDD', '0 300 -90 450 90 450'],
+  ['#111', '0 300 90 150 -90 150'],
+  ['#111', '180 300 90 450 270 450'],
+  ['#999', '180 300 270 150 90 150'],
+  ['#DDD', '360 300 270 450 450 450'],
+  ['#111', '360 300 450 150 270 150'],
+  ['#888', '540 300 450 450 630 450'],
+  ['#DDD', '540 300 630 150 450 150'],
+  ['#555', '720 300 630 450 810 450'],
+  ['#999', '720 300 810 150 630 150'],
+  ['#111', '900 300 810 450 990 450'],
+  ['#666', '900 300 990 150 810 150'],
+  ['', '0 600 -90 750 90 750'],
+  ['#999', '0 600 90 450 -90 450'],
+  ['#555', '180 600 90 750 270 750'],
+  ['#888', '180 600 270 450 90 450'],
+  ['#888', '360 600 270 750 450 750'],
+  ['#666', '360 600 450 450 270 450'],
+  ['#999', '540 600 630 450 450 450'],
+  ['#DDD', '720 600 630 750 810 750'],
+  ['#111', '900 600 810 750 990 750'],
+  ['#DDD', '900 600 990 450 810 450'],
+  ['#333', '0 900 90 750 -90 750'],
+  ['#888', '180 900 270 750 90 750'],
+  ['#111', '360 900 450 750 270 750'],
+  ['#555', '540 900 630 750 450 750'],
+  ['#111', '720 900 810 750 630 750'],
+  ['#DDD', '900 900 990 750 810 750'],
+  ['#DDD', '1080 300 990 450 1170 450'],
+  ['#111', '1080 300 1170 150 990 150'],
+  ['', '1080 600 990 750 1170 750'],
+  ['#999', '1080 600 1170 450 990 450'],
+  ['#333', '1080 900 1170 750 990 750'],
+];
+
+function buildBackgroundTile(): string {
+  const polygons = DARK_POLYGONS.map(
+    ([fill, points]) => `<polygon${fill ? ` fill="${fill}"` : ''} points="${points}"/>`,
+  ).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="540" height="450" viewBox="0 0 1080 900" preserveAspectRatio="xMidYMid slice"><rect width="100%" height="100%" fill="${PROXAI_THEME.pageBg}"/><g opacity="0.3"><g fill-opacity="0.05" fill="#ffffff">${polygons}</g></g></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
+}
+
+const BACKGROUND_TILE_DATA_URI = buildBackgroundTile();
+
+function htmlBool(value: boolean): string {
+  return value ? '<span class="v-true">true</span>' : '<span class="v-false">false</span>';
+}
+
+function htmlNullableBool(value: boolean | null): string {
+  return value === null ? '<span class="v-null">null</span>' : htmlBool(value);
+}
+
+function htmlStr(value: string | null): string {
+  return value === null
+    ? '<span class="v-null">null</span>'
+    : `<span class="v-str">${escapeHtml(value)}</span>`;
+}
+
+function htmlNum(value: number): string {
+  return `<span class="v-num">${value.toString()}</span>`;
+}
+
+function htmlNullableNum(value: number | null): string {
+  return value === null ? '<span class="v-null">null</span>' : htmlNum(value);
+}
+
+function htmlEvents(events: readonly string[]): string {
+  if (events.length === 0) {
+    return '<span class="v-null">none</span>';
+  }
+  return events
+    .map((e) => `<span class="v-str">${escapeHtml(e)}</span>`)
+    .join('<span class="v-null">, </span>');
+}
+
+function htmlRegressionLoops(
+  loops: ReadonlyArray<{ readonly sourcePathHash: string; readonly countInLastHour: number }>,
+): string {
+  if (loops.length === 0) {
+    return '<span class="v-null">none</span>';
+  }
+  return loops
+    .map(
+      (loop) =>
+        `<span class="v-str">${escapeHtml(loop.sourcePathHash)}</span> <span class="v-null">·</span> <span class="v-num">${loop.countInLastHour.toString()}</span><span class="v-null">/h</span>`,
+    )
+    .join('<br>');
+}
+
+function sigRow(key: string, valueHtml: string): string {
+  return `<div class="row"><span class="k">${key}</span><span class="v">${valueHtml}</span></div>`;
+}
+
+function sigCard(title: string, rows: readonly string[]): string {
+  return `<section class="card"><h3 class="card-title">${title}</h3><div class="rows">${rows.join('')}</div></section>`;
+}
+
+function renderFindingCard(finding: Finding): string {
+  let kind = 'info';
+  if (finding.severity === Severity.critical) {
+    kind = 'crit';
+  } else if (finding.severity === Severity.warning) {
+    kind = 'warn';
+  }
+  return `<article class="finding finding-${kind}">
+            <div class="finding-head">
+              <span class="finding-code">${escapeHtml(finding.code)}</span>
+              <span class="finding-conf">${finding.confidence}</span>
+            </div>
+            <p class="finding-cause">${escapeHtml(finding.cause)}</p>
+            <p class="finding-action"><span class="arrow">→</span><span>${escapeHtml(finding.action)}</span></p>
+          </article>`;
+}
+
+function findingGroup(label: string, kind: string, items: readonly Finding[]): string {
+  if (items.length === 0) {
+    return '';
+  }
+  return `<div class="group">
+          <h3 class="group-title group-${kind}"><span class="dot"></span>${label} (${items.length.toString()})</h3>
+          ${items.map(renderFindingCard).join('')}
+        </div>`;
+}
+
+function renderHealthBanner(criticals: number, warnings: number, infos: number): string {
+  const total = criticals + warnings + infos;
+  if (total === 0) {
+    return `<div class="health health-ok"><span class="pip"></span><span class="health-text">All systems healthy<span class="health-sub"> — no issues detected</span></span></div>`;
+  }
+  const parts: string[] = [];
+  if (criticals > 0) {
+    parts.push(`${criticals.toString()} critical`);
+  }
+  if (warnings > 0) {
+    parts.push(`${warnings.toString()} warning`);
+  }
+  if (infos > 0) {
+    parts.push(`${infos.toString()} info`);
+  }
+  return `<div class="health health-bad"><span class="pip"></span><span class="health-text">${total.toString()} issue${total === 1 ? '' : 's'} found<span class="health-sub"> — ${parts.join(' · ')}</span></span></div>`;
+}
+
 export function generateDoctorHtml(
   findings: readonly Finding[],
   signals: DoctorSignals,
   timestamp: string,
 ): string {
   const sorted = sortFindings(findings);
-
-  const renderHtmlFinding = (f: Finding) => {
-    let badgeClass = '';
-    let icon = '';
-    if (f.severity === Severity.critical) {
-      badgeClass = 'bg-red-500/10 text-red-400 border-red-500/30';
-      icon = '[X]';
-    } else if (f.severity === Severity.warning) {
-      badgeClass = 'bg-amber-500/10 text-amber-400 border-amber-500/30';
-      icon = '[!]';
-    } else {
-      badgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/30';
-      icon = '[i]';
-    }
-    return `
-      <div class="p-5 mb-4 rounded-xl border bg-slate-800/50 border-slate-700/50 hover:border-slate-600 transition duration-200">
-        <div class="flex items-center gap-3 mb-2">
-          <span class="px-2.5 py-1 text-xs font-semibold tracking-wider uppercase rounded-full border ${badgeClass}">
-            ${icon} [${f.confidence}] ${f.code}
-          </span>
-        </div>
-        <p class="text-base text-slate-100 font-medium mb-2">${escapeHtml(f.cause)}</p>
-        <div class="text-sm text-cyan-400 font-semibold flex items-start gap-2">
-          <span class="text-slate-500">→</span>
-          <span>${escapeHtml(f.action)}</span>
-        </div>
-      </div>
-    `;
-  };
-
   const criticals = sorted.filter((f) => f.severity === Severity.critical);
   const warnings = sorted.filter((f) => f.severity === Severity.warning);
   const infos = sorted.filter((f) => f.severity === Severity.info);
 
-  const buildSummaryHtml = () => {
-    let html = '';
-    if (sorted.length === 0) {
-      html += `
-        <div class="p-6 text-center rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-emerald-400 mb-8">
-          <span class="text-3xl mb-2 block">✓</span>
-          <span class="font-bold text-lg">System is completely healthy. No issues found!</span>
-        </div>
-      `;
-    } else {
-      if (criticals.length > 0) {
-        html += `
-          <div class="mb-8">
-            <h3 class="text-sm font-bold uppercase tracking-wider text-red-400 mb-4 flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
-              Critical Issues (${criticals.length})
-            </h3>
-            ${criticals.map(renderHtmlFinding).join('')}
-          </div>
-        `;
-      }
-      if (warnings.length > 0) {
-        html += `
-          <div class="mb-8">
-            <h3 class="text-sm font-bold uppercase tracking-wider text-amber-400 mb-4 flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-              Warnings (${warnings.length})
-            </h3>
-            ${warnings.map(renderHtmlFinding).join('')}
-          </div>
-        `;
-      }
-      if (infos.length > 0) {
-        html += `
-          <div class="mb-8">
-            <h3 class="text-sm font-bold uppercase tracking-wider text-blue-400 mb-4 flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-              Info (${infos.length})
-            </h3>
-            ${infos.map(renderHtmlFinding).join('')}
-          </div>
-        `;
-      }
-    }
+  const summaryBody =
+    sorted.length === 0
+      ? `<div class="healthy"><div class="mark">✓</div><div class="msg">System is completely healthy. No issues found!</div></div>`
+      : `${findingGroup('Critical Issues', 'crit', criticals)}${findingGroup('Warnings', 'warn', warnings)}${findingGroup('Info', 'info', infos)}`;
 
-    return html;
-  };
+  const cards = [
+    sigCard('Core State', [
+      sigRow('platform', htmlStr(signals.platform)),
+      sigRow('config.exists', htmlBool(signals.configExists)),
+      sigRow('config.parses', htmlBool(signals.configParses)),
+      sigRow('api_key_present', htmlBool(signals.apiKeyPresent)),
+      sigRow('service_unit_registered', htmlBool(signals.serviceUnitRegistered)),
+      sigRow('daemon_running', htmlBool(signals.daemonRunning)),
+    ]),
+    sigCard('Sentinels', [
+      sigRow('AUTH_FAILED', htmlBool(signals.sentinels.authFailed)),
+      sigRow('BUFFER_FULL', htmlBool(signals.sentinels.bufferFull)),
+      sigRow('SESSION_STOPPED', htmlBool(signals.sentinels.sessionStopped)),
+      sigRow('UPDATE_AVAILABLE', htmlBool(signals.sentinels.updateAvailable)),
+    ]),
+    sigCard('Buffer', [
+      sigRow('pending_count', htmlNum(signals.buffer.pendingCount)),
+      sigRow('pending_bytes', htmlNum(signals.buffer.pendingBytes)),
+      sigRow('failed_count', htmlNum(signals.buffer.failedCount)),
+      sigRow('quarantined_count', htmlNum(signals.buffer.quarantinedCount)),
+      sigRow('receipt_count', htmlNum(signals.buffer.receiptCount)),
+      sigRow('last_prune_at', htmlStr(localTime(signals.buffer.lastPruneAt))),
+      sigRow('last_success_at', htmlStr(localTime(signals.buffer.lastSuccessAt))),
+    ]),
+    sigCard('Daemon State', [
+      sigRow('capture_last_cycle', htmlStr(localTime(signals.daemonState.captureLastCycleAt))),
+      sigRow('drain_last_cycle', htmlStr(localTime(signals.daemonState.drainLastCycleAt))),
+      sigRow(
+        'retriable_break',
+        htmlNullableBool(signals.daemonState.lastConsecutiveRetriableBreak),
+      ),
+      sigRow('last_upload_error', htmlStr(signals.daemonState.lastUploadError)),
+    ]),
+    sigCard('Binary', [
+      sigRow('version', htmlStr(signals.binary.version)),
+      sigRow('mtime', htmlStr(localTime(signals.binary.mtime?.toISOString() ?? null))),
+      sigRow('install_source', htmlStr(signals.binary.installSource)),
+    ]),
+    sigCard('Recent Events', [
+      sigRow('auth_unconfirmed', htmlNum(signals.recentEvents.authUnconfirmedCount)),
+      sigRow('rate_limited', htmlNum(signals.recentEvents.rateLimitedCount)),
+      sigRow('retriable', htmlNum(signals.recentEvents.retriableCount)),
+      sigRow('validation_errors', htmlNum(signals.recentEvents.fatalValidationErrorCount)),
+      sigRow('auto_upgrade_events', htmlEvents(signals.recentEvents.autoUpgradeEvents)),
+    ]),
+    sigCard('Filesystem', [
+      sigRow('config_dir_writable', htmlBool(signals.filesystem.configDirWritable)),
+      sigRow('log_dir_writable', htmlBool(signals.filesystem.logDirWritable)),
+      sigRow('disk_free_bytes', htmlNullableNum(signals.filesystem.diskFreeBytes)),
+    ]),
+    sigCard('Network', [sigRow('nest_reachable', htmlNullableBool(signals.network.nestReachable))]),
+    sigCard('Source Paths', [
+      sigRow('claude_code_exists', htmlBool(signals.sourcePaths.claudeCodeExists)),
+      sigRow('cursor_exists', htmlBool(signals.sourcePaths.cursorExists)),
+      sigRow('codex_exists', htmlBool(signals.sourcePaths.codexExists)),
+      sigRow('gemini_cli_exists', htmlBool(signals.sourcePaths.geminiCliExists)),
+    ]),
+    sigCard('Host & Resync', [
+      sigRow('resync_total', htmlNum(signals.resyncEvents.totalCount)),
+      sigRow('regression_loops', htmlRegressionLoops(signals.resyncEvents.regressionLoops)),
+      sigRow('systemd_linger', htmlNullableBool(signals.systemdLingerEnabled)),
+      sigRow('macos_quarantine', htmlNullableBool(signals.macOsQuarantineXattr)),
+      sigRow('clock_skew_ms', htmlNullableNum(signals.clockSkewMs)),
+    ]),
+  ].join('');
 
-  const summarySection = buildSummaryHtml();
-  const formatHtmlBool = (v: boolean) =>
-    v
-      ? '<span class="text-emerald-400 font-bold">true</span>'
-      : '<span class="text-red-400 font-bold">false</span>';
-  const formatHtmlStr = (v: string | null) =>
-    v !== null
-      ? `<span class="text-amber-300">${escapeHtml(v)}</span>`
-      : '<span class="text-slate-500">null</span>';
-  const formatHtmlNum = (v: number) => `<span class="text-fuchsia-400">${v}</span>`;
+  const T = PROXAI_THEME;
 
   return `<!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ProxAI Gateway - Doctor Diagnostics Report</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>ProxAI Gateway — Doctor Diagnostics</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+    :root {
+      --page: ${T.pageBg};
+      --card: ${T.cardBg};
+      --card-2: ${T.codeBg};
+      --border: ${T.borderBase};
+      --border-strong: ${T.borderStrong};
+      --text: ${T.text};
+      --text-2: ${T.textSecondary};
+      --muted: ${T.textMuted};
+      --mint: ${T.mint};
+      --cyan: ${T.cyan};
+      --amber: ${T.amber};
+      --rose: ${T.rose};
+      --blue: ${T.blue};
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --mono: 'Menlo', 'Monaco', 'Courier New', monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
     body {
-      font-family: 'Outfit', sans-serif;
+      background-color: var(--page);
+      background-image: url("${BACKGROUND_TILE_DATA_URI}");
+      background-repeat: repeat;
+      color: var(--text);
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+      font-size: 15px;
     }
-    .font-mono {
-      font-family: 'JetBrains Mono', monospace;
+    .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+    .band {
+      background-color: var(--page);
+      border-bottom: 1px solid var(--border);
+      padding: 40px 24px 32px;
+      text-align: center;
     }
+    .wordmark {
+      font-size: 44px;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+      line-height: 1;
+      color: var(--text);
+    }
+    .eyebrow {
+      margin-top: 16px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--mint);
+    }
+    .band-meta { margin-top: 10px; font-size: 13px; color: var(--muted); }
+    .band-meta .ts { color: var(--text-2); font-family: var(--mono); }
+    main { padding: 40px 0 60px; }
+    .health {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 18px 22px;
+      border-radius: 14px;
+      border: 1px solid var(--border-strong);
+      background-color: var(--card);
+      margin-bottom: 44px;
+    }
+    .health-ok { border-color: rgba(74, 222, 128, 0.45); background-color: rgba(74, 222, 128, 0.06); }
+    .health-bad { border-color: rgba(251, 113, 133, 0.45); background-color: rgba(251, 113, 133, 0.06); }
+    .health .pip { width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto; }
+    .health-ok .pip { background-color: var(--mint); box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.15); }
+    .health-bad .pip { background-color: var(--rose); box-shadow: 0 0 0 4px rgba(251, 113, 133, 0.15); }
+    .health-text { font-size: 15px; font-weight: 600; color: var(--text); }
+    .health-sub { font-weight: 400; color: var(--text-2); }
+    .block { margin-bottom: 48px; }
+    .section-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-2);
+      margin: 0 0 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .group { margin-bottom: 26px; }
+    .group-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin: 0 0 14px;
+    }
+    .group-title .dot { width: 9px; height: 9px; border-radius: 50%; }
+    .group-crit { color: var(--rose); } .group-crit .dot { background-color: var(--rose); }
+    .group-warn { color: var(--amber); } .group-warn .dot { background-color: var(--amber); }
+    .group-info { color: var(--blue); } .group-info .dot { background-color: var(--blue); }
+    .finding {
+      padding: 18px 20px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background-color: var(--card);
+      margin-bottom: 12px;
+    }
+    .finding-crit { border-left: 3px solid var(--rose); }
+    .finding-warn { border-left: 3px solid var(--amber); }
+    .finding-info { border-left: 3px solid var(--blue); }
+    .finding-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .finding-code {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      background-color: var(--card-2);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      padding: 3px 9px;
+      letter-spacing: 0.04em;
+    }
+    .finding-conf {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .finding-cause { margin: 0 0 8px; font-size: 15px; font-weight: 500; color: var(--text); }
+    .finding-action {
+      margin: 0;
+      font-size: 14px;
+      color: var(--mint);
+      font-weight: 500;
+      display: flex;
+      gap: 8px;
+    }
+    .finding-action .arrow { color: var(--muted); }
+    .healthy {
+      padding: 36px 24px;
+      text-align: center;
+      border-radius: 16px;
+      border: 1px solid rgba(74, 222, 128, 0.3);
+      background-color: rgba(74, 222, 128, 0.05);
+    }
+    .healthy .mark { font-size: 34px; color: var(--mint); line-height: 1; }
+    .healthy .msg { margin-top: 12px; font-size: 17px; font-weight: 700; color: var(--mint); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 18px;
+    }
+    .card {
+      background-color: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 22px;
+    }
+    .card-title {
+      margin: 0 0 14px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--mint);
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .rows { display: flex; flex-direction: column; gap: 9px; }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 16px;
+    }
+    .row .k { color: var(--text); font-family: var(--mono); font-size: 12.5px; }
+    .row .v {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      text-align: right;
+      word-break: break-word;
+    }
+    .v-true { color: var(--mint); font-weight: 600; }
+    .v-false { color: var(--rose); font-weight: 600; }
+    .v-null { color: var(--muted); }
+    .v-num { color: var(--cyan); }
+    .v-str { color: var(--amber); }
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 26px 24px 44px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    footer .sep { margin: 0 8px; color: var(--border-strong); }
   </style>
 </head>
-<body class="bg-slate-900 text-slate-200 h-full flex flex-col antialiased">
-  <header class="bg-slate-950 border-b border-slate-800 py-8 px-6 text-center relative overflow-hidden shrink-0">
-    <div class="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-fuchsia-500/10 to-emerald-500/10 opacity-30 pointer-events-none"></div>
-    <div class="relative z-10 max-w-4xl mx-auto flex flex-col items-center">
-      <div class="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mb-4">
-        <span class="text-2xl font-bold font-mono text-cyan-400">DR</span>
-      </div>
-      <h1 class="text-3xl font-extrabold tracking-tight text-white mb-2">PROXAI-GATEWAY DOCTOR</h1>
-      <p class="text-sm text-slate-400">Diagnostic report compiled on <span class="text-cyan-400 font-medium font-mono">${timestamp}</span></p>
-    </div>
+<body>
+  <header class="band">
+    <div class="wordmark">ProxAI</div>
+    <div class="eyebrow">Gateway · Doctor Diagnostics</div>
+    <div class="band-meta">Report compiled <span class="ts">${escapeHtml(timestamp)}</span> · v${escapeHtml(signals.binary.version)}</div>
   </header>
 
-  <main class="flex-1 overflow-y-auto py-10 px-6">
-    <div class="max-w-4xl mx-auto">
-      <section class="mb-12">
-        <h2 class="text-lg font-bold text-white mb-6 border-b border-slate-800 pb-2 flex items-center gap-2">
-          Diagnostics Signals Appendix
-        </h2>
-        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-xl">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div>
-              <h3 class="text-xs font-bold uppercase tracking-wider text-cyan-400 mb-4 border-b border-slate-800 pb-2">Core State</h3>
-              <div class="space-y-2 text-sm">
-                <div class="flex justify-between"><span class="text-slate-400">platform:</span><span class="font-mono text-cyan-300">${signals.platform}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">config.exists:</span><span class="font-mono">${formatHtmlBool(signals.configExists)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">config.parses:</span><span class="font-mono">${formatHtmlBool(signals.configParses)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">api_key_present:</span><span class="font-mono">${formatHtmlBool(signals.apiKeyPresent)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">service_unit_registered:</span><span class="font-mono">${formatHtmlBool(signals.serviceUnitRegistered)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">daemon_running:</span><span class="font-mono">${formatHtmlBool(signals.daemonRunning)}</span></div>
-              </div>
+  <main>
+    <div class="wrap">
+      ${renderHealthBanner(criticals.length, warnings.length, infos.length)}
 
-              <h3 class="text-xs font-bold uppercase tracking-wider text-cyan-400 mt-6 mb-4 border-b border-slate-800 pb-2">Sentinels</h3>
-              <div class="space-y-2 text-sm">
-                <div class="flex justify-between"><span class="text-slate-400">AUTH_FAILED:</span><span class="font-mono">${formatHtmlBool(signals.sentinels.authFailed)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">BUFFER_FULL:</span><span class="font-mono">${formatHtmlBool(signals.sentinels.bufferFull)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">SESSION_STOPPED:</span><span class="font-mono">${formatHtmlBool(signals.sentinels.sessionStopped)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">UPDATE_AVAILABLE:</span><span class="font-mono">${formatHtmlBool(signals.sentinels.updateAvailable)}</span></div>
-              </div>
-
-              <h3 class="text-xs font-bold uppercase tracking-wider text-cyan-400 mt-6 mb-4 border-b border-slate-800 pb-2">Filesystem</h3>
-              <div class="space-y-2 text-sm">
-                <div class="flex justify-between"><span class="text-slate-400">config_dir_writable:</span><span class="font-mono">${formatHtmlBool(signals.filesystem.configDirWritable)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">log_dir_writable:</span><span class="font-mono">${formatHtmlBool(signals.filesystem.logDirWritable)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">disk_free_bytes:</span><span class="font-mono">${signals.filesystem.diskFreeBytes !== null ? formatHtmlNum(signals.filesystem.diskFreeBytes) : '<span class="text-slate-500">null</span>'}</span></div>
-              </div>
-            </div>
-
-            <div>
-              <h3 class="text-xs font-bold uppercase tracking-wider text-cyan-400 mb-4 border-b border-slate-800 pb-2">Buffer</h3>
-              <div class="space-y-2 text-sm">
-                <div class="flex justify-between"><span class="text-slate-400">pending_count:</span><span class="font-mono">${formatHtmlNum(signals.buffer.pendingCount)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">pending_bytes:</span><span class="font-mono">${formatHtmlNum(signals.buffer.pendingBytes)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">failed_count:</span><span class="font-mono">${formatHtmlNum(signals.buffer.failedCount)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">quarantined_count:</span><span class="font-mono">${formatHtmlNum(signals.buffer.quarantinedCount)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">receipt_count:</span><span class="font-mono">${formatHtmlNum(signals.buffer.receiptCount)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">last_prune_at:</span><span class="font-mono">${formatHtmlStr(localTime(signals.buffer.lastPruneAt))}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">last_success_at:</span><span class="font-mono">${formatHtmlStr(localTime(signals.buffer.lastSuccessAt))}</span></div>
-              </div>
-
-              <h3 class="text-xs font-bold uppercase tracking-wider text-cyan-400 mt-6 mb-4 border-b border-slate-800 pb-2">Daemon State Machine</h3>
-              <div class="space-y-2 text-sm">
-                <div class="flex justify-between"><span class="text-slate-400">capture_last_cycle:</span><span class="font-mono">${formatHtmlStr(localTime(signals.daemonState.captureLastCycleAt))}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">drain_last_cycle:</span><span class="font-mono">${formatHtmlStr(localTime(signals.daemonState.drainLastCycleAt))}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">last_upload_error:</span><span class="font-mono">${formatHtmlStr(signals.daemonState.lastUploadError)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">retriable_break:</span><span class="font-mono">${signals.daemonState.lastConsecutiveRetriableBreak === null ? '<span class="text-slate-500">null</span>' : formatHtmlBool(signals.daemonState.lastConsecutiveRetriableBreak)}</span></div>
-              </div>
-
-              <h3 class="text-xs font-bold uppercase tracking-wider text-cyan-400 mt-6 mb-4 border-b border-slate-800 pb-2">Binary</h3>
-              <div class="space-y-2 text-sm">
-                <div class="flex justify-between"><span class="text-slate-400">version:</span><span class="font-mono text-amber-300">${escapeHtml(signals.binary.version)}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">mtime:</span><span class="font-mono">${formatHtmlStr(localTime(signals.binary.mtime?.toISOString() ?? null))}</span></div>
-                <div class="flex justify-between"><span class="text-slate-400">install_source:</span><span class="font-mono">${formatHtmlStr(signals.binary.installSource)}</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
+      <section class="block">
+        <h2 class="section-title">Diagnostics Summary</h2>
+        ${summaryBody}
       </section>
 
-      <section class="mb-8">
-        <h2 class="text-lg font-bold text-white mb-6 border-b border-slate-800 pb-2 flex items-center gap-2">
-          Diagnostics Summary
-        </h2>
-        ${summarySection}
+      <section class="block">
+        <h2 class="section-title">Signals Appendix</h2>
+        <div class="grid">${cards}</div>
       </section>
     </div>
   </main>
 
-  <footer class="bg-slate-950 border-t border-slate-800 py-6 px-6 text-center text-xs text-slate-500 shrink-0">
-    <div class="max-w-4xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-      <span>ProxAI Daemon State Machine Diagnostics v${escapeHtml(signals.binary.version)}</span>
-      <span>Generated by Antigravity CLI</span>
-    </div>
+  <footer>
+    ProxAI Gateway<span class="sep">·</span>Diagnostics Report<span class="sep">·</span>v${escapeHtml(signals.binary.version)}
   </footer>
 </body>
 </html>`;

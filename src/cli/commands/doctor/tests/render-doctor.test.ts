@@ -330,6 +330,73 @@ test('generateDoctorHtml renders HTML report correctly for healthy system', () =
   expect(html).toContain('<!DOCTYPE html>');
   expect(html).toContain('System is completely healthy. No issues found!');
   expect(html).toContain('2026-05-28T12:00:00Z');
+  expect(html).toContain('All systems healthy');
+  expect(html).toContain('<div class="wordmark">ProxAI</div>');
+});
+
+test('generateDoctorHtml is fully self-contained with no external resources', () => {
+  const html = generateDoctorHtml([], baseSignals(), '2026-05-28T12:00:00Z');
+  expect(html).not.toContain('cdn.tailwindcss.com');
+  expect(html).not.toContain('fonts.googleapis.com');
+  expect(html).not.toContain('Antigravity');
+  expect(html).not.toContain('http://');
+  expect(html).not.toContain('https://');
+  expect(html).not.toContain('<script');
+  expect(html).toContain('data:image/svg+xml;base64,');
+});
+
+test('generateDoctorHtml renders populated signals and a single-severity summary', () => {
+  const signals = baseSignals({
+    buffer: {
+      pendingCount: 1,
+      pendingBytes: 200,
+      failedCount: 2,
+      quarantinedCount: 0,
+      receiptCount: 3,
+      lastPruneAt: '2026-05-28T00:00:00.000Z',
+      lastSuccessAt: '2026-05-28T01:00:00.000Z',
+    },
+    daemonState: {
+      captureLastCycleAt: '2026-05-28T00:00:00.000Z',
+      drainLastCycleAt: '2026-05-28T00:00:30.000Z',
+      lastConsecutiveRetriableBreak: true,
+      lastUploadError: 'connection reset',
+    },
+    binary: {
+      version: '2026.5.28',
+      mtime: new Date('2026-05-28T00:00:00.000Z'),
+      installSource: 'npm',
+    },
+    recentEvents: {
+      authUnconfirmedCount: 0,
+      rateLimitedCount: 0,
+      retriableCount: 0,
+      fatalValidationErrorCount: 0,
+      autoUpgradeEvents: ['success'],
+    },
+    filesystem: { configDirWritable: true, logDirWritable: true, diskFreeBytes: 12345 },
+    network: { nestReachable: true },
+    resyncEvents: {
+      totalCount: 7,
+      regressionLoops: [{ sourcePathHash: 'abc123', countInLastHour: 9 }],
+    },
+    systemdLingerEnabled: false,
+    macOsQuarantineXattr: true,
+    clockSkewMs: 4000,
+  });
+  const findings: Finding[] = [makeFinding({ code: 'B1', severity: Severity.critical })];
+
+  const html = generateDoctorHtml(findings, signals, '2026-05-28T12:00:00Z');
+  expect(html).toContain('Critical Issues (1)');
+  expect(html).not.toContain('Warnings (');
+  expect(html).not.toContain('Info (');
+  expect(html).toContain('1 issue found');
+  expect(html).toContain('abc123');
+  expect(html).toContain('success');
+  expect(html).toContain('connection reset');
+  expect(html).toContain('npm');
+  expect(html).toContain('12345');
+  expect(html).toContain(formatLocalTimestamp('2026-05-28T00:00:00.000Z'));
 });
 
 test('generateDoctorHtml renders HTML report correctly for multiple issues and escapes HTML characters', () => {

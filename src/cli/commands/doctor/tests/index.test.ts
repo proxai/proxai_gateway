@@ -189,7 +189,9 @@ test('doctor writes HTML report to specified absolute output path', async () => 
 
   const content = await Bun.file(reportPath).text();
   expect(content).toContain('<!DOCTYPE html>');
-  expect(content).toContain('PROXAI-GATEWAY DOCTOR');
+  expect(content).toContain('<div class="wordmark">ProxAI</div>');
+  expect(content).not.toContain('cdn.tailwindcss.com');
+  expect(content).not.toContain('Antigravity');
   const count = content.split('Diagnostics Summary').length - 1;
   expect(count).toBe(1);
 });
@@ -241,7 +243,7 @@ test('doctor writes HTML report inside specified output directory', async () => 
   const fullPath = join(reportsDir, reportFile);
   const content = await Bun.file(fullPath).text();
   expect(content).toContain('<!DOCTYPE html>');
-  expect(content).toContain('Diagnostics Signals Appendix');
+  expect(content).toContain('Signals Appendix');
 });
 
 test('in dev mode without explicit profile option, runs diagnostics for both profiles, prefixes, and deduplicates generic findings', async () => {
