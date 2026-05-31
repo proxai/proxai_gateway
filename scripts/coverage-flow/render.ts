@@ -168,7 +168,7 @@ function renderFailures(
   out: string[],
   failed: TestCase[],
   details: Map<string, string>,
-  rawByFile: Map<string, string>,
+  rawUnmatched: string,
 ): void {
   out.push(section(`Failures (${failed.length})`));
   if (failed.length === 0) {
@@ -183,25 +183,23 @@ function renderFailures(
   }
   for (const [file, fileTests] of byFile) {
     out.push(chalk.red.bold(`\n${INDENT}${file}`));
-    let anyUnmatched = false;
     for (const t of fileTests) {
       out.push(`${INDENT}  ${chalk.red(`x ${t.name}`)} ${chalk.dim(`(line ${t.line})`)}`);
       const detail = details.get(`${t.file} ${t.name}`);
       if (detail !== undefined && detail !== '') {
         for (const dl of detail.split('\n')) out.push(`${INDENT}    ${colorizeDiffLine(dl)}`);
       } else {
-        anyUnmatched = true;
-        out.push(`${INDENT}    ${chalk.dim('(no structured detail — raw bun output below)')}`);
+        out.push(`${INDENT}    ${chalk.dim('(no structured detail — see raw bun console below)')}`);
       }
     }
-    // Last-resort fallback: when a failure in this file matched no structured
-    // block, dump bun's raw console for the whole file so the reason is never
-    // hidden behind "(no console detail captured)".
-    const raw = rawByFile.get(file);
-    if (anyUnmatched && raw !== undefined && raw !== '') {
-      out.push(`${INDENT}  ${chalk.dim(`── raw bun console for ${file} ──`)}`);
-      for (const rl of raw.split('\n')) out.push(`${INDENT}    ${colorizeDiffLine(rl)}`);
-    }
+  }
+  // Guaranteed fallback: when any failure matched no structured block, append
+  // bun's verbatim console for every failing section. Content-based, so it
+  // shows the real error even when path-separator/format drift defeats the
+  // structured matcher.
+  if (rawUnmatched !== '') {
+    out.push(`\n${INDENT}${chalk.yellow.bold('── raw bun console (failing sections) ──')}`);
+    for (const rl of rawUnmatched.split('\n')) out.push(`${INDENT}  ${colorizeDiffLine(rl)}`);
   }
 }
 
@@ -331,7 +329,7 @@ export function renderReport(
     (t) => (sumMs > 0 ? (t.durationMs / sumMs) * 100 : 0) >= SHARE_THRESHOLD_PCT,
   ).length;
   if (coverage) renderCoverageGaps(out, main.coverageAll, main.gaps);
-  renderFailures(out, failed, main.failureDetails, main.rawByFile);
+  renderFailures(out, failed, main.failureDetails, main.rawUnmatched);
   renderFlakeCheck(out, retry);
   renderTiming(out, executed, wallClockMs, heavyShare, heavyCount, coverage);
   renderSummary(

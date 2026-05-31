@@ -46,45 +46,51 @@ function matchFailureDetails(tests: TestCase[], blocks: FailureBlock[]): Map<str
   return details;
 }
 
-// Split the test console into per-file sections (header line -> next header) and
-// return, for each file that still has an unmatched failing test, its raw lines.
-// This is the renderer's last-resort fallback when structured extraction yields
-// nothing for a failure (e.g. an output shape bun changed or one we don't model).
-function rawSectionsForUnmatched(
+const FAIL_LINE_RE = /^\(fail\) /;
+const PASSLIKE_LINE_RE = /^\((?:pass|skip|todo)\)/;
+
+// Last-resort fallback when structured extraction yields nothing for some
+// failure (an output shape bun changed, or path separators that defeat
+// matching). Deliberately CONTENT-based — it never matches console paths to
+// JUnit `file` attributes (the Windows `/` vs `\` mismatch is exactly what
+// emptied the per-file approach). Returns the verbatim console for every
+// section (header -> next header) that contains a `(fail)` marker; if no
+// section parses, falls back to the whole console minus per-test pass/skip/todo
+// noise. Empty string when every failure already matched a structured block.
+function rawForUnmatched(
   testSection: string,
   tests: TestCase[],
   details: Map<string, string>,
-): Map<string, string> {
-  const unmatchedFiles = new Set(
-    tests
-      .filter((t) => t.status === 'fail' && !details.has(`${t.file} ${t.name}`))
-      .map((t) => t.file),
+): string {
+  const hasUnmatched = tests.some(
+    (t) => t.status === 'fail' && !details.has(`${t.file} ${t.name}`),
   );
-  const out = new Map<string, string>();
-  if (unmatchedFiles.size === 0) return out;
+  if (!hasUnmatched) return '';
 
+  const lines = testSection.split('\n');
+  const sections: string[] = [];
   let header = '';
   let buf: string[] = [];
   const flush = (): void => {
-    if (header === '') return;
-    const target = [...unmatchedFiles].find((f) => sameFile(header, f));
-    if (target !== undefined) {
-      const body = buf.join('\n').trim();
-      if (body !== '') out.set(target, body);
+    if (header !== '' && buf.some((l) => FAIL_LINE_RE.test(l))) {
+      sections.push([header, ...buf].join('\n').trim());
     }
   };
-  for (const line of testSection.split('\n')) {
-    const next = line.match(HEADER_RE)?.[1];
-    if (next !== undefined) {
+  for (const line of lines) {
+    if (HEADER_RE.test(line)) {
       flush();
-      header = next;
+      header = line;
       buf = [];
       continue;
     }
     buf.push(line);
   }
   flush();
-  return out;
+  if (sections.length > 0) return sections.join('\n\n');
+  return lines
+    .filter((l) => !PASSLIKE_LINE_RE.test(l))
+    .join('\n')
+    .trim();
 }
 
 export function parseRun(raw: RawRun): ParsedRun {
@@ -102,6 +108,6 @@ export function parseRun(raw: RawRun): ParsedRun {
     coverageTotal: cov.total,
     gaps: cov.gaps,
     failureDetails,
-    rawByFile: rawSectionsForUnmatched(testSection, tests, failureDetails),
+    rawUnmatched: rawForUnmatched(testSection, tests, failureDetails),
   };
 }

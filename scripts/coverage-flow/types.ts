@@ -35,10 +35,11 @@ export interface ParsedRun {
   gaps: CoverageRow[];
   // key: `<file> <testName>` -> bun's verbose failure block
   failureDetails: Map<string, string>;
-  // file -> bun's raw console section, ONLY for files with a failing test that
-  // matched no structured block. The renderer dumps this verbatim as a
-  // last-resort fallback so a failure is never shown with zero context.
-  rawByFile: Map<string, string>;
+  // Verbatim raw console for every section that contains a `(fail)` marker,
+  // populated ONLY when some failure matched no structured block. The renderer
+  // appends it so a failure is never shown with zero context — content-based
+  // (no path matching), so it survives Windows separators and format drift.
+  rawUnmatched: string;
 }
 
 // Verdict for a coverage-gap source file after the gap re-check flow.
