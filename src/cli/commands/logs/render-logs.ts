@@ -1,10 +1,9 @@
-import { isAbsolute, relative } from 'node:path';
 import chalk from 'chalk';
 
-import { formatBytes, formatRelative, formatLocalTimestamp } from 'core/utils';
+import { formatBytes, formatLocalTimestamp, formatRelative } from 'core/utils';
 import type {
+  CaptureLookup,
   FailedRecord,
-  LogsCommandDeps,
   LogsCommandOptions,
   LogsFrame,
   PendingRecord,
@@ -12,225 +11,215 @@ import type {
   UploadedRecord,
 } from 'cli/commands/logs/logs.types.ts';
 
+const PROMPT_PREVIEW_MAX = 100;
+const DETAIL_INDENT = '              ';
+
+function oneLine(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
+}
+
 function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return `${s.slice(0, max - 1)}…`;
+  return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
 }
 
-export function shortPath(path: string, maxLen: number): string {
-  if (maxLen <= 0) return '';
-  if (path.length <= maxLen) return path;
-  if (maxLen <= 5) {
-    return path.slice(0, maxLen - 1) + '…';
-  }
-
-  const ellipsis = '…';
-  const remainingSpace = maxLen - ellipsis.length;
-  const startLen = Math.floor(remainingSpace / 2);
-  const endLen = Math.ceil(remainingSpace / 2);
-
-  return path.slice(0, startLen) + ellipsis + path.slice(path.length - endLen);
+function timeColumn(iso: string): string {
+  return `${formatLocalTimestamp(iso)} (${formatRelative(iso)})`;
 }
 
-function getRelativePath(p: string | null | undefined): string {
-  if (!p) return '';
-  return isAbsolute(p) ? relative(process.cwd(), p) : p;
+function promptPreview(prompt: string | null): string {
+  if (prompt === null || prompt.trim().length === 0) return chalk.dim('(no prompt captured)');
+  return truncate(oneLine(prompt), PROMPT_PREVIEW_MAX);
 }
 
-function renderUploadedRow(row: UploadedRecord, showDevDetails: boolean, columns: number): string {
-  const time = formatLocalTimestamp(row.deliveredAt);
-  const rel = formatRelative(row.deliveredAt);
-  const reuse = row.idempotentOnServer ? chalk.dim(' (re-sent)') : '';
-  const source = chalk.cyan(row.sourceApp);
-
-  const relPart = ` (${rel})`;
-  const reusePart = row.idempotentOnServer ? ' (re-sent)' : '';
-  const sourcePart = row.sourceApp;
-
-  let otherLen = 2 + time.length + relPart.length + 2 + sourcePart.length + reusePart.length;
-
-  if (showDevDetails) {
-    const capturePart = row.captureId;
-    const hashPart = `  hash:${row.sourcePathHash}`;
-    otherLen += 2 + capturePart.length + 2 + hashPart.length;
-  }
-
-  const maxPathLen = Math.max(15, columns - otherLen);
-  const pathStr = row.sourcePath ? shortPath(getRelativePath(row.sourcePath), maxPathLen) : '';
-  const pathPart = pathStr ? `  ${chalk.dim(pathStr)}` : '';
-
-  if (showDevDetails) {
-    return `${chalk.dim(time)} (${rel})  ${source}  ${chalk.dim(row.captureId)}${pathPart}  hash:${row.sourcePathHash}${reuse}`;
-  }
-
-  return `${chalk.dim(time)} (${rel})  ${source}${pathPart}${reuse}`;
+function uploadedStatus(record: UploadedRecord): string {
+  return record.idempotentOnServer ? chalk.dim('re-sent') : chalk.green('uploaded');
 }
 
-function renderFailedRow(row: FailedRecord, showDevDetails: boolean, columns: number): string {
-  const time = formatLocalTimestamp(row.capturedAtUtc);
-  const rel = formatRelative(row.capturedAtUtc);
-  const source = chalk.yellow(row.sourceApp);
-  const attempts = chalk.dim(`attempts: ${row.attempts.toString()}`);
-  const errText = row.lastError !== null ? chalk.red(truncate(row.lastError, 80)) : '';
-
-  const relPart = ` (${rel})`;
-  const sourcePart = row.sourceApp;
-  const attemptsPart = `  attempts: ${row.attempts.toString()}`;
-  const errPart = row.lastError !== null ? `  ${truncate(row.lastError, 80)}` : '';
-
-  let otherLen =
-    2 +
-    time.length +
-    relPart.length +
-    2 +
-    sourcePart.length +
-    2 +
-    attemptsPart.length +
-    errPart.length;
-
-  if (showDevDetails) {
-    const capturePart = row.captureId;
-    const hashPart = row.sourcePathHash ? `  hash:${row.sourcePathHash}` : '';
-    otherLen += 2 + capturePart.length + 2 + hashPart.length;
-  }
-
-  const maxPathLen = Math.max(15, columns - otherLen);
-  const path = chalk.dim(shortPath(getRelativePath(row.sourcePath), maxPathLen));
-
-  if (showDevDetails) {
-    const hashPartChalk = row.sourcePathHash ? `  hash:${row.sourcePathHash}` : '';
-    return `${chalk.dim(time)} (${rel})  ${source}  ${chalk.dim(row.captureId)}  ${path}${hashPartChalk}  ${attempts}${errText.length > 0 ? `  ${errText}` : ''}`;
-  }
-
-  return `${chalk.dim(time)} (${rel})  ${source}  ${path}  ${attempts}${errText.length > 0 ? `  ${errText}` : ''}`;
+function renderUploadedRow(record: UploadedRecord): string {
+  return `${chalk.dim(timeColumn(record.deliveredAt))}  ${chalk.cyan(record.sourceApp)}  ${promptPreview(record.userPrompt)}  ${uploadedStatus(record)}`;
 }
 
-function renderQuarantinedRow(
-  row: QuarantinedRecord,
-  showDevDetails: boolean,
-  columns: number,
-): string {
-  const time = formatLocalTimestamp(row.quarantinedAtUtc);
-  const rel = formatRelative(row.quarantinedAtUtc);
-  const source = chalk.magenta(row.sourceApp);
-  const size = chalk.dim(formatBytes(row.redactedSizeBytes));
-  const reason = chalk.red(truncate(row.reason, 60));
-
-  const relPart = ` (${rel})`;
-  const sourcePart = row.sourceApp;
-  const sizePart = `  ${formatBytes(row.redactedSizeBytes)}`;
-  const reasonPart = `  ${truncate(row.reason, 60)}`;
-
-  let otherLen =
-    2 +
-    time.length +
-    relPart.length +
-    2 +
-    sourcePart.length +
-    2 +
-    sizePart.length +
-    2 +
-    reasonPart.length;
-
-  if (showDevDetails) {
-    const idPart = `id:${row.id.toString()}`;
-    const hashPart = row.sourcePathHash ? `  hash:${row.sourcePathHash}` : '';
-    otherLen += 2 + idPart.length + 2 + hashPart.length;
-  }
-
-  const maxPathLen = Math.max(15, columns - otherLen);
-  const path = chalk.dim(shortPath(getRelativePath(row.sourcePath), maxPathLen));
-
-  if (showDevDetails) {
-    const hashPartChalk = row.sourcePathHash ? `  hash:${row.sourcePathHash}` : '';
-    return `${chalk.dim(time)} (${rel})  ${source}  id:${row.id.toString()}  ${path}${hashPartChalk}  ${size}  ${reason}`;
-  }
-
-  return `${chalk.dim(time)} (${rel})  ${source}  ${path}  ${size}  ${reason}`;
+function renderFailedRow(record: FailedRecord): string {
+  const attempts = chalk.dim(`(${record.attempts.toString()}x)`);
+  const error =
+    record.lastError !== null ? `  ${chalk.red(truncate(oneLine(record.lastError), 60))}` : '';
+  return `${chalk.dim(timeColumn(record.capturedAtUtc))}  ${chalk.yellow(record.sourceApp)}  ${promptPreview(record.userPrompt)}  ${chalk.red('failed')} ${attempts}${error}`;
 }
 
-function renderPendingRow(row: PendingRecord, showDevDetails: boolean, columns: number): string {
-  const time = formatLocalTimestamp(row.capturedAtUtc);
-  const rel = formatRelative(row.capturedAtUtc);
-  const source = chalk.blue(row.sourceApp);
-  const attempts = row.attempts > 0 ? chalk.dim(` attempts:${row.attempts.toString()}`) : '';
-
-  const relPart = ` (${rel})`;
-  const sourcePart = row.sourceApp;
-  const attemptsPart = row.attempts > 0 ? ` attempts:${row.attempts.toString()}` : '';
-
-  let otherLen = 2 + time.length + relPart.length + 2 + sourcePart.length + 2 + attemptsPart.length;
-
-  if (showDevDetails) {
-    const capturePart = row.captureId;
-    const hashPart = row.sourcePathHash ? `  hash:${row.sourcePathHash}` : '';
-    otherLen += 2 + capturePart.length + 2 + hashPart.length;
-  }
-
-  const maxPathLen = Math.max(15, columns - otherLen);
-  const path = chalk.dim(shortPath(getRelativePath(row.sourcePath), maxPathLen));
-
-  if (showDevDetails) {
-    const hashPartChalk = row.sourcePathHash ? `  hash:${row.sourcePathHash}` : '';
-    return `${chalk.dim(time)} (${rel})  ${source}  ${chalk.dim(row.captureId)}  ${path}${hashPartChalk}${attempts}`;
-  }
-
-  return `${chalk.dim(time)} (${rel})  ${source}  ${path}${attempts}`;
+function renderPendingRow(record: PendingRecord): string {
+  const attempts = record.attempts > 0 ? chalk.dim(` (${record.attempts.toString()}x)`) : '';
+  return `${chalk.dim(timeColumn(record.capturedAtUtc))}  ${chalk.blue(record.sourceApp)}  ${promptPreview(record.userPrompt)}  ${chalk.blue('pending')}${attempts}`;
 }
 
-export function renderLogsFrame(
-  frame: LogsFrame,
-  options: LogsCommandOptions,
-  deps: LogsCommandDeps,
-): string {
+function renderQuarantinedRow(record: QuarantinedRecord): string {
+  return `${chalk.dim(timeColumn(record.quarantinedAtUtc))}  ${chalk.magenta(record.sourceApp)}  ${chalk.dim(formatBytes(record.redactedSizeBytes))}  ${chalk.red('quarantined')}  ${chalk.dim(truncate(record.reason, 50))}`;
+}
+
+function field(label: string, value: string): string {
+  return `  ${chalk.dim(label.padEnd(11))} ${value}`;
+}
+
+function textField(label: string, value: string | null, emptyText: string): string {
+  if (value === null || value.trim().length === 0) {
+    return field(label, chalk.dim(emptyText));
+  }
+  const indented = value
+    .split('\n')
+    .map((line, index) => (index === 0 ? line : `${DETAIL_INDENT}${line}`))
+    .join('\n');
+  return field(label, indented);
+}
+
+function watermark(start: number, end: number, kind: string): string {
+  return `${start.toString()} → ${end.toString()} (${kind})`;
+}
+
+function versions(agent: string | null, gateway: string | null): string {
+  return `agent ${agent ?? '—'} · gateway ${gateway ?? '—'}`;
+}
+
+function renderUploadedDetail(record: UploadedRecord): string[] {
+  return [
+    `${chalk.bold(chalk.cyan(record.sourceApp))}  ${chalk.dim(timeColumn(record.deliveredAt))}  ${uploadedStatus(record)}`,
+    field('capture_id', chalk.dim(record.captureId)),
+    textField('prompt', record.userPrompt, '(no prompt captured)'),
+    field('response', chalk.dim('(not retained after upload)')),
+    field('source', record.sourcePath ?? chalk.dim('—')),
+    field('hash', chalk.dim(record.sourcePathHash)),
+    field('watermark', watermark(record.watermarkStart, record.watermarkEnd, record.watermarkKind)),
+    field('versions', chalk.dim(versions(record.agentSchemaVersion, record.gatewayVersion))),
+    field(
+      'bytes',
+      chalk.dim(
+        `${record.shippedBytes !== null ? formatBytes(record.shippedBytes) : '—'} · attempts ${record.attempts?.toString() ?? '—'}`,
+      ),
+    ),
+  ];
+}
+
+function renderFailedDetail(record: FailedRecord): string[] {
+  return [
+    `${chalk.bold(chalk.yellow(record.sourceApp))}  ${chalk.dim(timeColumn(record.capturedAtUtc))}  ${chalk.red('failed')} ${chalk.dim(`(${record.attempts.toString()}x)`)}`,
+    field('capture_id', chalk.dim(record.captureId)),
+    textField('prompt', record.userPrompt, '(no prompt found in body)'),
+    textField('response', record.assistantResponse, '(no assistant response found in body)'),
+    textField('error', record.lastError, '—'),
+    field('source', record.sourcePath),
+    field('hash', chalk.dim(record.sourcePathHash ?? '—')),
+    field('watermark', watermark(record.watermarkStart, record.watermarkEnd, record.watermarkKind)),
+    field('versions', chalk.dim(versions(record.agentSchemaVersion, record.gatewayVersion))),
+    field('bytes', chalk.dim(formatBytes(record.sizeBytes))),
+  ];
+}
+
+function renderPendingDetail(record: PendingRecord): string[] {
+  return [
+    `${chalk.bold(chalk.blue(record.sourceApp))}  ${chalk.dim(timeColumn(record.capturedAtUtc))}  ${chalk.blue('pending')}`,
+    field('capture_id', chalk.dim(record.captureId)),
+    textField('prompt', record.userPrompt, '(no prompt found in body)'),
+    textField('response', record.assistantResponse, '(no assistant response found in body)'),
+    field('source', record.sourcePath),
+    field('hash', chalk.dim(record.sourcePathHash ?? '—')),
+    field('watermark', watermark(record.watermarkStart, record.watermarkEnd, record.watermarkKind)),
+    field('versions', chalk.dim(versions(record.agentSchemaVersion, record.gatewayVersion))),
+    field('bytes', chalk.dim(formatBytes(record.sizeBytes))),
+  ];
+}
+
+function renderDetail(detail: CaptureLookup): string[] {
+  if (detail.kind === 'uploaded') return renderUploadedDetail(detail.record);
+  if (detail.kind === 'failed') return renderFailedDetail(detail.record);
+  return renderPendingDetail(detail.record);
+}
+
+function renderIdView(frame: LogsFrame): string {
+  if (frame.detail === null) {
+    return chalk.dim(`No record found for id '${frame.idQuery ?? ''}'.`);
+  }
+  return renderDetail(frame.detail).join('\n');
+}
+
+interface Section<T> {
+  readonly title: string;
+  readonly rows: readonly T[];
+  readonly compact: (row: T) => string;
+  readonly detail?: (row: T) => string[];
+}
+
+function renderSection<T>(section: Section<T>, verbose: boolean): string[] {
+  if (section.rows.length === 0) return [];
+  const lines = [section.title];
+  for (const row of section.rows) {
+    if (verbose && section.detail !== undefined) {
+      lines.push(...section.detail(row).map((line) => `  ${line}`));
+      lines.push('');
+    } else {
+      lines.push(`  ${section.compact(row)}`);
+    }
+  }
+  return lines;
+}
+
+function emptyMessage(options: LogsCommandOptions): string {
+  if (options.failed === true) return 'No failed or quarantined records.';
+  if (options.pending === true) return 'No pending records.';
+  return 'No uploaded records yet.';
+}
+
+export function renderLogsFrame(frame: LogsFrame, options: LogsCommandOptions): string {
+  if (frame.idQuery !== null) {
+    return renderIdView(frame);
+  }
+
+  const verbose = options.verbose === true;
   const lines: string[] = [];
-  const showDevDetails = deps.isDevMode && options.compact !== true;
 
-  const columns =
-    process.stdout.columns && process.stdout.columns > 0 ? process.stdout.columns : 100;
+  lines.push(
+    ...renderSection(
+      {
+        title: chalk.bold('Uploaded'),
+        rows: frame.uploaded,
+        compact: renderUploadedRow,
+        detail: renderUploadedDetail,
+      },
+      verbose,
+    ),
+  );
+  lines.push(
+    ...renderSection(
+      {
+        title: chalk.bold(chalk.yellow('Failed')),
+        rows: frame.failed,
+        compact: renderFailedRow,
+        detail: renderFailedDetail,
+      },
+      verbose,
+    ),
+  );
+  lines.push(
+    ...renderSection(
+      {
+        title: chalk.bold(chalk.red('Quarantined')),
+        rows: frame.quarantined,
+        compact: renderQuarantinedRow,
+      },
+      verbose,
+    ),
+  );
+  lines.push(
+    ...renderSection(
+      {
+        title: chalk.bold(chalk.blue('Pending')),
+        rows: frame.pending,
+        compact: renderPendingRow,
+        detail: renderPendingDetail,
+      },
+      verbose,
+    ),
+  );
 
-  if (frame.uploaded.length > 0) {
-    lines.push(chalk.bold('Uploaded'));
-    for (const row of frame.uploaded) {
-      lines.push('  ' + renderUploadedRow(row, showDevDetails, columns));
-    }
-  }
-
-  if (frame.failed.length > 0) {
-    lines.push(chalk.bold(chalk.yellow('Failed')));
-    for (const row of frame.failed) {
-      lines.push('  ' + renderFailedRow(row, showDevDetails, columns));
-    }
-  }
-
-  if (frame.quarantined.length > 0) {
-    lines.push(chalk.bold(chalk.red('Quarantined')));
-    for (const row of frame.quarantined) {
-      lines.push('  ' + renderQuarantinedRow(row, showDevDetails, columns));
-    }
-  }
-
-  if (frame.pending.length > 0) {
-    lines.push(chalk.bold(chalk.blue('Pending')));
-    for (const row of frame.pending) {
-      lines.push('  ' + renderPendingRow(row, showDevDetails, columns));
-    }
-  }
-
-  const isEmpty =
-    frame.uploaded.length === 0 &&
-    frame.failed.length === 0 &&
-    frame.quarantined.length === 0 &&
-    frame.pending.length === 0;
-
-  if (isEmpty) {
-    const mode =
-      options.error === true
-        ? 'No errors found.'
-        : options.pending === true
-          ? 'No pending records.'
-          : 'No uploaded records yet.';
-    lines.push(chalk.dim(mode));
+  if (lines.length === 0) {
+    lines.push(chalk.dim(emptyMessage(options)));
   }
 
   if (options.static !== true && options.json !== true) {

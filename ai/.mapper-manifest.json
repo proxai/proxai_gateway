@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-31T17:10:11.447Z",
-  "sourceHash": "c77c310b40f984cce06f31b3b08fd849",
+  "generatedAt": "2026-05-31T19:35:23.648Z",
+  "sourceHash": "955fbb62b8bd19e0ae6d0e069858e6c2",
   "files": [
     {
       "path": "CLAUDE.md",
@@ -369,19 +369,19 @@
     },
     {
       "path": ".claude/knowledge/cli/commands-overview.md",
-      "hash": "4f90ef6ea0e2a571"
+      "hash": "da6c1b1bf4ca2330"
     },
     {
       "path": ".cursor/knowledge/cli/commands-overview.md",
-      "hash": "4f90ef6ea0e2a571"
+      "hash": "da6c1b1bf4ca2330"
     },
     {
       "path": ".codex/knowledge/cli/commands-overview.md",
-      "hash": "4f90ef6ea0e2a571"
+      "hash": "da6c1b1bf4ca2330"
     },
     {
       "path": ".agents/knowledge/cli/commands-overview.md",
-      "hash": "4f90ef6ea0e2a571"
+      "hash": "da6c1b1bf4ca2330"
     },
     {
       "path": ".claude/knowledge/cli/dev-mode.md",

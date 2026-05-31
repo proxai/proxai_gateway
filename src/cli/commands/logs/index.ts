@@ -33,7 +33,7 @@ export async function runLogs(
     }
   }
 
-  const isStatic = options.static === true || options.json === true;
+  const isStatic = options.static === true || options.json === true || options.id !== undefined;
 
   if (deps.buffer === null) {
     deps.output.error('buffer database is unavailable');
@@ -48,7 +48,7 @@ export async function runLogs(
 
   if (isStatic) {
     const frame = gatherLogsFrame(deps.buffer, options);
-    deps.output.info(renderLogsFrame(frame, options, deps));
+    deps.output.info(renderLogsFrame(frame, options));
     return { exitCode: EXIT_CODE.ok };
   }
 
@@ -89,7 +89,7 @@ async function runWatchLogs(
         return;
       }
       const frame = gatherLogsFrame(deps.buffer, options);
-      const rendered = renderLogsFrame(frame, options, deps);
+      const rendered = renderLogsFrame(frame, options);
       const lines = rendered.split('\n');
       const painted = lines.map((line) => `${line}${CLEAR_TO_END_OF_LINE}`).join('\n');
       deps.output.info(`${CURSOR_HOME}${painted}${CLEAR_TO_END_OF_SCREEN}`);

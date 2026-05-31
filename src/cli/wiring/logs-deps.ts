@@ -1,9 +1,6 @@
-import { join } from 'node:path';
-
 import type { LogsCommandDeps } from 'cli/commands/logs';
 import { openBufferDb } from 'services/buffer';
-import { readDevModeSentinel } from 'core/io/fs';
-import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
 import { consoleOutput } from 'cli/output.ts';
 import type { Database } from 'bun:sqlite';
 
@@ -26,12 +23,9 @@ export async function buildLogsDeps(inputs: BuildLogsDepsInputs = {}): Promise<L
     buffer = null;
   }
 
-  const isDevMode = await readDevModeSentinel(join(profileRootDir(), 'DEV_MODE'));
-
   const deps: LogsCommandDeps = {
     output: consoleOutput(),
     buffer,
-    isDevMode,
   };
 
   return {

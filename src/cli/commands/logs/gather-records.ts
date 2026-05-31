@@ -1,13 +1,30 @@
-import { parseSinceDuration } from 'cli/commands/tail/filter.ts';
-import type { LogsCommandOptions, LogsFrame } from 'cli/commands/logs/logs.types.ts';
-import type { LogsQueryOptions } from 'services/buffer/logs-queries.ts';
+import type { Database } from 'bun:sqlite';
+
+import { extractConversation } from 'services/prompt-extract';
+import type {
+  CaptureLookupRaw,
+  FailedBatchData,
+  LogsQueryOptions,
+  PendingBatchData,
+} from 'services/buffer/logs-queries.ts';
 import {
+  queryByCaptureId,
   queryFailed,
   queryPending,
   queryQuarantined,
   queryUploaded,
 } from 'services/buffer/logs-queries.ts';
-import type { Database } from 'bun:sqlite';
+
+import { parseSinceDuration } from 'cli/commands/tail/filter.ts';
+import type {
+  CaptureLookup,
+  FailedRecord,
+  LogsCommandOptions,
+  LogsFrame,
+  PendingRecord,
+} from 'cli/commands/logs/logs.types.ts';
+
+const DEFAULT_LIMIT = 50;
 
 function parseSinceToIso(since: string): string | undefined {
   const ms = parseSinceDuration(since);
@@ -16,7 +33,7 @@ function parseSinceToIso(since: string): string | undefined {
 }
 
 function buildQueryOpts(options: LogsCommandOptions): LogsQueryOptions {
-  const limit = options.lines ?? 20;
+  const limit = options.lines ?? DEFAULT_LIMIT;
   const opts: LogsQueryOptions = { limit };
   if (options.source !== undefined) opts.sourceApp = options.source;
   const sinceIso = options.since !== undefined ? parseSinceToIso(options.since) : undefined;
@@ -24,31 +41,100 @@ function buildQueryOpts(options: LogsCommandOptions): LogsQueryOptions {
   return opts;
 }
 
+function toFailedRecord(data: FailedBatchData): FailedRecord {
+  const conv = extractConversation({
+    sourceApp: data.sourceApp,
+    bodyFormat: data.bodyFormat,
+    body: data.body,
+  });
+  return {
+    captureId: data.captureId,
+    sourceApp: data.sourceApp,
+    capturedAtUtc: data.capturedAtUtc,
+    sourcePath: data.sourcePath,
+    sourcePathHash: data.sourcePathHash,
+    attempts: data.attempts,
+    lastError: data.lastError,
+    userPrompt: conv.userPrompt,
+    assistantResponse: conv.assistantResponse,
+    watermarkKind: data.watermarkKind,
+    watermarkStart: data.watermarkStart,
+    watermarkEnd: data.watermarkEnd,
+    watermarkTable: data.watermarkTable,
+    agentSchemaVersion: data.agentSchemaVersion,
+    gatewayVersion: data.gatewayVersion,
+    sourceInode: data.sourceInode,
+    sizeBytes: data.sizeBytes,
+  };
+}
+
+function toPendingRecord(data: PendingBatchData): PendingRecord {
+  const conv = extractConversation({
+    sourceApp: data.sourceApp,
+    bodyFormat: data.bodyFormat,
+    body: data.body,
+  });
+  return {
+    captureId: data.captureId,
+    sourceApp: data.sourceApp,
+    capturedAtUtc: data.capturedAtUtc,
+    sourcePath: data.sourcePath,
+    sourcePathHash: data.sourcePathHash,
+    attempts: data.attempts,
+    userPrompt: conv.userPrompt,
+    assistantResponse: conv.assistantResponse,
+    watermarkKind: data.watermarkKind,
+    watermarkStart: data.watermarkStart,
+    watermarkEnd: data.watermarkEnd,
+    watermarkTable: data.watermarkTable,
+    agentSchemaVersion: data.agentSchemaVersion,
+    gatewayVersion: data.gatewayVersion,
+    sourceInode: data.sourceInode,
+    sizeBytes: data.sizeBytes,
+  };
+}
+
+function toDetail(raw: CaptureLookupRaw): CaptureLookup {
+  if (raw.kind === 'uploaded') return { kind: 'uploaded', record: raw.record };
+  if (raw.kind === 'failed') return { kind: 'failed', record: toFailedRecord(raw.record) };
+  return { kind: 'pending', record: toPendingRecord(raw.record) };
+}
+
+function emptyLists(): Pick<LogsFrame, 'uploaded' | 'failed' | 'quarantined' | 'pending'> {
+  return { uploaded: [], failed: [], quarantined: [], pending: [] };
+}
+
 export function gatherLogsFrame(db: Database, options: LogsCommandOptions): LogsFrame {
+  if (options.id !== undefined) {
+    const raw = queryByCaptureId(db, options.id);
+    return { ...emptyLists(), detail: raw !== null ? toDetail(raw) : null, idQuery: options.id };
+  }
+
   const queryOpts = buildQueryOpts(options);
 
-  if (options.error === true) {
+  if (options.failed === true) {
     return {
-      uploaded: [],
-      failed: queryFailed(db, queryOpts),
+      ...emptyLists(),
+      failed: queryFailed(db, queryOpts).map(toFailedRecord),
       quarantined: queryQuarantined(db, queryOpts),
-      pending: [],
+      detail: null,
+      idQuery: null,
     };
   }
 
   if (options.pending === true) {
     return {
-      uploaded: [],
-      failed: [],
-      quarantined: [],
-      pending: queryPending(db, queryOpts),
+      ...emptyLists(),
+      pending: queryPending(db, queryOpts).map(toPendingRecord),
+      detail: null,
+      idQuery: null,
     };
   }
 
   return {
+    ...emptyLists(),
     uploaded: queryUploaded(db, queryOpts),
-    failed: [],
-    quarantined: [],
-    pending: [],
+    detail: null,
+    idQuery: null,
   };
 }

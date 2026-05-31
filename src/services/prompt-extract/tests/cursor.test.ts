@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 
-import { extractFromCursorKvPairs } from 'services/prompt-extract/cursor.ts';
+import {
+  extractAssistantFromCursorKvPairs,
+  extractFromCursorKvPairs,
+} from 'services/prompt-extract/cursor.ts';
 
 interface SyntheticRow {
   key: string;
@@ -240,4 +243,54 @@ test('continues past a non-matching bubble row to a later matching one', () => {
     userPrompt: 'the real prompt',
     userPromptAddedAt: null,
   });
+});
+
+test('extractAssistantFromCursorKvPairs reads an assistant bubble (type 2)', () => {
+  const body = kvBody([bubbleRow('bubbleId:1', { type: 2, text: 'assistant says hi' })]);
+  expect(extractAssistantFromCursorKvPairs(body)).toBe('assistant says hi');
+});
+
+test('extractAssistantFromCursorKvPairs reads an assistant agentKv blob', () => {
+  const body = kvBody([
+    bubbleRow('agentKv:blob:1', { role: 'assistant', content: [{ text: 'blob answer' }] }),
+  ]);
+  expect(extractAssistantFromCursorKvPairs(body)).toBe('blob answer');
+});
+
+test('extractAssistantFromCursorKvPairs reads an assistant blob with string content', () => {
+  const body = kvBody([
+    bubbleRow('agentKv:blob:1', { role: 'assistant', content: 'plain answer' }),
+  ]);
+  expect(extractAssistantFromCursorKvPairs(body)).toBe('plain answer');
+});
+
+test('extractAssistantFromCursorKvPairs returns null for non-assistant or invalid input', () => {
+  expect(extractAssistantFromCursorKvPairs('not json {')).toBeNull();
+  expect(extractAssistantFromCursorKvPairs(JSON.stringify({ rows: 'x' }))).toBeNull();
+  expect(extractAssistantFromCursorKvPairs(JSON.stringify('a string'))).toBeNull();
+  expect(
+    extractAssistantFromCursorKvPairs(kvBody([bubbleRow('bubbleId:1', { type: 1, text: 'u' })])),
+  ).toBeNull();
+  expect(
+    extractAssistantFromCursorKvPairs(kvBody([bubbleRow('bubbleId:1', 'not json {')])),
+  ).toBeNull();
+  expect(
+    extractAssistantFromCursorKvPairs(kvBody([bubbleRow('agentKv:blob:1', { role: 'user' })])),
+  ).toBeNull();
+  expect(
+    extractAssistantFromCursorKvPairs(
+      kvBody([bubbleRow('agentKv:blob:1', { role: 'assistant', content: [{}] })]),
+    ),
+  ).toBeNull();
+  expect(extractAssistantFromCursorKvPairs(kvBody([{ key: 'other:1', value: '{}' }]))).toBeNull();
+});
+
+test('extractAssistantFromCursorKvPairs swallows an invalid-JSON bubble value', () => {
+  const body = JSON.stringify({ rows: [{ key: 'bubbleId:1', value: 'not json {' }] });
+  expect(extractAssistantFromCursorKvPairs(body)).toBeNull();
+});
+
+test('extractAssistantFromCursorKvPairs swallows an invalid-JSON agentKv blob value', () => {
+  const body = JSON.stringify({ rows: [{ key: 'agentKv:blob:1', value: 'not json {' }] });
+  expect(extractAssistantFromCursorKvPairs(body)).toBeNull();
 });

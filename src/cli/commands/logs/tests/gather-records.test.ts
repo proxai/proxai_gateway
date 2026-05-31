@@ -92,15 +92,20 @@ test('default frame pulls only uploaded receipts', () => {
   expect(frame.failed).toEqual([]);
   expect(frame.quarantined).toEqual([]);
   expect(frame.pending).toEqual([]);
+  expect(frame.detail).toBeNull();
+  expect(frame.idQuery).toBeNull();
 });
 
-test('error frame pulls failed batches and quarantined records', () => {
+test('failed frame pulls failed batches and quarantined records with extracted prompt fields', () => {
   seedFailed();
   recordQuarantine(buffer, makeQuarantine());
-  const frame = gatherLogsFrame(buffer, { error: true });
+  const frame = gatherLogsFrame(buffer, { failed: true });
   expect(frame.uploaded).toEqual([]);
   expect(frame.failed).toHaveLength(1);
   expect(frame.failed[0]?.lastError).toBe('server returned 500');
+  // The fixture body is not valid zstd, so extraction yields null.
+  expect(frame.failed[0]?.userPrompt).toBeNull();
+  expect(frame.failed[0]?.assistantResponse).toBeNull();
   expect(frame.quarantined).toHaveLength(1);
   expect(frame.quarantined[0]?.reason).toBe('oversized');
   expect(frame.pending).toEqual([]);
@@ -143,4 +148,40 @@ test('invalid since duration is ignored and returns all rows', () => {
   seedDelivered();
   const frame = gatherLogsFrame(buffer, { since: 'not-a-duration' });
   expect(frame.uploaded).toHaveLength(1);
+});
+
+test('pending frame extracts null prompt fields from the fixture body', () => {
+  seedPending();
+  const frame = gatherLogsFrame(buffer, { pending: true });
+  expect(frame.pending).toHaveLength(1);
+  expect(frame.pending[0]?.userPrompt).toBeNull();
+  expect(frame.pending[0]?.assistantResponse).toBeNull();
+});
+
+test('id frame resolves an uploaded record by capture id', () => {
+  const id = seedDelivered();
+  const frame = gatherLogsFrame(buffer, { id });
+  expect(frame.idQuery).toBe(id);
+  expect(frame.detail?.kind).toBe('uploaded');
+  expect(frame.uploaded).toEqual([]);
+});
+
+test('id frame resolves a failed record', () => {
+  const id = seedFailed();
+  const frame = gatherLogsFrame(buffer, { id });
+  expect(frame.detail?.kind).toBe('failed');
+  if (frame.detail?.kind === 'failed')
+    expect(frame.detail.record.lastError).toBe('server returned 500');
+});
+
+test('id frame resolves a pending record', () => {
+  const id = seedPending();
+  const frame = gatherLogsFrame(buffer, { id });
+  expect(frame.detail?.kind).toBe('pending');
+});
+
+test('id frame returns a null detail when nothing matches', () => {
+  const frame = gatherLogsFrame(buffer, { id: 'does-not-exist' });
+  expect(frame.idQuery).toBe('does-not-exist');
+  expect(frame.detail).toBeNull();
 });

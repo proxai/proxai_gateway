@@ -634,36 +634,36 @@ redaction
 
 const logsCommand = program
   .command('logs')
-  .description('Show uploaded records and any errors from the local buffer.')
+  .description(
+    'Show your last uploaded records (and failed or pending ones) from the local buffer.',
+  )
   .option('--static', 'one-shot output, no live refresh', false)
   .option('--json', 'emit JSON; implies --static', false)
-  .option('--error', 'show only failed, quarantined, and looping-resync records', false)
+  .option('--failed', 'show failed and quarantined records instead of uploaded', false)
+  .option('--pending', 'show queued records not yet uploaded', false)
+  .option('-v, --verbose', 'expand every record to its full prompt, response, and metadata', false)
+  .option('--id <capture-id>', 'show full detail for one record by capture id (prefix accepted)')
   .option(
     '--source <app>',
     'filter by coding agent (claude-code, cursor, codex, gemini-cli, claude-desktop)',
   )
   .option('--since <dur>', 'show records from the last duration (e.g. 24h, 7d)')
-  .option('--pending', 'show queued records not yet uploaded', false)
-  .option('--lines <n>', 'number of records to display', '20')
+  .option('--lines <n>', 'number of records to display', '50')
   .option('--profile <name>', 'profile to query (prod | dev)');
-
-if (isDevMode) {
-  logsCommand.option('--compact', 'simplified regular user view', false);
-}
 
 logsCommand.action(
   async (opts: {
     static?: boolean;
     json?: boolean;
-    error?: boolean;
+    failed?: boolean;
+    pending?: boolean;
+    verbose?: boolean;
+    id?: string;
     source?: string;
     since?: string;
-    pending?: boolean;
     lines?: string;
     profile?: string;
-    compact?: boolean;
   }) => {
-    const compactMode = opts.compact === true || program.opts().compact === true;
     const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
     const profileName = parseProfileName(opts.profile ?? defaultProfile);
     const profileCtx = buildProfileContext(profileName);
@@ -672,15 +672,16 @@ logsCommand.action(
     process.on('SIGINT', () => ctrl.abort());
     process.on('SIGTERM', () => ctrl.abort());
     try {
-      const parsedLines = opts.lines !== undefined ? parseInt(opts.lines, 10) : 20;
-      const safeLines = Number.isFinite(parsedLines) ? parsedLines : 20;
+      const parsedLines = opts.lines !== undefined ? parseInt(opts.lines, 10) : 50;
+      const safeLines = Number.isFinite(parsedLines) ? parsedLines : 50;
       const result = await runLogs(deps, {
         lines: safeLines,
-        compact: compactMode,
         ...(opts.static === true ? { static: true as const } : {}),
         ...(opts.json === true ? { json: true as const } : {}),
-        ...(opts.error === true ? { error: true as const } : {}),
+        ...(opts.failed === true ? { failed: true as const } : {}),
         ...(opts.pending === true ? { pending: true as const } : {}),
+        ...(opts.verbose === true ? { verbose: true as const } : {}),
+        ...(opts.id !== undefined ? { id: opts.id } : {}),
         ...(opts.source !== undefined ? { source: opts.source } : {}),
         ...(opts.since !== undefined ? { since: opts.since } : {}),
       });

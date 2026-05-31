@@ -56,7 +56,6 @@ function makeDeps(extras: Partial<LogsCommandDeps> = {}): LogsCommandDeps {
   return {
     output: captureOutput(),
     buffer,
-    isDevMode: false,
     ...extras,
   };
 }
@@ -129,33 +128,36 @@ test('json mode emits a serialized frame and exits ok', async () => {
   expect(payload.uploaded).toHaveLength(1);
 });
 
-test('static mode renders a frame in prod brevity', async () => {
+test('static mode renders an uploaded frame with the same view for everyone', async () => {
   seedDelivered();
   const out = captureOutput();
-  const result = await runLogs(makeDeps({ output: out, isDevMode: false }), { static: true });
+  const result = await runLogs(makeDeps({ output: out }), { static: true });
   expect(result.exitCode).toBe(0);
   const rendered = stripAnsi(out.lines.map((l) => l.msg).join('\n'));
   expect(rendered).toContain('Uploaded');
   expect(rendered).toContain('claude-code');
-  expect(rendered).not.toContain('hash:');
 });
 
-test('static mode renders dev-mode detail when isDevMode is true', async () => {
-  seedDelivered();
-  const out = captureOutput();
-  const result = await runLogs(makeDeps({ output: out, isDevMode: true }), { static: true });
-  expect(result.exitCode).toBe(0);
-  const rendered = stripAnsi(out.lines.map((l) => l.msg).join('\n'));
-  expect(rendered).toContain('hash:');
-});
-
-test('static mode --error renders failed records', async () => {
+test('static mode --failed renders failed records', async () => {
   seedFailed();
   const out = captureOutput();
-  const result = await runLogs(makeDeps({ output: out }), { static: true, error: true });
+  const result = await runLogs(makeDeps({ output: out }), { static: true, failed: true });
   expect(result.exitCode).toBe(0);
   const rendered = stripAnsi(out.lines.map((l) => l.msg).join('\n'));
   expect(rendered).toContain('Failed');
+});
+
+test('--id implies static and renders a single record detail', async () => {
+  const batch = makeBatch();
+  insertBatch(buffer, batch);
+  markBatchDelivered(buffer, requireDefined(getBatch(buffer, batch.captureId)), {
+    idempotentOnServer: false,
+  });
+  const out = captureOutput();
+  const result = await runLogs(makeDeps({ output: out }), { id: batch.captureId });
+  expect(result.exitCode).toBe(0);
+  const rendered = stripAnsi(out.lines.map((l) => l.msg).join('\n'));
+  expect(rendered).toContain('capture_id');
 });
 
 test('watch mode renders a frame and exits when the user quits', async () => {
@@ -187,7 +189,6 @@ test('watch mode reports unavailable buffer from inside the tick and self-quits'
   let reads = 0;
   const deps: LogsCommandDeps = {
     output: captureOutput(),
-    isDevMode: false,
     get buffer(): Database | null {
       reads += 1;
       return reads <= 1 ? live : null;
@@ -205,7 +206,6 @@ test('watch mode surfaces a thrown render error without crashing', async () => {
   let reads = 0;
   const deps: LogsCommandDeps = {
     output: captureOutput(),
-    isDevMode: false,
     get buffer(): Database | null {
       reads += 1;
       if (reads <= 1) return live;

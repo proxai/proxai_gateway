@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import { extractFromJsonl } from 'services/prompt-extract/jsonl.ts';
+import { extractAssistantFromJsonl, extractFromJsonl } from 'services/prompt-extract/jsonl.ts';
 
 function jsonl(...records: unknown[]): string {
   return records.map((r) => JSON.stringify(r)).join('\n');
@@ -299,4 +299,60 @@ test('returns the first matching prompt across multiple lines', () => {
     userPrompt: 'first user line',
     userPromptAddedAt: null,
   });
+});
+
+test('extractAssistantFromJsonl reads a claude-code assistant turn', () => {
+  const text = jsonl(
+    { type: 'user', message: { content: 'hi' } },
+    { type: 'assistant', message: { content: [{ type: 'text', text: 'hello there' }] } },
+  );
+  expect(extractAssistantFromJsonl(text, 'claude-code')).toBe('hello there');
+});
+
+test('extractAssistantFromJsonl reads a gemini model turn', () => {
+  const text = jsonl({ type: 'gemini', content: 'model reply' });
+  expect(extractAssistantFromJsonl(text, 'gemini-cli')).toBe('model reply');
+});
+
+test('extractAssistantFromJsonl reads a codex assistant message', () => {
+  const text = jsonl({
+    type: 'response_item',
+    payload: { type: 'message', role: 'assistant', content: 'codex answer' },
+  });
+  expect(extractAssistantFromJsonl(text, 'codex')).toBe('codex answer');
+});
+
+test('extractAssistantFromJsonl skips tool-only assistant turns and malformed lines', () => {
+  const text = [
+    'not json {',
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use' }] } }),
+  ].join('\n');
+  expect(extractAssistantFromJsonl(text, 'claude-code')).toBeNull();
+});
+
+test('extractAssistantFromJsonl returns null when no assistant turn is present', () => {
+  const text = jsonl({ type: 'user', message: { content: 'hi' } });
+  expect(extractAssistantFromJsonl(text, 'claude-code')).toBeNull();
+  expect(extractAssistantFromJsonl(jsonl({ type: 'gemini' }), 'gemini-cli')).toBeNull();
+  expect(
+    extractAssistantFromJsonl(jsonl({ type: 'response_item', payload: { role: 'user' } }), 'codex'),
+  ).toBeNull();
+  expect(
+    extractAssistantFromJsonl(jsonl({ type: 'response_item', payload: 'x' }), 'codex'),
+  ).toBeNull();
+});
+
+test('extractAssistantFromJsonl resolves content from each claude-code field shape', () => {
+  expect(
+    extractAssistantFromJsonl(jsonl({ type: 'assistant', content: 'via content' }), 'claude-code'),
+  ).toBe('via content');
+  expect(
+    extractAssistantFromJsonl(
+      jsonl({ type: 'assistant', message: { text: 'via message text' } }),
+      'claude-code',
+    ),
+  ).toBe('via message text');
+  expect(
+    extractAssistantFromJsonl(jsonl({ type: 'assistant', text: 'via top text' }), 'claude-code'),
+  ).toBe('via top text');
 });

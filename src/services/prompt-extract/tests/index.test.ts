@@ -3,7 +3,7 @@ import { expect, test } from 'bun:test';
 import { zstdCompressSync } from 'core/utils';
 import type { BodyFormat, SourceApp } from 'services/contract';
 
-import { extractUserPrompt } from 'services/prompt-extract';
+import { extractConversation, extractUserPrompt } from 'services/prompt-extract';
 
 function input(text: string, sourceApp: SourceApp, bodyFormat: BodyFormat) {
   return { sourceApp, bodyFormat, body: zstdCompressSync(text) };
@@ -87,5 +87,58 @@ test('returns null result when decoding throws unexpectedly', () => {
   expect(extractUserPrompt(input(text, 'claude-code', 'jsonl'), throwingDecode)).toEqual({
     userPrompt: null,
     userPromptAddedAt: null,
+  });
+});
+
+test('extractConversation returns user prompt and assistant response for jsonl', () => {
+  const text = [
+    JSON.stringify({ type: 'user', message: { content: 'do the thing' } }),
+    JSON.stringify({ type: 'assistant', message: { content: 'done' } }),
+  ].join('\n');
+  expect(extractConversation(input(text, 'claude-code', 'jsonl'))).toEqual({
+    userPrompt: 'do the thing',
+    userPromptAddedAt: null,
+    assistantResponse: 'done',
+  });
+});
+
+test('extractConversation returns prompt and response for cursor kv pairs', () => {
+  const body = JSON.stringify({
+    rows: [
+      { key: 'bubbleId:1', value: JSON.stringify({ type: 1, text: 'ask' }) },
+      { key: 'bubbleId:2', value: JSON.stringify({ type: 2, text: 'reply' }) },
+    ],
+  });
+  const result = extractConversation(input(body, 'cursor', 'kv_pairs_json'));
+  expect(result.userPrompt).toBe('ask');
+  expect(result.assistantResponse).toBe('reply');
+});
+
+test('extractConversation returns all-null for unsupported source/format combos', () => {
+  expect(extractConversation(input('x', 'cursor', 'jsonl'))).toEqual({
+    userPrompt: null,
+    userPromptAddedAt: null,
+    assistantResponse: null,
+  });
+});
+
+test('extractConversation returns all-null when the body cannot be decompressed', () => {
+  expect(
+    extractConversation({
+      sourceApp: 'claude-code',
+      bodyFormat: 'jsonl',
+      body: new Uint8Array([9, 9, 9]),
+    }),
+  ).toEqual({ userPrompt: null, userPromptAddedAt: null, assistantResponse: null });
+});
+
+test('extractConversation swallows a decode failure', () => {
+  const throwingDecode = (): string => {
+    throw new Error('decode boom');
+  };
+  expect(extractConversation(input('x', 'claude-code', 'jsonl'), throwingDecode)).toEqual({
+    userPrompt: null,
+    userPromptAddedAt: null,
+    assistantResponse: null,
   });
 });

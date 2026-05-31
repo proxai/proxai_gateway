@@ -21,7 +21,6 @@ test('buildLogsDeps opens the buffer and returns a working cleanup', async () =>
   const { deps, cleanup } = await buildLogsDeps({ bufferPath });
   expect(deps.output).toBeDefined();
   expect(deps.buffer).not.toBeNull();
-  expect(typeof deps.isDevMode).toBe('boolean');
   expect(() => cleanup()).not.toThrow();
 });
 
@@ -31,13 +30,11 @@ test('buildLogsDeps sets buffer to null when the path cannot be opened', async (
   const bufferPath = join(blocker, 'buffer.db');
   const { deps, cleanup } = await buildLogsDeps({ bufferPath });
   expect(deps.buffer).toBeNull();
-  expect(typeof deps.isDevMode).toBe('boolean');
   expect(() => cleanup()).not.toThrow();
 });
 
 test('buildLogsDeps falls back to the prod buffer path when none is supplied', async () => {
   const { deps, cleanup } = await buildLogsDeps();
   expect(deps.output).toBeDefined();
-  expect(typeof deps.isDevMode).toBe('boolean');
   cleanup();
 });

@@ -72,6 +72,73 @@ function extractFromAgentKvBlob(row: KvRow): PromptResult | null {
   return { userPrompt: truncated, userPromptAddedAt: ts };
 }
 
+function extractAssistantFromBubble(row: KvRow): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(row.value);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed)) return null;
+  if (parsed.type !== 2) return null;
+  if (typeof parsed.text !== 'string' || parsed.text.trim().length === 0) return null;
+  return parsed.text.trim().slice(0, USER_PROMPT_MAX_CHARS);
+}
+
+function extractAssistantFromAgentKvBlob(row: KvRow): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(row.value);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed)) return null;
+  if (parsed.role !== 'assistant') return null;
+
+  const content = parsed.content;
+  let text: string | null = null;
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      if (!isRecord(item)) continue;
+      if (typeof item.text === 'string' && item.text.trim().length > 0) {
+        text = item.text.trim();
+        break;
+      }
+    }
+  } else if (typeof content === 'string' && content.trim().length > 0) {
+    text = content.trim();
+  }
+  if (text === null) return null;
+  return text.slice(0, USER_PROMPT_MAX_CHARS);
+}
+
+export function extractAssistantFromCursorKvPairs(text: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed)) return null;
+
+  const rows = parsed.rows;
+  if (!Array.isArray(rows)) return null;
+
+  for (const row of rows) {
+    if (!isKvRow(row)) continue;
+
+    if (row.key.startsWith('bubbleId:')) {
+      const result = extractAssistantFromBubble(row);
+      if (result !== null) return result;
+    } else if (row.key.startsWith('agentKv:blob:')) {
+      const result = extractAssistantFromAgentKvBlob(row);
+      if (result !== null) return result;
+    }
+  }
+
+  return null;
+}
+
 export function extractFromCursorKvPairs(text: string): PromptResult {
   let parsed: unknown;
   try {
