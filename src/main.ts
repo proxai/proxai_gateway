@@ -12,7 +12,7 @@ import { runRestart } from 'cli/commands/restart.ts';
 import { runDaemon } from 'cli/commands/run';
 import { refreshServiceUnitIfLegacy } from 'cli/commands/run/service-unit-refresh.ts';
 import { runDaemonStartupRelocation } from 'cli/commands/run/startup-relocation.ts';
-import { runSetup } from 'cli/commands/setup';
+import { runSetup, runSetupNew, runSetupReset } from 'cli/commands/setup';
 import { runStart } from 'cli/commands/start.ts';
 import { runStatus } from 'cli/commands/status';
 import { runStop } from 'cli/commands/stop.ts';
@@ -79,6 +79,8 @@ program
     'output the version and install source',
   );
 
+program.enablePositionalOptions();
+
 if (isDevMode) {
   program.option('--compact', 'simplified regular user view', false);
 }
@@ -109,19 +111,32 @@ function parseProfileName(raw: string | undefined): ProfileName {
   return parseProfileNameInternal(raw);
 }
 
-program
-  .command('setup')
+async function resolveSetupInputs(
+  profileOpt: string | undefined,
+): Promise<Parameters<typeof buildSetupDeps>[0]> {
+  let profileName: ProfileName;
+  if (isDevMode && profileOpt === undefined) {
+    profileName = await inquirerPrompts().askProfile();
+  } else {
+    const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
+    profileName = parseProfileName(profileOpt ?? defaultProfile);
+  }
+  const ctx = buildPlatformServiceContext(process.platform, process.execPath);
+  return {
+    platform: process.platform,
+    programPath: process.execPath,
+    serviceUnitPath: ctx?.unitPath ?? null,
+    serviceManager: ctx?.serviceManager ?? null,
+    env: process.env,
+    profileCtx: buildProfileContext(profileName),
+  };
+}
+
+const setupCommand = program
+  .command('setup [gateway-key]')
   .alias('init')
   .description(
-    'Configure the gateway with your ingestion key. Verifies the key, writes ~/.proxai/proxai-gateway/config.toml, installs the platform service unit, and starts the daemon. If the machine is already configured, starts the daemon when it is not running.',
-  )
-  .argument(
-    '[api-key]',
-    'ingestion key to verify and store; equivalent to --api-key. If a different key is already configured, you will be prompted to replace it.',
-  )
-  .option(
-    '--api-key <key>',
-    'ingestion key to verify and store; skips the interactive prompt. Get one at https://proxai.co.',
+    'Show your gateway configuration, or run first-time setup. Pass a gateway key to configure on the first run (omit it to be prompted). When already configured, prints the gateway key and last upload and points to `setup new` / `setup reset`.',
   )
   .option(
     '--install-source <source>',
@@ -132,48 +147,55 @@ program
     '--no-start',
     'finish setup without registering or starting the platform service. Run `proxai-gateway start` manually when ready.',
   )
-  .option(
-    '--force',
-    're-run setup even if a configuration already exists. Overwrites the stored ingestion key.',
-    false,
-  )
   .option('--profile <name>', 'profile to target (prod | dev)')
   .action(
     async (
-      positionalApiKey: string | undefined,
-      opts: {
-        apiKey?: string;
-        installSource: string;
-        start?: boolean;
-        force?: boolean;
-        profile?: string;
-      },
+      gatewayKey: string | undefined,
+      opts: { installSource: string; start?: boolean; profile?: string },
     ) => {
-      let profileName: ProfileName;
-      if (isDevMode && opts.profile === undefined) {
-        const prompts = inquirerPrompts();
-        profileName = await prompts.askProfile();
-      } else {
-        const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
-        profileName = parseProfileName(opts.profile ?? defaultProfile);
-      }
-      const ctx = buildPlatformServiceContext(process.platform, process.execPath);
-      const profileCtx = buildProfileContext(profileName);
-      const setupInputs = {
-        platform: process.platform,
-        programPath: process.execPath,
-        serviceUnitPath: ctx?.unitPath ?? null,
-        serviceManager: ctx?.serviceManager ?? null,
-        env: process.env,
-        profileCtx,
-      };
-      const effectiveKey = positionalApiKey ?? opts.apiKey;
-      const optionsForRun: typeof opts =
-        effectiveKey === undefined ? opts : { ...opts, apiKey: effectiveKey };
-      const result = await runSetup(buildSetupDeps(setupInputs), buildSetupOptions(optionsForRun));
+      const inputs = await resolveSetupInputs(opts.profile);
+      const optionsForRun = gatewayKey === undefined ? opts : { ...opts, apiKey: gatewayKey };
+      const result = await runSetup(buildSetupDeps(inputs), buildSetupOptions(optionsForRun));
       process.exit(result.exitCode);
     },
   );
+
+setupCommand
+  .command('new [gateway-key]')
+  .description(
+    'Replace the stored gateway key with a new one: re-verifies the key, rewrites the configuration, clears any auth-failure flag, and restarts the daemon. Pass the key as an argument, or run with no argument to be prompted for it.',
+  )
+  .option(
+    '--install-source <source>',
+    'how this binary was installed; reported to the backend for diagnostics.',
+    'github_release',
+  )
+  .option('--no-start', 'finish without registering or starting the platform service.')
+  .option('--profile <name>', 'profile to target (prod | dev)')
+  .action(
+    async (
+      gatewayKey: string | undefined,
+      opts: { installSource: string; start?: boolean; profile?: string },
+    ) => {
+      const inputs = await resolveSetupInputs(opts.profile);
+      const optionsForRun = gatewayKey === undefined ? opts : { ...opts, apiKey: gatewayKey };
+      const result = await runSetupNew(buildSetupDeps(inputs), buildSetupOptions(optionsForRun));
+      process.exit(result.exitCode);
+    },
+  );
+
+setupCommand
+  .command('reset')
+  .description(
+    'Stop the daemon and remove the stored gateway key, returning the gateway to a waiting-for-configuration state. Buffered data and logs are kept.',
+  )
+  .option('-y, --yes', 'skip the confirmation prompt', false)
+  .option('--profile <name>', 'profile to target (prod | dev)')
+  .action(async (opts: { yes?: boolean; profile?: string }) => {
+    const inputs = await resolveSetupInputs(opts.profile);
+    const result = await runSetupReset(buildSetupDeps(inputs), { yes: opts.yes === true });
+    process.exit(result.exitCode);
+  });
 
 program
   .command('start')
@@ -696,14 +718,19 @@ doctorCommand.action(async (opts: { profile?: string; output?: string | boolean 
   process.exit(result.exitCode);
 });
 
-if (!isDevMode) {
-  for (const command of program.commands) {
-    for (const option of command.options) {
-      if (option.long === '--profile') {
-        option.hideHelp(true);
-      }
+function hideProfileOptions(command: Command): void {
+  for (const option of command.options) {
+    if (option.long === '--profile') {
+      option.hideHelp(true);
     }
   }
+  for (const sub of command.commands) {
+    hideProfileOptions(sub);
+  }
+}
+
+if (!isDevMode) {
+  hideProfileOptions(program);
 }
 
 program.parseAsync().catch((err: unknown) => {

@@ -33,8 +33,8 @@ export function inquirerPrompts(): PromptSink {
     askApiKey: (message) =>
       rethrowAborts(() =>
         input({
-          message: message ?? 'Enter your ProxAI ingestion key:',
-          validate: (v) => (v.trim().length > 0 ? true : 'ingestion key is required'),
+          message: message ?? 'Enter your ProxAI gateway key:',
+          validate: (v) => (v.trim().length > 0 ? true : 'gateway key is required'),
         }),
       ),
     confirmPhrase: (message, requiredPhrase) =>

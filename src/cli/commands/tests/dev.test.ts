@@ -259,7 +259,7 @@ test('runDevSetup: verification failure returns auth error', async () => {
   expect(result.exitCode).toBe(EXIT_CODE.authError);
   expect(
     (deps.output as ReturnType<typeof captureOutput>).lines.some((l) =>
-      l.msg.includes('dev ingestion key not accepted'),
+      l.msg.includes('dev gateway key not accepted'),
     ),
   ).toBe(true);
 });

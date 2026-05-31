@@ -16,6 +16,7 @@ import {
   nestWatermarksUrl,
 } from 'services/config';
 import type { InstallSource } from 'services/config';
+import { derivedUploadStats, openBufferDb } from 'services/buffer';
 import { HttpClient } from 'services/http';
 
 export interface BuildSetupDepsInputs {
@@ -56,6 +57,19 @@ export function buildSetupDeps(inputs: BuildSetupDepsInputs): SetupCommandDeps {
         gatewayVersion: GATEWAY_USER_AGENT,
       }),
     readMachineUuid: () => readMachineUuid(),
+    readLastSuccessAt: async () => {
+      try {
+        if (!(await Bun.file(profileCtx.bufferDbPath).exists())) return null;
+        const db = openBufferDb(profileCtx.bufferDbPath);
+        try {
+          return derivedUploadStats(db).lastSuccessAt;
+        } finally {
+          db.close();
+        }
+      } catch {
+        return null;
+      }
+    },
     platform: inputs.platform,
   };
   if (inputs.serviceManager !== null) {
@@ -87,7 +101,6 @@ export function buildSetupOptions(opts: {
   apiKey?: string;
   installSource: string;
   start?: boolean;
-  force?: boolean;
 }): SetupCommandOptions {
   const installSource: InstallSource = (VALID_INSTALL_SOURCES as readonly string[]).includes(
     opts.installSource,
@@ -97,7 +110,6 @@ export function buildSetupOptions(opts: {
   const out: SetupCommandOptions = { installSource };
   if (opts.apiKey !== undefined) out.apiKey = opts.apiKey;
   if (opts.start === false) out.noStart = true;
-  if (opts.force === true) out.force = true;
   return out;
 }
 

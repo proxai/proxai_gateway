@@ -435,7 +435,7 @@ test('AuthError + verify-key returns success: false → fatal, sentinel written'
     const outcome = await uploadBatch(ctx, stored);
 
     expect(outcome.kind).toBe('fatal');
-    if (outcome.kind === 'fatal') expect(outcome.error).toContain('ingestion key invalid');
+    if (outcome.kind === 'fatal') expect(outcome.error).toContain('gateway key invalid');
     const row = requireDefined(getBatch(db, batch.captureId));
     expect(row.status).toBe('failed');
     expect(await Bun.file(sentinelPath).exists()).toBe(true);
@@ -532,7 +532,7 @@ test('AuthError + verify-key throws AuthError → fatal, sentinel written', asyn
     const outcome = await uploadBatch(ctx, stored);
 
     expect(outcome.kind).toBe('fatal');
-    if (outcome.kind === 'fatal') expect(outcome.error).toContain('ingestion key invalid');
+    if (outcome.kind === 'fatal') expect(outcome.error).toContain('gateway key invalid');
     expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
     expect(await Bun.file(sentinelPath).exists()).toBe(true);
   } finally {
@@ -631,7 +631,7 @@ test('AuthError + verify-key returns success: false → fatal even when sentinel
     const outcome = await uploadBatch(ctx, stored);
 
     expect(outcome.kind).toBe('fatal');
-    if (outcome.kind === 'fatal') expect(outcome.error).toContain('ingestion key invalid');
+    if (outcome.kind === 'fatal') expect(outcome.error).toContain('gateway key invalid');
     expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
     expect(loggedErrors.some((e) => e.msg.includes('failed to write AUTH_FAILED sentinel'))).toBe(
       true,
@@ -685,13 +685,13 @@ test('403 AuthError immediately fatal, bypasses verify-key and writes sentinel',
 
     expect(outcome.kind).toBe('fatal');
     if (outcome.kind === 'fatal') {
-      expect(outcome.error).toContain('ingestion key invalid');
+      expect(outcome.error).toContain('gateway key invalid');
     }
     expect(verifyKeyCalled).toBe(false);
     expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
     expect(await Bun.file(sentinelPath).exists()).toBe(true);
     const payload = JSON.parse(await Bun.file(sentinelPath).text()) as Record<string, unknown>;
-    expect(payload['reason']).toContain('server returned 403: ingestion key invalid or revoked');
+    expect(payload['reason']).toContain('server returned 403: gateway key invalid or revoked');
   } finally {
     await rmRecursive(dirAuth);
   }
@@ -804,7 +804,7 @@ test('handleAuthError verification throwing AuthError is finalized as fatal', as
   const outcome = await uploadBatch(ctx, stored);
   expect(outcome.kind).toBe('fatal');
   if (outcome.kind === 'fatal') {
-    expect(outcome.error).toBe('ingestion key invalid');
+    expect(outcome.error).toBe('gateway key invalid');
   }
   expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
 });

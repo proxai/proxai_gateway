@@ -8,9 +8,9 @@ export function checkB1InvalidKey(signals: DoctorSignals): Finding | null {
     severity: Severity.critical,
     confidence: Confidence.confirmed,
     cause:
-      'The configured API key has been rejected by the ProxAI server, meaning it is invalid or deleted.',
+      'The configured gateway key has been rejected by the ProxAI server, meaning it is invalid or deleted.',
     action:
-      'Retrieve a valid API key from your ProxAI dashboard (https://proxai.co) and reconfigure the gateway by running: "proxai-gateway setup --force"',
+      'Retrieve a valid gateway key from your ProxAI dashboard (https://proxai.co) and reconfigure by running: "proxai-gateway setup new"',
   };
 }
 
@@ -31,14 +31,14 @@ export function checkB3IngestionKeyAuthError(signals: DoctorSignals): Finding | 
   const err = signals.daemonState.lastUploadError;
   if (!err) return null;
   const lower = err.toLowerCase();
-  if (lower.includes('403') || lower.includes('ingestion key') || lower.includes('ingestion_key')) {
+  if (lower.includes('403') || lower.includes('gateway key') || lower.includes('ingestion_key')) {
     return {
       code: 'B3',
       severity: Severity.critical,
       confidence: Confidence.confirmed,
-      cause: 'Log upload failed because the configured ingestion key is invalid or has expired.',
+      cause: 'Log upload failed because the configured gateway key is invalid or has expired.',
       action:
-        'Generate a fresh API key from your ProxAI dashboard (https://proxai.co) and reconfigure the gateway by running: "proxai-gateway setup --force"',
+        'Generate a fresh gateway key from your ProxAI dashboard (https://proxai.co) and reconfigure by running: "proxai-gateway setup new"',
     };
   }
   return null;

@@ -32,7 +32,7 @@ A checker that reports B1 when `AUTH_FAILED` is absent is **wrong**. B2 must alw
 
 ### A — Lifecycle / not running
 - **A1** Config absent → not set up.
-- **A2** Config present, unit not registered → "run start / setup --force".
+- **A2** Config present, unit not registered (and not intentionally stopped) → "run start / setup new".
 - **A3** Unit registered, process not running, `SESSION_STOPPED` present → stopped by user.
 - **A4** Unit registered, process not running, `SESSION_STOPPED` absent → crashed/failed to spawn.
 - **A5** Process running but last-cycle timestamp stale > 2× interval → wedged.

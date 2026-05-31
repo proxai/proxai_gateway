@@ -47,7 +47,7 @@ export async function autoStartDaemon(
     await deps.serviceManager.start();
     deps.output.success('daemon started');
     deps.output.info('');
-    deps.output.info(`  Logs:    ${chalk.cyan('proxai-gateway tail --follow')}`);
+    deps.output.info(`  Logs:    ${chalk.cyan('proxai-gateway logs')}`);
     deps.output.info(`  Status:  ${chalk.cyan('proxai-gateway status')}`);
     deps.output.info(`  Stop:    ${chalk.cyan('proxai-gateway stop')}`);
   } catch (err) {

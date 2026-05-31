@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import type { ServiceManager } from 'cli/service-manager';
 import { buildProfileContext } from 'core/io/fs/profile.ts';
+import { rmRecursive } from 'core/io/fs';
+import { openBufferDb } from 'services/buffer';
 import {
   buildSetupDeps,
   buildSetupOptions,
@@ -59,6 +64,30 @@ test('buildSetupDeps: configExists() resolves with a boolean', async () => {
     profileCtx,
   });
   await expect(deps.configExists()).resolves.toEqual(expect.any(Boolean));
+});
+
+test('buildSetupDeps: readLastSuccessAt handles absent, empty, and unreadable buffers', async () => {
+  const tmp = await mkdtemp(join(tmpdir(), 'proxai-setup-deps-'));
+  try {
+    const bufferDbPath = join(tmp, 'buffer.db');
+    const deps = buildSetupDeps({
+      platform: 'linux',
+      programPath: '/bin/p',
+      serviceUnitPath: null,
+      serviceManager: null,
+      env: {},
+      profileCtx: { ...profileCtx, bufferDbPath },
+    });
+    const read = deps.readLastSuccessAt;
+    if (read === undefined) throw new Error('readLastSuccessAt not wired');
+    expect(await read()).toBeNull();
+    openBufferDb(bufferDbPath).close();
+    expect(await read()).toBeNull();
+    await Bun.write(bufferDbPath, 'not a sqlite database at all — just garbage bytes');
+    expect(await read()).toBeNull();
+  } finally {
+    await rmRecursive(tmp);
+  }
 });
 
 test('buildSetupDeps: httpClientFactory returns a working HttpClient', () => {
@@ -152,13 +181,6 @@ test('buildSetupOptions: noStart absent when start=true or undefined', () => {
     installSource: 'brew',
   });
   expect(buildSetupOptions({ installSource: 'brew' })).toEqual({ installSource: 'brew' });
-});
-
-test('buildSetupOptions: forwards force when true', () => {
-  expect(buildSetupOptions({ installSource: 'brew', force: true })).toEqual({
-    installSource: 'brew',
-    force: true,
-  });
 });
 
 test('invokeSetupInteractive: returns a function that, when invoked, calls the provided runner', async () => {

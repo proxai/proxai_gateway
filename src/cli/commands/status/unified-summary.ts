@@ -20,8 +20,8 @@ export function deriveUnifiedSummary(inputs: UnifiedSummaryInputs): UnifiedStatu
       level: 'error',
       headline: 'Account authentication failed.',
       hint: isDevProfile
-        ? 'Run `proxai-gateway setup --profile dev --force` to reconfigure your account.'
-        : 'Run `proxai-gateway setup --force` to reconfigure your account.',
+        ? 'Run `proxai-gateway setup new --profile dev` to reconfigure your account.'
+        : 'Run `proxai-gateway setup new` to reconfigure your account.',
     };
   }
   if (inputs.sessionStopped) {

@@ -371,7 +371,7 @@ test('B2: auth-unconfirmed loop only when NO AUTH_FAILED and count>0', () => {
   expect(f.cause).toContain('API key network verification');
 });
 
-test('B3: ingestion key authentication error based on lastUploadError', () => {
+test('B3: gateway key authentication error based on lastUploadError', () => {
   expect(checkB3IngestionKeyAuthError(withDaemonState({ lastUploadError: null }))).toBeNull();
   expect(
     checkB3IngestionKeyAuthError(withDaemonState({ lastUploadError: 'some other error' })),
@@ -386,7 +386,7 @@ test('B3: ingestion key authentication error based on lastUploadError', () => {
 
   const f2 = requireDefined(
     checkB3IngestionKeyAuthError(
-      withDaemonState({ lastUploadError: 'invalid ingestion key provided' }),
+      withDaemonState({ lastUploadError: 'invalid gateway key provided' }),
     ),
   );
   expect(f2.code).toBe('B3');

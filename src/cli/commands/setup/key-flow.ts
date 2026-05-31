@@ -19,8 +19,8 @@ export async function acquireApiKey(
     if (options.apiKey !== undefined) {
       apiKey = options.apiKey.trim();
     } else {
-      deps.output.warn('an ingestion key is already configured for this machine');
-      deps.output.info('to replace it, type the new ingestion key, then re-enter it to confirm');
+      deps.output.warn('an gateway key is already configured for this machine');
+      deps.output.info('to replace it, type the new gateway key, then re-enter it to confirm');
       const first = (await deps.prompts.askApiKey()).trim();
       const second = (await deps.prompts.askApiKey('Type the same key again to confirm:')).trim();
       if (first !== second) {
@@ -34,11 +34,11 @@ export async function acquireApiKey(
   }
 
   if (apiKey.length === 0) {
-    deps.output.error('ingestion key is required');
+    deps.output.error('gateway key is required');
     return { ok: false, result: { exitCode: EXIT_CODE.validationError } };
   }
   if (options.skipKeyFormatCheck !== true && !INGESTION_KEY_PATTERN.test(apiKey)) {
-    deps.output.error('ingestion key has invalid format (expected three hyphen-separated parts)');
+    deps.output.error('gateway key has invalid format (expected three hyphen-separated parts)');
     return { ok: false, result: { exitCode: EXIT_CODE.validationError } };
   }
   return { ok: true, apiKey };

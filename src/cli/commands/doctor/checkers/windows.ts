@@ -27,6 +27,6 @@ export function checkA12WindowsTaskSchedulerXmlCorrupt(signals: DoctorSignals): 
     cause:
       'The Task Scheduler XML definition is corrupted or unparseable, preventing background daemon task triggers.',
     action:
-      'Re-register the scheduled task: "proxai-gateway setup --force" to recreate the XML definition.',
+      'Re-register the scheduled task: "proxai-gateway setup new" to recreate the XML definition.',
   };
 }

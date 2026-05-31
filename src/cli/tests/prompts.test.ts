@@ -215,10 +215,10 @@ test('inquirerPrompts.askApiKey wires up to @inquirer/prompts and accepts a cust
   const apiKey = await p.askApiKey();
   expect(apiKey).toBe('mocked-api-key');
   expect(inputCalls).toHaveLength(1);
-  expect(requireDefined(inputCalls[0]).message).toBe('Enter your ProxAI ingestion key:');
+  expect(requireDefined(inputCalls[0]).message).toBe('Enter your ProxAI gateway key:');
   const validate = requireDefined(requireDefined(inputCalls[0]).validate);
   expect(validate('valid-key')).toBe(true);
-  expect(validate('   ')).toBe('ingestion key is required');
+  expect(validate('   ')).toBe('gateway key is required');
 
   const customMessage = 'Type the same key again to confirm:';
   await p.askApiKey(customMessage);

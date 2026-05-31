@@ -26,7 +26,7 @@ export function checkA2UnitNotRegistered(signals: DoctorSignals): Finding | null
     cause:
       'The gateway is configured, but its background daemon is not registered as a system service.',
     action:
-      "Run 'proxai-gateway start' to register and start the daemon, or run 'proxai-gateway setup --force' to force re-registration.",
+      "Run 'proxai-gateway start' to register and start the daemon, or run 'proxai-gateway setup new' to reconfigure.",
   };
 }
 

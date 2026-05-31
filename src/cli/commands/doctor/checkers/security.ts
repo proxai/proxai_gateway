@@ -17,7 +17,7 @@ export function checkB4InsecureApiKeyTransmission(signals: DoctorSignals): Findi
     severity: Severity.critical,
     confidence: Confidence.confirmed,
     cause:
-      'SSL validation is explicitly disabled (NODE_TLS_REJECT_UNAUTHORIZED=0), exposing ingestion API keys to interception.',
+      'SSL validation is explicitly disabled (NODE_TLS_REJECT_UNAUTHORIZED=0), exposing gateway keys to interception.',
     action:
       'Remove NODE_TLS_REJECT_UNAUTHORIZED=0 from your environment and shell configuration profiles.',
   };

@@ -324,7 +324,7 @@ async function finalizeAuthFailure(
 ): Promise<UploadOutcome> {
   const captureId = batch.captureId;
   const log = ctx.logger?.child({ capture_id: captureId });
-  const message = 'ingestion key invalid';
+  const message = 'gateway key invalid';
   markBatchFailed(ctx.db, captureId, message);
   if (ctx.authFailedSentinelPath !== undefined) {
     try {
@@ -340,6 +340,6 @@ async function finalizeAuthFailure(
       );
     }
   }
-  log?.fatal({ event: 'auth.invalid', reason, capture_id: captureId }, 'ingestion key invalid');
+  log?.fatal({ event: 'auth.invalid', reason, capture_id: captureId }, 'gateway key invalid');
   return { kind: 'fatal', captureId, error: message };
 }

@@ -38,7 +38,7 @@ Commands are divided into two tiers:
 
 | Command | Responsibility |
 | --- | --- |
-| `setup` | Validate key, register host-id, write `config.toml`, write service-unit file, optionally `ensureRegistered`+`start`. Defaults to the `dev` profile when in dev mode; defaults to `prod` otherwise. |
+| `setup` | `setup [gateway-key]`: when already configured, prints a status view (masked **gateway key** + last successful upload, actual + relative) and points to `setup new` / `setup reset` — a positional key on an already-configured machine is **not** applied (a soft "already configured — your gateway key was not changed" line is shown). When unconfigured, runs first-time setup with the positional key (or prompts when omitted): verify the gateway key, register host-id, write `config.toml` + service unit, start the daemon. The key is always a positional argument or prompted — there is no `--api-key` flag. Subcommands: `setup new [gateway-key]` always replaces the key (re-verify, rewrite, clear AUTH_FAILED, restart); `setup reset [-y]` stops + unregisters the daemon and deletes the key/config while keeping `buffer.db` + logs (→ waiting-for-configuration). There is no `--force` flag. Defaults to the `dev` profile in dev mode, else `prod`. |
 | `start` | Clear `SESSION_STOPPED`, recreate service unit if missing, run auto-upgrade, then `ensureRegistered`+`start` via the service manager. |
 | `stop` | Read current boot-id, write `SESSION_STOPPED` sentinel, then `stop` via the service manager. |
 | `restart` | Same as `start` minus auto-upgrade, then `restart` instead of `start`. |

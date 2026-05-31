@@ -54,3 +54,20 @@ test('alias values are unique short identifiers', () => {
   const values = Object.values(COMMAND_ALIASES);
   expect(new Set(values).size).toBe(values.length);
 });
+
+test('setup new parses the positional gateway key instead of prompting', async () => {
+  const proc = Bun.spawn(['bun', ENTRY, 'setup', 'new', 'badnohyphens'], {
+    cwd: REPO_ROOT,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    stdin: 'ignore',
+  });
+  const killer = setTimeout(() => proc.kill(), 8_000);
+  const [stdout, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  await proc.exited;
+  clearTimeout(killer);
+  expect(`${stdout}${stderr}`).toContain('invalid format');
+}, 20_000);

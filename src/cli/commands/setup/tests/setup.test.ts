@@ -4,7 +4,7 @@ import { mkdtemp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runSetup } from 'cli/commands/setup';
+import { runSetup, runSetupNew, runSetupReset } from 'cli/commands/setup';
 import { captureOutput } from 'cli/output.ts';
 import { scriptedPrompts } from 'cli/prompts.ts';
 import { deriveHostId } from 'core/system';
@@ -26,13 +26,12 @@ import {
   DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
 } from 'services/config';
 import { buildProfileContext } from 'core/io/fs/profile.ts';
+import type { GatewayConfig } from 'services/config';
+import type { ServiceManager } from 'cli/service-manager';
 
 const prodBaseUrl = buildProfileContext('prod').defaultNestBaseUrl;
-import type { GatewayConfig } from 'services/config';
 
 const TEST_MACHINE_UUID = 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE';
-// Injected as deps.readBootId so DEV_MODE detection is deterministic — the real
-// readBootId throws on CI Linux (empty /proc boot_id) and is slow on Windows.
 const SETUP_BOOT_ID = 'test-boot-id-setup';
 const TEST_USER_ID = 'u_1';
 const TEST_USER_ID_OTHER = 'u_2';
@@ -181,9 +180,37 @@ function deps(control: MockHttpControl): Parameters<typeof runSetup>[0] {
     httpClientFactory: mockFactory(control),
     readMachineUuid: async () => TEST_MACHINE_UUID,
     readBootId: () => Promise.resolve(SETUP_BOOT_ID),
+    readLastSuccessAt: async () => null,
     now: () => '2026-04-29T10:42:00.123Z',
     platform: 'linux',
-    runUpgrade: async () => ({ exitCode: 0 }),
+  };
+}
+
+interface FakeServiceManager extends ServiceManager {
+  calls: { ensureRegistered: number; start: number; stop: number; unregister: number };
+}
+
+function fakeServiceManager(opts: { failStart?: boolean } = {}): FakeServiceManager {
+  const calls = { ensureRegistered: 0, start: 0, stop: 0, unregister: 0 };
+  return {
+    calls,
+    ensureRegistered: async () => {
+      calls.ensureRegistered++;
+    },
+    start: async () => {
+      calls.start++;
+      if (opts.failStart === true) throw new Error('launchd offline');
+    },
+    stop: async () => {
+      calls.stop++;
+    },
+    restart: async () => {},
+    unregister: async () => {
+      calls.unregister++;
+    },
+    isRegistered: async () => true,
+    isRunning: async () => true,
+    runtimeInfo: async () => ({ pid: null, startedAt: null }),
   };
 }
 
@@ -225,6 +252,8 @@ async function writeExistingConfig(
   await writeConfigToFile(config, configPath);
 }
 
+// --- first-time configure (runSetup with no existing config) -----------------
+
 test('writes CONSENT_ACCEPTED sentinel on first-time setup with a timestamp', async () => {
   const control = newControl();
   const sentinelPath = join(dir, 'CONSENT_ACCEPTED');
@@ -236,21 +265,9 @@ test('writes CONSENT_ACCEPTED sentinel on first-time setup with a timestamp', as
   expect(body).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 });
 
-test('does not overwrite CONSENT_ACCEPTED on --force replace', async () => {
-  await writeExistingConfig();
-  const sentinelPath = join(dir, 'CONSENT_ACCEPTED');
-  await Bun.write(sentinelPath, '2025-01-01T00:00:00.000Z');
-  const control = newControl();
-  const result = await runSetup(deps(control), { apiKey: NEW_KEY, force: true });
-  expect(result.exitCode).toBe(0);
-  const body = await Bun.file(sentinelPath).text();
-  expect(body).toBe('2025-01-01T00:00:00.000Z');
-});
-
 test('does not write CONSENT_ACCEPTED when consentSentinelPath is not provided', async () => {
   const control = newControl();
   const base = deps(control);
-
   const { consentSentinelPath: _omit, ...rest } = base;
   void _omit;
   const result = await runSetup(rest, { apiKey: VALID_KEY });
@@ -301,9 +318,7 @@ test('writes a scheduled-task XML on win32 with the configured user id', async (
   d.windowsUserId = 'MYDOMAIN\\testuser';
   const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
-
   const bytes = await Bun.file(d.serviceUnitPath as string).bytes();
-
   expect(bytes[0]).toBe(0xff);
   expect(bytes[1]).toBe(0xfe);
   const unitContent = Buffer.from(
@@ -323,14 +338,14 @@ test('skips service unit when serviceUnitPath is null', async () => {
   expect(result.exitCode).toBe(0);
 });
 
-test('returns validationError when ingestion key is empty', async () => {
+test('returns validationError when gateway key is empty', async () => {
   const control = newControl();
   const result = await runSetup(deps(control), { apiKey: '   ' });
   expect(result.exitCode).toBe(2);
   expect(control.verifyCalls).toBe(0);
 });
 
-test('returns validationError when ingestion key has wrong format', async () => {
+test('returns validationError when gateway key has wrong format', async () => {
   const control = newControl();
   const result = await runSetup(deps(control), { apiKey: 'not-a-valid-key' });
   expect(result.exitCode).toBe(2);
@@ -384,10 +399,7 @@ test('uses askApiKey prompt when apiKey option not provided', async () => {
 
 test('honors installSource option', async () => {
   const control = newControl();
-  const result = await runSetup(deps(control), {
-    apiKey: VALID_KEY,
-    installSource: 'brew',
-  });
+  const result = await runSetup(deps(control), { apiKey: VALID_KEY, installSource: 'brew' });
   expect(result.exitCode).toBe(0);
   const config = await loadConfigFromFile(configPath);
   expect(config.account.installSource).toBe('brew');
@@ -413,25 +425,16 @@ test('formatError falls back to String(err) when verify-key throws a non-Error v
 
 test('reports server-provided message when key is rejected with reason', async () => {
   const control = newControl({ verifyResponse: 'rejected' });
-  const baseDeps = deps(control);
   const output = captureOutput();
-  const result = await runSetup({ ...baseDeps, output }, { apiKey: VALID_KEY });
+  const result = await runSetup({ ...deps(control), output }, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(3);
   const errorLine = output.lines.find((l) => l.level === 'error');
   expect(errorLine?.msg).toContain('key expired');
 });
 
 test('reports generic message when key is rejected without reason', async () => {
-  const control: MockHttpControl = {
-    verifyResponse: 'accepted',
-    userId: TEST_USER_ID,
-    verifyCalls: 0,
-    registerResponse: 'registered',
-    registerCalls: 0,
-    registerLastBody: null,
-  };
   const baseDeps: Parameters<typeof runSetup>[0] = {
-    ...deps(control),
+    ...deps(newControl()),
     httpClientFactory: () => {
       const partial: unknown = {
         verifyKey: async () => ({ success: false, message: '', userId: null, keyName: null }),
@@ -443,7 +446,7 @@ test('reports generic message when key is rejected without reason', async () => 
   const result = await runSetup({ ...baseDeps, output }, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(3);
   const errorLine = output.lines.find((l) => l.level === 'error');
-  expect(errorLine?.msg).toBe('ingestion key not accepted');
+  expect(errorLine?.msg).toBe('gateway key not accepted');
 });
 
 test('returns authError when verify-key omits userId on success', async () => {
@@ -451,12 +454,7 @@ test('returns authError when verify-key omits userId on success', async () => {
     ...deps(newControl()),
     httpClientFactory: () => {
       const partial: unknown = {
-        verifyKey: async () => ({
-          success: true,
-          message: 'ok',
-          userId: null,
-          keyName: 'my-key',
-        }),
+        verifyKey: async () => ({ success: true, message: 'ok', userId: null, keyName: 'my-key' }),
       };
       return partial as HttpClient;
     },
@@ -466,101 +464,6 @@ test('returns authError when verify-key omits userId on success', async () => {
   expect(result.exitCode).toBe(3);
   const errorLine = output.lines.find((l) => l.level === 'error');
   expect(errorLine?.msg).toContain('user id');
-});
-
-test('replaces api key when re-entry matches (interactive)', async () => {
-  await writeExistingConfig();
-  const control = newControl();
-  const d = { ...deps(control), prompts: scriptedPrompts({ apiKeys: [NEW_KEY, NEW_KEY] }) };
-  const result = await runSetup(d, { force: true });
-  expect(result.exitCode).toBe(0);
-  expect(control.verifyCalls).toBe(1);
-  const config = await loadConfigFromFile(configPath);
-  expect(config.account.apiKey).toBe(NEW_KEY);
-});
-
-test('aborts when re-entry does not match (existing config preserved)', async () => {
-  await writeExistingConfig();
-  const control = newControl();
-  const d = { ...deps(control), prompts: scriptedPrompts({ apiKeys: [NEW_KEY, OTHER_KEY] }) };
-  const result = await runSetup(d, { force: true });
-  expect(result.exitCode).toBe(5);
-  expect(control.verifyCalls).toBe(0);
-  const config = await loadConfigFromFile(configPath);
-  expect(config.account.apiKey).toBe(VALID_KEY);
-});
-
-test('setup with existing config and production build path redirects to upgrade flow', async () => {
-  await writeExistingConfig();
-  const control = newControl();
-  const out = captureOutput();
-  const d = { ...deps(control), output: out };
-  const result = await runSetup(d, {});
-  expect(result.exitCode).toBe(0);
-  expect(control.verifyCalls).toBe(0);
-  expect(
-    out.lines.some(
-      (l) =>
-        l.level === 'info' &&
-        l.msg.includes('Gateway is already installed. Redirecting smoothly to upgrade flow...'),
-    ),
-  ).toBe(true);
-});
-
-test('redirects to upgrade flow even when existing config fails to parse', async () => {
-  await Bun.write(configPath, 'not = [valid] toml }}}');
-  const control = newControl();
-  const out = captureOutput();
-  const d = { ...deps(control), output: out };
-  const result = await runSetup(d, {});
-  expect(result.exitCode).toBe(0);
-  expect(
-    out.lines.some(
-      (l) =>
-        l.level === 'info' &&
-        l.msg.includes('Gateway is already installed. Redirecting smoothly to upgrade flow...'),
-    ),
-  ).toBe(true);
-});
-
-test('preserves installedAt and installSource on replace; rederives host_id from same user', async () => {
-  const PRESERVED_INSTALLED_AT = '2025-01-15T08:00:00.000Z';
-  await writeExistingConfig({
-    installedAt: PRESERVED_INSTALLED_AT,
-    installSource: 'brew',
-  });
-  const control = newControl();
-  const d = { ...deps(control), prompts: scriptedPrompts({ apiKeys: [NEW_KEY, NEW_KEY] }) };
-  const result = await runSetup(d, { force: true });
-  expect(result.exitCode).toBe(0);
-  const config = await loadConfigFromFile(configPath);
-  expect(config.account.apiKey).toBe(NEW_KEY);
-  expect(config.account.userId).toBe(TEST_USER_ID);
-  expect(config.account.hostId).toBe(EXPECTED_HOST_ID);
-  expect(config.account.installedAt).toBe(PRESERVED_INSTALLED_AT);
-  expect(config.account.installSource).toBe('brew');
-});
-
-test('on replace, rederives host_id from new user_id', async () => {
-  await writeExistingConfig({ userId: TEST_USER_ID, hostId: EXPECTED_HOST_ID });
-  const control = newControl({ userId: TEST_USER_ID_OTHER });
-  const result = await runSetup(deps(control), { apiKey: NEW_KEY });
-  expect(result.exitCode).toBe(0);
-  const config = await loadConfigFromFile(configPath);
-  expect(config.account.userId).toBe(TEST_USER_ID_OTHER);
-  expect(config.account.hostId).toBe(EXPECTED_HOST_ID_OTHER);
-  expect(config.account.hostId).not.toBe(EXPECTED_HOST_ID);
-});
-
-test('scripted mode (--api-key) bypasses re-entry on existing config', async () => {
-  await writeExistingConfig();
-  const control = newControl();
-  const result = await runSetup(deps(control), { apiKey: NEW_KEY });
-  expect(result.exitCode).toBe(0);
-  expect(control.verifyCalls).toBe(1);
-  const config = await loadConfigFromFile(configPath);
-  expect(config.account.apiKey).toBe(NEW_KEY);
-  expect(config.account.hostId).toBe(EXPECTED_HOST_ID);
 });
 
 test.skipIf(process.platform === 'win32')(
@@ -576,14 +479,14 @@ test.skipIf(process.platform === 'win32')(
 
 test('returns error when readMachineUuid throws', async () => {
   const control = newControl();
+  const out = captureOutput();
   const d = {
     ...deps(control),
+    output: out,
     readMachineUuid: async () => {
       throw new Error('cannot read /etc/machine-id');
     },
   };
-  const out = captureOutput();
-  d.output = out;
   const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(1);
   expect(
@@ -591,26 +494,9 @@ test('returns error when readMachineUuid throws', async () => {
   ).toBe(true);
 });
 
-test('on replace, reports rederivation when host_id changes despite stable user_id', async () => {
-  await writeExistingConfig({ userId: TEST_USER_ID, hostId: 'stale-host-id-from-old-machine' });
-  const control = newControl({ userId: TEST_USER_ID });
-  const out = captureOutput();
-  const d = { ...deps(control), output: out };
-  const result = await runSetup(d, { apiKey: NEW_KEY });
-  expect(result.exitCode).toBe(0);
-  expect(
-    out.lines.some(
-      (l) => l.level === 'info' && l.msg.includes('host_id rederived from machine UUID'),
-    ),
-  ).toBe(true);
-  const config = await loadConfigFromFile(configPath);
-  expect(config.account.hostId).toBe(EXPECTED_HOST_ID);
-});
-
 test('successful setup clears a pre-existing AUTH_FAILED sentinel', async () => {
   const control = newControl();
   const d = deps(control);
-
   await Bun.write(d.authFailedSentinelPath, '{"reason":"prior halt","detected_at":"x"}');
   expect(await Bun.file(d.authFailedSentinelPath).exists()).toBe(true);
   const result = await runSetup(d, { apiKey: VALID_KEY });
@@ -630,8 +516,7 @@ test('failed setup (auth rejected) does not clear AUTH_FAILED sentinel', async (
 test('register-host-id call is made with the derived host_id and reports newly bound', async () => {
   const control = newControl();
   const out = captureOutput();
-  const d = { ...deps(control), output: out };
-  const result = await runSetup(d, { apiKey: VALID_KEY });
+  const result = await runSetup({ ...deps(control), output: out }, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
   expect(control.registerCalls).toBe(1);
   expect(control.registerLastBody?.host_id).toBe(EXPECTED_HOST_ID);
@@ -643,8 +528,7 @@ test('register-host-id call is made with the derived host_id and reports newly b
 test('register-host-id idempotent path reports already bound', async () => {
   const control = newControl({ registerResponse: 'idempotent' });
   const out = captureOutput();
-  const d = { ...deps(control), output: out };
-  const result = await runSetup(d, { apiKey: VALID_KEY });
+  const result = await runSetup({ ...deps(control), output: out }, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
   expect(control.registerCalls).toBe(1);
   expect(out.lines.some((l) => l.level === 'info' && /host_id already bound/.test(l.msg))).toBe(
@@ -655,8 +539,7 @@ test('register-host-id idempotent path reports already bound', async () => {
 test('register-host-id 403 returns authError exit and surfaces a clear message', async () => {
   const control = newControl({ registerResponse: 'forbidden' });
   const out = captureOutput();
-  const d = { ...deps(control), output: out };
-  const result = await runSetup(d, { apiKey: VALID_KEY });
+  const result = await runSetup({ ...deps(control), output: out }, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(3);
   expect(
     out.lines.some((l) => l.level === 'error' && /already bound to another machine/.test(l.msg)),
@@ -666,8 +549,7 @@ test('register-host-id 403 returns authError exit and surfaces a clear message',
 test('register-host-id 503 returns generic error', async () => {
   const control = newControl({ registerResponse: 'service-unavailable' });
   const out = captureOutput();
-  const d = { ...deps(control), output: out };
-  const result = await runSetup(d, { apiKey: VALID_KEY });
+  const result = await runSetup({ ...deps(control), output: out }, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(1);
   expect(
     out.lines.some((l) => l.level === 'error' && /host_id registration failed/.test(l.msg)),
@@ -677,39 +559,12 @@ test('register-host-id 503 returns generic error', async () => {
 test('register-host-id network error returns generic error', async () => {
   const control = newControl({ registerResponse: 'network-error' });
   const out = captureOutput();
-  const d = { ...deps(control), output: out };
-  const result = await runSetup(d, { apiKey: VALID_KEY });
+  const result = await runSetup({ ...deps(control), output: out }, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(1);
   expect(
     out.lines.some((l) => l.level === 'error' && /host_id registration failed/.test(l.msg)),
   ).toBe(true);
 });
-
-import type { ServiceManager } from 'cli/service-manager';
-
-interface FakeServiceManager extends ServiceManager {
-  calls: { ensureRegistered: number; start: number };
-}
-
-function fakeServiceManager(opts: { failStart?: boolean } = {}): FakeServiceManager {
-  const calls = { ensureRegistered: 0, start: 0 };
-  return {
-    calls,
-    ensureRegistered: async () => {
-      calls.ensureRegistered++;
-    },
-    start: async () => {
-      calls.start++;
-      if (opts.failStart === true) throw new Error('launchd offline');
-    },
-    stop: async () => {},
-    restart: async () => {},
-    unregister: async () => {},
-    isRegistered: async () => true,
-    isRunning: async () => true,
-    runtimeInfo: async () => ({ pid: null, startedAt: null }),
-  };
-}
 
 test('auto-starts the daemon by default after successful setup', async () => {
   const control = newControl();
@@ -726,18 +581,14 @@ test('auto-starts the daemon by default after successful setup', async () => {
   expect(sm.calls.ensureRegistered).toBe(1);
   expect(sm.calls.start).toBe(1);
   expect(out.lines.some((l) => l.msg.includes('daemon started'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('proxai-gateway tail'))).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('proxai-gateway logs'))).toBe(true);
 });
 
 test('skips auto-start when --no-start is passed', async () => {
   const control = newControl();
   const sm = fakeServiceManager();
   const out = captureOutput();
-  const d = {
-    ...deps(control),
-    output: out,
-    serviceManager: sm,
-  };
+  const d = { ...deps(control), output: out, serviceManager: sm };
   const result = await runSetup(d, { apiKey: VALID_KEY, noStart: true });
   expect(result.exitCode).toBe(0);
   expect(sm.calls.start).toBe(0);
@@ -748,11 +599,7 @@ test('warns but exits 0 when service manager start throws', async () => {
   const control = newControl();
   const sm = fakeServiceManager({ failStart: true });
   const out = captureOutput();
-  const d = {
-    ...deps(control),
-    output: out,
-    serviceManager: sm,
-  };
+  const d = { ...deps(control), output: out, serviceManager: sm };
   const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
   expect(
@@ -764,336 +611,22 @@ test('warns but exits 0 when service manager start throws', async () => {
 test('falls through with manual-start hint when no service manager is supplied', async () => {
   const control = newControl();
   const out = captureOutput();
-  const d = { ...deps(control), output: out };
-  const result = await runSetup(d, { apiKey: VALID_KEY });
-  expect(result.exitCode).toBe(0);
+  await runSetup({ ...deps(control), output: out }, { apiKey: VALID_KEY });
   expect(out.lines.some((l) => l.msg.includes('Service manager unavailable'))).toBe(true);
 });
 
 test('clears session-stopped sentinel before starting (when sentinel path supplied)', async () => {
   const control = newControl();
   const sm = fakeServiceManager();
-  const out = captureOutput();
   const sentinelPath = join(dir, 'SESSION_STOPPED');
   await Bun.write(sentinelPath, JSON.stringify({ boot_id: 'b', set_at: '2026-05-08T00:00:00Z' }));
   const d = {
     ...deps(control),
-    output: out,
     serviceManager: sm,
     sessionStoppedSentinelPath: sentinelPath,
   };
   await runSetup(d, { apiKey: VALID_KEY });
   expect(await Bun.file(sentinelPath).exists()).toBe(false);
-});
-
-test('setup with existing config and same api-key auto-starts when daemon is down', async () => {
-  await writeExistingConfig();
-  const control = newControl();
-  const sm = fakeServiceManager();
-  sm.isRunning = async () => false;
-  const out = captureOutput();
-  const d = { ...deps(control), output: out, serviceManager: sm };
-  const result = await runSetup(d, { apiKey: VALID_KEY });
-  expect(result.exitCode).toBe(0);
-  expect(sm.calls.start).toBe(1);
-  expect(out.lines.some((l) => l.msg.includes('Daemon is not running — starting it now'))).toBe(
-    true,
-  );
-});
-
-test('setup with existing config and same api-key reports running when daemon is up', async () => {
-  await writeExistingConfig();
-  const control = newControl();
-  const sm = fakeServiceManager();
-  sm.isRunning = async () => true;
-  const out = captureOutput();
-  const d = { ...deps(control), output: out, serviceManager: sm };
-  const result = await runSetup(d, { apiKey: VALID_KEY });
-  expect(result.exitCode).toBe(5);
-  expect(sm.calls.start).toBe(0);
-  expect(out.lines.some((l) => l.msg.includes('Daemon is running'))).toBe(true);
-});
-
-test('setup with same api-key as existing config skips replace flow and auto-starts', async () => {
-  await writeExistingConfig();
-  const control = newControl();
-  const sm = fakeServiceManager();
-  sm.isRunning = async () => false;
-  const out = captureOutput();
-  const d = { ...deps(control), output: out, serviceManager: sm };
-  const result = await runSetup(d, { apiKey: VALID_KEY });
-  expect(result.exitCode).toBe(0);
-  expect(sm.calls.start).toBe(1);
-  expect(control.verifyCalls).toBe(0);
-  expect(control.registerCalls).toBe(0);
-});
-
-test('setup with different api-key and user declining replace keeps existing config', async () => {
-  await writeExistingConfig();
-  const control = newControl();
-  const sm = fakeServiceManager();
-  sm.isRunning = async () => true;
-  const out = captureOutput();
-  const d = {
-    ...deps(control),
-    output: out,
-    serviceManager: sm,
-    prompts: scriptedPrompts({ replace: false }),
-  };
-  const result = await runSetup(d, { apiKey: NEW_KEY });
-  expect(result.exitCode).toBe(5);
-  expect(control.verifyCalls).toBe(0);
-  const existing = await loadConfigFromFile(configPath);
-  expect(existing.account.apiKey).toBe(VALID_KEY);
-  expect(out.lines.some((l) => l.msg.includes('aborted'))).toBe(true);
-});
-
-test('setup with different api-key and user accepting replace runs full replace flow', async () => {
-  await writeExistingConfig();
-  const control = newControl();
-  const sm = fakeServiceManager();
-  const out = captureOutput();
-  const d = {
-    ...deps(control),
-    output: out,
-    serviceManager: sm,
-    prompts: scriptedPrompts({ replace: true }),
-  };
-  const result = await runSetup(d, { apiKey: NEW_KEY });
-  expect(result.exitCode).toBe(0);
-  expect(control.verifyCalls).toBe(1);
-  const updated = await loadConfigFromFile(configPath);
-  expect(updated.account.apiKey).toBe(NEW_KEY);
-});
-
-test('setup with existing config and local build path redirects to upgrade flow', async () => {
-  const control = newControl();
-  const out = captureOutput();
-  const d = {
-    ...deps(control),
-    output: out,
-    programPath: '/workspace/dist/proxai-gateway',
-    configExists: async () => true,
-  };
-  const result = await runSetup(d, {});
-  expect(result.exitCode).toBe(0);
-  expect(
-    out.lines.some(
-      (l) =>
-        l.level === 'info' &&
-        l.msg.includes('Gateway is already installed. Redirecting smoothly to upgrade flow...'),
-    ),
-  ).toBe(true);
-});
-
-test('setup with existing config and production build path redirects to upgrade', async () => {
-  const control = newControl();
-  const out = captureOutput();
-  const d = {
-    ...deps(control),
-    output: out,
-    programPath: '/usr/local/bin/proxai-gateway',
-    configExists: async () => true,
-  };
-  const result = await runSetup(d, {});
-  expect(result.exitCode).toBe(0);
-  expect(
-    out.lines.some(
-      (l) =>
-        l.level === 'info' &&
-        l.msg.includes('Gateway is already installed. Redirecting smoothly to upgrade flow...'),
-    ),
-  ).toBe(true);
-});
-
-test('setup in dev mode with configs present', async () => {
-  const bootId = SETUP_BOOT_ID;
-  const fs = require('node:fs/promises');
-  await fs.writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
-
-  await fs.mkdir(join(dir, 'dev'), { recursive: true });
-  await fs.mkdir(join(dir, 'prod'), { recursive: true });
-
-  const devConfig: GatewayConfig = {
-    account: {
-      apiKey: 'dev-key-12345678',
-      userId: 'u_dev',
-      hostId: 'h_dev',
-      installedAt: '2026-05-01T00:00:00Z',
-      installSource: 'github_release',
-    },
-    backend: {
-      ingestUrl: 'http://localhost:3001/v1/raw_records',
-      verifyKeyUrl: 'http://localhost:3001/ingestion/verify-key',
-      watermarksUrl: 'http://localhost:3001/v1/watermarks',
-      registerHostIdUrl: 'http://localhost:3001/v1/host-ids/register',
-    },
-    capture: {
-      pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
-      bufferPath: bufferDbPath,
-      receiptRetentionDays: DEFAULT_RECEIPT_RETENTION_DAYS,
-      failedRetentionDays: DEFAULT_FAILED_RETENTION_DAYS,
-      bufferSoftPauseBytes: DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
-      bufferSoftResumeBytes: DEFAULT_BUFFER_SOFT_RESUME_BYTES,
-      uploadMaxBatchesPerSec: DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
-      uploadMaxBytesPerMinute: DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
-      uploadBackoffOn429Multiplier: DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
-    },
-    logging: { level: 'info', logDir },
-    staleBinary: {
-      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
-      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
-    },
-  };
-
-  const prodConfig: GatewayConfig = {
-    account: {
-      apiKey: 'prod-key-12345678',
-      userId: 'u_prod',
-      hostId: 'h_prod',
-      installedAt: '2026-05-02T00:00:00Z',
-      installSource: 'github_release',
-    },
-    backend: {
-      ingestUrl: 'https://api.example.com/v1/raw_records',
-      verifyKeyUrl: 'https://api.example.com/ingestion/verify-key',
-      watermarksUrl: 'https://api.example.com/v1/watermarks',
-      registerHostIdUrl: 'https://api.example.com/v1/host-ids/register',
-    },
-    capture: {
-      pollIntervalSec: DEFAULT_POLL_INTERVAL_SEC,
-      bufferPath: bufferDbPath,
-      receiptRetentionDays: DEFAULT_RECEIPT_RETENTION_DAYS,
-      failedRetentionDays: DEFAULT_FAILED_RETENTION_DAYS,
-      bufferSoftPauseBytes: DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
-      bufferSoftResumeBytes: DEFAULT_BUFFER_SOFT_RESUME_BYTES,
-      uploadMaxBatchesPerSec: DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
-      uploadMaxBytesPerMinute: DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
-      uploadBackoffOn429Multiplier: DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
-    },
-    logging: { level: 'info', logDir },
-    staleBinary: {
-      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
-      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
-    },
-  };
-
-  await writeConfigToFile(devConfig, join(dir, 'dev', 'config.toml'));
-  await writeConfigToFile(prodConfig, join(dir, 'prod', 'config.toml'));
-
-  const control = newControl();
-  const sm = fakeServiceManager();
-  const out = captureOutput();
-  const d = {
-    ...deps(control),
-    output: out,
-    serviceManager: sm,
-    configExists: async () => true,
-  };
-
-  const result = await runSetup(d, { noStart: true, apiKey: 'dev-key-12345678' });
-  expect(result.exitCode).toBe(5);
-  expect(out.lines.some((l) => l.msg.includes('[dev]  already configured (host_id: h_dev)'))).toBe(
-    true,
-  );
-  expect(out.lines.some((l) => l.msg.includes('[prod] already configured (host_id: h_prod)'))).toBe(
-    true,
-  );
-});
-
-test('setup in dev mode with configs absent', async () => {
-  const bootId = SETUP_BOOT_ID;
-  const fs = require('node:fs/promises');
-  await fs.writeFile(join(dir, 'DEV_MODE'), JSON.stringify({ bootId }));
-
-  const control = newControl();
-  const sm = fakeServiceManager();
-  const out = captureOutput();
-  const d = {
-    ...deps(control),
-    output: out,
-    serviceManager: sm,
-    configExists: async () => true,
-  };
-
-  const result = await runSetup(d, { noStart: true, apiKey: VALID_KEY });
-  expect(result.exitCode).toBe(5);
-  expect(out.lines.some((l) => l.msg.includes('[dev]  not configured'))).toBe(true);
-  expect(out.lines.some((l) => l.msg.includes('[prod] not configured'))).toBe(true);
-});
-
-test('setup with invalid existing config', async () => {
-  await Bun.write(configPath, 'invalid toml content [[[}');
-
-  const control = newControl();
-  const sm = fakeServiceManager();
-  const out = captureOutput();
-  const d = {
-    ...deps(control),
-    output: out,
-    serviceManager: sm,
-    configExists: async () => true,
-  };
-
-  const result = await runSetup(d, { noStart: true, apiKey: VALID_KEY });
-  expect(result.exitCode).toBe(5);
-  expect(
-    out.lines.some((l) => l.msg.includes('already configured (could not read existing config)')),
-  ).toBe(true);
-});
-
-test('setup with existing config and same api-key and noStart but not in dev mode', async () => {
-  await writeExistingConfig();
-
-  const control = newControl();
-  const out = captureOutput();
-  const { serviceManager: _, ...restDeps } = deps(control);
-  const d = {
-    ...restDeps,
-    output: out,
-  };
-
-  const result = await runSetup(d, { apiKey: VALID_KEY, noStart: true });
-  expect(result.exitCode).toBe(5);
-  expect(
-    out.lines.some((l) =>
-      l.msg.includes('Run proxai-gateway setup --force to re-enter your ingestion key'),
-    ),
-  ).toBe(true);
-});
-
-test('setup with existing config and same api-key and undefined serviceManager not in dev mode and not noStart', async () => {
-  await writeExistingConfig();
-
-  const control = newControl();
-  const out = captureOutput();
-  const { serviceManager: _, ...restDeps } = deps(control);
-  const d = {
-    ...restDeps,
-    output: out,
-  };
-
-  const result = await runSetup(d, { apiKey: VALID_KEY });
-  expect(result.exitCode).toBe(5);
-  expect(
-    out.lines.some((l) =>
-      l.msg.includes('Run proxai-gateway setup --force to re-enter your ingestion key'),
-    ),
-  ).toBe(true);
-});
-
-test('setup with existing config and same api-key handles isRunning throwing and starts daemon', async () => {
-  await writeExistingConfig();
-  const control = newControl();
-  const sm = fakeServiceManager();
-  sm.isRunning = async () => {
-    throw new Error('service manager error');
-  };
-  const out = captureOutput();
-  const d = { ...deps(control), output: out, serviceManager: sm };
-  const result = await runSetup(d, { apiKey: VALID_KEY });
-  expect(result.exitCode).toBe(0);
-  expect(sm.calls.start).toBe(1);
 });
 
 test('maybeWriteConsentSentinel handles write error gracefully', async () => {
@@ -1104,4 +637,243 @@ test('maybeWriteConsentSentinel handles write error gracefully', async () => {
   };
   const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
+});
+
+// --- setup new (replace an existing key) -------------------------------------
+
+test('setup new replaces the key when given a new gateway key', async () => {
+  await writeExistingConfig();
+  const control = newControl({ userId: TEST_USER_ID_OTHER });
+  const result = await runSetupNew(deps(control), { apiKey: NEW_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(control.verifyCalls).toBe(1);
+  const config = await loadConfigFromFile(configPath);
+  expect(config.account.apiKey).toBe(NEW_KEY);
+  expect(config.account.userId).toBe(TEST_USER_ID_OTHER);
+  expect(config.account.hostId).toBe(EXPECTED_HOST_ID_OTHER);
+  expect(config.account.hostId).not.toBe(EXPECTED_HOST_ID);
+});
+
+test('setup new does not overwrite CONSENT_ACCEPTED on replace', async () => {
+  await writeExistingConfig();
+  const sentinelPath = join(dir, 'CONSENT_ACCEPTED');
+  await Bun.write(sentinelPath, '2025-01-01T00:00:00.000Z');
+  const control = newControl();
+  const result = await runSetupNew(deps(control), { apiKey: NEW_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(await Bun.file(sentinelPath).text()).toBe('2025-01-01T00:00:00.000Z');
+});
+
+test('setup new preserves installedAt and installSource on replace', async () => {
+  const PRESERVED_INSTALLED_AT = '2025-01-15T08:00:00.000Z';
+  await writeExistingConfig({ installedAt: PRESERVED_INSTALLED_AT, installSource: 'brew' });
+  const control = newControl();
+  const result = await runSetupNew(deps(control), { apiKey: NEW_KEY });
+  expect(result.exitCode).toBe(0);
+  const config = await loadConfigFromFile(configPath);
+  expect(config.account.apiKey).toBe(NEW_KEY);
+  expect(config.account.installedAt).toBe(PRESERVED_INSTALLED_AT);
+  expect(config.account.installSource).toBe('brew');
+});
+
+test('setup new replaces the key when interactive re-entry matches', async () => {
+  await writeExistingConfig();
+  const control = newControl();
+  const d = { ...deps(control), prompts: scriptedPrompts({ apiKeys: [NEW_KEY, NEW_KEY] }) };
+  const result = await runSetupNew(d, {});
+  expect(result.exitCode).toBe(0);
+  expect(control.verifyCalls).toBe(1);
+  const config = await loadConfigFromFile(configPath);
+  expect(config.account.apiKey).toBe(NEW_KEY);
+});
+
+test('setup new aborts when interactive re-entry does not match', async () => {
+  await writeExistingConfig();
+  const control = newControl();
+  const d = { ...deps(control), prompts: scriptedPrompts({ apiKeys: [NEW_KEY, OTHER_KEY] }) };
+  const result = await runSetupNew(d, {});
+  expect(result.exitCode).toBe(5);
+  expect(control.verifyCalls).toBe(0);
+  const config = await loadConfigFromFile(configPath);
+  expect(config.account.apiKey).toBe(VALID_KEY);
+});
+
+test('setup new reports rederivation when host_id changes despite stable user_id', async () => {
+  await writeExistingConfig({ userId: TEST_USER_ID, hostId: 'stale-host-id-from-old-machine' });
+  const control = newControl({ userId: TEST_USER_ID });
+  const out = captureOutput();
+  const result = await runSetupNew({ ...deps(control), output: out }, { apiKey: NEW_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(
+    out.lines.some(
+      (l) => l.level === 'info' && l.msg.includes('host_id rederived from machine UUID'),
+    ),
+  ).toBe(true);
+  const config = await loadConfigFromFile(configPath);
+  expect(config.account.hostId).toBe(EXPECTED_HOST_ID);
+});
+
+test('setup new on a fresh machine configures normally', async () => {
+  const control = newControl();
+  const result = await runSetupNew(deps(control), { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+  const config = await loadConfigFromFile(configPath);
+  expect(config.account.apiKey).toBe(VALID_KEY);
+});
+
+// --- setup (configured) status view ------------------------------------------
+
+test('setup on a configured machine shows the status view with key + last upload', async () => {
+  await writeExistingConfig();
+  const out = captureOutput();
+  const d = {
+    ...deps(newControl()),
+    output: out,
+    readLastSuccessAt: async () => '2026-04-29T10:38:00.000Z',
+  };
+  const result = await runSetup(d, {});
+  expect(result.exitCode).toBe(5);
+  const joined = out.lines.map((l) => l.msg).join('\n');
+  expect(joined).toContain('configured');
+  expect(joined).toContain('Gateway key');
+  expect(joined).toContain('abc1…t456');
+  expect(joined).toContain('Last upload');
+  expect(joined).toContain('29 Apr');
+  expect(joined).toContain('min ago');
+  expect(joined).toContain('proxai-gateway setup new');
+  expect(joined).toContain('proxai-gateway setup reset');
+});
+
+test('status view shows a no-upload hint when there is no successful upload', async () => {
+  await writeExistingConfig();
+  const out = captureOutput();
+  const d = { ...deps(newControl()), output: out, readLastSuccessAt: async () => null };
+  await runSetup(d, {});
+  expect(out.lines.some((l) => l.msg.includes('no successful upload yet'))).toBe(true);
+});
+
+test('status view tolerates a missing readLastSuccessAt dep', async () => {
+  await writeExistingConfig();
+  const out = captureOutput();
+  const base = deps(newControl());
+  const { readLastSuccessAt: _omit, ...rest } = base;
+  void _omit;
+  const result = await runSetup({ ...rest, output: out }, {});
+  expect(result.exitCode).toBe(5);
+  expect(out.lines.some((l) => l.msg.includes('no successful upload yet'))).toBe(true);
+});
+
+test('status view reports an unreadable configuration', async () => {
+  await Bun.write(configPath, 'not = [valid] toml }}}');
+  const out = captureOutput();
+  const result = await runSetup({ ...deps(newControl()), output: out }, {});
+  expect(result.exitCode).toBe(5);
+  expect(out.lines.some((l) => l.msg.includes('could not be read'))).toBe(true);
+});
+
+test('setup with a key on a configured machine keeps the key and notes it was unchanged', async () => {
+  await writeExistingConfig();
+  const control = newControl();
+  const out = captureOutput();
+  const d = {
+    ...deps(control),
+    output: out,
+    readLastSuccessAt: async () => '2026-04-29T10:38:00.000Z',
+  };
+  const result = await runSetup(d, { apiKey: NEW_KEY });
+  expect(result.exitCode).toBe(5);
+  expect(control.verifyCalls).toBe(0);
+  const joined = out.lines.map((l) => l.msg).join('\n');
+  expect(joined).toContain('already configured');
+  expect(joined).toContain('was not changed');
+  expect(joined).toContain('Gateway key');
+  expect(joined).toContain('abc1…t456');
+  expect(joined).toContain('proxai-gateway setup new');
+  const config = await loadConfigFromFile(configPath);
+  expect(config.account.apiKey).not.toBe(NEW_KEY);
+});
+
+// --- setup reset -------------------------------------------------------------
+
+test('setup reset on an unconfigured machine reports nothing to reset', async () => {
+  const out = captureOutput();
+  const result = await runSetupReset({ ...deps(newControl()), output: out }, {});
+  expect(result.exitCode).toBe(0);
+  expect(out.lines.some((l) => l.msg.includes('nothing to reset'))).toBe(true);
+});
+
+test('setup reset --yes stops, unregisters, and removes the key + config', async () => {
+  await writeExistingConfig();
+  const sm = fakeServiceManager();
+  const out = captureOutput();
+  const authPath = join(dir, 'AUTH_FAILED');
+  const sessionPath = join(dir, 'SESSION_STOPPED');
+  await Bun.write(authPath, '{"reason":"x","detected_at":"y"}');
+  await Bun.write(sessionPath, '{"boot_id":"b"}');
+  await Bun.write(join(dir, 'service.unit'), 'unit');
+  const d = {
+    ...deps(newControl()),
+    output: out,
+    serviceManager: sm,
+    sessionStoppedSentinelPath: sessionPath,
+  };
+  const result = await runSetupReset(d, { yes: true });
+  expect(result.exitCode).toBe(0);
+  expect(sm.calls.stop).toBe(1);
+  expect(sm.calls.unregister).toBe(1);
+  expect(await Bun.file(configPath).exists()).toBe(false);
+  expect(await Bun.file(join(dir, 'service.unit')).exists()).toBe(false);
+  expect(await Bun.file(authPath).exists()).toBe(false);
+  expect(await Bun.file(sessionPath).exists()).toBe(false);
+  expect(out.lines.some((l) => l.msg.includes('waiting for configuration'))).toBe(true);
+});
+
+test('setup reset keeps the buffer database', async () => {
+  await writeExistingConfig();
+  await Bun.write(bufferDbPath, 'buffer-bytes');
+  const result = await runSetupReset(
+    { ...deps(newControl()), serviceManager: fakeServiceManager() },
+    { yes: true },
+  );
+  expect(result.exitCode).toBe(0);
+  expect(await Bun.file(bufferDbPath).exists()).toBe(true);
+});
+
+test('setup reset proceeds when the confirmation phrase matches', async () => {
+  await writeExistingConfig();
+  const sm = fakeServiceManager();
+  const d = {
+    ...deps(newControl()),
+    serviceManager: sm,
+    prompts: scriptedPrompts({ phrase: 'setup reset' }),
+  };
+  const result = await runSetupReset(d, {});
+  expect(result.exitCode).toBe(0);
+  expect(await Bun.file(configPath).exists()).toBe(false);
+});
+
+test('setup reset aborts when the confirmation phrase does not match', async () => {
+  await writeExistingConfig();
+  const out = captureOutput();
+  const d = {
+    ...deps(newControl()),
+    output: out,
+    serviceManager: fakeServiceManager(),
+    prompts: scriptedPrompts({ phrase: 'nope' }),
+  };
+  const result = await runSetupReset(d, {});
+  expect(result.exitCode).toBe(5);
+  expect(await Bun.file(configPath).exists()).toBe(true);
+  expect(out.lines.some((l) => l.msg.includes('aborted'))).toBe(true);
+});
+
+test('setup reset tolerates a null service unit path and missing service manager', async () => {
+  await writeExistingConfig();
+  const base = deps(newControl());
+  const { serviceManager: _omit, ...rest } = base;
+  void _omit;
+  const d = { ...rest, serviceUnitPath: null as string | null };
+  const result = await runSetupReset(d, { yes: true });
+  expect(result.exitCode).toBe(0);
+  expect(await Bun.file(configPath).exists()).toBe(false);
 });

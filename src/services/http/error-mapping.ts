@@ -52,10 +52,10 @@ export async function dispatchSuccessOrThrow<T>(
     throw withCtx(new ValidationError(`server returned 400 ${response.statusText}`), ctx);
   }
   if (status === HTTP_STATUS.unauthorized) {
-    throw withCtx(new AuthError('server returned 401: ingestion key missing or invalid'), ctx);
+    throw withCtx(new AuthError('server returned 401: gateway key missing or invalid'), ctx);
   }
   if (status === HTTP_STATUS.forbidden) {
-    throw withCtx(new AuthError('server returned 403: ingestion key invalid or revoked'), ctx);
+    throw withCtx(new AuthError('server returned 403: gateway key invalid or revoked'), ctx);
   }
   if (status === HTTP_STATUS.requestTimeout) {
     throw withCtx(

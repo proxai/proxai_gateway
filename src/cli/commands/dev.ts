@@ -117,7 +117,7 @@ async function runDevSetup(
   }
 
   if (!verified.success) {
-    deps.output.error('dev ingestion key not accepted');
+    deps.output.error('dev gateway key not accepted');
     return { exitCode: EXIT_CODE.authError };
   }
 

@@ -22,8 +22,8 @@ export async function verifyAndRegister(
     if (!verification.success) {
       deps.output.error(
         verification.message.length > 0
-          ? `ingestion key not accepted: ${verification.message}`
-          : 'ingestion key not accepted',
+          ? `gateway key not accepted: ${verification.message}`
+          : 'gateway key not accepted',
       );
       return { ok: false, result: { exitCode: EXIT_CODE.authError } };
     }
@@ -34,7 +34,7 @@ export async function verifyAndRegister(
     userId = verification.userId;
   } catch (err) {
     if (err instanceof AuthError) {
-      deps.output.error('ingestion key rejected by server (invalid, revoked, or wrong type)');
+      deps.output.error('gateway key rejected by server (invalid, revoked, or wrong type)');
       return { ok: false, result: { exitCode: EXIT_CODE.authError } };
     }
     deps.output.error(formatError('verify-key failed', err));
@@ -71,7 +71,7 @@ export async function verifyAndRegister(
   } catch (err) {
     if (err instanceof AuthError) {
       deps.output.error(
-        'this ingestion key is already bound to another machine; create a new ingestion key on https://proxai.co for this machine',
+        'this gateway key is already bound to another machine; create a new gateway key on https://proxai.co for this machine',
       );
       return { ok: false, result: { exitCode: EXIT_CODE.authError } };
     }

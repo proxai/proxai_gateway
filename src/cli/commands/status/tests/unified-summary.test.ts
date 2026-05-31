@@ -85,11 +85,11 @@ test('dev profile: not configured returns inactive level with dev setup hint', (
   expect(s.hint).toContain('--profile dev');
 });
 
-test('dev profile: auth failure returns error level with dev setup force hint', () => {
+test('dev profile: auth failure returns error level with dev setup-new hint', () => {
   const s = deriveUnifiedSummary({ ...BASE, authFailed: true, profileName: 'dev' });
   expect(s.level).toBe('error');
   expect(s.headline).toContain('authentication');
-  expect(s.hint).toContain('--profile dev --force');
+  expect(s.hint).toContain('setup new --profile dev');
 });
 
 test('dev profile: session stopped returns dev-specific headline and hint', () => {

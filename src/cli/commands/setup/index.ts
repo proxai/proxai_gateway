@@ -1,12 +1,10 @@
 import chalk from 'chalk';
 import { createActor } from 'xstate';
-import { join } from 'node:path';
+import { unlink } from 'node:fs/promises';
 
 import { sentinelHandle } from 'core/io/fs';
-import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
-import { readBootId } from 'core/system/boot-id.ts';
-import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
 import { nowIsoUtc } from 'core/utils';
+import { formatTimeWithRelative } from 'core/utils/format.ts';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
 import { loadConfigFromFile } from 'services/config';
@@ -19,8 +17,6 @@ import { autoStartDaemon, writeServiceUnitIfNeeded } from 'cli/commands/setup/in
 import { acquireApiKey } from 'cli/commands/setup/key-flow.ts';
 import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup/setup.types.ts';
 import { verifyAndRegister } from 'cli/commands/setup/verify-and-register.ts';
-import { runUpgrade } from 'cli/commands/upgrade.ts';
-import { buildUpgradeDeps } from 'cli/wiring/upgrade-deps.ts';
 
 function maskKey(key: string): string {
   if (key.length <= 8) return '***';
@@ -33,43 +29,27 @@ export async function runSetup(
   deps: SetupCommandDeps,
   options: SetupCommandOptions = {},
 ): Promise<CommandResult> {
-  const isInstalled = await deps.configExists();
-  if (isInstalled) {
-    if (
-      options.force !== true &&
-      (options.apiKey === undefined || options.apiKey.trim().length === 0)
-    ) {
-      deps.output.info('Gateway is already installed. Redirecting smoothly to upgrade flow...');
-      const upgradeDeps = buildUpgradeDeps({ binaryPath: deps.programPath });
-      const upgradeFn = deps.runUpgrade ?? runUpgrade;
-      return upgradeFn(upgradeDeps, {});
-    }
+  if (await deps.configExists()) {
+    return showSetupStatus(deps, options.apiKey !== undefined);
   }
+  return runConfigure(deps, options);
+}
 
+export async function runSetupNew(
+  deps: SetupCommandDeps,
+  options: SetupCommandOptions = {},
+): Promise<CommandResult> {
+  return runConfigure(deps, options);
+}
+
+async function runConfigure(
+  deps: SetupCommandDeps,
+  options: SetupCommandOptions,
+): Promise<CommandResult> {
+  const isReplace = await deps.configExists();
   const machine = createActor(setupMachine);
   machine.start();
   machine.send({ type: 'CONSENT_ACCEPTED' });
-
-  const isReplace = await deps.configExists();
-  const providedKey = options.apiKey?.trim();
-  const hasProvidedKey = providedKey !== undefined && providedKey.length > 0;
-
-  if (isReplace && options.force !== true) {
-    const existing = await tryLoadExistingConfig(deps);
-    if (hasProvidedKey && existing !== null && existing.account.apiKey !== providedKey) {
-      const wantsReplace = await deps.prompts.confirmReplace(
-        `This machine is already configured with ingestion key ${chalk.cyan(maskKey(existing.account.apiKey))}. Replace it with the new key ${chalk.cyan(maskKey(providedKey))}?`,
-      );
-      if (!wantsReplace) {
-        deps.output.info('aborted — keeping existing configuration');
-        machine.stop();
-        return reportAlreadyConfiguredAndMaybeStart(deps, options, existing);
-      }
-    } else {
-      machine.stop();
-      return reportAlreadyConfiguredAndMaybeStart(deps, options, existing);
-    }
-  }
 
   const keyResult = await acquireApiKey(deps, options, isReplace);
   if (!keyResult.ok) {
@@ -127,7 +107,7 @@ export async function runSetup(
   machine.send({ type: 'SENTINEL_WRITTEN' });
 
   if (isReplace) {
-    deps.output.success(`replaced (host_id: ${verifyResult.hostId})`);
+    deps.output.success(`gateway key replaced (host_id: ${verifyResult.hostId})`);
   } else {
     deps.output.success(`installed (host_id: ${verifyResult.hostId})`);
   }
@@ -135,6 +115,90 @@ export async function runSetup(
   const result = await autoStartDaemon(deps, options);
   machine.stop();
   return result;
+}
+
+async function showSetupStatus(
+  deps: SetupCommandDeps,
+  keyProvided = false,
+): Promise<CommandResult> {
+  const config = await tryLoadExistingConfig(deps);
+  if (config === null) {
+    deps.output.info('Gateway is configured, but the configuration could not be read.');
+    return { exitCode: EXIT_CODE.alreadyInstalled };
+  }
+
+  if (keyProvided) {
+    deps.output.info('proxai-gateway is already configured — your gateway key was not changed.');
+    deps.output.info('');
+  }
+
+  const lastSuccessAt =
+    deps.readLastSuccessAt !== undefined ? await deps.readLastSuccessAt() : null;
+  const nowDate = deps.now !== undefined ? new Date(deps.now()) : undefined;
+  const lastUpload =
+    lastSuccessAt !== null
+      ? formatTimeWithRelative(lastSuccessAt, nowDate !== undefined ? { now: nowDate } : {})
+      : null;
+
+  deps.output.info(`  ${chalk.green('●')} proxai-gateway — configured`);
+  deps.output.info(`    ├─ Gateway key : ${chalk.cyan(maskKey(config.account.apiKey))}`);
+  deps.output.info(
+    `    └─ Last upload : ${lastUpload !== null ? chalk.cyan(lastUpload) : chalk.dim('no successful upload yet')}`,
+  );
+  deps.output.info('');
+  deps.output.info(`To replace your gateway key, run ${chalk.cyan('proxai-gateway setup new')}.`);
+  deps.output.info(
+    `To clear it and reconfigure later, run ${chalk.cyan('proxai-gateway setup reset')}.`,
+  );
+  return { exitCode: EXIT_CODE.alreadyInstalled };
+}
+
+export async function runSetupReset(
+  deps: SetupCommandDeps,
+  options: SetupCommandOptions = {},
+): Promise<CommandResult> {
+  if (!(await deps.configExists())) {
+    deps.output.info('Gateway is not configured — nothing to reset.');
+    return { exitCode: EXIT_CODE.ok };
+  }
+
+  if (options.yes !== true) {
+    const confirmed = await deps.prompts.confirmPhrase(
+      `This stops the daemon and removes your gateway key. Buffered data and logs are kept. Type ${chalk.cyan('setup reset')} to confirm, or anything else to abort.`,
+      'setup reset',
+    );
+    if (!confirmed) {
+      deps.output.info('aborted — nothing changed');
+      return { exitCode: EXIT_CODE.alreadyInstalled };
+    }
+  }
+
+  if (deps.serviceManager !== undefined) {
+    try {
+      await deps.serviceManager.stop();
+    } catch {}
+    try {
+      await deps.serviceManager.unregister();
+    } catch {}
+  }
+  if (deps.serviceUnitPath !== null) {
+    try {
+      await unlink(deps.serviceUnitPath);
+    } catch {}
+  }
+  try {
+    await unlink(deps.configPath);
+  } catch {}
+  await clearAuthFailedSentinel(deps.authFailedSentinelPath);
+  if (deps.sessionStoppedSentinelPath !== undefined) {
+    try {
+      await sentinelHandle(deps.sessionStoppedSentinelPath).remove();
+    } catch {}
+  }
+
+  deps.output.success('gateway key removed — gateway is waiting for configuration.');
+  deps.output.info(`Run ${chalk.cyan('proxai-gateway setup')} to configure a new gateway key.`);
+  return { exitCode: EXIT_CODE.ok };
 }
 
 async function maybeWriteConsentSentinel(deps: SetupCommandDeps): Promise<void> {
@@ -153,96 +217,4 @@ async function tryLoadExistingConfig(deps: SetupCommandDeps): Promise<GatewayCon
   } catch {
     return null;
   }
-}
-
-async function tryLoadConfigFromPath(path: string): Promise<GatewayConfig | null> {
-  try {
-    return await loadConfigFromFile(path);
-  } catch {
-    return null;
-  }
-}
-
-async function reportAlreadyConfiguredAndMaybeStart(
-  deps: SetupCommandDeps,
-  options: SetupCommandOptions,
-  existing: GatewayConfig | null,
-): Promise<CommandResult> {
-  const isDevMode = await readDevModeSentinel(
-    join(profileRootDir(), 'DEV_MODE'),
-    deps.readBootId ?? readBootId,
-  );
-  if (isDevMode) {
-    deps.output.info('Configuration status:');
-    const devCtx = buildProfileContext('dev');
-    const prodCtx = buildProfileContext('prod');
-    const [devConfig, prodConfig] = await Promise.all([
-      tryLoadConfigFromPath(devCtx.configFilePath),
-      tryLoadConfigFromPath(prodCtx.configFilePath),
-    ]);
-
-    if (devConfig !== null) {
-      deps.output.info(`  [dev]  already configured (host_id: ${devConfig.account.hostId})`);
-      deps.output.info(`         installed at  ${devConfig.account.installedAt}`);
-      deps.output.info(`         install src   ${devConfig.account.installSource}`);
-    } else {
-      deps.output.info('  [dev]  not configured');
-    }
-
-    if (prodConfig !== null) {
-      deps.output.info(`  [prod] already configured (host_id: ${prodConfig.account.hostId})`);
-      deps.output.info(`         installed at  ${prodConfig.account.installedAt}`);
-      deps.output.info(`         install src   ${prodConfig.account.installSource}`);
-    } else {
-      deps.output.info('  [prod] not configured');
-    }
-    deps.output.info('');
-    deps.output.info(
-      `To override the existing configuration, run ${chalk.cyan('proxai-gateway setup --force')} or ${chalk.cyan('proxai-gateway setup --api-key <new-key>')}.`,
-    );
-  } else {
-    if (existing !== null) {
-      deps.output.info(`already configured (host_id: ${existing.account.hostId})`);
-      deps.output.info(`  installed at  ${existing.account.installedAt}`);
-      deps.output.info(`  install src   ${existing.account.installSource}`);
-    } else {
-      deps.output.info('already configured (could not read existing config)');
-    }
-  }
-  deps.output.info('');
-
-  if (options.noStart === true) {
-    if (!isDevMode) {
-      deps.output.info(
-        `Run ${chalk.cyan('proxai-gateway setup --force')} to re-enter your ingestion key, or ${chalk.cyan('proxai-gateway uninstall --reset')} to wipe and start fresh.`,
-      );
-    }
-    return { exitCode: EXIT_CODE.alreadyInstalled };
-  }
-
-  if (deps.serviceManager === undefined) {
-    if (!isDevMode) {
-      deps.output.info(
-        `Run ${chalk.cyan('proxai-gateway setup --force')} to re-enter your ingestion key, or ${chalk.cyan('proxai-gateway uninstall --reset')} to wipe and start fresh.`,
-      );
-    }
-    return { exitCode: EXIT_CODE.alreadyInstalled };
-  }
-
-  let running = false;
-  try {
-    running = await deps.serviceManager.isRunning();
-  } catch {
-    running = false;
-  }
-  if (running) {
-    deps.output.info(
-      `Daemon is running. View live status with ${chalk.cyan('proxai-gateway status')}.`,
-    );
-    return { exitCode: EXIT_CODE.alreadyInstalled };
-  }
-
-  deps.output.info('Daemon is not running — starting it now.');
-  await writeServiceUnitIfNeeded(deps);
-  return autoStartDaemon(deps, options);
 }
