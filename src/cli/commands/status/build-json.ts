@@ -1,7 +1,29 @@
 import { daysSince } from 'core/utils';
+import { toLocalIsoString } from 'core/utils/format.ts';
 
 import { inferDaemonAlive } from 'cli/commands/status/daemon-liveness.ts';
 import type { StatusJsonOutput, StatusSnapshot } from 'cli/commands/status/status.types.ts';
+
+const ISO_UTC_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+
+export function localizeStatusJsonTimes(value: unknown): unknown {
+  if (typeof value === 'string') {
+    if (!ISO_UTC_PATTERN.test(value)) return value;
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? toLocalIsoString(new Date(ms)) : value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => localizeStatusJsonTimes(item));
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      out[key] = localizeStatusJsonTimes(val);
+    }
+    return out;
+  }
+  return value;
+}
 
 export function buildEmptyStatusJson(): StatusJsonOutput {
   return {

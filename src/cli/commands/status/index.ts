@@ -11,7 +11,11 @@ export { inferDaemonAlive } from 'cli/commands/status/daemon-liveness.ts';
 import { inferDaemonAlive } from 'cli/commands/status/daemon-liveness.ts';
 import { isLocalBuildPath } from 'cli/commands/status/local-build.ts';
 
-import { buildEmptyStatusJson, buildStatusJson } from 'cli/commands/status/build-json.ts';
+import {
+  buildEmptyStatusJson,
+  buildStatusJson,
+  localizeStatusJsonTimes,
+} from 'cli/commands/status/build-json.ts';
 import { gatherStatusSnapshot } from 'cli/commands/status/gather-snapshot.ts';
 import { renderFullStatus } from 'cli/commands/status/render/render-full.ts';
 import type { RenderInputs } from 'cli/commands/status/render/render.types.ts';
@@ -52,7 +56,7 @@ async function runJsonStatus(deps: StatusCommandDeps): Promise<CommandResult> {
     );
     const emptyJson = buildEmptyStatusJson();
     emptyJson.isDevMode = isDevMode;
-    deps.output.info(JSON.stringify(emptyJson));
+    deps.output.info(JSON.stringify(localizeStatusJsonTimes(emptyJson)));
     return { exitCode: EXIT_CODE.notInstalled };
   }
   if (deps.buffer === undefined) {
@@ -60,7 +64,7 @@ async function runJsonStatus(deps: StatusCommandDeps): Promise<CommandResult> {
     return { exitCode: EXIT_CODE.error };
   }
   const snapshot = await gatherStatusSnapshot(deps, deps.buffer);
-  deps.output.info(JSON.stringify(buildStatusJson(snapshot)));
+  deps.output.info(JSON.stringify(localizeStatusJsonTimes(buildStatusJson(snapshot))));
   return { exitCode: EXIT_CODE.ok };
 }
 

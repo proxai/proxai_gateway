@@ -88,6 +88,23 @@ export function formatTimeWithRelative(iso: string, options: RelativeTimeOptions
   return rel.length > 0 ? `${ts} (${rel})` : ts;
 }
 
+export function toLocalIsoString(
+  date: Date,
+  offsetMinutes: number = -date.getTimezoneOffset(),
+): string {
+  const shifted = new Date(date.getTime() + offsetMinutes * MS_PER_MINUTE);
+  const pad = (n: number, width = 2): string => n.toString().padStart(width, '0');
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absOffset = Math.abs(offsetMinutes);
+  const offHours = pad(Math.trunc(absOffset / 60));
+  const offMinutes = pad(absOffset % 60);
+  return (
+    `${shifted.getUTCFullYear().toString()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}` +
+    `T${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}:${pad(shifted.getUTCSeconds())}` +
+    `.${pad(shifted.getUTCMilliseconds(), 3)}${sign}${offHours}:${offMinutes}`
+  );
+}
+
 export function formatBytes(n: number): string {
   if (!Number.isFinite(n) || n < 0) return '0 B';
   if (n < 1024) return `${n.toString()} B`;

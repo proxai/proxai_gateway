@@ -6,6 +6,7 @@ import {
   formatBytes,
   formatDuration,
   formatPercent,
+  toLocalIsoString,
 } from '../format.ts';
 
 test('formatLocalTimestamp formats ISO strings correctly', () => {
@@ -29,6 +30,27 @@ test('monthFromIso is used when locale produces a non-English month name', () =>
 
   const result = formatLocalTimestamp(ts, { locale: 'fr-FR', timeZone: 'UTC' });
   expect(result).toContain('May');
+});
+
+test('toLocalIsoString renders local ISO with an explicit positive offset', () => {
+  const date = new Date('2026-05-28T00:00:00.000Z');
+  expect(toLocalIsoString(date, 330)).toBe('2026-05-28T05:30:00.000+05:30');
+});
+
+test('toLocalIsoString renders local ISO with an explicit negative offset', () => {
+  const date = new Date('2026-05-28T00:00:00.000Z');
+  expect(toLocalIsoString(date, -420)).toBe('2026-05-27T17:00:00.000-07:00');
+});
+
+test('toLocalIsoString renders +00:00 for a zero offset', () => {
+  const date = new Date('2026-05-28T09:08:07.000Z');
+  expect(toLocalIsoString(date, 0)).toBe('2026-05-28T09:08:07.000+00:00');
+});
+
+test('toLocalIsoString defaults to the ambient local offset', () => {
+  const date = new Date('2026-05-28T00:00:00.000Z');
+  const ambientOffset = -date.getTimezoneOffset();
+  expect(toLocalIsoString(date)).toBe(toLocalIsoString(date, ambientOffset));
 });
 
 test('formatRelative returns relative string', () => {
