@@ -41,7 +41,6 @@ test('resolveSubAgentCapture returns false when no env vars set', () => {
   expect(resolveSubAgentCapture('claude-code', {})).toBe(false);
   expect(resolveSubAgentCapture('codex', {})).toBe(false);
   expect(resolveSubAgentCapture('cursor', {})).toBe(false);
-  expect(resolveSubAgentCapture('gemini-cli', {})).toBe(false);
   expect(resolveSubAgentCapture('claude-desktop', {})).toBe(false);
 });
 
@@ -50,7 +49,6 @@ test('global flag overrides all per-source flags', () => {
   expect(resolveSubAgentCapture('claude-code', env)).toBe(true);
   expect(resolveSubAgentCapture('codex', env)).toBe(true);
   expect(resolveSubAgentCapture('cursor', env)).toBe(true);
-  expect(resolveSubAgentCapture('gemini-cli', env)).toBe(true);
   expect(resolveSubAgentCapture('claude-desktop', env)).toBe(true);
 });
 
@@ -59,7 +57,6 @@ test('per-source flag enables only that source', () => {
   expect(resolveSubAgentCapture('claude-code', env)).toBe(true);
   expect(resolveSubAgentCapture('codex', env)).toBe(false);
   expect(resolveSubAgentCapture('cursor', env)).toBe(false);
-  expect(resolveSubAgentCapture('gemini-cli', env)).toBe(false);
   expect(resolveSubAgentCapture('claude-desktop', env)).toBe(false);
 });
 
@@ -68,7 +65,6 @@ test('codex per-source flag is independent', () => {
   expect(resolveSubAgentCapture('claude-code', env)).toBe(false);
   expect(resolveSubAgentCapture('codex', env)).toBe(true);
   expect(resolveSubAgentCapture('cursor', env)).toBe(false);
-  expect(resolveSubAgentCapture('gemini-cli', env)).toBe(false);
   expect(resolveSubAgentCapture('claude-desktop', env)).toBe(false);
 });
 
@@ -77,16 +73,6 @@ test('cursor per-source flag is independent', () => {
   expect(resolveSubAgentCapture('claude-code', env)).toBe(false);
   expect(resolveSubAgentCapture('codex', env)).toBe(false);
   expect(resolveSubAgentCapture('cursor', env)).toBe(true);
-  expect(resolveSubAgentCapture('gemini-cli', env)).toBe(false);
-  expect(resolveSubAgentCapture('claude-desktop', env)).toBe(false);
-});
-
-test('gemini-cli per-source flag is independent', () => {
-  const env = { PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_GEMINI_CLI: 'TRUE' };
-  expect(resolveSubAgentCapture('claude-code', env)).toBe(false);
-  expect(resolveSubAgentCapture('codex', env)).toBe(false);
-  expect(resolveSubAgentCapture('cursor', env)).toBe(false);
-  expect(resolveSubAgentCapture('gemini-cli', env)).toBe(true);
   expect(resolveSubAgentCapture('claude-desktop', env)).toBe(false);
 });
 
@@ -95,7 +81,6 @@ test('claude-desktop per-source flag is independent', () => {
   expect(resolveSubAgentCapture('claude-code', env)).toBe(false);
   expect(resolveSubAgentCapture('codex', env)).toBe(false);
   expect(resolveSubAgentCapture('cursor', env)).toBe(false);
-  expect(resolveSubAgentCapture('gemini-cli', env)).toBe(false);
   expect(resolveSubAgentCapture('claude-desktop', env)).toBe(true);
 });
 

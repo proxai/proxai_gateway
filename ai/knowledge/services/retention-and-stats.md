@@ -109,7 +109,7 @@ Extraction is **fault-tolerant**: any parse failure, missing field, or unknown s
 Per-source boundaries (user turn vs assistant turn vs tool output):
 - `claude-code`: `type === 'user'` turns in JSONL `message` arrays.
 - `cursor`: SQL KV pairs with the user's prompt key.
-- `codex` / `gemini-cli`: equivalent per-source parsing; specific field paths defined in each source's parser.
+- `codex`: equivalent per-source parsing; specific field paths defined in each source's parser.
 
 ## Display tiers
 

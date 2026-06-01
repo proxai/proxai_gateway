@@ -51,9 +51,6 @@ where possible:
 - `claude-code`: `extractAgentSchemaVersion(redactedFullText)` parses
   `version` / `message.version` from the JSONL itself
   (`sources/claude-code/collect.ts:273`).
-- `gemini-cli`: spawns `gemini --version` and prefixes with
-  `gemini-cli/`, validated against `/^[\w.+:/-]{1,64}$/`
-  (`sources/gemini-cli/collect.ts:179`).
 - `cursor`: `extractAgentSchemaVersion(kvRows)` reads the version key
   from the sqlite KV pairs (`sources/cursor/collect.ts:140`).
 - `codex`: parsed from the rollout/state file format.
@@ -85,4 +82,4 @@ so downstream consumers can fan out on it.
 - `ai/rules/sources/sources.md` — `SOURCE_VARIANTS` must include any
   new variant before `validateRawRecordDTO` will accept it.
 
-[source: src/sources/claude-code/collect.ts, src/sources/gemini-cli/collect.ts, src/sources/cursor/collect.ts, src/services/contract/contract.types.ts]
+[source: src/sources/claude-code/collect.ts, src/sources/cursor/collect.ts, src/services/contract/contract.types.ts]

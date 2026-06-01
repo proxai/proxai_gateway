@@ -246,15 +246,6 @@ test('countCapturedConversations returns accurate counts per source app', () => 
   });
 
   setCursor(db, {
-    sourceApp: 'gemini-cli',
-    sourcePathHash: 'c'.repeat(64),
-    sourcePath: '/path/3',
-    sourceInode: 3,
-    watermarkTable: null,
-    watermarkEnd: 30,
-  });
-
-  setCursor(db, {
     sourceApp: 'codex',
     sourcePathHash: 'd'.repeat(64),
     sourcePath: '/path/4',
@@ -275,7 +266,6 @@ test('countCapturedConversations returns accurate counts per source app', () => 
   const counts = countCapturedConversations(db);
   expect(counts['claude-code']).toBe(1);
   expect(counts.cursor).toBe(1);
-  expect(counts['gemini-cli']).toBe(1);
   expect(counts.codex).toBe(4);
 });
 

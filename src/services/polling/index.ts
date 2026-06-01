@@ -9,7 +9,6 @@ export * from 'services/polling/poll-claude-code.ts';
 export * from 'services/polling/poll-codex.ts';
 export * from 'services/polling/poll-cursor.ts';
 export * from 'services/polling/poll-cycle.ts';
-export * from 'services/polling/poll-gemini-cli.ts';
 export * from 'services/polling/polling.constants.ts';
 export * from 'services/polling/polling.types.ts';
 export * from 'services/polling/session-stopped-sentinel.ts';

@@ -442,7 +442,6 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     claudeCodeExists,
     cursorExists,
     codexExists,
-    geminiCliExists,
     networkResult,
     diskFreeBytes,
     installSource,
@@ -461,7 +460,6 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     probeSourcePathExists([homedir(), '.claude']),
     probeSourcePathExists([cursorConfigDir]),
     probeSourcePathExists([homedir(), '.codex']),
-    probeSourcePathExists([homedir(), '.config', 'gemini']),
     probeNestReachable(deps.nestVerifyKeyUrl),
     probeDiskFreeBytes(deps.configDirPath, deps.platform),
     probeInstallSource(deps.binaryPath, deps.platform),
@@ -555,7 +553,6 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
       claudeCodeExists,
       cursorExists,
       codexExists,
-      geminiCliExists,
     },
     resyncEvents: {
       totalCount: dbData.resyncStats.totalCount,

@@ -11,7 +11,6 @@ import type {
 import { makeClaudeCodeSourcePoller } from 'services/polling/poll-claude-code.ts';
 import { makeCodexSourcePoller } from 'services/polling/poll-codex.ts';
 import { makeCursorSourcePoller } from 'services/polling/poll-cursor.ts';
-import { makeGeminiCliSourcePoller } from 'services/polling/poll-gemini-cli.ts';
 import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.types.ts';
 import {
   discoverClaudeCodeFiles,
@@ -35,12 +34,6 @@ import {
   isAgentKvConversationBlob,
   trimCursorRowValue,
 } from 'sources/cursor';
-import {
-  discoverGeminiCliFiles,
-  defaultGeminiCliTmpRoot,
-  isGeminiCliDialogueRecord,
-  trimGeminiCliRecord,
-} from 'sources/gemini-cli';
 
 // Why: Bun's worker entrypoint exposes `self` as a `DedicatedWorkerGlobalScope`
 // equivalent at runtime. The shape we use is a narrow subset — message handler
@@ -76,7 +69,7 @@ function createCompressedSizer(): { add: (text: string) => void; finish: () => n
 
 function isPromptRecord(
   parsed: unknown,
-  sourceApp: 'claude-code' | 'gemini-cli' | 'codex' | 'claude-desktop',
+  sourceApp: 'claude-code' | 'codex' | 'claude-desktop',
 ): boolean {
   const rec = parsed as Record<string, unknown>;
   if (sourceApp === 'codex') {
@@ -118,7 +111,7 @@ function isCursorPromptRow(key: string, value: string | null): boolean {
 
 async function analyzeJsonlLogFile(
   filePath: string,
-  sourceApp: 'claude-code' | 'gemini-cli' | 'codex' | 'claude-desktop',
+  sourceApp: 'claude-code' | 'codex' | 'claude-desktop',
 ): Promise<{
   totalLines: number;
   oldestDate: string | null;
@@ -169,12 +162,6 @@ async function analyzeJsonlLogFile(
       let lineBytes = Buffer.byteLength(line, 'utf8') + 1;
       if (sourceApp === 'claude-code' || sourceApp === 'claude-desktop') {
         match = isDialogueRecord(parsed);
-      } else if (sourceApp === 'gemini-cli') {
-        match = isGeminiCliDialogueRecord(parsed);
-        if (match) {
-          capturedText = JSON.stringify(trimGeminiCliRecord(parsed));
-          lineBytes = Buffer.byteLength(capturedText, 'utf8') + 1;
-        }
       } else if (sourceApp === 'codex') {
         match = isCodexDialogueRecord(parsed);
         if (match) {
@@ -369,34 +356,6 @@ export async function handleInspect(
         }
       }
     }
-  } else if (sourceName === 'gemini-cli') {
-    const baseDir = options.baseDir ?? defaultGeminiCliTmpRoot();
-    const files = await discoverGeminiCliFiles(baseDir, { minimumMtime: null });
-    for (const f of files) {
-      filesProcessed++;
-      totalBytes += f.sizeBytes;
-      const {
-        totalLines,
-        oldestDate,
-        newestDate,
-        telemetryRecordCount: telCount,
-        telemetryRawBytes: telBytes,
-        telemetryCompressedBytes: telComp,
-        promptCount: telPrompts,
-        error,
-      } = await analyzeJsonlLogFile(f.sourcePath, 'gemini-cli');
-      recordCount += totalLines;
-      updateChronological(oldestDate, f.lastModifiedMs);
-      updateChronological(newestDate, f.lastModifiedMs);
-
-      telemetryRawBytes += telBytes;
-      telemetryCompressedBytes += telComp;
-      telemetryRecordCount += telCount;
-      promptCount += telPrompts;
-      if (error !== null) {
-        errors.push(`${f.sourcePath}: ${error}`);
-      }
-    }
   } else if (sourceName === 'codex') {
     const baseDir = options.baseDir ?? defaultCodexHome();
 
@@ -545,8 +504,6 @@ export async function handleCapture(
       poller = makeClaudeCodeSourcePoller(pollerOpts);
     } else if (sourceName === 'cursor') {
       poller = makeCursorSourcePoller(pollerOpts);
-    } else if (sourceName === 'gemini-cli') {
-      poller = makeGeminiCliSourcePoller(pollerOpts);
     } else if (sourceName === 'codex') {
       poller = makeCodexSourcePoller(pollerOpts);
     } else {

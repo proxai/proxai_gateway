@@ -163,13 +163,6 @@ export function countCapturedConversations(db: Database): Record<SourceApp, numb
     >(`SELECT COUNT(DISTINCT ${CURSOR_COLS.sourcePath}) AS count FROM ${BUFFER_TABLES.cursors} WHERE ${CURSOR_COLS.sourceApp} = ?`)
     .get('cursor');
 
-  const geminiCliRow = db
-    .query<
-      { count: number },
-      [string]
-    >(`SELECT COUNT(DISTINCT ${CURSOR_COLS.sourcePath}) AS count FROM ${BUFFER_TABLES.cursors} WHERE ${CURSOR_COLS.sourceApp} = ?`)
-    .get('gemini-cli');
-
   const claudeDesktopRow = db
     .query<
       { count: number },
@@ -194,7 +187,6 @@ export function countCapturedConversations(db: Database): Record<SourceApp, numb
   return {
     'claude-code': claudeCodeRow?.count ?? 0,
     cursor: cursorRow?.count ?? 0,
-    'gemini-cli': geminiCliRow?.count ?? 0,
     'claude-desktop': claudeDesktopRow?.count ?? 0,
     codex: (codexThreadsRow?.total ?? 0) + (codexRolloutsRow?.count ?? 0),
   };

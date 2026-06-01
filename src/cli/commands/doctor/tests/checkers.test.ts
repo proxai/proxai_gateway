@@ -165,7 +165,6 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
       claudeCodeExists: true,
       cursorExists: false,
       codexExists: false,
-      geminiCliExists: false,
     },
     resyncEvents: {
       totalCount: 0,
@@ -668,7 +667,6 @@ test('D1: no agent activity, info when source dirs exist', () => {
           claudeCodeExists: true,
           cursorExists: false,
           codexExists: false,
-          geminiCliExists: false,
         },
       }),
     ),
@@ -686,7 +684,6 @@ test('D1: warning when no source dirs exist at all', () => {
           claudeCodeExists: false,
           cursorExists: false,
           codexExists: false,
-          geminiCliExists: false,
         },
       }),
     ),

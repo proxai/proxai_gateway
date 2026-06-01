@@ -263,14 +263,14 @@ test('queryPending returns an empty array when there are no pending batches', ()
 
 test('queryPending maps pending batch columns including body', () => {
   const batch = newBatch({
-    sourceApp: 'gemini-cli',
-    sourcePath: '/Users/test/g.log',
+    sourceApp: 'claude-desktop',
+    sourcePath: '/Users/test/claude-desktop.log',
     body: new Uint8Array([9, 9, 9]),
   });
   insertBatch(db, batch);
   const first = requireDefined(queryPending(db, { limit: 10 })[0]);
-  expect(first.sourceApp).toBe('gemini-cli');
-  expect(first.sourcePath).toBe('/Users/test/g.log');
+  expect(first.sourceApp).toBe('claude-desktop');
+  expect(first.sourcePath).toBe('/Users/test/claude-desktop.log');
   expect(first.attempts).toBe(0);
   expect(first.sizeBytes).toBe(3);
   expect(first.bodyFormat).toBe('jsonl');

@@ -24,7 +24,7 @@ No mode bits are applied. Files inherit ACLs from the parent (`%LOCALAPPDATA%\pr
 | Operation | macOS | Linux | Windows |
 | --- | --- | --- | --- |
 | Read source SQLite files (Cursor, Codex state) | read access to user home | same | same |
-| Read source JSONL files (Claude Code, Codex rollouts, Gemini CLI) | read access to user home | same | same |
+| Read source JSONL files (Claude Code, Codex rollouts, Claude Desktop) | read access to user home | same | same |
 | Write `configDir`, `logDir`, sentinels | user write | user write | user write |
 | Spawn `launchctl` / `systemctl` / `schtasks` | user (no `sudo`) | user (no `sudo`) | user (no UAC) |
 | Register `LaunchAgent` | user (writes to `~/Library/LaunchAgents/`) | n/a | n/a |

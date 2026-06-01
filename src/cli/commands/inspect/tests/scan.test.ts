@@ -55,10 +55,10 @@ test('isCompiledRuntime: false under the test runner', () => {
 });
 
 test('resolveSourceBaseDir: maps every source and unknown input', () => {
-  const baseDirs = { claudeCode: 'a', cursor: 'b', geminiCli: 'c', codex: 'd' };
+  const baseDirs = { claudeCode: 'a', cursor: 'b', claudeDesktop: 'c', codex: 'd' };
   expect(resolveSourceBaseDir('claude-code', baseDirs)).toBe('a');
   expect(resolveSourceBaseDir('cursor', baseDirs)).toBe('b');
-  expect(resolveSourceBaseDir('gemini-cli', baseDirs)).toBe('c');
+  expect(resolveSourceBaseDir('claude-desktop', baseDirs)).toBe('c');
   expect(resolveSourceBaseDir('codex', baseDirs)).toBe('d');
   expect(resolveSourceBaseDir('unknown', baseDirs)).toBeUndefined();
   expect(resolveSourceBaseDir('codex', undefined)).toBeUndefined();

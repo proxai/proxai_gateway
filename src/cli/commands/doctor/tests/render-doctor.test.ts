@@ -70,7 +70,6 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
       claudeCodeExists: false,
       cursorExists: false,
       codexExists: false,
-      geminiCliExists: false,
     },
     resyncEvents: {
       totalCount: 0,

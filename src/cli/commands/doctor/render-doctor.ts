@@ -136,7 +136,6 @@ function renderSignalsAppendix(signals: DoctorSignals, width: number): string {
   lines.push(`  claude_code_exists:      ${formatBool(signals.sourcePaths.claudeCodeExists)}`);
   lines.push(`  cursor_exists:           ${formatBool(signals.sourcePaths.cursorExists)}`);
   lines.push(`  codex_exists:            ${formatBool(signals.sourcePaths.codexExists)}`);
-  lines.push(`  gemini_cli_exists:       ${formatBool(signals.sourcePaths.geminiCliExists)}`);
   lines.push('');
   lines.push('Resync events:');
   lines.push(`  total_count:             ${formatNum(signals.resyncEvents.totalCount)}`);
@@ -487,7 +486,6 @@ export function generateDoctorHtml(
       sigRow('claude_code_exists', htmlBool(signals.sourcePaths.claudeCodeExists)),
       sigRow('cursor_exists', htmlBool(signals.sourcePaths.cursorExists)),
       sigRow('codex_exists', htmlBool(signals.sourcePaths.codexExists)),
-      sigRow('gemini_cli_exists', htmlBool(signals.sourcePaths.geminiCliExists)),
     ]),
     sigCard('Host & Resync', [
       sigRow('resync_total', htmlNum(signals.resyncEvents.totalCount)),

@@ -10,7 +10,7 @@
 interface RawRecordDTO {
   capture_id: string;
   host_id: string;
-  source_app: 'claude-code' | 'cursor' | 'codex' | 'gemini-cli';
+  source_app: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop';
   source_kind: 'jsonl_append' | 'sqlite_kv_snapshot' | 'sqlite_table_snapshot';
   source_path: string;
   source_path_hash: string;
@@ -29,7 +29,7 @@ interface RawRecordDTO {
 
 | Kind | Fields | Used by |
 | --- | --- | --- |
-| `byte_range` | `{ kind: 'byte_range', start, end, table: null }` | claude-code, codex rollouts, gemini-cli |
+| `byte_range` | `{ kind: 'byte_range', start, end, table: null }` | claude-code, codex rollouts, claude-desktop |
 | `rowid_range` | `{ kind: 'rowid_range', start, end, table: string \| null }` | cursor (table: null), codex state (table: 'threads' / 'thread_dynamic_tools' / 'thread_spawn_edges') |
 
 ## `SOURCE_VARIANTS` matrix
@@ -42,7 +42,7 @@ Five entries; canonical enumeration of allowed `(sourceApp, sourceKind, bodyForm
 | `codex` | `jsonl_append` | `jsonl` | `byte_range` | false |
 | `cursor` | `sqlite_kv_snapshot` | `kv_pairs_json` | `rowid_range` | false |
 | `codex` | `sqlite_table_snapshot` | `sqlite_rows_json` | `rowid_range` | true |
-| `gemini-cli` | `jsonl_append` | `jsonl` | `byte_range` | false |
+| `claude-desktop` | `jsonl_append` | `jsonl` | `byte_range` | false |
 
 Codex appears twice (rollouts JSONL + state SQLite). Adding a new agent requires a new entry here and a matching test case in `validateRawRecordDTO` tests.
 

@@ -192,27 +192,6 @@ test('handleInspect: codex with sqlite state and rollout jsonl files', async () 
   expect(result.promptCount).toBe(1);
 });
 
-test('handleInspect: gemini-cli inspect block coverage', async () => {
-  const geminiDir = join(dir, 'project-1', 'chats');
-  await mkdir(geminiDir, { recursive: true });
-  const logPath = join(geminiDir, 'session-1.jsonl');
-  const lines = [
-    '{"id":"e1","timestamp":"2026-01-01T00:00:00Z","type":"user","content":[{"text":"hi"}]}',
-    '{"id":"e2","timestamp":"2026-01-01T00:00:01Z","type":"gemini","content":[{"text":"hello"}]}',
-  ];
-  await writeFile(logPath, lines.join('\n') + '\n');
-
-  const result = await handleInspect('gemini-cli', {
-    baseDir: dir,
-    priorCursors: [],
-    gatewayVersion: 'gw-0.1',
-    maxDecompressedBytes: 9 * 1024 * 1024,
-  });
-
-  expect(result.filesProcessed).toBe(1);
-  expect(result.telemetryRecordCount).toBe(2);
-});
-
 test('handleInspect: handles file inspect errors and codex errors gracefully', async () => {
   // chmod 0o000 only blocks reads on POSIX; Windows ignores the bits, so the
   // file-read-error scenarios (1, 4, 5) can't be reproduced there.
@@ -266,24 +245,7 @@ test('handleInspect: handles file inspect errors and codex errors gracefully', a
   // Clean up cursor invalid file before next tests so they don't interfere
   await rmRecursive(cursorGlobalDir);
 
-  // 4. Gemini-CLI chats file read error: an unreadable chats file (POSIX only)
-  if (posix) {
-    const geminiDir = join(dir, 'gemini-proj-err', 'chats');
-    await mkdir(geminiDir, { recursive: true });
-    const errGeminiPath = join(geminiDir, 'session-1.jsonl');
-    await writeFile(errGeminiPath, 'invalid-log-data');
-    await chmod(errGeminiPath, 0o000);
-
-    const resultGemini = await handleInspect('gemini-cli', {
-      baseDir: dir,
-      priorCursors: [],
-      gatewayVersion: 'gw-0.1',
-      maxDecompressedBytes: 9 * 1024 * 1024,
-    });
-    expect(resultGemini.errors.length).toBe(1);
-  }
-
-  // 5. Codex rollout session file inspect error: an unreadable rollout (POSIX only)
+  // 4. Codex rollout session file inspect error: an unreadable rollout (POSIX only)
   if (posix) {
     const codexDir = join(dir, 'codex-proj-err');
     const rolloutDir = join(codexDir, 'sessions', '2026', '05', '21');
@@ -348,7 +310,7 @@ test('handleCapture: supports options.priorCursors, custom baseDir, and throws o
   ).rejects.toThrow('Unknown source poller: unknown-poller');
 });
 
-test('handleCapture: runs capture for cursor and gemini-cli successfully, maps quarantine', async () => {
+test('handleCapture: runs capture for cursor successfully, maps quarantine', async () => {
   // Mock Database.prototype.query specifically to return quarantine rows
   const originalQuery = Database.prototype.query;
   let injectQuarantine = false;
@@ -395,19 +357,6 @@ test('handleCapture: runs capture for cursor and gemini-cli successfully, maps q
     expect(cursorOutcome.quarantine[0]?.rowPk).toBe('pk1');
 
     injectQuarantine = false;
-    // Test gemini-cli poller with chats subdirectory
-    const geminiDir = join(dir, 'project-1', 'chats');
-    await mkdir(geminiDir, { recursive: true });
-    const logPath = join(geminiDir, 'session-1.jsonl');
-    await writeFile(logPath, '{"type":"user","content":[{"text":"hi"}]}\n');
-
-    const geminiOutcome = await handleCapture('gemini-cli', {
-      baseDir: dir,
-      priorCursors: [],
-      gatewayVersion: 'gw-0.1',
-      maxDecompressedBytes: 9 * 1024 * 1024,
-    });
-    expect(geminiOutcome.filesProcessed).toBe(1);
   } finally {
     Database.prototype.query = originalQuery;
   }

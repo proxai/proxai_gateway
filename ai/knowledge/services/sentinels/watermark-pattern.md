@@ -11,7 +11,7 @@ From `services/contract/contract.types.ts:9-25`:
 
 - `byte_range` — for append-only JSONL files. `start` and `end` are byte
   offsets into the file. `table` is always `null`. Used by claude-code,
-  codex rollouts, gemini-cli.
+  codex rollouts, claude-desktop.
 - `rowid_range` — for sqlite-backed sources. `start` and `end` are
   sqlite `rowid` values + 1 (exclusive upper bound). `table` is `null`
   for cursor (kv-snapshot) and a string for codex state

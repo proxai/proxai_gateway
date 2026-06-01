@@ -248,7 +248,6 @@ test('source paths existing are detected', async () => {
   expect(typeof signals.sourcePaths.claudeCodeExists).toBe('boolean');
   expect(typeof signals.sourcePaths.cursorExists).toBe('boolean');
   expect(typeof signals.sourcePaths.codexExists).toBe('boolean');
-  expect(typeof signals.sourcePaths.geminiCliExists).toBe('boolean');
 });
 
 test('linux: systemd linger null when loginctl is absent', async () => {

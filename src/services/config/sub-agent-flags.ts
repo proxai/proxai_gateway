@@ -6,7 +6,6 @@ const PER_SOURCE_ENV_VAR: Readonly<Record<SourceApp, string>> = {
   'claude-code': 'PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_CLAUDE_CODE',
   codex: 'PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_CODEX',
   cursor: 'PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_CURSOR',
-  'gemini-cli': 'PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_GEMINI_CLI',
   'claude-desktop': 'PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_CLAUDE_DESKTOP',
 };
 
@@ -29,6 +28,5 @@ export const SUB_AGENT_CAPTURE_BY_SOURCE: Readonly<Record<SourceApp, boolean>> =
   'claude-code': resolveSubAgentCapture('claude-code'),
   codex: resolveSubAgentCapture('codex'),
   cursor: resolveSubAgentCapture('cursor'),
-  'gemini-cli': resolveSubAgentCapture('gemini-cli'),
   'claude-desktop': resolveSubAgentCapture('claude-desktop'),
 };

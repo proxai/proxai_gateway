@@ -81,17 +81,6 @@ function extractClaudeCodeUserPrompt(rec: Record<string, unknown>): PromptResult
   return { userPrompt: truncated, userPromptAddedAt: ts };
 }
 
-function extractGeminiUserPrompt(rec: Record<string, unknown>): PromptResult | null {
-  if (rec.type !== 'user') return null;
-
-  const text = extractTextFromContent(rec.content);
-  if (text === null) return null;
-
-  const truncated = text.slice(0, USER_PROMPT_MAX_CHARS);
-  const ts = timestampFromRecord(rec);
-  return { userPrompt: truncated, userPromptAddedAt: ts };
-}
-
 function extractCodexRolloutUserPrompt(rec: Record<string, unknown>): PromptResult | null {
   if (rec.type !== 'response_item') return null;
   if (!isRecord(rec.payload)) return null;
@@ -128,11 +117,6 @@ function extractClaudeCodeAssistant(rec: Record<string, unknown>): string | null
   return extractTextFromContent(resolveDialogueContent(rec));
 }
 
-function extractGeminiAssistant(rec: Record<string, unknown>): string | null {
-  if (rec.type !== 'gemini') return null;
-  return extractTextFromContent(rec.content);
-}
-
 function extractCodexAssistant(rec: Record<string, unknown>): string | null {
   if (rec.type !== 'response_item') return null;
   if (!isRecord(rec.payload)) return null;
@@ -141,7 +125,7 @@ function extractCodexAssistant(rec: Record<string, unknown>): string | null {
   return extractTextFromContent(payload.content);
 }
 
-export type JsonlSourceApp = 'claude-code' | 'gemini-cli' | 'codex';
+export type JsonlSourceApp = 'claude-code' | 'codex';
 
 export function extractAssistantFromJsonl(text: string, sourceApp: JsonlSourceApp): string | null {
   const lines = text.split('\n');
@@ -158,8 +142,6 @@ export function extractAssistantFromJsonl(text: string, sourceApp: JsonlSourceAp
     let response: string | null = null;
     if (sourceApp === 'claude-code') {
       response = extractClaudeCodeAssistant(parsed);
-    } else if (sourceApp === 'gemini-cli') {
-      response = extractGeminiAssistant(parsed);
     } else {
       response = extractCodexAssistant(parsed);
     }
@@ -183,8 +165,6 @@ export function extractFromJsonl(text: string, sourceApp: JsonlSourceApp): Promp
     let result: PromptResult | null = null;
     if (sourceApp === 'claude-code') {
       result = extractClaudeCodeUserPrompt(parsed);
-    } else if (sourceApp === 'gemini-cli') {
-      result = extractGeminiUserPrompt(parsed);
     } else {
       result = extractCodexRolloutUserPrompt(parsed);
     }

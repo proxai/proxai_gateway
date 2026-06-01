@@ -131,7 +131,6 @@ test('renderBufferSection prints per-source pending sub-rows with bytes when any
       'claude-code': { pending: 3, pendingBytes: 700, failed: 0, failedBytes: 0, delivered: 0 },
       cursor: { pending: 2, pendingBytes: 324, failed: 0, failedBytes: 0, delivered: 0 },
       codex: { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
-      'gemini-cli': { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
       'claude-desktop': { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
     },
     now: NOW,
@@ -165,7 +164,6 @@ test('renderBufferSection prints per-source failed sub-rows when failed count > 
       },
       cursor: { pending: 0, pendingBytes: 0, failed: 1, failedBytes: 1024, delivered: 0 },
       codex: { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
-      'gemini-cli': { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
       'claude-desktop': { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
     },
     now: NOW,
@@ -185,7 +183,6 @@ test('renderUploadSection writes all-time, avg, last cycle, last success when po
       'claude-code': { batches: 70, bytes: 9 * 1024 * 1024 },
       cursor: { batches: 14, bytes: 2 * 1024 * 1024 },
       codex: { batches: 2, bytes: 512 * 1024 },
-      'gemini-cli': { batches: 0, bytes: 0 },
       'claude-desktop': { batches: 0, bytes: 0 },
     },
     lastCycleCompletedAt: '2026-05-08T13:28:50Z',
@@ -205,7 +202,6 @@ test('renderUploadSection writes all-time, avg, last cycle, last success when po
   expect(joined).toContain('Claude Code');
   expect(joined).toContain('Cursor');
   expect(joined).toContain('Codex');
-  expect(joined).not.toMatch(/Gemini CLI\s+0 batches/);
   expect(joined).toContain('Avg / drain');
   expect(joined).toContain('Last drain');
   expect(joined).toContain('Last success');
@@ -246,7 +242,6 @@ test('renderUploadSection colors retriable and fatal when nonzero, omits zero pe
       'claude-code': { batches: 1, bytes: 1 },
       cursor: { batches: 0, bytes: 0 },
       codex: { batches: 0, bytes: 0 },
-      'gemini-cli': { batches: 0, bytes: 0 },
       'claude-desktop': { batches: 0, bytes: 0 },
     },
     lastCycleCompletedAt: '2026-05-08T13:28:50Z',

@@ -97,7 +97,7 @@ test('countsBySource reports zero for all known apps on empty buffer', () => {
     failedBytes: 0,
     delivered: 0,
   });
-  expect(counts['gemini-cli']).toEqual({
+  expect(counts['claude-desktop']).toEqual({
     pending: 0,
     pendingBytes: 0,
     failed: 0,

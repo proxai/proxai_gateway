@@ -8,8 +8,7 @@ export function checkD1NoAgentActivity(signals: DoctorSignals): Finding | null {
   const anySourceExists =
     signals.sourcePaths.claudeCodeExists ||
     signals.sourcePaths.cursorExists ||
-    signals.sourcePaths.codexExists ||
-    signals.sourcePaths.geminiCliExists;
+    signals.sourcePaths.codexExists;
 
   if (anySourceExists) {
     return {
@@ -27,8 +26,7 @@ export function checkD1NoAgentActivity(signals: DoctorSignals): Finding | null {
     code: 'D1',
     severity: Severity.warning,
     confidence: Confidence.likely,
-    cause:
-      'No supported coding agents (Claude Code, Cursor, Codex, Gemini CLI) are detected on this system.',
+    cause: 'No supported coding agents (Claude Code, Cursor, Codex) are detected on this system.',
     action:
       'Install a supported coding agent, start a session, and run a prompt to begin capturing activity.',
   };

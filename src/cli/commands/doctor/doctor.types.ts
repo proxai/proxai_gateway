@@ -176,7 +176,6 @@ export interface DoctorSignals {
     readonly claudeCodeExists: boolean;
     readonly cursorExists: boolean;
     readonly codexExists: boolean;
-    readonly geminiCliExists: boolean;
   };
   readonly resyncEvents: {
     readonly totalCount: number;

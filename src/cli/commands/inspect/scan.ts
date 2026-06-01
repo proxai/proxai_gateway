@@ -31,7 +31,6 @@ export function resolveSourceBaseDir(
   if (baseDirs === undefined) return undefined;
   if (sourceName === 'claude-code') return baseDirs.claudeCode;
   if (sourceName === 'cursor') return baseDirs.cursor;
-  if (sourceName === 'gemini-cli') return baseDirs.geminiCli;
   if (sourceName === 'codex') return baseDirs.codex;
   if (sourceName === 'claude-desktop') return baseDirs.claudeDesktop;
   return undefined;

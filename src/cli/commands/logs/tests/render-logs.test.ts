@@ -70,7 +70,7 @@ function failed(overrides: Partial<FailedRecord> = {}): FailedRecord {
 function pending(overrides: Partial<PendingRecord> = {}): PendingRecord {
   return {
     captureId: '0190abcd-0000-7000-8000-000000000003',
-    sourceApp: 'gemini-cli',
+    sourceApp: 'claude-desktop',
     capturedAtUtc: '2026-05-08T02:20:00.000Z',
     sourcePath: '/home/user/project/chat.jsonl',
     sourcePathHash: 'pendinghash',
@@ -81,7 +81,7 @@ function pending(overrides: Partial<PendingRecord> = {}): PendingRecord {
     watermarkStart: 0,
     watermarkEnd: 256,
     watermarkTable: null,
-    agentSchemaVersion: 'gemini-cli/3.0',
+    agentSchemaVersion: 'claude-desktop/3.0',
     gatewayVersion: '2026.5.8',
     sourceInode: 7,
     sizeBytes: 1024,

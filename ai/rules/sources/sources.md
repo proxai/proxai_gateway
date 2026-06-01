@@ -18,4 +18,3 @@ globs: ["src/**/*.ts", "**/*.ts"]
 - Per-source `collect` functions must maintain `consecutive_errors` on the cursor: catch-block reads the prior cursor and upserts with `consecutiveErrors: priorErrors + 1`; success path upserts with `consecutiveErrors: 0`.
 - The five `SOURCE_VARIANTS` in `contract.constants.ts` are the canonical enumeration of valid `(sourceApp, sourceKind, bodyFormat, watermarkKind, watermarkTableRequired)` tuples. Never add a source without a matching entry there validated by `validateRawRecordDTO`.
 - The `PROXAI_GATEWAY_CAPTURE_SUB_AGENTS*` env-var flags are maintainer-only and must not appear in CLI `--help`, `config.toml`, or README. They are read once at module load (`sub-agent-flags.ts`); a daemon restart is required to change them.
-- Gemini CLI: always skip the header line (`GEMINI_CLI_HEADER_MAX_BYTES = 64 KiB` cap) on first capture. The cursor for a fresh Gemini file must start at the byte after the header, not at 0.

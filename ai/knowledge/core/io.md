@@ -56,7 +56,7 @@ Streaming JSONL parser plus a "read up to last complete line" range helper.
 
 Constants: `NEWLINE_BYTE = 0x0a`, `JSONL_DECODER = TextDecoder('utf-8', { fatal: false })` (`jsonl.constants.ts`).
 
-Both helpers are used by every JSONL-backed source (Claude Code, Codex rollouts, Gemini CLI). The byte-offset is the absolute file offset of the line start (`baseOffset + lineStart`), which sources use to advance their watermark to "end of last complete line".
+Both helpers are used by every JSONL-backed source (Claude Code, Codex rollouts, Claude Desktop). The byte-offset is the absolute file offset of the line start (`baseOffset + lineStart`), which sources use to advance their watermark to "end of last complete line".
 
 ## `core/io/sqlite/`
 

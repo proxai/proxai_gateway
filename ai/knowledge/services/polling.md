@@ -31,7 +31,7 @@ Sleep is abortable: `options.sleep ?? abortableSleep` from `core/utils`. The `Ab
 ## Capture cycle internals (`capture-cycle.ts`)
 
 1. Sentinel gate check (auth → buffer-full); first hit returns a `CaptureCycleResult` with the relevant flag set and `sourceResults: {}`, `pressureResult: null`. Skipped cycles do not bump `capture_cycles_total`.
-2. For each registered source: `pollSourceInWorker(source, ctx)` if the source is in `['claude-code', 'cursor', 'gemini-cli', 'codex']`, else `source.poll(sourceCtx)` directly.
+2. For each registered source: `pollSourceInWorker(source, ctx)` if the source is in `['claude-code', 'cursor', 'codex']`, else `source.poll(sourceCtx)` directly.
 3. Worker dispatch dual-mode: when running under `bun build --compile`, `import.meta.url` includes `$bunfs` or `bun:wrap` — in that case the worker runs in-process (`handleCapture` called directly) because `new Worker(new URL('./poll-worker.ts', import.meta.url))` cannot resolve a relative module from inside the compiled binary. Both branches commit results identically.
 4. Each worker returns `{ batches[], quarantine[], cursors[] }`. The main thread wraps `insertBatch` + `recordQuarantine` + `setCursor` calls in a single `ctx.buffer.transaction(() => …)` per source — ACID guarantee against partial cursor advance.
 5. `applyPressureSentinel(ctx, log)` runs after all sources; on `shouldPause` it writes `BUFFER_FULL` with `{ pendingBytes, threshold, setAt }`.
@@ -70,7 +70,7 @@ All writes go through `sentinelHandle(path).write(payload)` which uses `writeAto
 
 ## Source registry
 
-`buildDefaultSources(options)` returns four `RegisteredSource` entries (claude-code, cursor, codex, gemini-cli), each with `{ name, poll: makeXxxSourcePoller(opts), baseDir? }`. Each poller wraps the source's `discover` + `collect` per-file. The capture cycle's worker-dispatch shortcut bypasses these in-process pollers when running default sources — the worker calls `handleCapture` directly.
+`buildDefaultSources(options)` returns four `RegisteredSource` entries (claude-code, cursor, codex, claude-desktop), each with `{ name, poll: makeXxxSourcePoller(opts), baseDir? }`. Each poller wraps the source's `discover` + `collect` per-file. The capture cycle's worker-dispatch shortcut bypasses these in-process pollers for `claude-code`, `cursor`, and `codex` — the worker calls `handleCapture` directly. `claude-desktop` is the exception: it is **not** in the worker-dispatch set, so it always runs through its in-process poller (`makeClaudeDesktopSourcePoller` → `source.poll`). Note the worker's `handleCapture` only knows the three worker sources (it throws on any other `sourceName`); only the worker's `handleInspect` has a `claude-desktop` branch, used by the `inspect` dry-run command.
 
 ## `runPollCycle` (one-shot)
 

@@ -68,6 +68,6 @@ There is none. The daemon reads config once at start; SIGHUP does not re-read. T
 
 ## `sub-agent-flags`
 
-`PROXAI_GATEWAY_CAPTURE_SUB_AGENTS` (global) and four per-source variants (`_CLAUDE_CODE`, `_CODEX`, `_CURSOR`, `_GEMINI_CLI`) are read **at module load** into a frozen `SUB_AGENT_CAPTURE_BY_SOURCE` record. A daemon restart is required to flip them. These flags are maintainer-only and intentionally absent from `--help` / `config.toml` / README.
+`PROXAI_GATEWAY_CAPTURE_SUB_AGENTS` (global) and four per-source variants (`_CLAUDE_CODE`, `_CODEX`, `_CURSOR`, `_CLAUDE_DESKTOP`) are read **at module load** into a frozen `SUB_AGENT_CAPTURE_BY_SOURCE` record. A daemon restart is required to flip them. These flags are maintainer-only and intentionally absent from `--help` / `config.toml` / README.
 
 [source: src/services/config/config.constants.ts:1-48; src/services/config/config.types.ts:1-49; src/services/config/loader.ts:8-26; src/services/config/validate.ts:35-267; src/services/config/writer.ts:6-52; src/services/config/install-source-infer.ts:5-17; src/services/config/sub-agent-flags.ts:1-32]

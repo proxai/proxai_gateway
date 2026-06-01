@@ -25,11 +25,12 @@ Every parser exposes the same two-call pipeline used by the polling layer:
 | codex rollout| `~/.codex`                                       | `sessions/*/*/*/rollout-*.jsonl`                              | JSONL append |
 | codex state  | `~/.codex`                                       | `state_*.sqlite` (highest-numbered only)                      | sqlite (table snapshot) |
 | cursor       | `~/Library/Application Support/Cursor/User` (macOS); `~/.config/Cursor/User` (linux); `%APPDATA%/Cursor/User` (win32) | `globalStorage/state.vscdb` + `workspaceStorage/*/state.vscdb` | sqlite (KV snapshot) |
-| gemini-cli   | `~/.gemini/tmp`                                  | `*/chats/**/*.jsonl`                                          | JSONL append (with header line) |
+| claude-desktop | `~/Library/Application Support/Claude/local-agent-mode-sessions` (macOS-only; no platform branch) | `*/*/local_*/audit.jsonl` (authoritative) + `.claude/projects/*/*.jsonl` (per-session CLI-metadata side input) | JSONL append |
 
-The cursor base dir is the only one whose POSIX default branches on `process.platform`.
-All globs are pinned-depth — `**/*.jsonl` is never used so we never silently start
-capturing unknown content.
+The cursor base dir is the only one whose POSIX default branches on `process.platform`;
+claude-desktop has no platform branch and so is macOS-only in practice. All globs are
+pinned-depth — `**/*.jsonl` is never used so we never silently start capturing unknown
+content.
 
 ## Output batch shape (`NewBatch`, services/buffer/buffer.types.ts:11)
 
@@ -38,7 +39,7 @@ Every parser writes the same `NewBatch` interface into the buffer:
 ```ts
 interface NewBatch {
   captureId: string;            // UUIDv7 generated at insert
-  sourceApp: SourceApp;         // 'claude-code' | 'codex' | 'cursor' | 'gemini-cli'
+  sourceApp: SourceApp;         // 'claude-code' | 'codex' | 'cursor' | 'claude-desktop'
   sourceKind: SourceKind;       // 'jsonl_append' | 'sqlite_kv_snapshot' | 'sqlite_table_snapshot'
   sourcePath: string;
   sourcePathHash: string;
@@ -61,25 +62,36 @@ base64-encoded.
 
 ## Where each parser diverges
 
-| Concern              | claude-code            | codex rollout          | codex state            | cursor                 | gemini-cli             |
+| Concern              | claude-code            | codex rollout          | codex state            | cursor                 | claude-desktop         |
 | -------------------- | ---------------------- | ---------------------- | ---------------------- | ---------------------- | ---------------------- |
 | Body format          | `jsonl`                | `jsonl`                | `sqlite_rows_json`     | `kv_pairs_json`        | `jsonl`                |
 | Watermark kind       | `byte_range`           | `byte_range`           | `rowid_range`          | `rowid_range`          | `byte_range`           |
 | `watermarkTable`     | `null`                 | `null`                 | `'threads'` or `'thread_spawn_edges'` | `null`  | `null`                 |
 | `sourceInode`        | file inode             | file inode             | `null`                 | `null`                 | file inode             |
 | Splitter             | `splitJsonlAtBoundary` | `splitJsonlAtBoundary` | `splitRowsByCompressedSize` | `splitRowsByCompressedSize` | `splitJsonlAtBoundary` |
-| Version source       | embedded `version`     | embedded `payload.cli_version` (first line) | `threads.cli_version` (max-rowid) | `_v` from composer + bubble rows | `gemini --version` subprocess |
-| Version fallback     | `'unknown'`            | `'unknown'`            | `'unknown'`            | `'unknown:unknown'`    | `'gemini-cli/unknown'` |
-| Initial watermark    | `0`                    | `0`                    | `1` (rowid space)      | `1` (rowid space)      | past header (≤64 KiB)  |
+| Version source       | embedded `version`     | embedded `payload.cli_version` (first line) | `threads.cli_version` (max-rowid) | `_v` from composer + bubble rows | `agentVersion` correlated from File A transcript |
+| Version fallback     | `'unknown'`            | `'unknown'`            | `'unknown'`            | `'unknown:unknown'`    | `'unknown'`            |
+| Initial watermark    | `0`                    | `0`                    | `1` (rowid space)      | `1` (rowid space)      | `0`                    |
 | Quarantine on oversize | throws fatal         | throws fatal           | `recordQuarantine` + advance cursor | `recordQuarantine` + advance cursor | throws fatal |
 | VACUUM rehash        | n/a                    | n/a                    | yes (`detectVacuum`)   | yes (`detectVacuum`)   | n/a                    |
 | Snapshot before read | n/a                    | n/a                    | `snapshotSqlite`       | `snapshotSqlite`       | n/a                    |
-| Sub-agent exclude    | second glob skipped    | `thread_spawn_edges` join skip | n/a            | sql-level (currently no-op) | n/a                  |
+| Sub-agent exclude    | second glob skipped    | `thread_spawn_edges` join skip | n/a            | sql-level (currently no-op) | flag wired, no-op |
 
 JSONL parsers re-use a single in-collector `splitJsonlAtBoundary`; sqlite parsers
 re-use `splitRowsByCompressedSize`. Both binary-search the largest prefix that fits
 both the 2 MiB compressed and 10 MiB decompressed budgets defined in
 `contract.constants.ts:78-84`.
+
+`claude-desktop` is the one parser that reads **two** files: it watermarks the
+authoritative `audit.jsonl` but, before shipping, enriches each kept record with
+CLI metadata correlated from the session's `.claude/projects/*/*.jsonl` transcript
+(`user` by `uuid`, `assistant` by `message.id`) and injects
+`source_platform = 'claude-cowork-desktop'`. It reuses claude-code's
+`isDialogueRecord` filter (plus an `isReplay` drop) but, unlike claude-code, rewrites
+the record shape rather than shipping it verbatim. It is also the one default source
+that is **not** worker-dispatched — the capture cycle routes only claude-code, cursor,
+and codex to Bun Workers, so claude-desktop polls in-process. See
+`ai/knowledge/sources/parsers/claude-desktop.md`.
 
 ## Parser version scheme
 
@@ -88,4 +100,4 @@ file), not a gateway-internal parser version. The gateway propagates whatever th
 agent claims; gateway version travels separately in `gatewayVersion`. There is no
 per-parser semver — parsers are versioned alongside the gateway binary (CalVer).
 
-[source: src/sources/claude-code/collect.ts:200-403; src/sources/codex/collect-rollout.ts:97-303; src/sources/codex/collect-state.ts:21-141; src/sources/cursor/collect.ts:51-195; src/sources/gemini-cli/collect.ts:153-376; src/services/contract/contract.constants.ts:40-89; src/services/buffer/buffer.types.ts:11-28; src/services/polling/default-sources.ts]
+[source: src/sources/claude-code/collect.ts:200-403; src/sources/codex/collect-rollout.ts:97-303; src/sources/codex/collect-state.ts:21-141; src/sources/cursor/collect.ts:51-195; src/sources/claude-desktop/collect.ts; src/services/contract/contract.constants.ts:40-89; src/services/buffer/buffer.types.ts:11-28; src/services/polling/default-sources.ts]

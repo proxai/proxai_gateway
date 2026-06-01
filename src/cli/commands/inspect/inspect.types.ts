@@ -3,7 +3,6 @@ import type { OutputSink } from 'cli/cli.types.ts';
 export interface InspectBaseDirs {
   claudeCode?: string;
   cursor?: string;
-  geminiCli?: string;
   codex?: string;
   claudeDesktop?: string;
 }

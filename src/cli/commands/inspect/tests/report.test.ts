@@ -13,7 +13,7 @@ import type { InspectSummary, SourceResult } from 'cli/commands/inspect/inspect.
 
 function makeResult(over: Partial<SourceResult> = {}): SourceResult {
   return {
-    sourceName: 'gemini-cli',
+    sourceName: 'claude-desktop',
     filesProcessed: 3,
     recordCount: 30,
     totalBytes: 9000,
@@ -38,9 +38,9 @@ function makeSummary(over: Partial<InspectSummary> = {}): InspectSummary {
     totalRawBytes: 6000,
     totalCompressedBytes: 500,
     oldestDateIso: '2026-05-02T00:00:00.000Z',
-    oldestSource: 'gemini-cli',
+    oldestSource: 'claude-desktop',
     newestDateIso: '2026-05-09T00:00:00.000Z',
-    newestSource: 'gemini-cli',
+    newestSource: 'claude-desktop',
     ...over,
   };
 }
@@ -64,7 +64,7 @@ test('buildMarkdownReport: renders all sections with results and warnings', () =
   expect(markdown).toContain('Estimated Upload Metrics');
   expect(markdown).toContain('## Warnings');
   expect(markdown).toContain('boom');
-  expect(markdown).toContain('Gemini CLI');
+  expect(markdown).toContain('Claude Desktop');
 });
 
 test('buildMarkdownReport: omits warnings and handles null dates', () => {

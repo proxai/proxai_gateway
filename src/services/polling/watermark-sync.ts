@@ -41,7 +41,7 @@ export async function syncServerWatermarks(
       continue;
     }
     setCursor(buffer, {
-      sourceApp: w.sourceApp as 'claude-code' | 'cursor' | 'codex' | 'gemini-cli',
+      sourceApp: w.sourceApp as 'claude-code' | 'cursor' | 'codex',
       sourcePathHash: w.sourcePathHash,
       sourcePath: '',
       sourceInode: null,
@@ -53,7 +53,7 @@ export async function syncServerWatermarks(
   return result;
 }
 
-const KNOWN_APPS = new Set<string>(['claude-code', 'cursor', 'codex', 'gemini-cli']);
+const KNOWN_APPS = new Set<string>(['claude-code', 'cursor', 'codex']);
 
 function isApplicable(w: ServerWatermark): boolean {
   if (!KNOWN_APPS.has(w.sourceApp)) return false;

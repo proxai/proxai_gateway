@@ -152,7 +152,7 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
       pollActor.send({ type: 'BEGIN_POLL', startedAtUtc: nowIsoUtc() });
     }
 
-    const isDefaultSource = ['claude-code', 'cursor', 'gemini-cli', 'codex'].includes(source.name);
+    const isDefaultSource = ['claude-code', 'cursor', 'codex'].includes(source.name);
 
     let result: SourcePollerResult;
     if (isDefaultSource) {

@@ -26,14 +26,6 @@ test('dispatches claude-code jsonl bodies to the jsonl extractor', () => {
   });
 });
 
-test('dispatches gemini-cli jsonl bodies to the jsonl extractor', () => {
-  const text = JSON.stringify({ type: 'user', content: 'hello gemini' });
-  expect(extractUserPrompt(input(text, 'gemini-cli', 'jsonl'))).toEqual({
-    userPrompt: 'hello gemini',
-    userPromptAddedAt: null,
-  });
-});
-
 test('dispatches codex jsonl bodies to the jsonl extractor', () => {
   const text = JSON.stringify({
     type: 'response_item',

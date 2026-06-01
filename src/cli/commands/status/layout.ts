@@ -15,8 +15,6 @@ export function formatSourceLabel(name: string): string {
       return 'Cursor';
     case 'codex':
       return 'Codex';
-    case 'gemini-cli':
-      return 'Gemini CLI';
     default:
       return name.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   }

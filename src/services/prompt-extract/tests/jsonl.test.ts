@@ -182,34 +182,6 @@ test('claude-code: user prompt is truncated to 2000 characters', () => {
   expect(result.userPrompt).toHaveLength(2000);
 });
 
-test('gemini-cli: extracts user content with timestamp', () => {
-  const text = jsonl({
-    type: 'user',
-    content: 'gemini question',
-    timestamp: '2026-02-02T00:00:00.000Z',
-  });
-  expect(extractFromJsonl(text, 'gemini-cli')).toEqual({
-    userPrompt: 'gemini question',
-    userPromptAddedAt: '2026-02-02T00:00:00.000Z',
-  });
-});
-
-test('gemini-cli: non-user records are skipped', () => {
-  const text = jsonl({ type: 'model', content: 'response' });
-  expect(extractFromJsonl(text, 'gemini-cli')).toEqual({
-    userPrompt: null,
-    userPromptAddedAt: null,
-  });
-});
-
-test('gemini-cli: user record with no usable content yields null', () => {
-  const text = jsonl({ type: 'user', content: '' });
-  expect(extractFromJsonl(text, 'gemini-cli')).toEqual({
-    userPrompt: null,
-    userPromptAddedAt: null,
-  });
-});
-
 test('codex: extracts user message from a response_item payload with payload timestamp', () => {
   const text = jsonl({
     type: 'response_item',
@@ -309,11 +281,6 @@ test('extractAssistantFromJsonl reads a claude-code assistant turn', () => {
   expect(extractAssistantFromJsonl(text, 'claude-code')).toBe('hello there');
 });
 
-test('extractAssistantFromJsonl reads a gemini model turn', () => {
-  const text = jsonl({ type: 'gemini', content: 'model reply' });
-  expect(extractAssistantFromJsonl(text, 'gemini-cli')).toBe('model reply');
-});
-
 test('extractAssistantFromJsonl reads a codex assistant message', () => {
   const text = jsonl({
     type: 'response_item',
@@ -333,7 +300,6 @@ test('extractAssistantFromJsonl skips tool-only assistant turns and malformed li
 test('extractAssistantFromJsonl returns null when no assistant turn is present', () => {
   const text = jsonl({ type: 'user', message: { content: 'hi' } });
   expect(extractAssistantFromJsonl(text, 'claude-code')).toBeNull();
-  expect(extractAssistantFromJsonl(jsonl({ type: 'gemini' }), 'gemini-cli')).toBeNull();
   expect(
     extractAssistantFromJsonl(jsonl({ type: 'response_item', payload: { role: 'user' } }), 'codex'),
   ).toBeNull();

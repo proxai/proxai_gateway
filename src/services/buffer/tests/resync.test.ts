@@ -73,7 +73,7 @@ test('recentResyncEvents returns events sorted by recoveredAt descending and res
   };
 
   const event3 = {
-    sourceApp: 'gemini-cli' as const,
+    sourceApp: 'claude-desktop' as const,
     sourcePathHash: 'hash3',
     watermarkKind: 'rowid_range' as const,
     serverWatermarkEnd: 30,
@@ -90,11 +90,11 @@ test('recentResyncEvents returns events sorted by recoveredAt descending and res
   const allRecent = recentResyncEvents(db, 10);
   expect(allRecent).toHaveLength(3);
   expect(requireDefined(allRecent[0]).sourceApp).toBe('cursor');
-  expect(requireDefined(allRecent[1]).sourceApp).toBe('gemini-cli');
+  expect(requireDefined(allRecent[1]).sourceApp).toBe('claude-desktop');
   expect(requireDefined(allRecent[2]).sourceApp).toBe('claude-code');
 
   const limitedRecent = recentResyncEvents(db, 2);
   expect(limitedRecent).toHaveLength(2);
   expect(requireDefined(limitedRecent[0]).sourceApp).toBe('cursor');
-  expect(requireDefined(limitedRecent[1]).sourceApp).toBe('gemini-cli');
+  expect(requireDefined(limitedRecent[1]).sourceApp).toBe('claude-desktop');
 });

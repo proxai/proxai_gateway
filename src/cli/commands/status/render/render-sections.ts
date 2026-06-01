@@ -29,13 +29,12 @@ import type { StatusSnapshot } from 'cli/commands/status/status.types.ts';
 
 const PROMPT_SNIPPET_MAX = 80;
 
-const SOURCE_ORDER: readonly (
-  | 'claude-code'
-  | 'cursor'
-  | 'codex'
-  | 'gemini-cli'
-  | 'claude-desktop'
-)[] = ['claude-code', 'cursor', 'codex', 'gemini-cli', 'claude-desktop'];
+const SOURCE_ORDER: readonly ('claude-code' | 'cursor' | 'codex' | 'claude-desktop')[] = [
+  'claude-code',
+  'cursor',
+  'codex',
+  'claude-desktop',
+];
 
 const SUB_LABEL_WIDTH = 14;
 

@@ -541,7 +541,7 @@ withProfileOption(
     )
     .option(
       '--source <name>',
-      'show only entries from one collector. One of: claude-code, cursor, codex, gemini-cli, claude-desktop.',
+      'show only entries from one collector. One of: claude-code, cursor, codex, claude-desktop.',
     )
     .option(
       '--level <level>',
@@ -663,10 +663,7 @@ const logsCommand = withProfileOption(
       false,
     )
     .option('--id <capture-id>', 'show full detail for one record by capture id (prefix accepted)')
-    .option(
-      '--source <app>',
-      'filter by coding agent (claude-code, cursor, codex, gemini-cli, claude-desktop)',
-    )
+    .option('--source <app>', 'filter by coding agent (claude-code, cursor, codex, claude-desktop)')
     .option('--since <dur>', 'show records from the last duration (e.g. 24h, 7d)')
     .option('--lines <n>', 'number of records to display', '50'),
 );

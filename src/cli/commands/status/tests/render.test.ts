@@ -53,7 +53,6 @@ const mockSourceCounts: CountsBySource = {
   'claude-code': emptySourceCounts,
   cursor: emptySourceCounts,
   codex: emptySourceCounts,
-  'gemini-cli': emptySourceCounts,
   'claude-desktop': emptySourceCounts,
 };
 
@@ -622,7 +621,6 @@ test('render-sections renderHistorySection', () => {
         cursor: 10,
         'claude-code': 5,
         codex: 0,
-        'gemini-cli': 0,
         'claude-desktop': 0,
       },
     },
