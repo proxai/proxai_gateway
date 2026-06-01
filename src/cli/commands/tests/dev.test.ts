@@ -39,6 +39,7 @@ function makeDevDeps(overrides: Partial<DevCommandDeps> = {}): DevCommandDeps {
     verifyKey: () => Promise.resolve({ success: true }),
     writeDevConfig: () => Promise.resolve(),
     registerDevHostId: () => Promise.resolve({ registered: true }),
+    clearAuthFailed: () => Promise.resolve(),
     registerDevServiceUnit: () => Promise.resolve(),
     readBootId: () => Promise.resolve('mock-boot-id-dev-cmd'),
     ...overrides,
@@ -386,6 +387,33 @@ test('runDevSetup: writeDevConfig throwing non-Error returns error', async () =>
       l.msg.includes('failed to write dev config: string-disk-full'),
     ),
   ).toBe(true);
+});
+
+test('runDevSetup: clears the dev AUTH_FAILED sentinel on success', async () => {
+  let cleared = false;
+  const deps = makeDevDeps({
+    clearAuthFailed: () => {
+      cleared = true;
+      return Promise.resolve();
+    },
+  });
+  const result = await runDev(deps, 'setup', { apiKey: 'key123' });
+  expect(result.exitCode).toBe(EXIT_CODE.ok);
+  expect(cleared).toBe(true);
+});
+
+test('runDevSetup: does not clear AUTH_FAILED when key verification fails', async () => {
+  let cleared = false;
+  const deps = makeDevDeps({
+    verifyKey: () => Promise.resolve({ success: false }),
+    clearAuthFailed: () => {
+      cleared = true;
+      return Promise.resolve();
+    },
+  });
+  const result = await runDev(deps, 'setup', { apiKey: 'key123' });
+  expect(result.exitCode).toBe(EXIT_CODE.authError);
+  expect(cleared).toBe(false);
 });
 
 test('runDevSetup: successfully sets up and starts dev daemon', async () => {

@@ -19,6 +19,7 @@ import {
   nestRegisterHostIdUrl,
 } from 'services/config';
 import { buildGatewayConfig } from 'cli/commands/setup/build-config.ts';
+import { clearAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
 import { readMachineUuid, deriveHostId } from 'core/system';
 import { nowIsoUtc, GATEWAY_USER_AGENT } from 'core/utils';
 import { HttpClient } from 'services/http';
@@ -50,6 +51,7 @@ export const __deps = {
   }): GatewayConfig => buildGatewayConfig(input),
   writeConfigToFile: (config: GatewayConfig, path: string): Promise<void> =>
     writeConfigToFile(config, path),
+  clearAuthFailedSentinel: (path: string): Promise<void> => clearAuthFailedSentinel(path),
   nowIsoUtc: (): string => nowIsoUtc(),
   defaultLaunchdPlistPath: (label: string): string => defaultLaunchdPlistPath(label),
   defaultSystemdUnitPath: (unitName: string): string => defaultSystemdUnitPath(unitName),
@@ -147,6 +149,7 @@ export function buildDevDeps(): DevCommandDeps {
     verifyKey: verifyKeySimple,
     writeDevConfig: writeDevConfigFull,
     registerDevHostId: registerDevHostIdFull,
+    clearAuthFailed: () => __deps.clearAuthFailedSentinel(devCtx.sentinels.authFailed),
     registerDevServiceUnit: async () => {
       if (devServiceUnitPath === null) return;
       await __deps.writeServiceUnit({

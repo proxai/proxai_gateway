@@ -19,6 +19,7 @@ export interface DevCommandDeps {
   readonly verifyKey: (url: string, apiKey: string) => Promise<{ success: boolean }>;
   readonly writeDevConfig: (profileCtx: ProfileContext, apiKey: string) => Promise<void>;
   readonly registerDevHostId: (apiKey: string) => Promise<{ registered: boolean }>;
+  readonly clearAuthFailed: () => Promise<void>;
   readonly registerDevServiceUnit: () => Promise<void>;
   readonly readBootId?: () => Promise<string>;
 }
@@ -153,6 +154,8 @@ async function runDevSetup(
     );
     return { exitCode: EXIT_CODE.error };
   }
+
+  await deps.clearAuthFailed();
 
   let daemonStarted = false;
   if (deps.devServiceManager !== null) {

@@ -155,7 +155,20 @@ test('buildDevDeps returns correct dev command dependencies', async () => {
   expect(typeof deps.verifyKey).toBe('function');
   expect(typeof deps.writeDevConfig).toBe('function');
   expect(typeof deps.registerDevHostId).toBe('function');
+  expect(typeof deps.clearAuthFailed).toBe('function');
   expect(typeof deps.registerDevServiceUnit).toBe('function');
+});
+
+test('buildDevDeps clearAuthFailed targets the dev profile AUTH_FAILED sentinel', async () => {
+  const removed: string[] = [];
+  __deps.clearAuthFailedSentinel = (path: string) => {
+    removed.push(path);
+    return Promise.resolve();
+  };
+  const deps = buildDevDeps();
+  await deps.clearAuthFailed();
+  expect(removed).toHaveLength(1);
+  expect(requireDefined(removed[0])).toBe(buildProfileContext('dev').sentinels.authFailed);
 });
 
 // ── registerDevServiceUnit lambda ──
@@ -232,6 +245,9 @@ test('__deps wrappers invoke the real underlying implementations', async () => {
     const configPath = join(dir, 'config.toml');
     await __deps.writeConfigToFile(config, configPath);
     expect(existsSync(configPath)).toBe(true);
+
+    await __deps.clearAuthFailedSentinel(join(dir, 'AUTH_FAILED'));
+    expect(existsSync(join(dir, 'AUTH_FAILED'))).toBe(false);
 
     const unitPath = join(dir, 'unit-out');
     await __deps.writeServiceUnit({
