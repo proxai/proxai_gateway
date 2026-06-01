@@ -28,10 +28,10 @@ export interface BuildStatusContextInputs {
 }
 
 export async function buildStatusContext(inputs: BuildStatusContextInputs): Promise<StatusContext> {
-  const options: StatusCommandOptions = {};
+  const { profileCtx } = inputs;
+  const options: StatusCommandOptions = { profileName: profileCtx.name };
   if (inputs.json) options.json = true;
 
-  const { profileCtx } = inputs;
   const cfgPath = inputs.configPath ?? profileCtx.configFilePath;
   const exists = await Bun.file(cfgPath).exists();
 

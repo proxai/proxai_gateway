@@ -28,7 +28,18 @@ test('buildStatusContext: returns minimal deps and noop cleanup when config does
     serviceManager: null,
   });
   expect(ctx.deps.buffer).toBeUndefined();
-  expect(ctx.options).toEqual({});
+  expect(ctx.options).toEqual({ profileName: 'prod' });
+  ctx.cleanup();
+});
+
+test('buildStatusContext: labels options with the dev profile name', async () => {
+  const ctx = await buildStatusContext({
+    profileCtx: buildProfileContext('dev'),
+    configPath: '/dev/null/proxai-no-such-config.toml',
+    json: false,
+    serviceManager: null,
+  });
+  expect(ctx.options.profileName).toBe('dev');
   ctx.cleanup();
 });
 

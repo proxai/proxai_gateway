@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
 import { readBootId } from 'core/system/boot-id.ts';
 import { profileRootDir } from 'core/io/fs/profile.ts';
+import type { ProfileName } from 'core/io/fs/profile.types.ts';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
@@ -42,12 +43,15 @@ export async function runStatus(
   options: StatusCommandOptions = {},
 ): Promise<CommandResult> {
   if (options.json === true) {
-    return runJsonStatus(deps);
+    return runJsonStatus(deps, options.profileName ?? 'prod');
   }
   return runWatchStatus(deps, options);
 }
 
-async function runJsonStatus(deps: StatusCommandDeps): Promise<CommandResult> {
+async function runJsonStatus(
+  deps: StatusCommandDeps,
+  profileName: ProfileName,
+): Promise<CommandResult> {
   const exists = await deps.configExists();
   if (!exists) {
     const isDevMode = await readDevModeSentinel(
@@ -63,7 +67,7 @@ async function runJsonStatus(deps: StatusCommandDeps): Promise<CommandResult> {
     deps.output.error('buffer database is unavailable');
     return { exitCode: EXIT_CODE.error };
   }
-  const snapshot = await gatherStatusSnapshot(deps, deps.buffer);
+  const snapshot = await gatherStatusSnapshot(deps, deps.buffer, profileName);
   deps.output.info(JSON.stringify(localizeStatusJsonTimes(buildStatusJson(snapshot))));
   return { exitCode: EXIT_CODE.ok };
 }

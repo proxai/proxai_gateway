@@ -111,6 +111,22 @@ test('reports not-configured in JSON mode emits structured payload', async () =>
   expect(json.health).toBe('inactive');
 });
 
+test('JSON mode labels the payload with the dev profile when profileName is dev', async () => {
+  const out = captureOutput();
+  const result = await runStatus(makeDeps({ output: out }), { json: true, profileName: 'dev' });
+  expect(result.exitCode).toBe(0);
+  const json = JSON.parse(requireDefined(out.lines[0]).msg) as { profileName: string };
+  expect(json.profileName).toBe('dev');
+});
+
+test('JSON mode defaults the profile label to prod when profileName is omitted', async () => {
+  const out = captureOutput();
+  const result = await runStatus(makeDeps({ output: out }), { json: true });
+  expect(result.exitCode).toBe(0);
+  const json = JSON.parse(requireDefined(out.lines[0]).msg) as { profileName: string };
+  expect(json.profileName).toBe('prod');
+});
+
 test('JSON mode returns full structured payload when configured', async () => {
   setDaemonState(buffer, {
     lastCycleStartedAt: '2026-05-08T02:40:13.100Z',

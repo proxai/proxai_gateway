@@ -39,6 +39,7 @@ export interface StatusCommandOptions {
   json?: boolean;
   all?: boolean;
   compact?: boolean;
+  profileName?: ProfileName;
   devDeps?: StatusCommandDeps;
   stdin?: ReadableInputStream;
   intervalMs?: number;
