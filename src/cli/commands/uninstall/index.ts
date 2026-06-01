@@ -25,7 +25,10 @@ const ROOT_FILES_TO_REMOVE = [
   '.upgrade.lock',
   '.migration.lock',
   'DEV_MODE',
+  'config.toml',
 ] as const;
+
+const FLAT_LAYOUT_BUFFER_FILES = ['buffer.db', 'buffer.db-wal', 'buffer.db-shm'] as const;
 
 export type {
   UninstallCommandDeps,
@@ -146,6 +149,9 @@ export async function runUninstall(
     await rmRecursive(deps.logDir);
     await rmRecursive(deps.devConfigDir);
     await rmRecursive(deps.devLogDir);
+    await Promise.all(
+      FLAT_LAYOUT_BUFFER_FILES.map((file) => rmRecursive(join(deps.profileRootDir, file))),
+    );
     for (const file of ROOT_FILES_TO_REMOVE) {
       rmSync(join(deps.profileRootDir, file), { force: true });
     }

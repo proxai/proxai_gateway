@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { join } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 import { COMMAND_ALIASES } from 'cli/command-aliases.ts';
 
@@ -56,18 +58,24 @@ test('alias values are unique short identifiers', () => {
 });
 
 test('setup new parses the positional gateway key instead of prompting', async () => {
-  const proc = Bun.spawn(['bun', ENTRY, 'setup', 'new', 'badnohyphens'], {
-    cwd: REPO_ROOT,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    stdin: 'ignore',
-  });
-  const killer = setTimeout(() => proc.kill(), 8_000);
-  const [stdout, stderr] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
-  await proc.exited;
-  clearTimeout(killer);
-  expect(`${stdout}${stderr}`).toContain('invalid format');
+  const sandbox = mkdtempSync(join(tmpdir(), 'proxai-aliases-'));
+  try {
+    const proc = Bun.spawn(['bun', ENTRY, 'setup', 'new', 'badnohyphens'], {
+      cwd: REPO_ROOT,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      stdin: 'ignore',
+      env: { ...process.env, PROXAI_TEST_PROFILE_ROOT: sandbox },
+    });
+    const killer = setTimeout(() => proc.kill(), 8_000);
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    await proc.exited;
+    clearTimeout(killer);
+    expect(`${stdout}${stderr}`).toContain('invalid format');
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
 }, 20_000);

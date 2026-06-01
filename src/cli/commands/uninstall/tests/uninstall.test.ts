@@ -313,6 +313,27 @@ test('--reset requires typed phrase "uninstall"; matching phrase wipes', async (
   expect(output.lines.some((l) => l.msg.includes('IMPORTANT NOTICE'))).toBe(true);
 });
 
+test('--reset sweeps legacy flat-layout root files (config.toml + buffer.db*)', async () => {
+  await writeConfig();
+  const flatRoot = join(tmpRoot, '.proxai');
+  const flatConfig = join(flatRoot, 'config.toml');
+  const flatBuffer = join(flatRoot, 'buffer.db');
+  const flatWal = join(flatRoot, 'buffer.db-wal');
+  const flatShm = join(flatRoot, 'buffer.db-shm');
+  await writeFile(flatConfig, 'api_key = "legacy"\n');
+  await writeFile(flatBuffer, 'sqlite');
+  await writeFile(flatWal, 'wal');
+  await writeFile(flatShm, 'shm');
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  const result = await runUninstall({ ...depsFor(sm), output }, { reset: true, yes: true });
+  expect(result.exitCode).toBe(0);
+  expect(await Bun.file(flatConfig).exists()).toBe(false);
+  expect(await Bun.file(flatBuffer).exists()).toBe(false);
+  expect(await Bun.file(flatWal).exists()).toBe(false);
+  expect(await Bun.file(flatShm).exists()).toBe(false);
+});
+
 test('--reset: empty input aborts; configDir preserved', async () => {
   await writeConfig();
   await writeFile(serviceUnitPath, '<plist/>');
