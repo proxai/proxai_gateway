@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-31T19:35:23.648Z",
-  "sourceHash": "955fbb62b8bd19e0ae6d0e069858e6c2",
+  "generatedAt": "2026-06-01T00:42:28.296Z",
+  "sourceHash": "2ce3b5ed1746b5552007703b484c7133",
   "files": [
     {
       "path": "CLAUDE.md",
@@ -913,19 +913,19 @@
     },
     {
       "path": ".claude/knowledge/services/http.md",
-      "hash": "38271dcb20365435"
+      "hash": "2962246846ddf031"
     },
     {
       "path": ".cursor/knowledge/services/http.md",
-      "hash": "38271dcb20365435"
+      "hash": "2962246846ddf031"
     },
     {
       "path": ".codex/knowledge/services/http.md",
-      "hash": "38271dcb20365435"
+      "hash": "2962246846ddf031"
     },
     {
       "path": ".agents/knowledge/services/http.md",
-      "hash": "38271dcb20365435"
+      "hash": "2962246846ddf031"
     },
     {
       "path": ".claude/knowledge/services/observability-events.md",
