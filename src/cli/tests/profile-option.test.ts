@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -50,6 +50,14 @@ async function enableDevMode(profileRoot: string): Promise<void> {
   writeFileSync(join(profileRoot, 'DEV_MODE'), JSON.stringify({ bootId: TEST_BOOT_ID }));
 }
 
+function seedConfig(profileRoot: string, profile: 'prod' | 'dev'): string {
+  const dir = join(profileRoot, profile);
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, 'config.toml');
+  writeFileSync(path, 'seed');
+  return path;
+}
+
 test('prod mode rejects --profile dev on a user command as an unknown option', async () => {
   const result = await runCli(['status', '--json', '--profile', 'dev'], workdir);
   expect(result.output).toContain("unknown option '--profile'");
@@ -98,4 +106,24 @@ test('run keeps --profile dev regardless of dev mode (prod mode)', async () => {
   );
   expect(result.output).not.toContain('unknown option');
   expect(result.output).toContain('config file not found');
+}, 30_000);
+
+test('setup reset --profile dev removes only the dev config, never the prod config', async () => {
+  await enableDevMode(workdir);
+  const devConfig = seedConfig(workdir, 'dev');
+  const prodConfig = seedConfig(workdir, 'prod');
+  const result = await runCli(['setup', 'reset', '--profile', 'dev', '-y'], workdir);
+  expect(result.output).not.toContain('unknown option');
+  expect(existsSync(devConfig)).toBe(false);
+  expect(existsSync(prodConfig)).toBe(true);
+}, 30_000);
+
+test('setup reset --profile prod removes only the prod config, never the dev config', async () => {
+  await enableDevMode(workdir);
+  const devConfig = seedConfig(workdir, 'dev');
+  const prodConfig = seedConfig(workdir, 'prod');
+  const result = await runCli(['setup', 'reset', '--profile', 'prod', '-y'], workdir);
+  expect(result.output).not.toContain('unknown option');
+  expect(existsSync(prodConfig)).toBe(false);
+  expect(existsSync(devConfig)).toBe(true);
 }, 30_000);

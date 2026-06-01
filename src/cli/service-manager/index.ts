@@ -114,7 +114,24 @@ function wrapWithMachine(
   };
 }
 
+function noopServiceManager(): ServiceManager {
+  return {
+    ensureRegistered: () => Promise.resolve(),
+    start: () => Promise.resolve(),
+    stop: () => Promise.resolve(),
+    restart: () => Promise.resolve(),
+    unregister: () => Promise.resolve(),
+    isRegistered: () => Promise.resolve(false),
+    isRunning: () => Promise.resolve(false),
+    runtimeInfo: () => Promise.resolve({ pid: null, startedAt: null }),
+  };
+}
+
 export function getServiceManager(deps: ServiceManagerDeps): ServiceManager {
+  const testProfileRoot = process.env['PROXAI_TEST_PROFILE_ROOT'];
+  if (deps.spawn === undefined && testProfileRoot !== undefined && testProfileRoot.length > 0) {
+    return noopServiceManager();
+  }
   const servicePlatform = platformToServicePlatform(deps.platform);
   const inner = buildInner(deps, servicePlatform);
   const actor = createActor(serviceManagerMachine, {

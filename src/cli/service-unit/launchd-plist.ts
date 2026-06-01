@@ -49,8 +49,16 @@ ${stdoutBlock}${stderrBlock}</dict>
 `;
 }
 
+function launchAgentsDir(): string {
+  const testProfileRoot = process.env['PROXAI_TEST_PROFILE_ROOT'];
+  if (testProfileRoot !== undefined && testProfileRoot.length > 0) {
+    return join(testProfileRoot, 'Library', 'LaunchAgents');
+  }
+  return join(homedir(), 'Library', 'LaunchAgents');
+}
+
 export function defaultLaunchdPlistPath(label: string = LAUNCHD_LABEL): string {
-  return join(homedir(), 'Library', 'LaunchAgents', `${label}.plist`);
+  return join(launchAgentsDir(), `${label}.plist`);
 }
 
 function escapeXml(value: string): string {

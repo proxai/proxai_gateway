@@ -31,6 +31,14 @@ WantedBy=default.target
 `;
 }
 
+function systemdUserDir(): string {
+  const testProfileRoot = process.env['PROXAI_TEST_PROFILE_ROOT'];
+  if (testProfileRoot !== undefined && testProfileRoot.length > 0) {
+    return join(testProfileRoot, '.config', 'systemd', 'user');
+  }
+  return join(homedir(), '.config', 'systemd', 'user');
+}
+
 export function defaultSystemdUnitPath(unitName: string = SYSTEMD_UNIT_NAME): string {
-  return join(homedir(), '.config', 'systemd', 'user', unitName);
+  return join(systemdUserDir(), unitName);
 }

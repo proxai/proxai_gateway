@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { sep as pathSep } from 'node:path';
+import { join, sep as pathSep } from 'node:path';
 
 import { buildLaunchdPlist, defaultLaunchdPlistPath } from 'cli/service-unit/launchd-plist.ts';
 
@@ -81,4 +81,18 @@ test('defaultLaunchdPlistPath ends with the label and .plist', () => {
 
 test('defaultLaunchdPlistPath honors explicit label override', () => {
   expect(defaultLaunchdPlistPath('co.x.y').endsWith('co.x.y.plist')).toBe(true);
+});
+
+test('defaultLaunchdPlistPath sandboxes under PROXAI_TEST_PROFILE_ROOT', () => {
+  const original = process.env['PROXAI_TEST_PROFILE_ROOT'];
+  const root = join(pathSep, 'tmp', 'proxai-launchd-sandbox');
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = root;
+  try {
+    expect(defaultLaunchdPlistPath('co.test.label')).toBe(
+      join(root, 'Library', 'LaunchAgents', 'co.test.label.plist'),
+    );
+  } finally {
+    if (original === undefined) delete process.env['PROXAI_TEST_PROFILE_ROOT'];
+    else process.env['PROXAI_TEST_PROFILE_ROOT'] = original;
+  }
 });

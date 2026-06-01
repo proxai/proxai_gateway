@@ -81,6 +81,25 @@ test('wrapWithMachine handles error throws gracefully with Error object', async 
   await expect(sm.unregister()).rejects.toThrow('spawn-failed');
 });
 
+test('getServiceManager returns a no-op manager under PROXAI_TEST_PROFILE_ROOT without an injected spawn', async () => {
+  const original = process.env['PROXAI_TEST_PROFILE_ROOT'];
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = '/tmp/proxai-noop-sandbox';
+  try {
+    const sm = getServiceManager({ platform: 'darwin', unitPath: '/path/to/unit.plist' });
+    await expect(sm.isRegistered()).resolves.toBe(false);
+    await expect(sm.isRunning()).resolves.toBe(false);
+    await expect(sm.runtimeInfo()).resolves.toEqual({ pid: null, startedAt: null });
+    await sm.ensureRegistered();
+    await sm.start();
+    await sm.stop();
+    await sm.restart();
+    await sm.unregister();
+  } finally {
+    if (original === undefined) delete process.env['PROXAI_TEST_PROFILE_ROOT'];
+    else process.env['PROXAI_TEST_PROFILE_ROOT'] = original;
+  }
+});
+
 test('wrapWithMachine handles non-Error object throws gracefully', async () => {
   // To throw a non-Error, we can make spawn throw a raw string.
   const spawn: SpawnFn = () => {

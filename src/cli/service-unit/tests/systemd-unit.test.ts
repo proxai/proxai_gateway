@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { join, sep as pathSep } from 'node:path';
 
 import { buildSystemdUnit, defaultSystemdUnitPath } from 'cli/service-unit/systemd-unit.ts';
 
@@ -39,4 +40,18 @@ test('defaultSystemdUnitPath ends with default unit name', () => {
 
 test('defaultSystemdUnitPath honors explicit unit name override', () => {
   expect(defaultSystemdUnitPath('alt.service').endsWith('alt.service')).toBe(true);
+});
+
+test('defaultSystemdUnitPath sandboxes under PROXAI_TEST_PROFILE_ROOT', () => {
+  const original = process.env['PROXAI_TEST_PROFILE_ROOT'];
+  const root = join(pathSep, 'tmp', 'proxai-systemd-sandbox');
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = root;
+  try {
+    expect(defaultSystemdUnitPath('alt.service')).toBe(
+      join(root, '.config', 'systemd', 'user', 'alt.service'),
+    );
+  } finally {
+    if (original === undefined) delete process.env['PROXAI_TEST_PROFILE_ROOT'];
+    else process.env['PROXAI_TEST_PROFILE_ROOT'] = original;
+  }
 });
