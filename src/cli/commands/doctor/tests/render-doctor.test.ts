@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import chalk from 'chalk';
 
 import { Confidence, Severity } from 'cli/commands/doctor/doctor.types.ts';
 import type { DoctorSignals, Finding } from 'cli/commands/doctor/doctor.types.ts';
@@ -399,6 +400,56 @@ test('generateDoctorHtml renders populated signals and a single-severity summary
   expect(html).toContain('npm');
   expect(html).toContain('12345');
   expect(html).toContain(formatLocalTimestamp('2026-05-28T00:00:00.000Z'));
+});
+
+test('signals appendix colors booleans by health polarity, not by literal value', () => {
+  const prevLevel = chalk.level;
+  chalk.level = 1;
+  try {
+    const signals = baseSignals({
+      daemonRunning: false,
+      sentinels: {
+        authFailed: true,
+        authFailedRetryAttempts: 0,
+        authFailedRetryMax: 0,
+        authFailedRetryExhausted: false,
+        bufferFull: false,
+        sessionStopped: false,
+        updateAvailable: false,
+      },
+    });
+    const out = renderDoctorOutput([], signals);
+    expect(out).toContain(`AUTH_FAILED:             ${chalk.red('true')}`);
+    expect(out).toContain(`BUFFER_FULL:             ${chalk.green('false')}`);
+    expect(out).toContain(`daemon_running:            ${chalk.red('false')}`);
+    expect(out).toContain(`cursor_exists:           ${chalk.cyan('false')}`);
+  } finally {
+    chalk.level = prevLevel;
+  }
+});
+
+test('generateDoctorHtml colors booleans by health polarity, not by literal value', () => {
+  const signals = baseSignals({
+    daemonRunning: false,
+    macOsQuarantineXattr: true,
+    sentinels: {
+      authFailed: true,
+      authFailedRetryAttempts: 0,
+      authFailedRetryMax: 0,
+      authFailedRetryExhausted: false,
+      bufferFull: false,
+      sessionStopped: false,
+      updateAvailable: true,
+    },
+  });
+  const html = generateDoctorHtml([], signals, '2026-05-28T12:00:00Z');
+  expect(html).toContain('<span class="v-bad">true</span>');
+  expect(html).toContain('<span class="v-good">false</span>');
+  expect(html).toContain('<span class="v-bad">false</span>');
+  expect(html).toContain('<span class="v-info">false</span>');
+  expect(html).toContain('<span class="v-info">true</span>');
+  expect(html).not.toContain('v-true');
+  expect(html).not.toContain('v-false');
 });
 
 test('generateDoctorHtml renders HTML report correctly for multiple issues and escapes HTML characters', () => {

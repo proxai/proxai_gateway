@@ -7,6 +7,19 @@ function localTime(iso: string | null): string | null {
   return iso === null ? null : formatLocalTimestamp(iso);
 }
 
+type BoolHealth = 'goodTrue' | 'goodFalse' | 'neutral';
+
+function colorBool(val: boolean, health: BoolHealth): string {
+  const label = val ? 'true' : 'false';
+  if (health === 'neutral') return chalk.cyan(label);
+  const healthy = health === 'goodTrue' ? val : !val;
+  return healthy ? chalk.green(label) : chalk.red(label);
+}
+
+function colorNullableBool(val: boolean | null, health: BoolHealth): string {
+  return val === null ? chalk.dim('null') : colorBool(val, health);
+}
+
 const SEVERITY_ORDER: Record<Severity, number> = {
   [Severity.critical]: 0,
   [Severity.warning]: 1,
@@ -60,24 +73,27 @@ function renderSignalsAppendix(signals: DoctorSignals, width: number): string {
   lines.push(centerText('SIGNALS', width));
   lines.push('═'.repeat(width));
 
-  const formatBool = (val: boolean) => (val ? chalk.green('true') : chalk.red('false'));
   const formatStr = (val: string | null) => (val !== null ? chalk.yellow(val) : chalk.dim('null'));
   const formatNum = (val: number) => chalk.magenta(val.toString());
 
   lines.push(`platform:                  ${chalk.blue(signals.platform)}`);
-  lines.push(`config.exists:             ${formatBool(signals.configExists)}`);
-  lines.push(`config.parses:             ${formatBool(signals.configParses)}`);
-  lines.push(`api_key_present:           ${formatBool(signals.apiKeyPresent)}`);
-  lines.push(`service_unit_registered:   ${formatBool(signals.serviceUnitRegistered)}`);
-  lines.push(`daemon_running:            ${formatBool(signals.daemonRunning)}`);
+  lines.push(`config.exists:             ${colorBool(signals.configExists, 'goodTrue')}`);
+  lines.push(`config.parses:             ${colorBool(signals.configParses, 'goodTrue')}`);
+  lines.push(`api_key_present:           ${colorBool(signals.apiKeyPresent, 'goodTrue')}`);
+  lines.push(`service_unit_registered:   ${colorBool(signals.serviceUnitRegistered, 'goodTrue')}`);
+  lines.push(`daemon_running:            ${colorBool(signals.daemonRunning, 'goodTrue')}`);
   lines.push('');
   lines.push('Sentinels:');
   lines.push(
-    `  AUTH_FAILED:             ${formatBool(signals.sentinels.authFailed)}${authRetrySuffix(signals)}`,
+    `  AUTH_FAILED:             ${colorBool(signals.sentinels.authFailed, 'goodFalse')}${authRetrySuffix(signals)}`,
   );
-  lines.push(`  BUFFER_FULL:             ${formatBool(signals.sentinels.bufferFull)}`);
-  lines.push(`  SESSION_STOPPED:         ${formatBool(signals.sentinels.sessionStopped)}`);
-  lines.push(`  UPDATE_AVAILABLE:        ${formatBool(signals.sentinels.updateAvailable)}`);
+  lines.push(`  BUFFER_FULL:             ${colorBool(signals.sentinels.bufferFull, 'goodFalse')}`);
+  lines.push(
+    `  SESSION_STOPPED:         ${colorBool(signals.sentinels.sessionStopped, 'goodFalse')}`,
+  );
+  lines.push(
+    `  UPDATE_AVAILABLE:        ${colorBool(signals.sentinels.updateAvailable, 'neutral')}`,
+  );
   lines.push('');
   lines.push('Buffer:');
   lines.push(`  pending_count:           ${formatNum(signals.buffer.pendingCount)}`);
@@ -96,7 +112,7 @@ function renderSignalsAppendix(signals: DoctorSignals, width: number): string {
     `  drain_last_cycle_at:     ${formatStr(localTime(signals.daemonState.drainLastCycleAt))}`,
   );
   lines.push(
-    `  retriable_break:         ${signals.daemonState.lastConsecutiveRetriableBreak === null ? chalk.dim('null') : formatBool(signals.daemonState.lastConsecutiveRetriableBreak)}`,
+    `  retriable_break:         ${colorNullableBool(signals.daemonState.lastConsecutiveRetriableBreak, 'goodFalse')}`,
   );
   if (signals.daemonState.lastUploadError !== null) {
     lines.push(`  last_upload_error:       ${formatStr(signals.daemonState.lastUploadError)}`);
@@ -121,21 +137,29 @@ function renderSignalsAppendix(signals: DoctorSignals, width: number): string {
   );
   lines.push('');
   lines.push('Filesystem:');
-  lines.push(`  config_dir_writable:     ${formatBool(signals.filesystem.configDirWritable)}`);
-  lines.push(`  log_dir_writable:        ${formatBool(signals.filesystem.logDirWritable)}`);
+  lines.push(
+    `  config_dir_writable:     ${colorBool(signals.filesystem.configDirWritable, 'goodTrue')}`,
+  );
+  lines.push(
+    `  log_dir_writable:        ${colorBool(signals.filesystem.logDirWritable, 'goodTrue')}`,
+  );
   lines.push(
     `  disk_free_bytes:         ${signals.filesystem.diskFreeBytes !== null ? chalk.magenta(signals.filesystem.diskFreeBytes.toString()) : chalk.dim('null')}`,
   );
   lines.push('');
   lines.push('Network:');
   lines.push(
-    `  nest_reachable:          ${signals.network.nestReachable === null ? chalk.dim('null') : formatBool(signals.network.nestReachable)}`,
+    `  nest_reachable:          ${colorNullableBool(signals.network.nestReachable, 'goodTrue')}`,
   );
   lines.push('');
   lines.push('Source paths:');
-  lines.push(`  claude_code_exists:      ${formatBool(signals.sourcePaths.claudeCodeExists)}`);
-  lines.push(`  cursor_exists:           ${formatBool(signals.sourcePaths.cursorExists)}`);
-  lines.push(`  codex_exists:            ${formatBool(signals.sourcePaths.codexExists)}`);
+  lines.push(
+    `  claude_code_exists:      ${colorBool(signals.sourcePaths.claudeCodeExists, 'neutral')}`,
+  );
+  lines.push(
+    `  cursor_exists:           ${colorBool(signals.sourcePaths.cursorExists, 'neutral')}`,
+  );
+  lines.push(`  codex_exists:            ${colorBool(signals.sourcePaths.codexExists, 'neutral')}`);
   lines.push('');
   lines.push('Resync events:');
   lines.push(`  total_count:             ${formatNum(signals.resyncEvents.totalCount)}`);
@@ -148,10 +172,10 @@ function renderSignalsAppendix(signals: DoctorSignals, width: number): string {
     lines.push(`  regression_loops:        ${chalk.dim('none')}`);
   }
   lines.push(
-    `  systemd_linger:          ${signals.systemdLingerEnabled === null ? chalk.dim('null') : formatBool(signals.systemdLingerEnabled)}`,
+    `  systemd_linger:          ${colorNullableBool(signals.systemdLingerEnabled, 'goodTrue')}`,
   );
   lines.push(
-    `  macos_quarantine:        ${signals.macOsQuarantineXattr === null ? chalk.dim('null') : formatBool(signals.macOsQuarantineXattr)}`,
+    `  macos_quarantine:        ${colorNullableBool(signals.macOsQuarantineXattr, 'goodFalse')}`,
   );
   lines.push(
     `  clock_skew_ms:           ${signals.clockSkewMs === null ? chalk.dim('null') : formatNum(signals.clockSkewMs)}`,
@@ -318,12 +342,15 @@ function buildBackgroundTile(): string {
 
 const BACKGROUND_TILE_DATA_URI = buildBackgroundTile();
 
-function htmlBool(value: boolean): string {
-  return value ? '<span class="v-true">true</span>' : '<span class="v-false">false</span>';
+function htmlBool(value: boolean, health: BoolHealth): string {
+  const label = value ? 'true' : 'false';
+  if (health === 'neutral') return `<span class="v-info">${label}</span>`;
+  const healthy = health === 'goodTrue' ? value : !value;
+  return `<span class="${healthy ? 'v-good' : 'v-bad'}">${label}</span>`;
 }
 
-function htmlNullableBool(value: boolean | null): string {
-  return value === null ? '<span class="v-null">null</span>' : htmlBool(value);
+function htmlNullableBool(value: boolean | null, health: BoolHealth): string {
+  return value === null ? '<span class="v-null">null</span>' : htmlBool(value, health);
 }
 
 function htmlStr(value: string | null): string {
@@ -434,17 +461,17 @@ export function generateDoctorHtml(
   const cards = [
     sigCard('Core State', [
       sigRow('platform', htmlStr(signals.platform)),
-      sigRow('config.exists', htmlBool(signals.configExists)),
-      sigRow('config.parses', htmlBool(signals.configParses)),
-      sigRow('api_key_present', htmlBool(signals.apiKeyPresent)),
-      sigRow('service_unit_registered', htmlBool(signals.serviceUnitRegistered)),
-      sigRow('daemon_running', htmlBool(signals.daemonRunning)),
+      sigRow('config.exists', htmlBool(signals.configExists, 'goodTrue')),
+      sigRow('config.parses', htmlBool(signals.configParses, 'goodTrue')),
+      sigRow('api_key_present', htmlBool(signals.apiKeyPresent, 'goodTrue')),
+      sigRow('service_unit_registered', htmlBool(signals.serviceUnitRegistered, 'goodTrue')),
+      sigRow('daemon_running', htmlBool(signals.daemonRunning, 'goodTrue')),
     ]),
     sigCard('Sentinels', [
-      sigRow('AUTH_FAILED', htmlBool(signals.sentinels.authFailed)),
-      sigRow('BUFFER_FULL', htmlBool(signals.sentinels.bufferFull)),
-      sigRow('SESSION_STOPPED', htmlBool(signals.sentinels.sessionStopped)),
-      sigRow('UPDATE_AVAILABLE', htmlBool(signals.sentinels.updateAvailable)),
+      sigRow('AUTH_FAILED', htmlBool(signals.sentinels.authFailed, 'goodFalse')),
+      sigRow('BUFFER_FULL', htmlBool(signals.sentinels.bufferFull, 'goodFalse')),
+      sigRow('SESSION_STOPPED', htmlBool(signals.sentinels.sessionStopped, 'goodFalse')),
+      sigRow('UPDATE_AVAILABLE', htmlBool(signals.sentinels.updateAvailable, 'neutral')),
     ]),
     sigCard('Buffer', [
       sigRow('pending_count', htmlNum(signals.buffer.pendingCount)),
@@ -460,7 +487,7 @@ export function generateDoctorHtml(
       sigRow('drain_last_cycle', htmlStr(localTime(signals.daemonState.drainLastCycleAt))),
       sigRow(
         'retriable_break',
-        htmlNullableBool(signals.daemonState.lastConsecutiveRetriableBreak),
+        htmlNullableBool(signals.daemonState.lastConsecutiveRetriableBreak, 'goodFalse'),
       ),
       sigRow('last_upload_error', htmlStr(signals.daemonState.lastUploadError)),
     ]),
@@ -477,21 +504,23 @@ export function generateDoctorHtml(
       sigRow('auto_upgrade_events', htmlEvents(signals.recentEvents.autoUpgradeEvents)),
     ]),
     sigCard('Filesystem', [
-      sigRow('config_dir_writable', htmlBool(signals.filesystem.configDirWritable)),
-      sigRow('log_dir_writable', htmlBool(signals.filesystem.logDirWritable)),
+      sigRow('config_dir_writable', htmlBool(signals.filesystem.configDirWritable, 'goodTrue')),
+      sigRow('log_dir_writable', htmlBool(signals.filesystem.logDirWritable, 'goodTrue')),
       sigRow('disk_free_bytes', htmlNullableNum(signals.filesystem.diskFreeBytes)),
     ]),
-    sigCard('Network', [sigRow('nest_reachable', htmlNullableBool(signals.network.nestReachable))]),
+    sigCard('Network', [
+      sigRow('nest_reachable', htmlNullableBool(signals.network.nestReachable, 'goodTrue')),
+    ]),
     sigCard('Source Paths', [
-      sigRow('claude_code_exists', htmlBool(signals.sourcePaths.claudeCodeExists)),
-      sigRow('cursor_exists', htmlBool(signals.sourcePaths.cursorExists)),
-      sigRow('codex_exists', htmlBool(signals.sourcePaths.codexExists)),
+      sigRow('claude_code_exists', htmlBool(signals.sourcePaths.claudeCodeExists, 'neutral')),
+      sigRow('cursor_exists', htmlBool(signals.sourcePaths.cursorExists, 'neutral')),
+      sigRow('codex_exists', htmlBool(signals.sourcePaths.codexExists, 'neutral')),
     ]),
     sigCard('Host & Resync', [
       sigRow('resync_total', htmlNum(signals.resyncEvents.totalCount)),
       sigRow('regression_loops', htmlRegressionLoops(signals.resyncEvents.regressionLoops)),
-      sigRow('systemd_linger', htmlNullableBool(signals.systemdLingerEnabled)),
-      sigRow('macos_quarantine', htmlNullableBool(signals.macOsQuarantineXattr)),
+      sigRow('systemd_linger', htmlNullableBool(signals.systemdLingerEnabled, 'goodTrue')),
+      sigRow('macos_quarantine', htmlNullableBool(signals.macOsQuarantineXattr, 'goodFalse')),
       sigRow('clock_skew_ms', htmlNullableNum(signals.clockSkewMs)),
     ]),
   ].join('');
@@ -685,8 +714,9 @@ export function generateDoctorHtml(
       text-align: right;
       word-break: break-word;
     }
-    .v-true { color: var(--mint); font-weight: 600; }
-    .v-false { color: var(--rose); font-weight: 600; }
+    .v-good { color: var(--mint); font-weight: 600; }
+    .v-bad { color: var(--rose); font-weight: 600; }
+    .v-info { color: var(--cyan); font-weight: 600; }
     .v-null { color: var(--muted); }
     .v-num { color: var(--cyan); }
     .v-str { color: var(--amber); }
