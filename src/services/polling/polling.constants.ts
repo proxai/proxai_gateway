@@ -14,6 +14,8 @@ export const AUTH_RECOVERY_MAX_RETRIES = 16;
 
 export const AUTH_RECOVERY_IDLE_MS = 5_000;
 
+export const PAUSE_RECHECK_MS = 5_000;
+
 export const SOURCE_NAME_CLAUDE_CODE: SourceApp = 'claude-code';
 export const SOURCE_NAME_CURSOR: SourceApp = 'cursor';
 export const SOURCE_NAME_CODEX: SourceApp = 'codex';

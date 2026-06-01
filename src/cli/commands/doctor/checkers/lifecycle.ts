@@ -62,6 +62,10 @@ export function checkA4Crashed(signals: DoctorSignals): Finding | null {
 
 export function checkA5Wedged(signals: DoctorSignals): Finding | null {
   if (!signals.daemonRunning) return null;
+  // Capture is intentionally paused while AUTH_FAILED is set (auth recovery in
+  // progress), so a stale capture cycle is expected, not a wedge — B1 already
+  // covers the real problem.
+  if (signals.sentinels.authFailed) return null;
   const lastCycleAt = signals.daemonState.captureLastCycleAt;
   if (lastCycleAt === null) return null;
   const ms = Date.parse(lastCycleAt);

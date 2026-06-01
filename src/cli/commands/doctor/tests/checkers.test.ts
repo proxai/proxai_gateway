@@ -352,6 +352,15 @@ test('A5: wedged daemon detection', () => {
   expect(f.code).toBe('A5');
 });
 
+test('A5: stays silent while AUTH_FAILED is set (capture paused by design)', () => {
+  const stale = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const signals = baseSignals({
+    daemonState: { ...baseSignals().daemonState, captureLastCycleAt: stale },
+    sentinels: { ...baseSignals().sentinels, authFailed: true },
+  });
+  expect(checkA5Wedged(signals)).toBeNull();
+});
+
 test('B1: AUTH_FAILED sentinel flags invalid key', () => {
   expect(checkB1InvalidKey(withSentinels({ authFailed: false }))).toBeNull();
   const f = requireDefined(checkB1InvalidKey(withSentinels({ authFailed: true })));

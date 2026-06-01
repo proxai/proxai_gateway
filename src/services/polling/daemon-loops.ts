@@ -11,6 +11,7 @@ import {
   CAPTURE_INTERVAL_MS,
   DRAIN_INTERVAL_MS,
   HEARTBEAT_INTERVAL_MS,
+  PAUSE_RECHECK_MS,
 } from 'services/polling/polling.constants.ts';
 import type {
   CaptureCycleContext,
@@ -93,7 +94,7 @@ async function captureLoop(
 ): Promise<void> {
   while (!isAborted(signal)) {
     if (await pausedByAuth(ctx.authFailedSentinelPath)) {
-      await sleep(intervalMs, signal);
+      await sleep(Math.min(intervalMs, PAUSE_RECHECK_MS), signal);
       continue;
     }
     try {
@@ -119,7 +120,7 @@ async function drainLoop(
 ): Promise<void> {
   while (!isAborted(signal)) {
     if (await pausedByAuth(ctx.authFailedSentinelPath)) {
-      await sleep(intervalMs, signal);
+      await sleep(Math.min(intervalMs, PAUSE_RECHECK_MS), signal);
       continue;
     }
     try {
@@ -145,7 +146,7 @@ async function heartbeatLoop(
 ): Promise<void> {
   while (!isAborted(signal)) {
     if (await pausedByAuth(ctx.authFailedSentinelPath)) {
-      await sleep(intervalMs, signal);
+      await sleep(Math.min(intervalMs, PAUSE_RECHECK_MS), signal);
       continue;
     }
     const result = await runHeartbeatCycle(ctx);
