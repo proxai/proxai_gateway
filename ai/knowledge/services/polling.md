@@ -60,7 +60,8 @@ Sleep is abortable: `options.sleep ?? abortableSleep` from `core/utils`. The `Ab
 
 | File | Purpose | Writers | Readers (gate) |
 | --- | --- | --- | --- |
-| `auth-failed-sentinel.ts` | JSON payload `{ reason, detected_at }`. | `handleAuthError` in uploader (only); cleared by `setup new` / `dev setup`. | Capture (gate 1) + drain (gate 1). |
+| `auth-failed-sentinel.ts` | JSON payload `{ reason, detected_at, retry }`. | `handleAuthError` in uploader; retry progress by `auth-recovery.ts`; cleared by the auth-recovery loop on re-verify, or `setup new` / `dev setup`. | Capture + drain **pause** (not exit) while set. |
+| `auth-recovery.ts` | Self-healing loop: re-verifies the key on exponential backoff (1s→…, 16 trials/day), clears `AUTH_FAILED` on success, marks exhausted after the cap. | Runs as a 4th daemon loop alongside capture/drain/heartbeat. | — |
 | `buffer-full-sentinel.ts` | JSON `{ pending_bytes, threshold, set_at }`. | Capture cycle's `applyPressureSentinel`. Cleared by drain's `applyResumeSentinel`. | Capture (gate 3) only. |
 | `session-stopped-sentinel.ts` | JSON `{ boot_id, set_at }`. Self-clearing read (`isCurrentSessionStopped` clears on boot_id mismatch). | CLI `service stop`. Cleared on next boot via the mismatch path, or by any start-triggering action (`start`, `setup`, auto-upgrade respawn). | Not gated; informational for `status`. |
 | `update-available-sentinel.ts` | JSON `{ latest_version, current_version, detected_at, asset_url? }`. | Heartbeat's `runBrewSentinelCheck`. | Brew users only; `status` reads it. |

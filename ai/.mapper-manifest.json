@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-01T05:09:20.687Z",
-  "sourceHash": "34ad45af8c7711956062c676764167af",
+  "generatedAt": "2026-06-01T06:43:15.996Z",
+  "sourceHash": "1c8459c6ef826af307f15b643412dfab",
   "files": [
     {
       "path": "CLAUDE.md",
@@ -209,19 +209,19 @@
     },
     {
       "path": ".claude/rules/services/daemon-loops.md",
-      "hash": "b1929ae8cbf04823"
+      "hash": "a640089fc8a804e0"
     },
     {
       "path": ".cursor/rules/services-daemon-loops.mdc",
-      "hash": "7247c04a86455b97"
+      "hash": "5e912de9c9398b13"
     },
     {
       "path": ".codex/rules/services/daemon-loops.md",
-      "hash": "fecf4a65a9bcf366"
+      "hash": "327615bf6181051e"
     },
     {
       "path": ".agents/rules/services/daemon-loops.md",
-      "hash": "fecf4a65a9bcf366"
+      "hash": "327615bf6181051e"
     },
     {
       "path": ".claude/rules/services/no-direct-sqlite-outside-buffer.md",
@@ -849,19 +849,19 @@
     },
     {
       "path": ".claude/knowledge/services/_overview.md",
-      "hash": "15888931e1334c0c"
+      "hash": "57eca1c1e0e3b770"
     },
     {
       "path": ".cursor/knowledge/services/_overview.md",
-      "hash": "15888931e1334c0c"
+      "hash": "57eca1c1e0e3b770"
     },
     {
       "path": ".codex/knowledge/services/_overview.md",
-      "hash": "15888931e1334c0c"
+      "hash": "57eca1c1e0e3b770"
     },
     {
       "path": ".agents/knowledge/services/_overview.md",
-      "hash": "15888931e1334c0c"
+      "hash": "57eca1c1e0e3b770"
     },
     {
       "path": ".claude/knowledge/services/buffer.md",
@@ -945,19 +945,19 @@
     },
     {
       "path": ".claude/knowledge/services/polling.md",
-      "hash": "9a62f63cc00b16cd"
+      "hash": "9402329e7e442c97"
     },
     {
       "path": ".cursor/knowledge/services/polling.md",
-      "hash": "9a62f63cc00b16cd"
+      "hash": "9402329e7e442c97"
     },
     {
       "path": ".codex/knowledge/services/polling.md",
-      "hash": "9a62f63cc00b16cd"
+      "hash": "9402329e7e442c97"
     },
     {
       "path": ".agents/knowledge/services/polling.md",
-      "hash": "9a62f63cc00b16cd"
+      "hash": "9402329e7e442c97"
     },
     {
       "path": ".claude/knowledge/services/redaction.md",
@@ -1009,19 +1009,19 @@
     },
     {
       "path": ".claude/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "109e060611fa1883"
+      "hash": "b01362cf0fdd83fb"
     },
     {
       "path": ".cursor/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "109e060611fa1883"
+      "hash": "b01362cf0fdd83fb"
     },
     {
       "path": ".codex/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "109e060611fa1883"
+      "hash": "b01362cf0fdd83fb"
     },
     {
       "path": ".agents/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "109e060611fa1883"
+      "hash": "b01362cf0fdd83fb"
     },
     {
       "path": ".claude/knowledge/services/sentinels/watermark-pattern.md",
