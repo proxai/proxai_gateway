@@ -56,6 +56,9 @@ export interface StatusJsonOutput {
   sentinels: {
     authFailed: boolean;
     authFailedReason: string | null;
+    authFailedRetryAttempts: number;
+    authFailedRetryMax: number;
+    authFailedRetryExhausted: boolean;
     bufferFull: boolean;
     bufferFullPendingBytes: number | null;
     sessionStopped: boolean;
@@ -123,6 +126,9 @@ export interface StatusSnapshot {
   authFailed: boolean;
   authFailedReason: string;
   authFailedDetectedAt: string;
+  authFailedRetryAttempts: number;
+  authFailedRetryMax: number;
+  authFailedRetryExhausted: boolean;
   bufferFull: boolean;
   bufferFullPendingBytes: number | null;
   bufferFullThreshold: number | null;

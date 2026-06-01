@@ -3,14 +3,29 @@ import type { DoctorSignals, Finding } from 'cli/commands/doctor/doctor.types.ts
 
 export function checkB1InvalidKey(signals: DoctorSignals): Finding | null {
   if (!signals.sentinels.authFailed) return null;
+  const { authFailedRetryAttempts, authFailedRetryMax, authFailedRetryExhausted } =
+    signals.sentinels;
+  if (authFailedRetryExhausted) {
+    return {
+      code: 'B1',
+      severity: Severity.critical,
+      confidence: Confidence.confirmed,
+      cause: `The configured gateway key was rejected by the ProxAI server and auto-recovery gave up after ${authFailedRetryMax} retries. The key is invalid or deleted.`,
+      action:
+        'Retrieve a valid gateway key from your ProxAI dashboard (https://proxai.co) and reconfigure by running: "proxai-gateway setup new"',
+    };
+  }
+  const progress =
+    authFailedRetryAttempts > 0
+      ? ` Auto-recovery is retrying on backoff (attempt ${authFailedRetryAttempts}/${authFailedRetryMax}); a transient backend issue will clear on its own.`
+      : '';
   return {
     code: 'B1',
     severity: Severity.critical,
     confidence: Confidence.confirmed,
-    cause:
-      'The configured gateway key has been rejected by the ProxAI server, meaning it is invalid or deleted.',
+    cause: `The configured gateway key has been rejected by the ProxAI server, meaning it is invalid or deleted.${progress}`,
     action:
-      'Retrieve a valid gateway key from your ProxAI dashboard (https://proxai.co) and reconfigure by running: "proxai-gateway setup new"',
+      'If the backend is temporarily down it will recover automatically; otherwise retrieve a valid gateway key from your ProxAI dashboard (https://proxai.co) and run: "proxai-gateway setup new"',
   };
 }
 

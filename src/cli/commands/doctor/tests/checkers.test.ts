@@ -119,6 +119,9 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
     daemonRunning: true,
     sentinels: {
       authFailed: false,
+      authFailedRetryAttempts: 0,
+      authFailedRetryMax: 0,
+      authFailedRetryExhausted: false,
       bufferFull: false,
       sessionStopped: false,
       updateAvailable: false,
@@ -354,6 +357,24 @@ test('B1: AUTH_FAILED sentinel flags invalid key', () => {
   const f = requireDefined(checkB1InvalidKey(withSentinels({ authFailed: true })));
   expect(f.code).toBe('B1');
   expect(f.severity).toBe(Severity.critical);
+});
+
+test('B1: surfaces the in-progress trial count while auto-recovery retries', () => {
+  const f = requireDefined(
+    checkB1InvalidKey(
+      withSentinels({ authFailed: true, authFailedRetryAttempts: 4, authFailedRetryMax: 16 }),
+    ),
+  );
+  expect(f.cause).toContain('attempt 4/16');
+});
+
+test('B1: reports auto-recovery exhausted after maxRetries', () => {
+  const f = requireDefined(
+    checkB1InvalidKey(
+      withSentinels({ authFailed: true, authFailedRetryExhausted: true, authFailedRetryMax: 16 }),
+    ),
+  );
+  expect(f.cause).toContain('gave up after 16 retries');
 });
 
 test('B2: auth-unconfirmed loop only when NO AUTH_FAILED and count>0', () => {

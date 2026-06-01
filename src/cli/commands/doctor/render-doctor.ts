@@ -43,6 +43,17 @@ function centerText(text: string, width: number): string {
   return ' '.repeat(padding) + text;
 }
 
+function authRetrySuffix(signals: DoctorSignals): string {
+  const { authFailed, authFailedRetryAttempts, authFailedRetryMax, authFailedRetryExhausted } =
+    signals.sentinels;
+  if (!authFailed) return '';
+  if (authFailedRetryExhausted)
+    return ` (recovery gave up ${authFailedRetryMax}/${authFailedRetryMax})`;
+  if (authFailedRetryAttempts > 0)
+    return ` (retrying ${authFailedRetryAttempts}/${authFailedRetryMax})`;
+  return '';
+}
+
 function renderSignalsAppendix(signals: DoctorSignals, width: number): string {
   const lines: string[] = [];
   lines.push('═'.repeat(width));
@@ -61,7 +72,9 @@ function renderSignalsAppendix(signals: DoctorSignals, width: number): string {
   lines.push(`daemon_running:            ${formatBool(signals.daemonRunning)}`);
   lines.push('');
   lines.push('Sentinels:');
-  lines.push(`  AUTH_FAILED:             ${formatBool(signals.sentinels.authFailed)}`);
+  lines.push(
+    `  AUTH_FAILED:             ${formatBool(signals.sentinels.authFailed)}${authRetrySuffix(signals)}`,
+  );
   lines.push(`  BUFFER_FULL:             ${formatBool(signals.sentinels.bufferFull)}`);
   lines.push(`  SESSION_STOPPED:         ${formatBool(signals.sentinels.sessionStopped)}`);
   lines.push(`  UPDATE_AVAILABLE:        ${formatBool(signals.sentinels.updateAvailable)}`);

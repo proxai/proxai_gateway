@@ -24,6 +24,9 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
     daemonRunning: true,
     sentinels: {
       authFailed: false,
+      authFailedRetryAttempts: 0,
+      authFailedRetryMax: 0,
+      authFailedRetryExhausted: false,
       bufferFull: false,
       sessionStopped: false,
       updateAvailable: false,

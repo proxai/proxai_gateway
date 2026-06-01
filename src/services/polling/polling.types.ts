@@ -177,4 +177,5 @@ export interface DaemonLoopOptions {
   onHeartbeatComplete?: (result: HeartbeatCycleResult) => void;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   xstateInspect?: boolean | undefined;
+  authRecovery?: { baseDelayMs?: number; maxRetries?: number; idleMs?: number };
 }

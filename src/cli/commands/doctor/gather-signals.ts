@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { sentinelHandle, writeAtomic } from 'core/io/fs';
 import type { DoctorCommandDeps, DoctorSignals } from 'cli/commands/doctor/doctor.types.ts';
 import { queryAllDoctorData } from 'services/buffer/doctor-queries.ts';
+import { readAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
 
 /** Seam for tests — swap individual deps without mock.module. */
 export const __deps = {
@@ -479,6 +480,10 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     }
   }
 
+  const authFailedPayload = authFailed
+    ? await readAuthFailedSentinel(deps.authFailedSentinelPath)
+    : null;
+
   const dbData = queryAllDoctorData(deps.bufferDbPath);
 
   const clockExtended = probeClockExtended();
@@ -512,6 +517,9 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     daemonRunning: serviceState.running,
     sentinels: {
       authFailed,
+      authFailedRetryAttempts: authFailedPayload?.retry?.attempts ?? 0,
+      authFailedRetryMax: authFailedPayload?.retry?.maxRetries ?? 0,
+      authFailedRetryExhausted: authFailedPayload?.retry?.exhausted ?? false,
       bufferFull,
       sessionStopped,
       updateAvailable,

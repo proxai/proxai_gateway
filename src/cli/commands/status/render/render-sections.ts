@@ -300,9 +300,22 @@ function renderDaemonLine(
   return chalk.red('○ not running');
 }
 
+function authFailedLabel(s: StatusSnapshot, isDevLike: boolean): string {
+  const base = isDevLike ? 'auth-failed' : 'authentication failed';
+  if (s.authFailedRetryExhausted) {
+    return isDevLike
+      ? `${base} (gave up ${s.authFailedRetryMax}/${s.authFailedRetryMax})`
+      : `${base} (gave up after ${s.authFailedRetryMax} retries — run setup new)`;
+  }
+  if (s.authFailedRetryAttempts > 0) {
+    return `${base} (retrying ${s.authFailedRetryAttempts}/${s.authFailedRetryMax})`;
+  }
+  return base;
+}
+
 function renderSentinelsLine(s: StatusSnapshot, isDevLike: boolean): string {
   const active: string[] = [];
-  if (s.authFailed) active.push(isDevLike ? 'auth-failed' : 'authentication failed');
+  if (s.authFailed) active.push(authFailedLabel(s, isDevLike));
   if (s.bufferFull) active.push(isDevLike ? 'buffer-full' : 'buffer full');
   if (s.sessionStopped) active.push(isDevLike ? 'session-stopped' : 'stopped');
   if (s.updateAvailable !== null) active.push(isDevLike ? 'update-available' : 'update available');

@@ -16,7 +16,7 @@ import type {
   HeartbeatCycleContext,
   RegisteredSource,
 } from 'services/polling';
-import { writeAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
+import { isAuthFailed, writeAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
 
 let dir: string;
 let buffer: Database;
@@ -113,6 +113,7 @@ test('runs all three loops at least once and exits when abort signal fires', asy
     captureIntervalMs: 1,
     drainIntervalMs: 1,
     heartbeatIntervalMs: 1,
+    authRecovery: { baseDelayMs: 1, idleMs: 1 },
     sleep: async (ms, signal) => {
       if (captureCount >= 1 && drainCount >= 1 && heartbeatCount >= 1) {
         ctrl.abort();
@@ -255,7 +256,7 @@ test('runtime errors in cycle functions are logged as error and loops continue',
   );
 });
 
-test('gracefully exits the loops when shouldHalt (sentinel present) resolves to true', async () => {
+test('pauses the loops (does not exit) while AUTH_FAILED is set, resuming on abort', async () => {
   const ctrl = new AbortController();
   const ctxs = makeContexts();
 
@@ -264,12 +265,19 @@ test('gracefully exits the loops when shouldHalt (sentinel present) resolves to 
   let captureCount = 0;
   let drainCount = 0;
   let heartbeatCount = 0;
+  let sleeps = 0;
 
   await runDaemonLoops(ctxs, {
     abortSignal: ctrl.signal,
     captureIntervalMs: 1,
     drainIntervalMs: 1,
     heartbeatIntervalMs: 1,
+    authRecovery: { baseDelayMs: 1, idleMs: 1, maxRetries: 2 },
+    sleep: async (_ms, signal) => {
+      sleeps++;
+      if (sleeps >= 12) ctrl.abort();
+      if (signal?.aborted === true) return;
+    },
     onCaptureComplete: () => {
       captureCount++;
     },
@@ -281,9 +289,57 @@ test('gracefully exits the loops when shouldHalt (sentinel present) resolves to 
     },
   });
 
+  // The loops stay paused while AUTH_FAILED is present — no cycles run — but the
+  // daemon never exits on its own; it only unwinds when the abort signal fires.
   expect(captureCount).toBe(0);
   expect(drainCount).toBe(0);
   expect(heartbeatCount).toBe(0);
+  expect(sleeps).toBeGreaterThanOrEqual(12);
+});
+
+test('auth-recovery re-verifies, clears AUTH_FAILED, and the paused loops resume', async () => {
+  const ctrl = new AbortController();
+  const ctxs = makeContexts();
+  let verifyCalls = 0;
+  // verify-key succeeds → the recovery loop should clear the sentinel and unpause.
+  ctxs.drain.http = new HttpClient({
+    apiKey: 'pxg_test',
+    hostId: 'h_test',
+    endpoints: {
+      ingest: 'https://api.example.com/v1/raw_records',
+      verifyKey: 'https://api.example.com/ingestion/verify-key',
+      watermarks: 'https://api.example.com/v1/watermarks',
+      registerHostId: 'https://api.example.com/v1/host-ids/register',
+    },
+    fetch: async () => {
+      verifyCalls += 1;
+      // stop the daemon as soon as the recovery loop re-verifies the key
+      ctrl.abort();
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+
+  await writeAuthFailedSentinel(ctxs.capture.authFailedSentinelPath, 'transient backend blip');
+
+  await runDaemonLoops(ctxs, {
+    abortSignal: ctrl.signal,
+    captureIntervalMs: 1,
+    drainIntervalMs: 1,
+    heartbeatIntervalMs: 1,
+    authRecovery: { baseDelayMs: 1, idleMs: 1 },
+    // a real 1ms tick so the paused loops don't busy-spin past the recovery loop
+    sleep: async (_ms, signal) => {
+      if (signal?.aborted === true) return;
+      await new Promise((r) => setTimeout(r, 1));
+    },
+  });
+
+  // the verifyKey path ran and the sentinel was cleared → loops would resume
+  expect(verifyCalls).toBeGreaterThanOrEqual(1);
+  expect(await isAuthFailed(ctxs.capture.authFailedSentinelPath)).toBe(false);
 });
 
 interface FakeLogger {
@@ -316,7 +372,7 @@ function makeFakeLogger(entries: { level: string; msg: string }[]): FakeLogger {
   return logger;
 }
 
-test('shouldHalt returns false when no sentinel path is set and signal is live', async () => {
+test('loops run (not paused) when no auth-failed sentinel path is set', async () => {
   const ctrl = new AbortController();
   const ctxs = makeContexts();
   delete (ctxs.drain as { authFailedSentinelPath?: string }).authFailedSentinelPath;
@@ -339,7 +395,7 @@ test('shouldHalt returns false when no sentinel path is set and signal is live',
   expect(cycles).toBeGreaterThanOrEqual(1);
 });
 
-test('daemon-loops covers shouldHalt when signal is aborted inside shouldHalt', async () => {
+test('daemon-loops unwinds when the abort signal flips between iterations', async () => {
   const ctxs = makeContexts();
   let calls = 0;
   const signal = {

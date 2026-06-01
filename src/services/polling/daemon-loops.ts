@@ -6,6 +6,7 @@ import { runCaptureCycle } from 'services/polling/capture-cycle.ts';
 import { runDrainCycle } from 'services/polling/drain-cycle.ts';
 import { runHeartbeatCycle } from 'services/polling/heartbeat-cycle.ts';
 import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
+import { runAuthRecoveryLoop } from 'services/polling/auth-recovery.ts';
 import {
   CAPTURE_INTERVAL_MS,
   DRAIN_INTERVAL_MS,
@@ -46,6 +47,14 @@ export async function runDaemonLoops(
       captureLoop(contexts.capture, captureMs, signal, sleep, options.onCaptureComplete),
       drainLoop(contexts.drain, drainMs, signal, sleep, options.onDrainComplete),
       heartbeatLoop(contexts.heartbeat, heartbeatMs, signal, sleep, options.onHeartbeatComplete),
+      runAuthRecoveryLoop(
+        {
+          verifyKey: () => contexts.drain.http.verifyKey(),
+          authFailedSentinelPath: contexts.capture.authFailedSentinelPath,
+          ...(contexts.drain.logger !== undefined ? { logger: contexts.drain.logger } : {}),
+        },
+        { sleep, abortSignal: signal, ...options.authRecovery },
+      ),
     ]);
   } finally {
     handle.requestShutdown('sigterm');
@@ -83,8 +92,9 @@ async function captureLoop(
   onComplete: ((result: CaptureCycleResult) => void) | undefined,
 ): Promise<void> {
   while (!isAborted(signal)) {
-    if (await shouldHalt(ctx.authFailedSentinelPath, signal)) {
-      return;
+    if (await pausedByAuth(ctx.authFailedSentinelPath)) {
+      await sleep(intervalMs, signal);
+      continue;
     }
     try {
       const result = await runCaptureCycle(ctx);
@@ -108,8 +118,9 @@ async function drainLoop(
   onComplete: ((result: DrainCycleResult) => void) | undefined,
 ): Promise<void> {
   while (!isAborted(signal)) {
-    if (await shouldHalt(ctx.authFailedSentinelPath, signal)) {
-      return;
+    if (await pausedByAuth(ctx.authFailedSentinelPath)) {
+      await sleep(intervalMs, signal);
+      continue;
     }
     try {
       const result = await runDrainCycle(ctx);
@@ -133,8 +144,9 @@ async function heartbeatLoop(
   onComplete: ((result: HeartbeatCycleResult) => void) | undefined,
 ): Promise<void> {
   while (!isAborted(signal)) {
-    if (await shouldHalt(ctx.authFailedSentinelPath, signal)) {
-      return;
+    if (await pausedByAuth(ctx.authFailedSentinelPath)) {
+      await sleep(intervalMs, signal);
+      continue;
     }
     const result = await runHeartbeatCycle(ctx);
     notify(onComplete, result, ctx.logger, 'heartbeat.cycle.callback_failed');
@@ -157,13 +169,7 @@ function notify<T>(
   }
 }
 
-async function shouldHalt(
-  sentinelPath: string | undefined,
-  signal: AbortSignal | undefined,
-): Promise<boolean> {
-  if (isAborted(signal)) {
-    return true;
-  }
+async function pausedByAuth(sentinelPath: string | undefined): Promise<boolean> {
   if (sentinelPath === undefined) {
     return false;
   }

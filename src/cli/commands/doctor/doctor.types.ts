@@ -130,6 +130,9 @@ export interface DoctorSignals {
   readonly daemonRunning: boolean;
   readonly sentinels: {
     readonly authFailed: boolean;
+    readonly authFailedRetryAttempts: number;
+    readonly authFailedRetryMax: number;
+    readonly authFailedRetryExhausted: boolean;
     readonly bufferFull: boolean;
     readonly sessionStopped: boolean;
     readonly updateAvailable: boolean;

@@ -64,6 +64,9 @@ const mockSnapshot: StatusSnapshot = {
   authFailed: false,
   authFailedReason: '',
   authFailedDetectedAt: '',
+  authFailedRetryAttempts: 0,
+  authFailedRetryMax: 0,
+  authFailedRetryExhausted: false,
   bufferFull: false,
   bufferFullPendingBytes: null,
   bufferFullThreshold: null,
@@ -629,4 +632,56 @@ test('render-sections renderHistorySection', () => {
   expect(r).toContain('1000 B');
   expect(r).toContain('Cursor');
   expect(r).toContain('10');
+});
+
+test('renderHealthSection: shows the trial count while auth recovery is retrying', () => {
+  const s = {
+    ...mockSnapshot,
+    authFailed: true,
+    authFailedRetryAttempts: 3,
+    authFailedRetryMax: 16,
+  };
+  const out = renderHealthSection({
+    s,
+    currentVersion: '2026.5.25',
+    inferredAlive: true,
+    isDevLike: false,
+    isLocalBuild: false,
+  }).join('\n');
+  expect(out).toContain('retrying 3/16');
+});
+
+test('renderHealthSection: shows gave-up label once auth recovery is exhausted', () => {
+  const s = {
+    ...mockSnapshot,
+    authFailed: true,
+    authFailedRetryAttempts: 16,
+    authFailedRetryMax: 16,
+    authFailedRetryExhausted: true,
+  };
+  const out = renderHealthSection({
+    s,
+    currentVersion: '2026.5.25',
+    inferredAlive: true,
+    isDevLike: false,
+    isLocalBuild: false,
+  }).join('\n');
+  expect(out).toContain('gave up after 16 retries');
+});
+
+test('renderHealthSection: terse dev gave-up label when exhausted', () => {
+  const s = {
+    ...mockSnapshot,
+    authFailed: true,
+    authFailedRetryMax: 16,
+    authFailedRetryExhausted: true,
+  };
+  const out = renderHealthSection({
+    s,
+    currentVersion: '2026.5.25',
+    inferredAlive: true,
+    isDevLike: true,
+    isLocalBuild: false,
+  }).join('\n');
+  expect(out).toContain('gave up 16/16');
 });

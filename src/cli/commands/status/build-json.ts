@@ -33,6 +33,9 @@ export function buildEmptyStatusJson(): StatusJsonOutput {
     sentinels: {
       authFailed: false,
       authFailedReason: null,
+      authFailedRetryAttempts: 0,
+      authFailedRetryMax: 0,
+      authFailedRetryExhausted: false,
       bufferFull: false,
       bufferFullPendingBytes: null,
       sessionStopped: false,
@@ -95,6 +98,9 @@ export function buildStatusJson(snapshot: StatusSnapshot): StatusJsonOutput {
     sentinels: {
       authFailed: snapshot.authFailed,
       authFailedReason: snapshot.authFailedReason.length > 0 ? snapshot.authFailedReason : null,
+      authFailedRetryAttempts: snapshot.authFailedRetryAttempts,
+      authFailedRetryMax: snapshot.authFailedRetryMax,
+      authFailedRetryExhausted: snapshot.authFailedRetryExhausted,
       bufferFull: snapshot.bufferFull,
       bufferFullPendingBytes: snapshot.bufferFullPendingBytes,
       sessionStopped: snapshot.sessionStopped,
