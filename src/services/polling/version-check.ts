@@ -1,3 +1,4 @@
+import { compareGatewayVersions } from 'core/utils';
 import type { FetchFn } from 'core/utils';
 export interface VersionCheckDeps {
   currentVersion: string;
@@ -63,7 +64,7 @@ export async function checkLatestVersion(deps: VersionCheckDeps): Promise<Versio
   if (latestVersion.length === 0) {
     return { kind: 'error', reason: 'release tag_name is empty after stripping v prefix' };
   }
-  const hasUpdate = compareVersionStrings(latestVersion, deps.currentVersion) > 0;
+  const hasUpdate = compareGatewayVersions(latestVersion, deps.currentVersion) > 0;
   const arch = deps.arch ?? process.arch;
   const platform = deps.platform ?? process.platform;
   const ext = platform === 'win32' ? '.exe' : '';
@@ -81,22 +82,4 @@ export async function checkLatestVersion(deps: VersionCheckDeps): Promise<Versio
 }
 function stripV(tag: string): string {
   return tag.startsWith('v') ? tag.slice(1) : tag;
-}
-function compareVersionStrings(a: string, b: string): number {
-  const pa = parseVersion(a);
-  const pb = parseVersion(b);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const ai = pa[i] ?? 0;
-    const bi = pb[i] ?? 0;
-    if (ai > bi) return 1;
-    if (ai < bi) return -1;
-  }
-  return 0;
-}
-function parseVersion(v: string): number[] {
-  const stripped = v.split('-')[0] ?? v;
-  return stripped.split('.').map((part) => {
-    const n = Number.parseInt(part, 10);
-    return Number.isFinite(n) ? n : 0;
-  });
 }

@@ -25,7 +25,7 @@ mock.module('node:fs', () => {
   };
 });
 
-import { compareVersions, runUpgrade } from 'cli/commands/upgrade.ts';
+import { runUpgrade } from 'cli/commands/upgrade.ts';
 import { captureOutput } from 'cli/output.ts';
 
 let dir: string;
@@ -78,13 +78,6 @@ function makeReleaseFetch(response: ReleaseResponse, binaryBytes?: Uint8Array): 
   };
 }
 
-test('compareVersions handles CalVer-style strings', () => {
-  expect(compareVersions('2026.5.10', '2026.5.7')).toBe(1);
-  expect(compareVersions('2026.5.7', '2026.5.10')).toBe(-1);
-  expect(compareVersions('2026.5.7', '2026.5.7')).toBe(0);
-  expect(compareVersions('2026.6.1', '2026.5.31')).toBe(1);
-});
-
 test('reports already at latest when current >= remote', async () => {
   const out = captureOutput();
   const fetchFn = makeReleaseFetch({ tag_name: 'v2026.5.7', assets: [] });
@@ -128,6 +121,39 @@ test('newer version available downloads, writes binary, and reports success', as
   expect(out.lines.some((l) => l.level === 'success' && l.msg.includes('upgraded to'))).toBe(true);
   const text = await readFile(binaryPath, 'utf8');
   expect(text).toBe('new-binary-content');
+});
+
+test('same-day hyphen re-release is treated as newer and upgrades', async () => {
+  const binaryPath = join(dir, 'proxai-gateway');
+  await writeFile(binaryPath, 'old-binary');
+  const out = captureOutput();
+  const newBinary = new TextEncoder().encode('new-binary-content');
+  const assetName = `proxai-gateway-linux-${process.arch}`;
+  const fetchFn = makeReleaseFetch(
+    {
+      tag_name: 'v2026.6.1-1',
+      assets: [
+        {
+          name: assetName,
+          browser_download_url: `https://github.com/proxai/proxai_gateway/releases/download/v2026.6.1-1/${assetName}`,
+        },
+      ],
+    },
+    newBinary,
+  );
+  const result = await runUpgrade({
+    output: out,
+    currentVersion: '2026.6.1',
+    binaryPath,
+    fetch: fetchFn,
+    platform: 'linux',
+  });
+  expect(result.exitCode).toBe(0);
+  expect(out.lines.some((l) => l.msg.includes('already at latest'))).toBe(false);
+  expect(
+    out.lines.some((l) => l.level === 'success' && l.msg.includes('upgraded to 2026.6.1-1')),
+  ).toBe(true);
+  expect(await readFile(binaryPath, 'utf8')).toBe('new-binary-content');
 });
 
 test('network failure during version check returns error', async () => {
@@ -637,11 +663,6 @@ test('local build path upgrade reports failure on non-zero exit code', async () 
     ),
   ).toBe(true);
   Bun.spawn = origSpawn;
-});
-
-test('compareVersions handles non-finite or invalid version segments correctly', () => {
-  expect(compareVersions('2026.abc', '2026.5')).toBe(-1); // abc parses to NaN -> 0, which is < 5
-  expect(compareVersions('2026.5.abc', '2026.5')).toBe(0); // abc parses to NaN -> 0, matches pb[2] ?? 0
 });
 
 test('local build path upgrade handles repository root not found', async () => {

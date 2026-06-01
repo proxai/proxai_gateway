@@ -520,9 +520,16 @@ withProfileOption(
     .alias('update')
     .description(
       'Fetch the latest gateway release from GitHub and replace the running binary. On Windows, writes the new binary alongside the existing one (restart required to apply).',
+    )
+    .option(
+      '--force',
+      'install the latest release even when it is not detected as newer than the current version',
+      false,
     ),
-).action(async (_opts: { profile?: string }) => {
-  const result = await runUpgrade(buildUpgradeDeps({ binaryPath: process.execPath }));
+).action(async (opts: { profile?: string; force?: boolean }) => {
+  const result = await runUpgrade(buildUpgradeDeps({ binaryPath: process.execPath }), {
+    force: opts.force === true,
+  });
   process.exit(result.exitCode);
 });
 

@@ -1,3 +1,4 @@
+import { compareGatewayVersions } from 'core/utils';
 import type { FetchFn } from 'core/utils';
 import { existsSync, statSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -119,7 +120,7 @@ export async function runUpgrade(
     return { exitCode: EXIT_CODE.error };
   }
 
-  const cmp = compareVersions(latestVersion, deps.currentVersion);
+  const cmp = compareGatewayVersions(latestVersion, deps.currentVersion);
   if (cmp <= 0 && options.force !== true) {
     deps.output.info(`already at latest version: ${deps.currentVersion}`);
     return { exitCode: EXIT_CODE.ok };
@@ -178,24 +179,4 @@ export async function runUpgrade(
 
 function stripV(tag: string): string {
   return tag.startsWith('v') ? tag.slice(1) : tag;
-}
-
-export function compareVersions(a: string, b: string): number {
-  const pa = parseVersion(a);
-  const pb = parseVersion(b);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const ai = pa[i] ?? 0;
-    const bi = pb[i] ?? 0;
-    if (ai > bi) return 1;
-    if (ai < bi) return -1;
-  }
-  return 0;
-}
-
-function parseVersion(v: string): number[] {
-  const stripped = v.split('-')[0] ?? v;
-  return stripped.split('.').map((part) => {
-    const n = Number.parseInt(part, 10);
-    return Number.isFinite(n) ? n : 0;
-  });
 }

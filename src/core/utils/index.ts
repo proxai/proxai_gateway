@@ -15,3 +15,4 @@ export * from 'core/utils/time.ts';
 export * from 'core/utils/utils.constants.ts';
 export * from 'core/utils/utils.types.ts';
 export * from 'core/utils/uuid.ts';
+export * from 'core/utils/version.ts';

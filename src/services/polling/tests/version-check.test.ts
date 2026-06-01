@@ -43,6 +43,28 @@ test('returns ok with hasUpdate=true when remote tag is newer', async () => {
   }
 });
 
+test('returns hasUpdate=true when remote tag is a same-day hyphen re-release', async () => {
+  const fetchFn = makeFetch({
+    tag_name: 'v2026.6.1-2',
+    assets: [{ name: 'asset', browser_download_url: 'https://example.com/asset' }],
+  });
+  const outcome = await checkLatestVersion({ currentVersion: '2026.6.1', fetch: fetchFn });
+  expect(outcome.kind).toBe('ok');
+  if (outcome.kind === 'ok') {
+    expect(outcome.result.latestVersion).toBe('2026.6.1-2');
+    expect(outcome.result.hasUpdate).toBe(true);
+  }
+});
+
+test('returns hasUpdate=false when the local build is already the latest hyphen re-release', async () => {
+  const fetchFn = makeFetch({ tag_name: 'v2026.6.1-2', assets: [] });
+  const outcome = await checkLatestVersion({ currentVersion: '2026.6.1-2', fetch: fetchFn });
+  expect(outcome.kind).toBe('ok');
+  if (outcome.kind === 'ok') {
+    expect(outcome.result.hasUpdate).toBe(false);
+  }
+});
+
 test('returns ok with hasUpdate=false when remote tag is the same', async () => {
   const fetchFn = makeFetch({ tag_name: 'v2026.5.7', assets: [] });
   const outcome = await checkLatestVersion({ currentVersion: '2026.5.7', fetch: fetchFn });
