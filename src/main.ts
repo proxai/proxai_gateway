@@ -32,6 +32,7 @@ import { buildDoctorDeps } from 'cli/wiring/doctor-deps.ts';
 import { buildLogsDeps } from 'cli/wiring/logs-deps.ts';
 import {
   buildPlatformServiceContext,
+  buildProfileServiceContext,
   buildServiceUnitRecreate,
   platformServiceUnitPath,
   resolveWindowsUserId,
@@ -212,9 +213,9 @@ withProfileOption(
       'Register the gateway as a managed service (launchd / systemd / Scheduled Task) and start the daemon. Auto-restarts on reboot. Requires a prior `setup`.',
     ),
 ).action(async (opts: { profile?: string }) => {
-  const ctx = buildPlatformServiceContext(process.platform, process.execPath);
-  if (ctx === null) exitUnsupportedPlatform('start');
   const profileCtx = buildProfileContext(parseProfileName(opts.profile));
+  const ctx = buildProfileServiceContext(process.platform, process.execPath, profileCtx);
+  if (ctx === null) exitUnsupportedPlatform('start');
   const setupInputs = {
     platform: ctx.platform,
     programPath: process.execPath,
@@ -255,12 +256,13 @@ withProfileOption(
       'Halt the running gateway daemon for this session. The service remains registered and will start again automatically on next reboot. Use `uninstall` to fully decommission.',
     ),
 ).action(async (opts: { profile?: string }) => {
-  const ctx = buildPlatformServiceContext(process.platform, process.execPath);
+  const profileCtx = buildProfileContext(parseProfileName(opts.profile));
+  const ctx = buildProfileServiceContext(process.platform, process.execPath, profileCtx);
   if (ctx === null) exitUnsupportedPlatform('stop');
   const result = await runStop(
     buildStopDeps({
       serviceManager: ctx.serviceManager,
-      profileCtx: buildProfileContext(parseProfileName(opts.profile)),
+      profileCtx,
     }),
   );
   process.exit(result.exitCode);
@@ -272,9 +274,9 @@ withProfileOption(
     .alias('r')
     .description('Stop and start the gateway daemon. Equivalent to `stop` followed by `start`.'),
 ).action(async (opts: { profile?: string }) => {
-  const ctx = buildPlatformServiceContext(process.platform, process.execPath);
-  if (ctx === null) exitUnsupportedPlatform('restart');
   const profileCtx = buildProfileContext(parseProfileName(opts.profile));
+  const ctx = buildProfileServiceContext(process.platform, process.execPath, profileCtx);
+  if (ctx === null) exitUnsupportedPlatform('restart');
   const setupInputs = {
     platform: ctx.platform,
     programPath: process.execPath,
@@ -422,8 +424,8 @@ statusCommand.action(
     compact?: boolean;
   }) => {
     const compactMode = opts.compact === true || program.opts().compact === true;
-    const ctx = buildPlatformServiceContext(process.platform, process.execPath);
     const profileCtx = buildProfileContext(parseProfileName(opts.profile));
+    const ctx = buildProfileServiceContext(process.platform, process.execPath, profileCtx);
     const statusContextInputs: Parameters<typeof buildStatusContext>[0] = {
       profileCtx,
       json: opts.json === true,
@@ -436,10 +438,15 @@ statusCommand.action(
     try {
       if ((opts.all === true || isDevMode) && !compactMode) {
         const devProfileCtx = buildProfileContext('dev');
+        const devServiceCtx = buildProfileServiceContext(
+          process.platform,
+          process.execPath,
+          devProfileCtx,
+        );
         const devCtx = await buildStatusContext({
           profileCtx: devProfileCtx,
           json: opts.json === true,
-          serviceManager: ctx?.serviceManager ?? null,
+          serviceManager: devServiceCtx?.serviceManager ?? null,
           configPath: devProfileCtx.configFilePath,
         });
         devCleanup = devCtx.cleanup;
@@ -722,12 +729,8 @@ doctorCommand.action(async (opts: { profile?: string; output?: string | boolean 
   const profileName = parseProfileName(opts.profile ?? defaultProfile);
   const profileCtx = buildProfileContext(profileName);
   const platform = process.platform;
-  const unitPath = platformServiceUnitPath(platform, profileCtx.configDir);
   const serviceManager =
-    unitPath !== null
-      ? (buildPlatformServiceContext(platform, process.execPath, profileCtx.configDir)
-          ?.serviceManager ?? null)
-      : null;
+    buildProfileServiceContext(platform, process.execPath, profileCtx)?.serviceManager ?? null;
   const result = await runDoctor(buildDoctorDeps({ serviceManager, platform, profileCtx }), {
     profile: opts.profile,
     output: opts.output,

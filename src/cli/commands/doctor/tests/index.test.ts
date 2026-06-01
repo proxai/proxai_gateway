@@ -41,6 +41,7 @@ let dir: string;
 let bufferDbPath: string;
 
 const origHome = process.env.HOME;
+const origProfileRoot = process.env['PROXAI_TEST_PROFILE_ROOT'];
 const origFetch = globalThis.fetch;
 const origWhich = Bun.which;
 
@@ -112,6 +113,7 @@ function makeDeps(output: OutputSink, over: Partial<DoctorCommandDeps> = {}): Do
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'proxai-doctor-index-'));
   process.env.HOME = dir;
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = dir;
   mkdirSync(profileRootDir(), { recursive: true });
   bufferDbPath = join(dir, 'buffer.db');
   const db = openBufferDb(bufferDbPath);
@@ -123,6 +125,11 @@ beforeEach(async () => {
 
 afterEach(async () => {
   process.env.HOME = origHome;
+  if (origProfileRoot === undefined) {
+    delete process.env['PROXAI_TEST_PROFILE_ROOT'];
+  } else {
+    process.env['PROXAI_TEST_PROFILE_ROOT'] = origProfileRoot;
+  }
   globalThis.fetch = origFetch;
   (Bun as unknown as { which: typeof Bun.which }).which = origWhich;
   interceptHtmlWrite = false;

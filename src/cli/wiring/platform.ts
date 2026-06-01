@@ -4,8 +4,9 @@ import { getServiceManager } from 'cli/service-manager';
 import type { ServiceManager } from 'cli/service-manager';
 import type { ServiceUnitRecreateConfig } from 'cli/service-unit/writer.ts';
 import { defaultSystemdUnitPath } from 'cli/service-unit/systemd-unit.ts';
+import { buildDevServiceUnitPath } from 'cli/wiring/dev-deps.ts';
 import { buildProfileContext } from 'core/io/fs/profile.ts';
-import type { ProfileName } from 'core/io/fs/profile.types.ts';
+import type { ProfileContext, ProfileName } from 'core/io/fs/profile.types.ts';
 
 export function platformServiceUnitPath(
   platform: NodeJS.Platform,
@@ -43,6 +44,20 @@ export function buildPlatformServiceContext(
   if (unitPath === null) return null;
   const serviceManager = getServiceManager({ platform, unitPath });
   return { platform, unitPath, serviceManager };
+}
+
+export function buildProfileServiceContext(
+  platform: NodeJS.Platform,
+  programPath: string,
+  profileCtx: ProfileContext,
+): PlatformServiceContext | null {
+  if (profileCtx.isDev) {
+    const unitPath = buildDevServiceUnitPath(platform, profileCtx.configDir);
+    if (unitPath === null) return null;
+    const serviceManager = getServiceManager({ platform, unitPath, profile: 'dev' });
+    return { platform, unitPath, serviceManager };
+  }
+  return buildPlatformServiceContext(platform, programPath, profileCtx.configDir);
 }
 
 export function buildServiceUnitRecreate(

@@ -23,31 +23,31 @@ test('returns false when sentinel file does not exist', async () => {
   expect(result).toBe(false);
 });
 
-test('returns false and deletes file when JSON is malformed', async () => {
+test('returns false and preserves file when JSON is malformed', async () => {
   const sentinelPath = join(dir, 'MALFORMED_SENTINEL');
   writeFileSync(sentinelPath, 'invalid-json');
 
   const result = await readDevModeSentinel(sentinelPath, () => Promise.resolve('boot-123'));
   expect(result).toBe(false);
-  expect(existsSync(sentinelPath)).toBe(false);
+  expect(existsSync(sentinelPath)).toBe(true);
 });
 
-test('returns false and deletes file when bootId is missing or not a string', async () => {
+test('returns false and preserves file when bootId is missing or not a string', async () => {
   const sentinelPath = join(dir, 'MISSING_BOOTID_SENTINEL');
   writeFileSync(sentinelPath, JSON.stringify({ notBootId: 123 }));
 
   const result = await readDevModeSentinel(sentinelPath, () => Promise.resolve('boot-123'));
   expect(result).toBe(false);
-  expect(existsSync(sentinelPath)).toBe(false);
+  expect(existsSync(sentinelPath)).toBe(true);
 });
 
-test('returns false and deletes file when stored bootId does not match current bootId', async () => {
+test('returns false and preserves file when stored bootId does not match current bootId', async () => {
   const sentinelPath = join(dir, 'MISMATCH_BOOTID_SENTINEL');
   writeFileSync(sentinelPath, JSON.stringify({ bootId: 'boot-abc' }));
 
   const result = await readDevModeSentinel(sentinelPath, () => Promise.resolve('boot-123'));
   expect(result).toBe(false);
-  expect(existsSync(sentinelPath)).toBe(false);
+  expect(existsSync(sentinelPath)).toBe(true);
 });
 
 test('returns true and preserves file when stored bootId matches current bootId', async () => {

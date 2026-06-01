@@ -1,12 +1,18 @@
 import { requireDefined } from 'core/utils';
-import { expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   buildPlatformServiceContext,
+  buildProfileServiceContext,
   buildServiceUnitRecreate,
   platformServiceUnitPath,
   resolveWindowsUserId,
 } from 'cli/wiring/platform.ts';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
+import { rmRecursive } from 'core/io/fs';
 
 test('platformServiceUnitPath: darwin returns a non-empty plist path', () => {
   const path = platformServiceUnitPath('darwin');
@@ -75,6 +81,81 @@ test('buildPlatformServiceContext: works on win32', () => {
   const ctx = buildPlatformServiceContext('win32', 'C:\\bin\\proxai.exe');
   expect(ctx).not.toBe(null);
   expect(requireDefined(ctx).platform).toBe('win32');
+});
+
+let profileRootDir: string;
+const origProfileRoot = process.env['PROXAI_TEST_PROFILE_ROOT'];
+
+beforeEach(() => {
+  profileRootDir = mkdtempSync(join(tmpdir(), 'proxai-platform-'));
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = profileRootDir;
+});
+
+afterEach(async () => {
+  if (origProfileRoot === undefined) {
+    delete process.env['PROXAI_TEST_PROFILE_ROOT'];
+  } else {
+    process.env['PROXAI_TEST_PROFILE_ROOT'] = origProfileRoot;
+  }
+  await rmRecursive(profileRootDir);
+});
+
+test('buildProfileServiceContext: dev profile on darwin targets the dev launchd plist', () => {
+  const devCtx = buildProfileContext('dev');
+  const ctx = buildProfileServiceContext('darwin', '/path/to/binary', devCtx);
+  expect(ctx).not.toBe(null);
+  expect(requireDefined(ctx).platform).toBe('darwin');
+  expect(requireDefined(ctx).unitPath).toContain('.dev');
+  expect(typeof requireDefined(ctx).serviceManager.isRunning).toBe('function');
+
+  const prodPath = requireDefined(
+    buildPlatformServiceContext('darwin', '/path/to/binary'),
+  ).unitPath;
+  expect(prodPath).not.toContain('.dev');
+});
+
+test('buildProfileServiceContext: dev profile on linux targets the dev systemd unit', () => {
+  const devCtx = buildProfileContext('dev');
+  const ctx = buildProfileServiceContext('linux', '/path/to/binary', devCtx);
+  expect(ctx).not.toBe(null);
+  expect(requireDefined(ctx).platform).toBe('linux');
+  expect(requireDefined(ctx).unitPath).toContain('-dev');
+
+  const prodPath = requireDefined(buildPlatformServiceContext('linux', '/path/to/binary')).unitPath;
+  expect(prodPath).not.toContain('-dev');
+});
+
+test('buildProfileServiceContext: dev profile on win32 targets the dev config dir scheduled task', () => {
+  const devCtx = buildProfileContext('dev');
+  const ctx = buildProfileServiceContext('win32', 'C:\\bin\\proxai.exe', devCtx);
+  expect(ctx).not.toBe(null);
+  expect(requireDefined(ctx).platform).toBe('win32');
+  expect(requireDefined(ctx).unitPath).toContain(join('dev', 'scheduled-task.xml'));
+  expect(requireDefined(ctx).unitPath).not.toContain(join('prod', 'scheduled-task.xml'));
+
+  const prodCtx = buildProfileContext('prod');
+  const prodPath = requireDefined(
+    buildProfileServiceContext('win32', 'C:\\bin\\proxai.exe', prodCtx),
+  ).unitPath;
+  expect(prodPath).toContain(join('prod', 'scheduled-task.xml'));
+});
+
+test('buildProfileServiceContext: dev profile returns null on unsupported platform', () => {
+  const devCtx = buildProfileContext('dev');
+  expect(buildProfileServiceContext('freebsd', '/path/to/binary', devCtx)).toBe(null);
+});
+
+test('buildProfileServiceContext: prod profile delegates to the prod service context', () => {
+  const prodCtx = buildProfileContext('prod');
+  const ctx = buildProfileServiceContext('darwin', '/path/to/binary', prodCtx);
+  expect(ctx).not.toBe(null);
+  expect(requireDefined(ctx).platform).toBe('darwin');
+  expect(requireDefined(ctx).unitPath).not.toContain('.dev');
+});
+
+test('buildProfileServiceContext: prod profile returns null on unsupported platform', () => {
+  const prodCtx = buildProfileContext('prod');
+  expect(buildProfileServiceContext('aix', '/path/to/binary', prodCtx)).toBe(null);
 });
 
 test('buildServiceUnitRecreate: omits windowsUserId on non-win32', () => {
