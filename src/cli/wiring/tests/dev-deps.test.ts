@@ -9,10 +9,12 @@ import {
   buildDevServiceUnitPath,
   verifyKeySimple,
   writeDevConfigFull,
+  registerDevHostIdFull,
   __deps,
 } from 'cli/wiring/dev-deps.ts';
 import { rmRecursive } from 'core/io/fs';
 import { buildProfileContext } from 'core/io/fs/profile.ts';
+import { requireDefined } from 'core/utils';
 import type { ServiceManager } from 'cli/service-manager';
 
 const origDeps = { ...__deps };
@@ -105,6 +107,40 @@ test('writeDevConfigFull: builds config and writes to file', async () => {
   expect(config['hostId']).toBe('mock-uuid::dev');
 });
 
+// ── registerDevHostIdFull ──
+
+test('registerDevHostIdFull: derives dev host_id and registers via http client', async () => {
+  __deps.readMachineUuid = async () => 'machine-xyz';
+  __deps.deriveHostId = (uuid: string, userId: string) => `${uuid}::${userId}`;
+  const capturedOptions: Parameters<typeof __deps.createHttpClient>[0][] = [];
+  __deps.createHttpClient = (options) => {
+    capturedOptions.push(options);
+    const stub: unknown = { registerHostId: async () => ({ registered: true }) };
+    return stub as ReturnType<typeof __deps.createHttpClient>;
+  };
+
+  const result = await registerDevHostIdFull('dev-api-key');
+
+  expect(result).toEqual({ registered: true });
+  expect(capturedOptions).toHaveLength(1);
+  const opts = requireDefined(capturedOptions[0]);
+  expect(opts.apiKey).toBe('dev-api-key');
+  expect(opts.hostId).toBe('machine-xyz::dev');
+  expect(opts.endpoints.registerHostId.endsWith('/v1/host-ids/register')).toBe(true);
+});
+
+test('registerDevHostIdFull: surfaces already-bound result', async () => {
+  __deps.readMachineUuid = async () => 'machine-xyz';
+  __deps.deriveHostId = (uuid: string, userId: string) => `${uuid}::${userId}`;
+  __deps.createHttpClient = () => {
+    const stub: unknown = { registerHostId: async () => ({ registered: false }) };
+    return stub as ReturnType<typeof __deps.createHttpClient>;
+  };
+
+  const result = await registerDevHostIdFull('dev-api-key');
+  expect(result).toEqual({ registered: false });
+});
+
 // ── buildDevDeps (existing test) ──
 
 test('buildDevDeps returns correct dev command dependencies', async () => {
@@ -118,6 +154,7 @@ test('buildDevDeps returns correct dev command dependencies', async () => {
   expect(typeof (await deps.devConfigExists())).toBe('boolean');
   expect(typeof deps.verifyKey).toBe('function');
   expect(typeof deps.writeDevConfig).toBe('function');
+  expect(typeof deps.registerDevHostId).toBe('function');
   expect(typeof deps.registerDevServiceUnit).toBe('function');
 });
 

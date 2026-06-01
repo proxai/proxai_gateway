@@ -7,6 +7,7 @@ import { captureOutput } from 'cli/output.ts';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { DevCommandDeps } from 'cli/commands/dev.ts';
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
+import { AuthError } from 'core/utils';
 
 const mockSentinelPath = join(tmpdir(), `DEV_MODE_CMD_TEST_${Math.random().toString(36).slice(2)}`);
 
@@ -37,6 +38,7 @@ function makeDevDeps(overrides: Partial<DevCommandDeps> = {}): DevCommandDeps {
     devServiceManager: null,
     verifyKey: () => Promise.resolve({ success: true }),
     writeDevConfig: () => Promise.resolve(),
+    registerDevHostId: () => Promise.resolve({ registered: true }),
     registerDevServiceUnit: () => Promise.resolve(),
     readBootId: () => Promise.resolve('mock-boot-id-dev-cmd'),
     ...overrides,
@@ -286,6 +288,76 @@ test('runDevSetup: verifyKey throwing non-Error returns auth error', async () =>
   expect(
     (deps.output as ReturnType<typeof captureOutput>).lines.some((l) =>
       l.msg.includes('key verification failed: string-timeout'),
+    ),
+  ).toBe(true);
+});
+
+test('runDevSetup: registers host_id and reports bound when newly registered', async () => {
+  const receivedKeys: string[] = [];
+  const deps = makeDevDeps({
+    registerDevHostId: (apiKey) => {
+      receivedKeys.push(apiKey);
+      return Promise.resolve({ registered: true });
+    },
+  });
+  const result = await runDev(deps, 'setup', { apiKey: 'key123' });
+  expect(result.exitCode).toBe(EXIT_CODE.ok);
+  expect(receivedKeys).toEqual(['key123']);
+  expect(
+    (deps.output as ReturnType<typeof captureOutput>).lines.some((l) =>
+      l.msg.includes('host_id bound on backend'),
+    ),
+  ).toBe(true);
+});
+
+test('runDevSetup: idempotent host_id registration reports already bound', async () => {
+  const deps = makeDevDeps({
+    registerDevHostId: () => Promise.resolve({ registered: false }),
+  });
+  const result = await runDev(deps, 'setup', { apiKey: 'key123' });
+  expect(result.exitCode).toBe(EXIT_CODE.ok);
+  expect(
+    (deps.output as ReturnType<typeof captureOutput>).lines.some((l) =>
+      l.msg.includes('host_id already bound on backend'),
+    ),
+  ).toBe(true);
+});
+
+test('runDevSetup: AuthError from host_id registration returns auth error', async () => {
+  const deps = makeDevDeps({
+    registerDevHostId: () => Promise.reject(new AuthError('bound elsewhere')),
+  });
+  const result = await runDev(deps, 'setup', { apiKey: 'key123' });
+  expect(result.exitCode).toBe(EXIT_CODE.authError);
+  expect(
+    (deps.output as ReturnType<typeof captureOutput>).lines.some((l) =>
+      l.msg.includes('this dev gateway key is already bound to another machine'),
+    ),
+  ).toBe(true);
+});
+
+test('runDevSetup: generic host_id registration error returns error', async () => {
+  const deps = makeDevDeps({
+    registerDevHostId: () => Promise.reject(new Error('backend down')),
+  });
+  const result = await runDev(deps, 'setup', { apiKey: 'key123' });
+  expect(result.exitCode).toBe(EXIT_CODE.error);
+  expect(
+    (deps.output as ReturnType<typeof captureOutput>).lines.some((l) =>
+      l.msg.includes('host_id registration failed: backend down'),
+    ),
+  ).toBe(true);
+});
+
+test('runDevSetup: non-Error host_id registration failure returns error', async () => {
+  const deps = makeDevDeps({
+    registerDevHostId: () => Promise.reject('string-backend-down'),
+  });
+  const result = await runDev(deps, 'setup', { apiKey: 'key123' });
+  expect(result.exitCode).toBe(EXIT_CODE.error);
+  expect(
+    (deps.output as ReturnType<typeof captureOutput>).lines.some((l) =>
+      l.msg.includes('host_id registration failed: string-backend-down'),
     ),
   ).toBe(true);
 });

@@ -11,7 +11,13 @@ import { defaultScheduledTaskXmlPath } from 'cli/service-unit/scheduled-task-xml
 import { writeServiceUnit } from 'cli/service-unit/writer.ts';
 import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
-import { writeConfigToFile } from 'services/config';
+import {
+  writeConfigToFile,
+  nestIngestUrl,
+  nestVerifyKeyUrl,
+  nestWatermarksUrl,
+  nestRegisterHostIdUrl,
+} from 'services/config';
 import { buildGatewayConfig } from 'cli/commands/setup/build-config.ts';
 import { readMachineUuid, deriveHostId } from 'core/system';
 import { nowIsoUtc, GATEWAY_USER_AGENT } from 'core/utils';
@@ -108,6 +114,25 @@ export async function writeDevConfigFull(
   await __deps.writeConfigToFile(config, profileCtx.configFilePath);
 }
 
+export async function registerDevHostIdFull(apiKey: string): Promise<{ registered: boolean }> {
+  const machineUuid = await __deps.readMachineUuid();
+  const hostId = __deps.deriveHostId(machineUuid, 'dev');
+  const baseUrl = buildProfileContext('dev').defaultNestBaseUrl;
+  const http = __deps.createHttpClient({
+    apiKey,
+    hostId,
+    endpoints: {
+      ingest: nestIngestUrl(baseUrl),
+      verifyKey: nestVerifyKeyUrl(baseUrl),
+      watermarks: nestWatermarksUrl(baseUrl),
+      registerHostId: nestRegisterHostIdUrl(baseUrl),
+    },
+    gatewayVersion: GATEWAY_USER_AGENT,
+  });
+  const result = await http.registerHostId();
+  return { registered: result.registered };
+}
+
 export function buildDevDeps(): DevCommandDeps {
   const devCtx = buildProfileContext('dev');
   const devServiceManager = buildDevServiceManager(process.platform, devCtx.configDir);
@@ -121,6 +146,7 @@ export function buildDevDeps(): DevCommandDeps {
     devServiceManager,
     verifyKey: verifyKeySimple,
     writeDevConfig: writeDevConfigFull,
+    registerDevHostId: registerDevHostIdFull,
     registerDevServiceUnit: async () => {
       if (devServiceUnitPath === null) return;
       await __deps.writeServiceUnit({

@@ -3,6 +3,7 @@ import { mkdir } from 'node:fs/promises';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
+import { AuthError } from 'core/utils';
 import { writeAtomic, sentinelHandle } from 'core/io/fs';
 import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
 import { readBootId } from 'core/system/boot-id.ts';
@@ -17,6 +18,7 @@ export interface DevCommandDeps {
   readonly devServiceManager: ServiceManager | null;
   readonly verifyKey: (url: string, apiKey: string) => Promise<{ success: boolean }>;
   readonly writeDevConfig: (profileCtx: ProfileContext, apiKey: string) => Promise<void>;
+  readonly registerDevHostId: (apiKey: string) => Promise<{ registered: boolean }>;
   readonly registerDevServiceUnit: () => Promise<void>;
   readonly readBootId?: () => Promise<string>;
 }
@@ -119,6 +121,24 @@ async function runDevSetup(
   if (!verified.success) {
     deps.output.error('dev gateway key not accepted');
     return { exitCode: EXIT_CODE.authError };
+  }
+
+  try {
+    const registration = await deps.registerDevHostId(apiKey);
+    deps.output.info(
+      registration.registered ? 'host_id bound on backend' : 'host_id already bound on backend',
+    );
+  } catch (err) {
+    if (err instanceof AuthError) {
+      deps.output.error(
+        'this dev gateway key is already bound to another machine; create a new dev gateway key',
+      );
+      return { exitCode: EXIT_CODE.authError };
+    }
+    deps.output.error(
+      `host_id registration failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return { exitCode: EXIT_CODE.error };
   }
 
   try {
