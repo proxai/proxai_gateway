@@ -28,6 +28,7 @@ export function checkB2AuthUnconfirmedLoop(signals: DoctorSignals): Finding | nu
 }
 
 export function checkB3IngestionKeyAuthError(signals: DoctorSignals): Finding | null {
+  if (!signals.sentinels.authFailed) return null;
   const err = signals.daemonState.lastUploadError;
   if (!err) return null;
   const lower = err.toLowerCase();

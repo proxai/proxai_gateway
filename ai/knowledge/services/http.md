@@ -47,8 +47,8 @@ All non-2xx responses route through `dispatchSuccessOrThrow` (the only HTTP erro
 | 200 / 201 | (success: `JSON.parse(body)`; empty body → `FatalError`) | accepted |
 | 400 with `error: 'watermark_regression'` body | `WatermarkRegressionError(currentEnd, sourcePathHash)` | **recovered** (cursor reset + batch deleted) |
 | 400 (other) | `ValidationError(`server returned 400 …`)` | fatal |
-| 401 | `AuthError('…401: ingestion key missing or invalid')` | triggers `verifyKey()` disambiguation |
-| 403 | `AuthError('…403: ingestion key invalid or revoked')` | same |
+| 401 | `AuthError('…401: gateway key missing or invalid')` | triggers `verifyKey()` disambiguation |
+| 403 | `AuthError('…403: host not authorized for this gateway key')` | same `verifyKey()` disambiguation — a 403 is the transient "valid key, host binding not ready yet" condition and self-heals as retriable; only a definitive verify-key `{ success: false }` (or verify-key `AuthError`) makes it fatal |
 | 408 | `ValidationError('server returned 408 (decompress timeout — gateway bug)')` | fatal |
 | 413 | `ValidationError('server returned 413 (payload too large)')` | fatal |
 | 429 | `RateLimitError(message, retryAfterMs)` | retriable, `pacer.notify429()` |

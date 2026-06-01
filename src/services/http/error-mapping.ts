@@ -55,7 +55,10 @@ export async function dispatchSuccessOrThrow<T>(
     throw withCtx(new AuthError('server returned 401: gateway key missing or invalid'), ctx);
   }
   if (status === HTTP_STATUS.forbidden) {
-    throw withCtx(new AuthError('server returned 403: gateway key invalid or revoked'), ctx);
+    throw withCtx(
+      new AuthError('server returned 403: host not authorized for this gateway key'),
+      ctx,
+    );
   }
   if (status === HTTP_STATUS.requestTimeout) {
     throw withCtx(

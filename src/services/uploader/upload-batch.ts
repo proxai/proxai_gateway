@@ -149,10 +149,6 @@ async function classifyAndPersist(
       reason: 'rate_limit',
     };
   }
-  if (err instanceof AuthError && err.httpContext?.status === 403) {
-    lifecycle.send({ type: 'AUTH_ERROR', error: err.message });
-    return finalizeAuthFailure(ctx, batch, err.message);
-  }
   if (err instanceof AuthError) {
     lifecycle.send({ type: 'AUTH_ERROR', error: err.message });
     return handleAuthError(ctx, batch, err, lifecycle);

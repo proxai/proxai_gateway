@@ -371,26 +371,39 @@ test('B2: auth-unconfirmed loop only when NO AUTH_FAILED and count>0', () => {
   expect(f.cause).toContain('API key network verification');
 });
 
-test('B3: gateway key authentication error based on lastUploadError', () => {
-  expect(checkB3IngestionKeyAuthError(withDaemonState({ lastUploadError: null }))).toBeNull();
-  expect(
-    checkB3IngestionKeyAuthError(withDaemonState({ lastUploadError: 'some other error' })),
-  ).toBeNull();
+function withAuthFailedAndError(lastUploadError: string | null): DoctorSignals {
+  return baseSignals({
+    sentinels: { ...baseSignals().sentinels, authFailed: true },
+    daemonState: { ...baseSignals().daemonState, lastUploadError },
+  });
+}
+
+test('B3: gateway key authentication error based on lastUploadError + AUTH_FAILED sentinel', () => {
+  expect(checkB3IngestionKeyAuthError(withAuthFailedAndError(null))).toBeNull();
+  expect(checkB3IngestionKeyAuthError(withAuthFailedAndError('some other error'))).toBeNull();
 
   const f1 = requireDefined(
-    checkB3IngestionKeyAuthError(withDaemonState({ lastUploadError: 'HTTP 403 Forbidden' })),
+    checkB3IngestionKeyAuthError(withAuthFailedAndError('HTTP 403 Forbidden')),
   );
   expect(f1.code).toBe('B3');
   expect(f1.severity).toBe(Severity.critical);
   expect(f1.confidence).toBe(Confidence.confirmed);
 
   const f2 = requireDefined(
-    checkB3IngestionKeyAuthError(
-      withDaemonState({ lastUploadError: 'invalid gateway key provided' }),
-    ),
+    checkB3IngestionKeyAuthError(withAuthFailedAndError('invalid gateway key provided')),
   );
   expect(f2.code).toBe('B3');
   expect(f2.severity).toBe(Severity.critical);
+});
+
+test('B3: stays silent on transient 403 host-auth error when AUTH_FAILED sentinel is absent', () => {
+  expect(
+    checkB3IngestionKeyAuthError(
+      withDaemonState({
+        lastUploadError: 'server returned 403: host not authorized for this gateway key',
+      }),
+    ),
+  ).toBeNull();
 });
 
 test('C1: rate-limited detection', () => {

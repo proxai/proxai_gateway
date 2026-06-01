@@ -656,7 +656,7 @@ test('AuthError without authFailedSentinelPath: still classifies, no sentinel si
   expect(outcome.kind).toBe('fatal');
 });
 
-test('403 AuthError immediately fatal, bypasses verify-key and writes sentinel', async () => {
+test('403 AuthError + verify-key success → retriable, no sentinel (host-auth self-heals)', async () => {
   const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-upload-auth-403-'));
   const sentinelPath = join(dirAuth, 'AUTH_FAILED');
   try {
@@ -683,15 +683,51 @@ test('403 AuthError immediately fatal, bypasses verify-key and writes sentinel',
     };
     const outcome = await uploadBatch(ctx, stored);
 
+    expect(outcome.kind).toBe('retriable');
+    if (outcome.kind === 'retriable') {
+      expect(outcome.reason).toBe('auth_unconfirmed');
+    }
+    expect(verifyKeyCalled).toBe(true);
+    expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('pending');
+    expect(await Bun.file(sentinelPath).exists()).toBe(false);
+  } finally {
+    await rmRecursive(dirAuth);
+  }
+});
+
+test('403 AuthError + verify-key success: false → fatal, sentinel written', async () => {
+  const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-upload-auth-403-fatal-'));
+  const sentinelPath = join(dirAuth, 'AUTH_FAILED');
+  try {
+    const batch = newClaudeCodeBatch('payload');
+    insertBatch(db, batch);
+    const stored = requireDefined(getBatch(db, batch.captureId));
+
+    const http = createTestHttpClient(
+      mockFetch((call) => {
+        if (call.url.includes('/ingestion/verify-key')) {
+          return jsonResponse({ success: false, message: 'revoked' });
+        }
+        return emptyResponse(403);
+      }),
+    );
+
+    const ctx: UploaderContext = {
+      db,
+      http,
+      hostId: TEST_HOST_ID,
+      authFailedSentinelPath: sentinelPath,
+    };
+    const outcome = await uploadBatch(ctx, stored);
+
     expect(outcome.kind).toBe('fatal');
     if (outcome.kind === 'fatal') {
       expect(outcome.error).toContain('gateway key invalid');
     }
-    expect(verifyKeyCalled).toBe(false);
     expect(requireDefined(getBatch(db, batch.captureId)).status).toBe('failed');
     expect(await Bun.file(sentinelPath).exists()).toBe(true);
     const payload = JSON.parse(await Bun.file(sentinelPath).text()) as Record<string, unknown>;
-    expect(payload['reason']).toContain('server returned 403: gateway key invalid or revoked');
+    expect(payload['reason']).toContain('revoked');
   } finally {
     await rmRecursive(dirAuth);
   }

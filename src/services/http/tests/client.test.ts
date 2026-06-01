@@ -165,9 +165,11 @@ describe('uploadRawRecord', () => {
     }
   });
 
-  test('throws AuthError on 403', async () => {
+  test('throws AuthError on 403 with host-not-authorized message', async () => {
     const client = createClient(mockFetch(() => emptyResponse(403)));
-    await expect(client.uploadRawRecord(validDto())).rejects.toThrow(AuthError);
+    await expect(client.uploadRawRecord(validDto())).rejects.toThrow(
+      'server returned 403: host not authorized for this gateway key',
+    );
   });
 
   test('throws ValidationError on 408', async () => {
@@ -442,7 +444,7 @@ describe('verifyKey', () => {
     expect(headers['X-API-Key']).toBe('pxg-20260505-secret');
   });
 
-  test('throws AuthError on 403 (invalid or revoked key)', async () => {
+  test('throws AuthError on 403 (host not authorized)', async () => {
     const client = createClient(mockFetch(() => emptyResponse(403)));
     await expect(client.verifyKey()).rejects.toThrow(AuthError);
   });

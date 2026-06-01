@@ -414,12 +414,14 @@ test('breaks out of the drainBuffer loop immediately on a fatal auth error', asy
   const sentinelPath = join(dirAuth, 'AUTH_FAILED');
   try {
     await insertN(3);
-    let calls = 0;
+    let uploadCalls = 0;
     const ctx: UploaderContext = {
       db,
       http: createTestHttpClient(
-        mockFetch(() => {
-          calls++;
+        mockFetch((call) => {
+          if (!call.url.includes('/ingestion/verify-key')) {
+            uploadCalls++;
+          }
           return emptyResponse(403);
         }),
       ),
@@ -431,7 +433,7 @@ test('breaks out of the drainBuffer loop immediately on a fatal auth error', asy
     expect(result.attempted).toBe(1);
     expect(result.fatal).toBe(1);
     expect(result.accepted).toBe(0);
-    expect(calls).toBe(1);
+    expect(uploadCalls).toBe(1);
     expect(await Bun.file(sentinelPath).exists()).toBe(true);
   } finally {
     await rmRecursive(dirAuth);
