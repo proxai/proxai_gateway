@@ -25,6 +25,10 @@ export interface BootIdDeps {
 const LINUX_BOOT_ID_PATH = '/proc/sys/kernel/random/boot_id';
 
 export async function readBootId(deps: BootIdDeps = {}): Promise<string> {
+  const override = process.env['PROXAI_TEST_BOOT_ID'];
+  if (override !== undefined && override.length > 0) {
+    return override;
+  }
   const platform = deps.platform ?? process.platform;
   const spawn = deps.spawn ?? defaultBootIdSpawn();
   const readFile = deps.readFile ?? defaultBootIdReadFile;

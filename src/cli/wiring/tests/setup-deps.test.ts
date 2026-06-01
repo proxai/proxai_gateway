@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { ServiceManager } from 'cli/service-manager';
+import { devLaunchdLabel, devSystemdUnitName } from 'cli/service-unit/dev-labels.ts';
+import { LAUNCHD_LABEL, SYSTEMD_UNIT_NAME } from 'cli/cli.constants.ts';
 import { buildProfileContext } from 'core/io/fs/profile.ts';
 import { rmRecursive } from 'core/io/fs';
 import { openBufferDb } from 'services/buffer';
@@ -11,9 +13,11 @@ import {
   buildSetupDeps,
   buildSetupOptions,
   invokeSetupInteractive,
+  resolveSetupServiceContext,
 } from 'cli/wiring/setup-deps.ts';
 
 const profileCtx = buildProfileContext('prod');
+const devProfileCtx = buildProfileContext('dev');
 
 const sm = {
   ensureRegistered: async () => {},
@@ -25,6 +29,49 @@ const sm = {
   isRunning: async () => false,
   runtimeInfo: async () => ({ pid: null, startedAt: null }),
 } satisfies ServiceManager;
+
+test('resolveSetupServiceContext: dev profile resolves the dev launchd unit on darwin', () => {
+  const ctx = resolveSetupServiceContext('darwin', '/bin/p', devProfileCtx);
+  expect(ctx.serviceUnitPath).not.toBeNull();
+  expect(ctx.serviceUnitPath).toContain(`${devLaunchdLabel()}.plist`);
+  expect(ctx.serviceUnitPath).not.toContain(`${LAUNCHD_LABEL}.plist`);
+  expect(ctx.serviceManager).not.toBeNull();
+});
+
+test('resolveSetupServiceContext: dev profile resolves the dev systemd unit on linux', () => {
+  const ctx = resolveSetupServiceContext('linux', '/bin/p', devProfileCtx);
+  expect(ctx.serviceUnitPath).not.toBeNull();
+  expect(ctx.serviceUnitPath).toContain(devSystemdUnitName());
+  expect(ctx.serviceUnitPath).not.toContain(`/${SYSTEMD_UNIT_NAME}`);
+  expect(ctx.serviceManager).not.toBeNull();
+});
+
+test('resolveSetupServiceContext: dev profile resolves the dev scheduled task under the dev config dir on win32', () => {
+  const ctx = resolveSetupServiceContext('win32', 'C:\\bin\\p.exe', devProfileCtx);
+  expect(ctx.serviceUnitPath).not.toBeNull();
+  expect(ctx.serviceUnitPath).toContain(devProfileCtx.configDir);
+  expect(ctx.serviceManager).not.toBeNull();
+});
+
+test('resolveSetupServiceContext: dev profile returns nulls on an unsupported platform', () => {
+  const ctx = resolveSetupServiceContext('freebsd' as NodeJS.Platform, '/bin/p', devProfileCtx);
+  expect(ctx.serviceUnitPath).toBeNull();
+  expect(ctx.serviceManager).toBeNull();
+});
+
+test('resolveSetupServiceContext: prod profile resolves the prod launchd unit on darwin', () => {
+  const ctx = resolveSetupServiceContext('darwin', '/bin/p', profileCtx);
+  expect(ctx.serviceUnitPath).not.toBeNull();
+  expect(ctx.serviceUnitPath).toContain(`${LAUNCHD_LABEL}.plist`);
+  expect(ctx.serviceUnitPath).not.toContain(`${devLaunchdLabel()}.plist`);
+  expect(ctx.serviceManager).not.toBeNull();
+});
+
+test('resolveSetupServiceContext: prod profile returns nulls on an unsupported platform', () => {
+  const ctx = resolveSetupServiceContext('freebsd' as NodeJS.Platform, '/bin/p', profileCtx);
+  expect(ctx.serviceUnitPath).toBeNull();
+  expect(ctx.serviceManager).toBeNull();
+});
 
 test('buildSetupDeps: omits serviceManager when null and platform=darwin', () => {
   const deps = buildSetupDeps({

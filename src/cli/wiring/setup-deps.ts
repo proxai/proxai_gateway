@@ -1,7 +1,8 @@
 import type { CommandResult } from 'cli/cli.types.ts';
 import { runSetup } from 'cli/commands/setup';
 import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup';
-import { resolveWindowsUserId } from 'cli/wiring/platform.ts';
+import { buildDevServiceManager, buildDevServiceUnitPath } from 'cli/wiring/dev-deps.ts';
+import { buildPlatformServiceContext, resolveWindowsUserId } from 'cli/wiring/platform.ts';
 import { consoleOutput } from 'cli/output.ts';
 import { inquirerPrompts } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager';
@@ -26,6 +27,29 @@ export interface BuildSetupDepsInputs {
   serviceManager: ServiceManager | null;
   env: NodeJS.ProcessEnv;
   profileCtx: ProfileContext;
+}
+
+export interface SetupServiceContext {
+  serviceUnitPath: string | null;
+  serviceManager: ServiceManager | null;
+}
+
+export function resolveSetupServiceContext(
+  platform: NodeJS.Platform,
+  programPath: string,
+  profileCtx: ProfileContext,
+): SetupServiceContext {
+  if (profileCtx.isDev) {
+    return {
+      serviceUnitPath: buildDevServiceUnitPath(platform, profileCtx.configDir),
+      serviceManager: buildDevServiceManager(platform, profileCtx.configDir),
+    };
+  }
+  const ctx = buildPlatformServiceContext(platform, programPath);
+  return {
+    serviceUnitPath: ctx?.unitPath ?? null,
+    serviceManager: ctx?.serviceManager ?? null,
+  };
 }
 
 export function buildSetupDeps(inputs: BuildSetupDepsInputs): SetupCommandDeps {

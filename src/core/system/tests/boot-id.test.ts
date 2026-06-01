@@ -171,3 +171,36 @@ test('defaultBootIdSpawn returns a callable that runs a real subprocess', async 
   await result.exited;
   expect(text).toContain('hello');
 });
+
+test('PROXAI_TEST_BOOT_ID env var overrides platform-specific boot id resolution', async () => {
+  const originalValue = process.env['PROXAI_TEST_BOOT_ID'];
+  try {
+    process.env['PROXAI_TEST_BOOT_ID'] = 'test-override-id';
+    const id = await readBootId();
+    expect(id).toBe('test-override-id');
+  } finally {
+    if (originalValue === undefined) {
+      delete process.env['PROXAI_TEST_BOOT_ID'];
+    } else {
+      process.env['PROXAI_TEST_BOOT_ID'] = originalValue;
+    }
+  }
+});
+
+test('PROXAI_TEST_BOOT_ID empty string does not override', async () => {
+  const originalValue = process.env['PROXAI_TEST_BOOT_ID'];
+  try {
+    process.env['PROXAI_TEST_BOOT_ID'] = '';
+    const id = await readBootId();
+    expect(typeof id).toBe('string');
+    expect(id).not.toBe('');
+  } catch (err) {
+    expect(err).toBeInstanceOf(Error);
+  } finally {
+    if (originalValue === undefined) {
+      delete process.env['PROXAI_TEST_BOOT_ID'];
+    } else {
+      process.env['PROXAI_TEST_BOOT_ID'] = originalValue;
+    }
+  }
+}, 30000);
