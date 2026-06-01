@@ -91,7 +91,7 @@ Check task ownership:
 schtasks /Query /TN proxai-gateway /V /FO LIST
 ```
 
-If the user shown isn't the current user, run `setup --force` from
+If the user shown isn't the current user, run `setup new` from
 the matching context.
 
 ### `USERDOMAIN` / `USERNAME` not resolvable
@@ -104,7 +104,7 @@ these env vars are absent or empty. `setup` falls back to just
 
 Workaround: invoke setup with the env vars explicitly:
 ```
-$env:USERDOMAIN = (hostname); $env:USERNAME = (whoami); proxai-gateway setup --force
+$env:USERDOMAIN = (hostname); $env:USERNAME = (whoami); proxai-gateway setup new
 ```
 
 ### XML encoding
@@ -128,7 +128,7 @@ See `ai/knowledge/runbooks/upgrade-failure.md` for the recovery.
 
 ## Cross-cutting
 
-### Re-run with `setup --force`
+### Re-run with `setup new`
 
 The `--force` flag tears down and recreates the service registration
 end-to-end. It is the canonical "I don't know what went wrong" reset

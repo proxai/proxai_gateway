@@ -35,7 +35,7 @@ ls -la ~/.proxai/proxai-gateway/AUTH_FAILED
 ls -la ~/.proxai/proxai-gateway/SESSION_STOPPED
 ```
 
-If `AUTH_FAILED` is set, drain isn't running — re-run `setup --force`
+If `AUTH_FAILED` is set, drain isn't running — re-run `setup new`
 to clear it. If `SESSION_STOPPED` is set the daemon process is stopped
 for this boot; run `proxai-gateway start` or reboot.
 

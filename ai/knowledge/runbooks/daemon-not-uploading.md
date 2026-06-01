@@ -35,7 +35,7 @@ The four event signatures to look for, in priority order:
 
 - `auth.invalid` (FATAL) — `handleAuthError` finalized auth failure;
   `AUTH_FAILED` sentinel written. Drain will keep skipping.
-  → `setup --force` with valid key.
+  → `setup new` with valid key.
 - `upload.rate_limited` (ERROR) with `retry_after_ms` — server told the
   daemon to back off. Look at the value; if `retry_after_ms > 300_000`
   (5 min), the server is intentionally throttling this host. Check

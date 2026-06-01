@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-01T00:42:28.296Z",
-  "sourceHash": "2ce3b5ed1746b5552007703b484c7133",
+  "generatedAt": "2026-06-01T05:09:20.687Z",
+  "sourceHash": "34ad45af8c7711956062c676764167af",
   "files": [
     {
       "path": "CLAUDE.md",
@@ -193,35 +193,35 @@
     },
     {
       "path": ".claude/rules/services/config.md",
-      "hash": "e2b2681836e6aec1"
+      "hash": "a5d72d329370bd8b"
     },
     {
       "path": ".cursor/rules/services-config.mdc",
-      "hash": "7a8bf3e21970515a"
+      "hash": "285a64b19d601173"
     },
     {
       "path": ".codex/rules/services/config.md",
-      "hash": "368af04007043c8f"
+      "hash": "47f769b117dc7064"
     },
     {
       "path": ".agents/rules/services/config.md",
-      "hash": "368af04007043c8f"
+      "hash": "47f769b117dc7064"
     },
     {
       "path": ".claude/rules/services/daemon-loops.md",
-      "hash": "43a0e9853f0ea1e1"
+      "hash": "b1929ae8cbf04823"
     },
     {
       "path": ".cursor/rules/services-daemon-loops.mdc",
-      "hash": "ce70a85dfbc4f8aa"
+      "hash": "7247c04a86455b97"
     },
     {
       "path": ".codex/rules/services/daemon-loops.md",
-      "hash": "81efa3e4101ff742"
+      "hash": "fecf4a65a9bcf366"
     },
     {
       "path": ".agents/rules/services/daemon-loops.md",
-      "hash": "81efa3e4101ff742"
+      "hash": "fecf4a65a9bcf366"
     },
     {
       "path": ".claude/rules/services/no-direct-sqlite-outside-buffer.md",
@@ -497,19 +497,19 @@
     },
     {
       "path": ".claude/knowledge/core/system.md",
-      "hash": "781e3c5389a3f568"
+      "hash": "4b320bf69865f697"
     },
     {
       "path": ".cursor/knowledge/core/system.md",
-      "hash": "781e3c5389a3f568"
+      "hash": "4b320bf69865f697"
     },
     {
       "path": ".codex/knowledge/core/system.md",
-      "hash": "781e3c5389a3f568"
+      "hash": "4b320bf69865f697"
     },
     {
       "path": ".agents/knowledge/core/system.md",
-      "hash": "781e3c5389a3f568"
+      "hash": "4b320bf69865f697"
     },
     {
       "path": ".claude/knowledge/core/utils.md",
@@ -641,19 +641,19 @@
     },
     {
       "path": ".claude/knowledge/process/workflow-rationale.md",
-      "hash": "5166d0ce79e7765f"
+      "hash": "eeb9655c6c76d00b"
     },
     {
       "path": ".cursor/knowledge/process/workflow-rationale.md",
-      "hash": "5166d0ce79e7765f"
+      "hash": "eeb9655c6c76d00b"
     },
     {
       "path": ".codex/knowledge/process/workflow-rationale.md",
-      "hash": "5166d0ce79e7765f"
+      "hash": "eeb9655c6c76d00b"
     },
     {
       "path": ".agents/knowledge/process/workflow-rationale.md",
-      "hash": "5166d0ce79e7765f"
+      "hash": "eeb9655c6c76d00b"
     },
     {
       "path": ".claude/knowledge/release/auto-update-flow.md",
@@ -737,51 +737,51 @@
     },
     {
       "path": ".claude/knowledge/runbooks/buffer-grows-unbounded.md",
-      "hash": "f2a1652f9a49be8c"
+      "hash": "28edf1f523f90204"
     },
     {
       "path": ".cursor/knowledge/runbooks/buffer-grows-unbounded.md",
-      "hash": "f2a1652f9a49be8c"
+      "hash": "28edf1f523f90204"
     },
     {
       "path": ".codex/knowledge/runbooks/buffer-grows-unbounded.md",
-      "hash": "f2a1652f9a49be8c"
+      "hash": "28edf1f523f90204"
     },
     {
       "path": ".agents/knowledge/runbooks/buffer-grows-unbounded.md",
-      "hash": "f2a1652f9a49be8c"
+      "hash": "28edf1f523f90204"
     },
     {
       "path": ".claude/knowledge/runbooks/daemon-not-uploading.md",
-      "hash": "85995d48fa34ba2f"
+      "hash": "583a878e7200944f"
     },
     {
       "path": ".cursor/knowledge/runbooks/daemon-not-uploading.md",
-      "hash": "85995d48fa34ba2f"
+      "hash": "583a878e7200944f"
     },
     {
       "path": ".codex/knowledge/runbooks/daemon-not-uploading.md",
-      "hash": "85995d48fa34ba2f"
+      "hash": "583a878e7200944f"
     },
     {
       "path": ".agents/knowledge/runbooks/daemon-not-uploading.md",
-      "hash": "85995d48fa34ba2f"
+      "hash": "583a878e7200944f"
     },
     {
       "path": ".claude/knowledge/runbooks/debug-stuck-daemon.md",
-      "hash": "ab14258ae3cd7072"
+      "hash": "63f2f8d7b4c52f47"
     },
     {
       "path": ".cursor/knowledge/runbooks/debug-stuck-daemon.md",
-      "hash": "ab14258ae3cd7072"
+      "hash": "63f2f8d7b4c52f47"
     },
     {
       "path": ".codex/knowledge/runbooks/debug-stuck-daemon.md",
-      "hash": "ab14258ae3cd7072"
+      "hash": "63f2f8d7b4c52f47"
     },
     {
       "path": ".agents/knowledge/runbooks/debug-stuck-daemon.md",
-      "hash": "ab14258ae3cd7072"
+      "hash": "63f2f8d7b4c52f47"
     },
     {
       "path": ".claude/knowledge/runbooks/fix-coverage-gap.md",
@@ -801,19 +801,19 @@
     },
     {
       "path": ".claude/knowledge/runbooks/platform-specific-install-failure.md",
-      "hash": "8ee302e2303900dd"
+      "hash": "8fe9a4312bdfb468"
     },
     {
       "path": ".cursor/knowledge/runbooks/platform-specific-install-failure.md",
-      "hash": "8ee302e2303900dd"
+      "hash": "8fe9a4312bdfb468"
     },
     {
       "path": ".codex/knowledge/runbooks/platform-specific-install-failure.md",
-      "hash": "8ee302e2303900dd"
+      "hash": "8fe9a4312bdfb468"
     },
     {
       "path": ".agents/knowledge/runbooks/platform-specific-install-failure.md",
-      "hash": "8ee302e2303900dd"
+      "hash": "8fe9a4312bdfb468"
     },
     {
       "path": ".claude/knowledge/runbooks/redaction-false-positive.md",
@@ -849,19 +849,19 @@
     },
     {
       "path": ".claude/knowledge/services/_overview.md",
-      "hash": "aa5b47d0bc7c702a"
+      "hash": "15888931e1334c0c"
     },
     {
       "path": ".cursor/knowledge/services/_overview.md",
-      "hash": "aa5b47d0bc7c702a"
+      "hash": "15888931e1334c0c"
     },
     {
       "path": ".codex/knowledge/services/_overview.md",
-      "hash": "aa5b47d0bc7c702a"
+      "hash": "15888931e1334c0c"
     },
     {
       "path": ".agents/knowledge/services/_overview.md",
-      "hash": "aa5b47d0bc7c702a"
+      "hash": "15888931e1334c0c"
     },
     {
       "path": ".claude/knowledge/services/buffer.md",
@@ -881,19 +881,19 @@
     },
     {
       "path": ".claude/knowledge/services/config.md",
-      "hash": "5862d85fa9ac90e9"
+      "hash": "50dba351ffd32d00"
     },
     {
       "path": ".cursor/knowledge/services/config.md",
-      "hash": "5862d85fa9ac90e9"
+      "hash": "50dba351ffd32d00"
     },
     {
       "path": ".codex/knowledge/services/config.md",
-      "hash": "5862d85fa9ac90e9"
+      "hash": "50dba351ffd32d00"
     },
     {
       "path": ".agents/knowledge/services/config.md",
-      "hash": "5862d85fa9ac90e9"
+      "hash": "50dba351ffd32d00"
     },
     {
       "path": ".claude/knowledge/services/contract.md",
@@ -945,19 +945,19 @@
     },
     {
       "path": ".claude/knowledge/services/polling.md",
-      "hash": "7a413cb278a50cce"
+      "hash": "9a62f63cc00b16cd"
     },
     {
       "path": ".cursor/knowledge/services/polling.md",
-      "hash": "7a413cb278a50cce"
+      "hash": "9a62f63cc00b16cd"
     },
     {
       "path": ".codex/knowledge/services/polling.md",
-      "hash": "7a413cb278a50cce"
+      "hash": "9a62f63cc00b16cd"
     },
     {
       "path": ".agents/knowledge/services/polling.md",
-      "hash": "7a413cb278a50cce"
+      "hash": "9a62f63cc00b16cd"
     },
     {
       "path": ".claude/knowledge/services/redaction.md",
@@ -1009,19 +1009,19 @@
     },
     {
       "path": ".claude/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "f3b1cf39cbdd49d6"
+      "hash": "109e060611fa1883"
     },
     {
       "path": ".cursor/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "f3b1cf39cbdd49d6"
+      "hash": "109e060611fa1883"
     },
     {
       "path": ".codex/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "f3b1cf39cbdd49d6"
+      "hash": "109e060611fa1883"
     },
     {
       "path": ".agents/knowledge/services/sentinels/sentinel-lifecycle.md",
-      "hash": "f3b1cf39cbdd49d6"
+      "hash": "109e060611fa1883"
     },
     {
       "path": ".claude/knowledge/services/sentinels/watermark-pattern.md",

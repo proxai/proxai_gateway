@@ -8,7 +8,7 @@ All five live inside `<profileRootDir>/<profile>/` — i.e. inside `prod/` or `d
 
 | File                | Writer                              | Clearer                     | Body                                                  |
 | ------------------- | ----------------------------------- | --------------------------- | ----------------------------------------------------- |
-| `AUTH_FAILED`       | `handleAuthError` in drain          | `setup --force` only        | `{ reason, detected_at }` JSON                        |
+| `AUTH_FAILED`       | `handleAuthError` in drain          | `setup new` / `dev setup`   | `{ reason, detected_at }` JSON                        |
 | `BUFFER_FULL`       | `applyPressureSentinel` in capture  | drain when pressure drops   | `{ pending_bytes, threshold, set_at }` JSON           |
 | `SESSION_STOPPED`   | `stop` CLI                          | self-clear on boot mismatch | `{ boot_id, set_at }` JSON                            |
 | `CONSENT_ACCEPTED`  | `setup` CLI                         | `uninstall --reset`         | informational (never gates)                           |

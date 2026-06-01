@@ -34,7 +34,7 @@ Linux returns the raw boot-id (it's already random per boot). macOS and Windows 
 
 `host-id.ts:1` — pure function. Returns `sha256Hex(<trimmed-machine-uuid>:<trimmed-user-id>)`.
 
-The host-id is what the backend uses to identify a unique `(machine, user)` pair. It is computed once at `setup`, written to `config.toml`'s `[account] host_id = ...`, and never recomputed at runtime. `setup --force` recomputes it (and re-registers with the backend) because the user-id may have changed.
+The host-id is what the backend uses to identify a unique `(machine, user)` pair. It is computed once at `setup`, written to `config.toml`'s `[account] host_id = ...`, and never recomputed at runtime. `setup new` recomputes it (and re-registers with the backend) because the user-id may have changed.
 
 Machine-uuid alone is insufficient because shared hosts (CI runners, shared dev boxes) have multiple users, each with their own ingestion key. User-id alone is insufficient because a single user across multiple machines should appear as distinct hosts in the dashboard.
 

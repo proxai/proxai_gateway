@@ -10,7 +10,7 @@ This document serves as an advanced architectural cheatsheet describing the exec
 
 Each profile owns its own sentinel set under `<root>/<profile>/`. There are **5 per-profile sentinels**:
 
-- `AUTH_FAILED` — written by the drain upload path on a confirmed invalid key; cleared only by `setup --force`. Gates capture and drain.
+- `AUTH_FAILED` — written by the drain upload path on a confirmed invalid key; cleared only by `setup new`. Gates capture and drain.
 - `BUFFER_FULL` — written by capture when pending bytes exceed the soft-pause threshold; cleared by drain once pressure drops below soft-resume. Gates capture only (never drain).
 - `SESSION_STOPPED` — boot-id self-clearing; read once at daemon boot to exit cleanly. Not gated inside the per-cycle loops.
 - `CONSENT_ACCEPTED` — informational only; never gates any cycle.

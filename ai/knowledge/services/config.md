@@ -56,7 +56,7 @@ Defaults live in `config.constants.ts`, **not** in a written-out template. `vali
 
 ## Env-var override
 
-`PROXAI_GATEWAY_NEST_ENDPOINT` is read at module load by `core/io/fs` (the dev-mode sentinel detection) and influences `NEST_BASE_URL`. **Once `setup` has written `[backend]` to `config.toml`, the env-var has no effect** — the resolved URLs are persisted. To change a running install's backend you must edit `[backend]` or re-run `setup --force`.
+`PROXAI_GATEWAY_NEST_ENDPOINT` is read at module load by `core/io/fs` (the dev-mode sentinel detection) and influences `NEST_BASE_URL`. **Once `setup` has written `[backend]` to `config.toml`, the env-var has no effect** — the resolved URLs are persisted. To change a running install's backend you must edit `[backend]` or re-run `setup new`.
 
 ## Hot-reload behavior
 

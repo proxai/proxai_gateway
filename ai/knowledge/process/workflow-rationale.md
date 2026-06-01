@@ -56,7 +56,7 @@ Drives the user to fix issues before `release.yml` rejects them.
 Reads `proxai-gateway status` output, last 2 h of `tail --level warn`,
 and the sentinel filesystem. Walks the user through
 `ai/knowledge/runbooks/debug-stuck-daemon.md`. Produces a structured
-finding ("AUTH_FAILED with reason X, suggest setup --force").
+finding ("AUTH_FAILED with reason X, suggest setup new").
 
 This is borderline a skill, but the value-add is the multi-step LLM
 synthesis of the three command outputs into a single conclusion.

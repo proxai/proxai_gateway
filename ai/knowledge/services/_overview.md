@@ -18,7 +18,7 @@ The `src/services/` tree is the daemon's modular runtime. Nine modules cooperate
 
 ## Coordination boundaries
 
-- **Sentinels** are the only cross-loop signal. Capture writes `BUFFER_FULL`; drain clears it. Drain writes `AUTH_FAILED`; only `setup --force` clears it. See `ai/knowledge/services/sentinel-lifecycle.md` for the full table.
+- **Sentinels** are the only cross-loop signal. Capture writes `BUFFER_FULL`; drain clears it. Drain writes `AUTH_FAILED`; the setup reconfigure flow clears it (`setup new` for prod, `dev setup` for dev). See `ai/knowledge/services/sentinel-lifecycle.md` for the full table.
 - **Buffer DB** is the only shared mutable state. All cross-loop visibility flows through SQL rows: cursors, batches, receipts, metadata counters, `daemon_state` singleton row.
 - **HttpClient / Pacer** are constructed once at daemon bootstrap and threaded into both drain and heartbeat contexts. They are not shared with capture (capture never makes outbound HTTP).
 
