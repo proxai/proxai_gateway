@@ -378,6 +378,30 @@ describe('uploadRawRecord', () => {
     expect(requireDefined(log[0]).url).toBe(endpoints.ingest);
     expect(requireDefined(log[0]).init.method).toBe('POST');
   });
+
+  test('sends X-Client-Timezone header on upload', async () => {
+    const log: MockCall[] = [];
+    const client = createClient(
+      mockFetch(
+        () => jsonResponse({ capture_id: VALID_UUID, accepted: true, idempotent: false }),
+        log,
+      ),
+    );
+    await client.uploadRawRecord(validDto());
+    const headers = requireDefined(log[0]).init.headers as Record<string, string>;
+    const expectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(headers['X-Client-Timezone']).toBe(expectedTz);
+  });
+
+  test('does not send X-Client-Timezone on verifyKey', async () => {
+    const log: MockCall[] = [];
+    const client = createClient(
+      mockFetch(() => jsonResponse({ success: true, message: 'ok' }), log),
+    );
+    await client.verifyKey();
+    const headers = requireDefined(log[0]).init.headers as Record<string, string>;
+    expect(headers['X-Client-Timezone']).toBeUndefined();
+  });
 });
 
 describe('verifyKey', () => {

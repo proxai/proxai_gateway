@@ -1,6 +1,6 @@
 {
   "name": "@proxai/gateway",
-  "version": "2026.6.2-2",
+  "version": "2026.6.2-3",
   "description": "ProxAI Gateway",
   "license": "MIT",
   "type": "module",
