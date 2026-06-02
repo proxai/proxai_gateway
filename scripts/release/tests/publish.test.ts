@@ -15,6 +15,11 @@ interface CaptureOps {
   promptCalls: string[];
   tagsCreated: Array<{ name: string; message: string }>;
   tagsPushed: string[];
+  filesStaged: string[];
+  commits: string[];
+  branchesPushed: string[];
+  packageJsonReads: number;
+  packageJsonWrites: string[];
 }
 
 function makeOps(
@@ -31,7 +36,13 @@ function makeOps(
   const promptCalls: string[] = [];
   const tagsCreated: Array<{ name: string; message: string }> = [];
   const tagsPushed: string[] = [];
+  const filesStaged: string[] = [];
+  const commits: string[] = [];
+  const branchesPushed: string[] = [];
   let validateCalls = 0;
+  let packageJsonReads = 0;
+  const packageJsonWrites: string[] = [];
+
   const git: GitOps = {
     status: () => override.status ?? '',
     currentBranch: () => override.branch ?? 'main',
@@ -45,6 +56,15 @@ function makeOps(
     pushTag: (name) => {
       tagsPushed.push(name);
     },
+    stageFile: (path) => {
+      filesStaged.push(path);
+    },
+    commit: (message) => {
+      commits.push(message);
+    },
+    pushBranch: (branch) => {
+      branchesPushed.push(branch);
+    },
   };
   const deps: PublishDeps = {
     git,
@@ -57,10 +77,29 @@ function makeOps(
     },
     log: (line) => log.push(line),
     now: new Date('2026-05-08T03:14:00Z'),
+    readPackageJson: () => {
+      packageJsonReads++;
+      return JSON.stringify({ name: '@proxai/gateway', version: '2026.5.7' });
+    },
+    writePackageJson: (content) => {
+      packageJsonWrites.push(content);
+    },
   };
   return {
     deps,
-    capture: { git, log, validateCalls, promptCalls, tagsCreated, tagsPushed },
+    capture: {
+      git,
+      log,
+      validateCalls,
+      promptCalls,
+      tagsCreated,
+      tagsPushed,
+      filesStaged,
+      commits,
+      branchesPushed,
+      packageJsonReads,
+      packageJsonWrites,
+    },
   };
 }
 
@@ -72,6 +111,16 @@ test('happy path: no prior tags → today with no suffix, validate runs, tag pus
   expect(result.validated).toBe(true);
   expect(capture.tagsCreated).toEqual([{ name: 'v2026.5.8', message: 'v2026.5.8' }]);
   expect(capture.tagsPushed).toEqual(['v2026.5.8']);
+  expect(capture.filesStaged).toEqual(['package.json']);
+  expect(capture.commits).toEqual(['chore: release 2026.5.8']);
+  expect(capture.branchesPushed).toEqual(['main']);
+  expect(capture.packageJsonWrites.length).toBe(1);
+  const firstWrite = capture.packageJsonWrites[0];
+  if (firstWrite === undefined) {
+    throw new Error('Expected at least one package.json write');
+  }
+  const updatedPkg = JSON.parse(firstWrite) as Record<string, unknown>;
+  expect(updatedPkg.version).toBe('2026.5.8');
 });
 
 test('happy path: latest from yesterday → fresh today version', async () => {

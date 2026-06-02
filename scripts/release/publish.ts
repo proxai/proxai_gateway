@@ -15,6 +15,9 @@ export interface GitOps {
   listTags(pattern: string): string[];
   createTag(name: string, message: string): void;
   pushTag(name: string): void;
+  stageFile(path: string): void;
+  commit(message: string): void;
+  pushBranch(branch: string): void;
 }
 
 export interface PublishDeps {
@@ -23,6 +26,8 @@ export interface PublishDeps {
   prompt: (message: string) => Promise<boolean>;
   log: (line: string) => void;
   now?: Date;
+  readPackageJson(): string;
+  writePackageJson(content: string): void;
 }
 
 export interface PublishOptions {
@@ -77,7 +82,26 @@ export async function runPublish(
     }
   }
 
+  const versionStr = formatVersion(next);
+  deps.log(`updating package.json version to ${versionStr}…`);
+  const pkgContent = deps.readPackageJson();
+  const pkg = JSON.parse(pkgContent) as Record<string, unknown>;
+  pkg.version = versionStr;
+  deps.writePackageJson(JSON.stringify(pkg, null, 2) + '\n');
+
+  deps.log('staging package.json…');
+  deps.git.stageFile('package.json');
+
+  const commitMsg = `chore: release ${versionStr}`;
+  deps.log(`committing version bump: "${commitMsg}"…`);
+  deps.git.commit(commitMsg);
+
   deps.git.createTag(tag, tag);
+
+  deps.log('pushing branch main to origin…');
+  deps.git.pushBranch('main');
+
+  deps.log(`pushing tag ${tag}…`);
   deps.git.pushTag(tag);
   deps.log(`pushed ${tag}`);
   return { tag, pushed: true, validated: !options.skipValidate };

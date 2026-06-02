@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { execSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { confirm } from '@inquirer/prompts';
 
 import { PublishAbortError, parseArgv, runPublish, type GitOps } from 'scripts/release/publish.ts';
@@ -24,6 +25,16 @@ function defaultGitOps(): GitOps {
     pushTag: (name: string) => {
       execSync(`git push origin ${name}`, { stdio: 'inherit' });
     },
+    stageFile: (path: string) => {
+      execSync(`git add ${path}`, { stdio: 'inherit' });
+    },
+    commit: (message: string) => {
+      const escaped = message.replace(/"/g, '\\"');
+      execSync(`git commit -m "${escaped}"`, { stdio: 'inherit' });
+    },
+    pushBranch: (branch: string) => {
+      execSync(`git push origin ${branch}`, { stdio: 'inherit' });
+    },
   };
 }
 
@@ -45,6 +56,8 @@ try {
       log: (line) => {
         console.log(line);
       },
+      readPackageJson: () => readFileSync('package.json', 'utf8'),
+      writePackageJson: (content: string) => writeFileSync('package.json', content, 'utf8'),
     },
     options,
   );
