@@ -1,4 +1,5 @@
 export const HEADER_X_API_KEY = 'X-API-Key';
+export const HEADER_X_CLIENT_TIMEZONE = 'X-Client-Timezone';
 export const HEADER_CONTENT_TYPE = 'Content-Type';
 export const HEADER_RETRY_AFTER = 'Retry-After';
 export const HEADER_USER_AGENT = 'User-Agent';

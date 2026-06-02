@@ -12,6 +12,7 @@ import {
   HEADER_CONTENT_TYPE,
   HEADER_USER_AGENT,
   HEADER_X_API_KEY,
+  HEADER_X_CLIENT_TIMEZONE,
   UPLOAD_TIMEOUT_MS,
 } from 'services/http/http.constants.ts';
 import type {
@@ -121,6 +122,7 @@ export class HttpClient {
       url: this.endpoints.ingest,
       body: dto,
       withApiKey: true,
+      withClientTimezone: true,
       timeoutMs: UPLOAD_TIMEOUT_MS,
     });
     return {
@@ -136,6 +138,10 @@ export class HttpClient {
     };
     if (options.withApiKey === true) {
       headers[HEADER_X_API_KEY] = this.apiKey;
+    }
+    if (options.withClientTimezone === true) {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz) headers[HEADER_X_CLIENT_TIMEZONE] = tz;
     }
     let body: string | undefined;
     if (options.body !== undefined) {

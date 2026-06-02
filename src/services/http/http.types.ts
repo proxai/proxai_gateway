@@ -20,6 +20,7 @@ export interface RequestOptions {
   url: string;
   body?: unknown;
   withApiKey?: boolean;
+  withClientTimezone?: boolean;
   timeoutMs?: number;
 }
 
