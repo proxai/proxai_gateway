@@ -44,20 +44,13 @@ export function deriveUnifiedSummary(inputs: UnifiedSummaryInputs): UnifiedStatu
     };
   }
   if (!inputs.daemonRunning) {
-    if (inputs.daemonInferredAlive) {
+    if (inputs.daemonInferredAlive && isDevProfile) {
       const age = formatLastCycleAge(inputs.daemonLastCycleAt);
       const agePrefix = age === null ? '' : `Last cycle ${age} · `;
-      if (isDevProfile) {
-        return {
-          level: 'ok',
-          headline: 'Dev daemon active — running locally.',
-          hint: `${agePrefix}Stop with Ctrl-C in the daemon terminal.`,
-        };
-      }
       return {
         level: 'ok',
-        headline: 'Account configured. Background service is running (not registered with OS).',
-        hint: `${agePrefix}Run \`proxai-gateway start\` to register with launchd/systemd for auto-restart.`,
+        headline: 'Dev daemon active — running locally.',
+        hint: `${agePrefix}Stop with Ctrl-C in the daemon terminal.`,
       };
     }
     if (isDevProfile) {

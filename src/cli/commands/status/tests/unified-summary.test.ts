@@ -55,7 +55,7 @@ test('daemon not running reports start hint', () => {
   expect(s.hint).toContain('start');
 });
 
-test('daemon not service-managed but recently cycled reports ok with registration hint', () => {
+test('prod: daemon not service-managed reads not running even if recently cycled', () => {
   const recent = new Date(Date.now() - 8_000).toISOString();
   const s = deriveUnifiedSummary({
     ...BASE,
@@ -63,9 +63,8 @@ test('daemon not service-managed but recently cycled reports ok with registratio
     daemonInferredAlive: true,
     daemonLastCycleAt: recent,
   });
-  expect(s.level).toBe('ok');
-  expect(s.headline).toContain('not registered with OS');
-  expect(s.hint).toContain('Last cycle');
+  expect(s.level).toBe('warning');
+  expect(s.headline).toContain('not running');
   expect(s.hint).toContain('start');
 });
 
@@ -126,12 +125,13 @@ test('dev profile: healthy state returns dev-specific running headline', () => {
   expect(s.headline).toContain('Dev daemon is running');
 });
 
-test('daemonLastCycleAt various age brackets and invalid formatting', () => {
+test('dev profile: daemonLastCycleAt various age brackets and invalid formatting', () => {
   const s1 = deriveUnifiedSummary({
     ...BASE,
     daemonRunning: false,
     daemonInferredAlive: true,
     daemonLastCycleAt: 'invalid-date',
+    profileName: 'dev',
   });
   expect(s1.hint).not.toContain('ago');
 
@@ -140,6 +140,7 @@ test('daemonLastCycleAt various age brackets and invalid formatting', () => {
     daemonRunning: false,
     daemonInferredAlive: true,
     daemonLastCycleAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+    profileName: 'dev',
   });
   expect(s2.hint).toContain('5m ago');
 
@@ -148,6 +149,7 @@ test('daemonLastCycleAt various age brackets and invalid formatting', () => {
     daemonRunning: false,
     daemonInferredAlive: true,
     daemonLastCycleAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+    profileName: 'dev',
   });
   expect(s3.hint).toContain('2h ago');
 });

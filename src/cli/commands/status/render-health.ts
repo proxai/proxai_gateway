@@ -68,9 +68,8 @@ export function renderHealthSection(input: {
 
 function renderDaemonLine(d: HealthDaemonInput, isDevLike: boolean): string {
   if (!d.isRunning) {
-    if (d.inferredAlive === true) {
-      const label = d.isDevMode === true ? 'running (dev)' : 'running';
-      return chalk.green(label);
+    if (d.inferredAlive === true && d.isDevMode === true) {
+      return chalk.green('running (dev)');
     }
     return chalk.dim('not running');
   }

@@ -288,12 +288,8 @@ function renderDaemonLine(
     }
     return parts.join('  ');
   }
-  if (inferredAlive) {
-    const tag = isLocalBuild
-      ? 'running (local build)'
-      : isDevLike
-        ? 'running (dev mode)'
-        : 'running';
+  if (inferredAlive && (isLocalBuild || isDevLike)) {
+    const tag = isLocalBuild ? 'running (local build)' : 'running (dev mode)';
     return chalk.green(`● ${tag}`);
   }
   return chalk.red('○ not running');

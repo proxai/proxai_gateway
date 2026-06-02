@@ -59,7 +59,7 @@ export async function runRestart(deps: RestartCommandDeps): Promise<CommandResul
     } else {
       deps.output.info(`    ├─ Status : ${chalk.green('running')}`);
     }
-    deps.output.info(`    └─ Logs   : run ${chalk.cyan('proxai-gateway tail')} to stream logs`);
+    deps.output.info(`    └─ Logs   : run ${chalk.cyan('proxai-gateway logs')} to view logs`);
     deps.output.info('');
     return { exitCode: EXIT_CODE.ok };
   } catch (err) {

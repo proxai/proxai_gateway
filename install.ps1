@@ -98,9 +98,9 @@ try {
 
     $cfg = Join-Path $HOME '.proxai\proxai-gateway\config.toml'
     if (Test-Path $cfg) {
-        Write-Host 'Existing configuration detected; reconciling daemon state...'
+        Write-Host 'Existing configuration detected; starting proxai-gateway...'
         try {
-            & $dest setup
+            & $dest start
         } catch {
             Write-Host "Run 'proxai-gateway status' for details."
         }

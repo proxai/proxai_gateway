@@ -522,6 +522,42 @@ test('formatSourceLabel default case fallback for custom name', () => {
   expect(formatSourceLabel('my-custom-source')).toBe('My Custom Source');
 });
 
+test('renderHealthSection: dev daemon inferred-alive (not service-managed) shows running (dev)', () => {
+  const lines = renderHealthSection({
+    daemon: {
+      isRunning: false,
+      pid: null,
+      inferredAlive: true,
+      isDevMode: true,
+      startedAt: null,
+      now: NOW,
+      installSource: null,
+    },
+    sentinels: {
+      authFailed: false,
+      bufferFull: false,
+      sessionStopped: false,
+      updateAvailable: false,
+    },
+    autoUpgrade: {
+      lastCheckAt: null,
+      currentVersion: '2026.5.9-3',
+      latestKnownVersion: '2026.5.9-3',
+      installSource: null,
+      updateAvailableSentinelPresent: false,
+      now: NOW,
+    },
+    binaryAge: {
+      installedAt: new Date(NOW.getTime() - 86_400_000).toISOString(),
+      warnAfterDays: DEFAULT_STALE_WARN_DAYS,
+      pauseAfterDays: DEFAULT_STALE_PAUSE_DAYS,
+      now: NOW,
+    },
+  });
+  const joined = lines.join('\n');
+  expect(joined).toContain('running (dev)');
+});
+
 test('renderHealthSection in jargon-free standard user mode', () => {
   const lines = renderHealthSection({
     daemon: {
@@ -557,7 +593,7 @@ test('renderHealthSection in jargon-free standard user mode', () => {
   const joined = lines.join('\n');
   expect(joined).toContain('App');
   expect(joined).not.toContain('Daemon');
-  expect(joined).toContain('running');
+  expect(joined).toContain('not running');
   expect(joined).not.toContain('running (not registered)');
   expect(joined).not.toContain('pid');
   expect(joined).toContain('Status flags');

@@ -529,7 +529,7 @@ test('render-sections renderHealthSection combinations', () => {
     isDevLike: false,
     isLocalBuild: false,
   }).join('\n');
-  expect(r10).toContain('running');
+  expect(r10).toContain('not running');
   expect(r10).not.toContain('dev mode');
   expect(r10).not.toContain('local build');
 
