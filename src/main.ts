@@ -26,7 +26,7 @@ import { autoUpgradeFromConfig } from 'cli/wiring/auto-upgrade.ts';
 import { buildUpgradePostRespawnRestoreDeps } from 'cli/wiring/upgrade-restore-deps.ts';
 
 import { inquirerPrompts } from 'cli/prompts.ts';
-import { consoleOutput } from 'cli/output.ts';
+import { consoleOutput, silentOutput } from 'cli/output.ts';
 import { buildDevDeps } from 'cli/wiring/dev-deps.ts';
 import { buildDoctorDeps } from 'cli/wiring/doctor-deps.ts';
 import { buildLogsDeps } from 'cli/wiring/logs-deps.ts';
@@ -519,7 +519,7 @@ withProfileOption(
     .command('upgrade')
     .alias('update')
     .description(
-      'Fetch the latest gateway release from GitHub and replace the running binary. On Windows, writes the new binary alongside the existing one (restart required to apply).',
+      'Fetch the latest gateway release from GitHub, replace the binary, and restart the daemon so the new version is applied automatically.',
     )
     .option(
       '--force',
@@ -527,9 +527,35 @@ withProfileOption(
       false,
     ),
 ).action(async (opts: { profile?: string; force?: boolean }) => {
-  const result = await runUpgrade(buildUpgradeDeps({ binaryPath: process.execPath }), {
-    force: opts.force === true,
-  });
+  const profileCtx = buildProfileContext(parseProfileName(opts.profile));
+  const ctx = buildProfileServiceContext(process.platform, process.execPath, profileCtx);
+  let restartDaemon: (() => Promise<boolean>) | undefined;
+  if (ctx !== null) {
+    restartDaemon = async () => {
+      const restartResult = await runRestart(
+        buildRestartDeps({
+          serviceManager: ctx.serviceManager,
+          serviceUnitRecreate: buildServiceUnitRecreate(
+            ctx.platform,
+            ctx.unitPath,
+            process.execPath,
+            process.env,
+          ),
+          invokeSetup: () => Promise.resolve({ exitCode: EXIT_CODE.error }),
+          profileCtx,
+          output: silentOutput(),
+        }),
+      );
+      return restartResult.exitCode === EXIT_CODE.ok;
+    };
+  }
+  const result = await runUpgrade(
+    buildUpgradeDeps({
+      binaryPath: process.execPath,
+      ...(restartDaemon !== undefined ? { restartDaemon } : {}),
+    }),
+    { force: opts.force === true },
+  );
   process.exit(result.exitCode);
 });
 

@@ -1,7 +1,7 @@
 import { compareGatewayVersions } from 'core/utils';
 import type { FetchFn } from 'core/utils';
 import { existsSync, statSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
@@ -20,6 +20,7 @@ export interface UpgradeCommandDeps {
   binaryPath: string;
   fetch?: FetchFn;
   platform?: NodeJS.Platform;
+  restartDaemon?: () => Promise<boolean>;
 }
 
 export interface UpgradeCommandOptions {
@@ -126,8 +127,6 @@ export async function runUpgrade(
     return { exitCode: EXIT_CODE.ok };
   }
 
-  deps.output.info(`upgrading: ${deps.currentVersion} -> ${latestVersion}`);
-
   const asset = findAssetForPlatform(release, platform, arch);
   if (asset === undefined) {
     deps.output.error(`no asset found for this platform: ${expectedAssetName(platform, arch)}`);
@@ -149,21 +148,6 @@ export async function runUpgrade(
     return { exitCode: EXIT_CODE.error };
   }
 
-  if (platform === 'win32') {
-    try {
-      await replaceBinary(deps.binaryPath, downloadedBytes, platform);
-    } catch (err) {
-      deps.output.error(
-        `failed to write ${deps.binaryPath}.new: ${(err as Error).message ?? String(err)}`,
-      );
-      return { exitCode: EXIT_CODE.error };
-    }
-    deps.output.success(
-      `downloaded to ${deps.binaryPath}.new; restart the service to apply (replace ${basename(deps.binaryPath)} with ${basename(deps.binaryPath)}.new after stopping the daemon)`,
-    );
-    return { exitCode: EXIT_CODE.ok };
-  }
-
   try {
     await replaceBinary(deps.binaryPath, downloadedBytes, platform);
   } catch (err) {
@@ -173,7 +157,22 @@ export async function runUpgrade(
     return { exitCode: EXIT_CODE.error };
   }
 
-  deps.output.success(`upgraded to ${latestVersion}; restart the daemon to apply`);
+  if (deps.restartDaemon === undefined) {
+    deps.output.success(
+      `Upgraded from ${deps.currentVersion} to ${latestVersion}; run \`proxai-gateway restart\` to apply.`,
+    );
+    return { exitCode: EXIT_CODE.ok };
+  }
+
+  const restarted = await deps.restartDaemon();
+  if (!restarted) {
+    deps.output.error(
+      `installed ${latestVersion} but could not restart automatically; run \`proxai-gateway restart\` to apply.`,
+    );
+    return { exitCode: EXIT_CODE.error };
+  }
+
+  deps.output.success(`Upgraded from ${deps.currentVersion} to ${latestVersion}.`);
   return { exitCode: EXIT_CODE.ok };
 }
 

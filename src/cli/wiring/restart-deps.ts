@@ -1,4 +1,4 @@
-import type { CommandResult } from 'cli/cli.types.ts';
+import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import type { RestartCommandDeps } from 'cli/commands/restart.ts';
 import { consoleOutput } from 'cli/output.ts';
 import type { ServiceManager } from 'cli/service-manager';
@@ -10,11 +10,12 @@ export interface BuildRestartDepsInputs {
   serviceUnitRecreate: ServiceUnitRecreateConfig;
   invokeSetup: () => Promise<CommandResult>;
   profileCtx: ProfileContext;
+  output?: OutputSink;
 }
 
 export function buildRestartDeps(inputs: BuildRestartDepsInputs): RestartCommandDeps {
   return {
-    output: consoleOutput(),
+    output: inputs.output ?? consoleOutput(),
     configExists: () => Bun.file(inputs.profileCtx.configFilePath).exists(),
     serviceManager: inputs.serviceManager,
     sessionStoppedSentinelPath: inputs.profileCtx.sentinels.sessionStopped,

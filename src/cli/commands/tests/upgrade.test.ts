@@ -118,7 +118,9 @@ test('newer version available downloads, writes binary, and reports success', as
     platform: 'linux',
   });
   expect(result.exitCode).toBe(0);
-  expect(out.lines.some((l) => l.level === 'success' && l.msg.includes('upgraded to'))).toBe(true);
+  expect(out.lines.some((l) => l.level === 'success' && l.msg.includes('Upgraded from'))).toBe(
+    true,
+  );
   const text = await readFile(binaryPath, 'utf8');
   expect(text).toBe('new-binary-content');
 });
@@ -151,7 +153,83 @@ test('same-day hyphen re-release is treated as newer and upgrades', async () => 
   expect(result.exitCode).toBe(0);
   expect(out.lines.some((l) => l.msg.includes('already at latest'))).toBe(false);
   expect(
-    out.lines.some((l) => l.level === 'success' && l.msg.includes('upgraded to 2026.6.1-1')),
+    out.lines.some(
+      (l) => l.level === 'success' && l.msg.includes('Upgraded from 2026.6.1 to 2026.6.1-1'),
+    ),
+  ).toBe(true);
+  expect(await readFile(binaryPath, 'utf8')).toBe('new-binary-content');
+});
+
+test('auto-restarts the daemon after install and reports a single upgraded line', async () => {
+  const binaryPath = join(dir, 'proxai-gateway');
+  await writeFile(binaryPath, 'old-binary');
+  const out = captureOutput();
+  const newBinary = new TextEncoder().encode('new-binary-content');
+  const assetName = `proxai-gateway-linux-${process.arch}`;
+  const fetchFn = makeReleaseFetch(
+    {
+      tag_name: 'v2026.5.10',
+      assets: [
+        {
+          name: assetName,
+          browser_download_url: `https://github.com/proxai/proxai_gateway/releases/download/v2026.5.10/${assetName}`,
+        },
+      ],
+    },
+    newBinary,
+  );
+  let restartCalls = 0;
+  const result = await runUpgrade({
+    output: out,
+    currentVersion: '2026.5.7',
+    binaryPath,
+    fetch: fetchFn,
+    platform: 'linux',
+    restartDaemon: async () => {
+      restartCalls++;
+      return true;
+    },
+  });
+  expect(result.exitCode).toBe(0);
+  expect(restartCalls).toBe(1);
+  expect(
+    out.lines.some(
+      (l) => l.level === 'success' && l.msg.includes('Upgraded from 2026.5.7 to 2026.5.10'),
+    ),
+  ).toBe(true);
+  expect(out.lines.every((l) => !l.msg.includes('restart'))).toBe(true);
+  expect(await readFile(binaryPath, 'utf8')).toBe('new-binary-content');
+});
+
+test('reports an error when the daemon cannot be auto-restarted after install', async () => {
+  const binaryPath = join(dir, 'proxai-gateway');
+  await writeFile(binaryPath, 'old-binary');
+  const out = captureOutput();
+  const newBinary = new TextEncoder().encode('new-binary-content');
+  const assetName = `proxai-gateway-linux-${process.arch}`;
+  const fetchFn = makeReleaseFetch(
+    {
+      tag_name: 'v2026.5.10',
+      assets: [
+        {
+          name: assetName,
+          browser_download_url: `https://github.com/proxai/proxai_gateway/releases/download/v2026.5.10/${assetName}`,
+        },
+      ],
+    },
+    newBinary,
+  );
+  const result = await runUpgrade({
+    output: out,
+    currentVersion: '2026.5.7',
+    binaryPath,
+    fetch: fetchFn,
+    platform: 'linux',
+    restartDaemon: async () => false,
+  });
+  expect(result.exitCode).toBe(1);
+  expect(
+    out.lines.some((l) => l.level === 'error' && l.msg.includes('could not restart automatically')),
   ).toBe(true);
   expect(await readFile(binaryPath, 'utf8')).toBe('new-binary-content');
 });
@@ -422,7 +500,7 @@ test('windows write failure to .new path surfaces an error', async () => {
     {},
   );
   expect(result.exitCode).toBe(1);
-  expect(out.lines.some((l) => l.level === 'error' && l.msg.includes('failed to write'))).toBe(
+  expect(out.lines.some((l) => l.level === 'error' && l.msg.includes('failed to install'))).toBe(
     true,
   );
 });
