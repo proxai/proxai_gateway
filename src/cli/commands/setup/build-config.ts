@@ -1,6 +1,6 @@
 import { dirname } from 'node:path';
 
-import { ensureDir } from 'core/io/fs';
+import { ensureSecureBaseDirs } from 'core/io/fs/mode.ts';
 import {
   DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
   DEFAULT_BUFFER_SOFT_RESUME_BYTES,
@@ -71,7 +71,6 @@ export async function writeConfigArtifacts(
   config: GatewayConfig,
   deps: SetupCommandDeps,
 ): Promise<void> {
-  await ensureDir(dirname(deps.configPath));
+  await ensureSecureBaseDirs([dirname(deps.configPath), deps.logDir]);
   await writeConfigToFile(config, deps.configPath);
-  await ensureDir(deps.logDir);
 }

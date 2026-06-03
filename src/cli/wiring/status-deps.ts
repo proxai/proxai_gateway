@@ -7,7 +7,7 @@ import type { ServiceManager } from 'cli/service-manager';
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 import { profileRootDir } from 'core/io/fs/profile.ts';
 import { PACKAGE_VERSION } from 'core/utils';
-import { openBufferDb } from 'services/buffer';
+import { openReadOnlyBufferDb } from 'services/buffer';
 import { loadConfigFromFile } from 'services/config';
 
 const STATUS_BINARY_PATH = process.execPath;
@@ -56,10 +56,14 @@ export async function buildStatusContext(inputs: BuildStatusContextInputs): Prom
     bufferPath = config.capture.bufferPath;
   } catch {}
 
-  const buffer: Database = openBufferDb(bufferPath);
+  let buffer: Database | undefined;
+  try {
+    buffer = openReadOnlyBufferDb(bufferPath);
+  } catch {}
+
   const deps: StatusCommandDeps = {
     output: consoleOutput(),
-    buffer,
+    ...(buffer !== undefined ? { buffer } : {}),
     configPath: cfgPath,
     configExists: () => Promise.resolve(true),
     bufferFullSentinelPath: profileCtx.sentinels.bufferFull,
@@ -74,5 +78,13 @@ export async function buildStatusContext(inputs: BuildStatusContextInputs): Prom
   if (inputs.serviceManager !== null) {
     deps.serviceManager = inputs.serviceManager;
   }
-  return { deps, options, cleanup: () => buffer.close() };
+  return {
+    deps,
+    options,
+    cleanup: () => {
+      if (buffer !== undefined) {
+        buffer.close();
+      }
+    },
+  };
 }

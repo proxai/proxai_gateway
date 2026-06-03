@@ -3,10 +3,11 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { expandHome, legacyRootDir } from 'core/io/fs';
+import { profileRootDir } from 'core/io/fs/profile.ts';
 
 test('legacyRootDir returns the root without profile segment', () => {
   if (process.platform === 'darwin' || process.platform === 'linux') {
-    expect(legacyRootDir()).toBe(join(homedir(), '.proxai', 'proxai-gateway'));
+    expect(legacyRootDir()).toBe(profileRootDir());
   }
 });
 

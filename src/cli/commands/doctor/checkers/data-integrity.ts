@@ -13,8 +13,7 @@ export function checkG1ReceiptsTableReadable(signals: DoctorSignals): Finding | 
     confidence: Confidence.confirmed,
     cause:
       'The local buffer database receipts table is unreadable or missing, indicating database schema corruption.',
-    action:
-      'Restart the gateway daemon to let it auto-recreate the tables, or delete ~/.proxai/buffer.db to force a clean sync.',
+    action: `Restart the gateway daemon to let it auto-recreate the tables, or delete ${signals.configDirPath}/buffer.db to force a clean sync.`,
   };
 }
 
@@ -27,8 +26,7 @@ export function checkG2BufferDbCorrupt(signals: DoctorSignals): Finding | null {
     severity: Severity.critical,
     confidence: Confidence.confirmed,
     cause: 'The local buffer SQLite database file is corrupted or unreadable.',
-    action:
-      'Delete the corrupted ~/.proxai/buffer.db file and restart the gateway daemon to reinitialize a healthy database.',
+    action: `Delete the corrupted ${signals.configDirPath}/buffer.db file and restart the gateway daemon to reinitialize a healthy database.`,
   };
 }
 

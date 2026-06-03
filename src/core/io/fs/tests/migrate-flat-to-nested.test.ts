@@ -180,3 +180,67 @@ test('tryAcquire rethrows a non-EEXIST write error (missing parent dir → ENOEN
   const lockPath = join(dir, 'does-not-exist', MIGRATION_LOCK);
   expect(() => tryAcquire(lockPath)).toThrow();
 });
+
+test('tryAcquire creates lock file with 0o600 permissions on non-Windows', async () => {
+  if (process.platform === 'win32') return;
+  const lockPath = join(dir, 'perm.lock');
+  const acquired = tryAcquire(lockPath);
+  expect(acquired).toBe(true);
+  const { statSync } = await import('node:fs');
+  const s = statSync(lockPath);
+  expect(s.mode & 0o777).toBe(0o600);
+});
+
+test('relocateFlatToNested rewrites config.toml buffer_path to prod/ when it matches legacy path', async () => {
+  const root = join(dir, 'rewrite-config');
+  mkdirSync(root);
+
+  const flatConfigPath = join(root, 'config.toml');
+  const flatBufferPath = join(root, 'buffer.db');
+
+  const tomlContent = `
+[capture]
+poll_interval_sec = 10
+buffer_path = "${flatBufferPath.replace(/\\/g, '\\\\')}"
+`;
+  writeFileSync(flatConfigPath, tomlContent);
+  writeFileSync(flatBufferPath, 'db-content');
+
+  await relocateFlatToNested(root);
+
+  const prodDir = join(root, 'prod');
+  const relocatedConfigPath = join(prodDir, 'config.toml');
+  const relocatedBufferPath = join(prodDir, 'buffer.db');
+
+  expect(existsSync(relocatedConfigPath)).toBe(true);
+  expect(existsSync(relocatedBufferPath)).toBe(true);
+
+  const newContent = readFileSync(relocatedConfigPath, 'utf8');
+  expect(newContent).toContain('buffer_path');
+  expect(newContent).toContain(join('prod', 'buffer.db').replace(/\\/g, '\\\\'));
+  expect(newContent).not.toContain(flatBufferPath.replace(/\\/g, '\\\\') + '"');
+});
+
+test('relocateFlatToNested rolls back already-relocated files if any file relocation fails (atomic)', async () => {
+  const root = join(dir, 'atomic-rollback');
+  mkdirSync(root);
+
+  const flatConfig = join(root, 'config.toml');
+  const flatBuffer = join(root, 'buffer.db');
+
+  writeFileSync(flatConfig, 'config-content');
+  writeFileSync(flatBuffer, 'buffer-content');
+
+  const prodDir = join(root, 'prod');
+  mkdirSync(prodDir, { recursive: true });
+  mkdirSync(join(prodDir, 'buffer.db'), { recursive: true });
+
+  await expect(relocateFlatToNested(root)).rejects.toThrow();
+
+  expect(existsSync(flatConfig)).toBe(true);
+  expect(readFileSync(flatConfig, 'utf8')).toBe('config-content');
+  expect(existsSync(flatBuffer)).toBe(true);
+  expect(readFileSync(flatBuffer, 'utf8')).toBe('buffer-content');
+
+  expect(existsSync(join(root, MIGRATED_MARKER))).toBe(false);
+});

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import type { ServiceManager } from 'cli/service-manager';
 import { buildProfileContext } from 'core/io/fs/profile.ts';
 import { buildStatusContext } from 'cli/wiring/status-deps.ts';
+import { openBufferDb } from 'services/buffer';
 
 const sm = {
   ensureRegistered: async () => {},
@@ -92,6 +93,7 @@ test('buildStatusContext: opens buffer and includes serviceManager when config f
       '',
     ].join('\n');
     await writeFile(cfgPath, minimalToml, 'utf8');
+    openBufferDb(bufferPath).close();
     const ctx = await buildStatusContext({
       profileCtx,
       configPath: cfgPath,
@@ -124,6 +126,7 @@ test('buildStatusContext: falls back to default buffer path when configOverride 
     const cfgPath = join(dir, 'config.toml');
     const fallbackBuffer = join(dir, 'fallback.db');
     await writeFile(cfgPath, 'malformed = toml without sections', 'utf8');
+    openBufferDb(fallbackBuffer).close();
     const ctx = await buildStatusContext({
       profileCtx,
       configPath: cfgPath,
@@ -165,6 +168,7 @@ test('buildStatusContext: omits serviceManager when null', async () => {
       '',
     ].join('\n');
     await writeFile(cfgPath, minimalToml, 'utf8');
+    openBufferDb(bufferPath).close();
     const ctx = await buildStatusContext({
       profileCtx,
       configPath: cfgPath,

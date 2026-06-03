@@ -27,6 +27,31 @@ mock.module('node:fs/promises', () => {
   };
 });
 
+let mockConnectError: string | null = null;
+let mockConnectSuccess = false;
+
+mock.module('node:net', () => {
+  const EventEmitter = require('node:events');
+  return {
+    connect: (): unknown => {
+      const socket = new EventEmitter();
+      (socket as unknown as { destroy: () => void }).destroy = (): void => {};
+      if (mockConnectSuccess) {
+        setTimeout(() => socket.emit('connect'), 5);
+      } else if (mockConnectError !== null) {
+        const err = new Error('connection failed');
+        Object.defineProperty(err, 'code', { value: mockConnectError });
+        setTimeout(() => socket.emit('error', err), 5);
+      } else {
+        const err = new Error('connection failed');
+        Object.defineProperty(err, 'code', { value: 'ENOENT' });
+        setTimeout(() => socket.emit('error', err), 5);
+      }
+      return socket;
+    },
+  };
+});
+
 import { gatherSignals } from 'cli/commands/doctor/gather-signals.ts';
 import { __deps } from 'cli/commands/doctor/gather-signals.ts';
 import { captureOutput } from 'cli/output.ts';
@@ -478,4 +503,77 @@ test('linux: root-owned config dir under non-root process flags sudo ownership d
   // so platform:'linux' alone can't exercise the non-root sudo-drift path.
   const signals = await gatherSignals(makeDeps({ platform: 'linux', getuid: () => 1000 }));
   expect(signals.filesystemExtended.sudoOwnershipDrift).toBe(true);
+});
+
+test('win32: control socket exists and active via named pipe connection', async () => {
+  mockConnectSuccess = true;
+  mockConnectError = null;
+  const signals = await gatherSignals(makeDeps({ platform: 'win32' }));
+  expect(signals.processExtended.controlSocketExists).toBe(true);
+  expect(signals.processExtended.controlSocketActive).toBe(true);
+});
+
+test('win32: control socket exists but inactive (e.g. connection refused)', async () => {
+  mockConnectSuccess = false;
+  mockConnectError = 'ECONNREFUSED';
+  const signals = await gatherSignals(makeDeps({ platform: 'win32' }));
+  expect(signals.processExtended.controlSocketExists).toBe(true);
+  expect(signals.processExtended.controlSocketActive).toBe(false);
+});
+
+test('win32: control socket does not exist (ENOENT)', async () => {
+  mockConnectSuccess = false;
+  mockConnectError = 'ENOENT';
+  const signals = await gatherSignals(makeDeps({ platform: 'win32' }));
+  expect(signals.processExtended.controlSocketExists).toBe(false);
+  expect(signals.processExtended.controlSocketActive).toBe(false);
+});
+
+test('linux: systemdExtended signals resolve correctly when platform is linux', async () => {
+  setWhich(((name: string) => {
+    if (name === 'systemctl') return '/usr/bin/systemctl';
+    return null;
+  }) as typeof Bun.which);
+
+  setSpawn(fakeSpawn('Result=start-limit-hit\n'));
+
+  const origEnv = process.env['XDG_RUNTIME_DIR'];
+  delete process.env['XDG_RUNTIME_DIR'];
+
+  let signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+  expect(signals.systemdExtended.systemdRuntimeDirMissing).toBe(true);
+
+  process.env['XDG_RUNTIME_DIR'] = '/run/user/1000';
+  signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+  expect(signals.systemdExtended.systemdRuntimeDirMissing).toBe(false);
+
+  if (origEnv !== undefined) {
+    process.env['XDG_RUNTIME_DIR'] = origEnv;
+  } else {
+    delete process.env['XDG_RUNTIME_DIR'];
+  }
+});
+
+test('linux: systemdRateLimitHit is true when systemctl show Result contains start-limit-hit', async () => {
+  setWhich(((name: string) => {
+    if (name === 'systemctl') return '/usr/bin/systemctl';
+    return null;
+  }) as typeof Bun.which);
+
+  setSpawn(fakeSpawn('Result=start-limit-hit\n'));
+
+  const signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+  expect(signals.systemdExtended.systemdRateLimitHit).toBe(true);
+});
+
+test('linux: systemdRateLimitHit is false when systemctl show Result is normal', async () => {
+  setWhich(((name: string) => {
+    if (name === 'systemctl') return '/usr/bin/systemctl';
+    return null;
+  }) as typeof Bun.which);
+
+  setSpawn(fakeSpawn('Result=success\n'));
+
+  const signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+  expect(signals.systemdExtended.systemdRateLimitHit).toBe(false);
 });

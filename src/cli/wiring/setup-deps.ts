@@ -17,7 +17,7 @@ import {
   nestWatermarksUrl,
 } from 'services/config';
 import type { InstallSource } from 'services/config';
-import { derivedUploadStats, openBufferDb } from 'services/buffer';
+import { derivedUploadStats, openReadOnlyBufferDb } from 'services/buffer';
 import { HttpClient } from 'services/http';
 
 export interface BuildSetupDepsInputs {
@@ -84,7 +84,7 @@ export function buildSetupDeps(inputs: BuildSetupDepsInputs): SetupCommandDeps {
     readLastSuccessAt: async () => {
       try {
         if (!(await Bun.file(profileCtx.bufferDbPath).exists())) return null;
-        const db = openBufferDb(profileCtx.bufferDbPath);
+        const db = openReadOnlyBufferDb(profileCtx.bufferDbPath);
         try {
           return derivedUploadStats(db).lastSuccessAt;
         } finally {

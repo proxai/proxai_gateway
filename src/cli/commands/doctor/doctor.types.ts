@@ -252,6 +252,8 @@ export interface DoctorSignals {
     readonly systemdRateLimitHit: boolean | null;
     readonly systemdHomeEncryptedTearing: boolean | null;
   };
+  readonly configDirPath: string;
+  readonly logDirPath: string;
 }
 
 export interface DoctorCommandOptions {

@@ -1,15 +1,34 @@
 import { access, constants as fsConstants, stat as fsStat, realpath, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { connect } from 'node:net';
 
 import { sentinelHandle, writeAtomic } from 'core/io/fs';
 import type { DoctorCommandDeps, DoctorSignals } from 'cli/commands/doctor/doctor.types.ts';
 import { queryAllDoctorData } from 'services/buffer/doctor-queries.ts';
 import { readAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
+import { profileSystemdUnitName } from 'cli/service-unit/dev-labels.ts';
 
 /** Seam for tests — swap individual deps without mock.module. */
 export const __deps = {
   realpath,
+  checkNamedPipe: async (pipePath: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const socket = connect(pipePath);
+      socket.on('connect', () => {
+        socket.end();
+        resolve(true);
+      });
+      socket.on('error', (err: unknown) => {
+        const error = err as { code?: string };
+        if (error && (error.code === 'ENOENT' || error.code === 'EINVAL')) {
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      });
+    });
+  },
 };
 
 async function probeWritable(dirPath: string): Promise<boolean> {
@@ -225,13 +244,36 @@ async function probeProcessExtended(deps: DoctorCommandDeps): Promise<{
   readonly helperProcessHealthy: boolean | null;
   readonly watcherThreadLagMs: number | null;
 }> {
-  const socketPath = join(deps.configDirPath, 'control.sock');
+  const socketPath = deps.profileCtx?.controlSocketPath ?? join(deps.configDirPath, 'control.sock');
   let controlSocketExists = false;
   let controlSocketActive = false;
   try {
-    controlSocketExists = await Bun.file(socketPath).exists();
-    if (controlSocketExists && deps.serviceManager !== null) {
-      controlSocketActive = await deps.serviceManager.isRunning();
+    if (deps.platform === 'win32') {
+      const pipeCheck = await new Promise<{ exists: boolean; active: boolean }>((resolve) => {
+        const socket = connect(socketPath);
+        socket.on('connect', () => {
+          socket.destroy();
+          resolve({ exists: true, active: true });
+        });
+        socket.on('error', (err: unknown) => {
+          const code =
+            err && typeof err === 'object' && 'code' in err
+              ? (err as { code: string }).code
+              : undefined;
+          if (code === 'ENOENT' || code === 'ENOTFOUND') {
+            resolve({ exists: false, active: false });
+          } else {
+            resolve({ exists: true, active: false });
+          }
+        });
+      });
+      controlSocketExists = pipeCheck.exists;
+      controlSocketActive = pipeCheck.active;
+    } else {
+      controlSocketExists = await Bun.file(socketPath).exists();
+      if (controlSocketExists && deps.serviceManager !== null) {
+        controlSocketActive = await deps.serviceManager.isRunning();
+      }
     }
   } catch {}
 
@@ -409,15 +451,71 @@ async function probeWindowsExtended(): Promise<{
   };
 }
 
-async function probeSystemdExtended(): Promise<{
+async function probeSystemdExtended(deps: DoctorCommandDeps): Promise<{
   readonly systemdRuntimeDirMissing: boolean | null;
   readonly systemdRateLimitHit: boolean | null;
   readonly systemdHomeEncryptedTearing: boolean | null;
 }> {
+  if (deps.platform !== 'linux') {
+    return {
+      systemdRuntimeDirMissing: null,
+      systemdRateLimitHit: null,
+      systemdHomeEncryptedTearing: null,
+    };
+  }
+
+  const systemdRuntimeDirMissing =
+    process.env['XDG_RUNTIME_DIR'] === undefined || process.env['XDG_RUNTIME_DIR'].length === 0;
+
+  let systemdRateLimitHit = false;
+  try {
+    const systemctlPath = Bun.which('systemctl');
+    if (systemctlPath !== null) {
+      const unitName = profileSystemdUnitName(deps.profileCtx.name);
+      const proc = Bun.spawn([systemctlPath, '--user', 'show', '-p', 'Result', unitName], {
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const text = await new Response(proc.stdout).text();
+      await proc.exited;
+      if (text.includes('Result=start-limit-hit')) {
+        systemdRateLimitHit = true;
+      }
+    }
+  } catch {
+    systemdRateLimitHit = false;
+  }
+
+  let systemdHomeEncryptedTearing = false;
+  try {
+    try {
+      const mounts = await Bun.file('/proc/mounts').text();
+      const home = homedir();
+      const lines = mounts.split('\n');
+      for (const line of lines) {
+        const parts = line.split(/\s+/);
+        if (parts.length >= 3 && parts[2] === 'ecryptfs' && parts[1] === home) {
+          systemdHomeEncryptedTearing = true;
+          break;
+        }
+      }
+    } catch {}
+
+    if (!systemdHomeEncryptedTearing) {
+      if (await Bun.file(join(homedir(), '.ecryptfs')).exists()) {
+        systemdHomeEncryptedTearing = true;
+      } else if (await Bun.file(join(homedir(), '.Private')).exists()) {
+        systemdHomeEncryptedTearing = true;
+      }
+    }
+  } catch {
+    systemdHomeEncryptedTearing = false;
+  }
+
   return {
-    systemdRuntimeDirMissing: false,
-    systemdRateLimitHit: false,
-    systemdHomeEncryptedTearing: false,
+    systemdRuntimeDirMissing,
+    systemdRateLimitHit,
+    systemdHomeEncryptedTearing,
   };
 }
 
@@ -425,7 +523,9 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
   const cursorConfigDir =
     deps.platform === 'win32'
       ? join(homedir(), 'AppData', 'Roaming', 'Cursor')
-      : join(homedir(), '.config', 'Cursor');
+      : deps.platform === 'darwin'
+        ? join(homedir(), 'Library', 'Application Support', 'Cursor')
+        : join(homedir(), '.config', 'Cursor');
 
   const [
     configExists,
@@ -504,7 +604,7 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     probeSqliteExtended(),
     probeUpgradeExtended(deps),
     probeWindowsExtended(),
-    probeSystemdExtended(),
+    probeSystemdExtended(deps),
   ]);
 
   const signals: DoctorSignals = {
@@ -574,6 +674,8 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     upgradeExtended,
     windowsExtended,
     systemdExtended,
+    configDirPath: deps.configDirPath,
+    logDirPath: deps.logDirPath,
   };
 
   return signals;

@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 
-import { columnExists, openReadWrite } from 'core/io/sqlite';
+import { columnExists, openReadOnly, openReadWrite } from 'core/io/sqlite';
 import {
   BATCH_PATH_HASH_INDEX_DDL,
   BATCH_STATUS_INDEX_DDL,
@@ -39,6 +39,10 @@ export function openBufferDb(path: string): Database {
   const db = openReadWrite(path);
   initializeSchema(db);
   return db;
+}
+
+export function openReadOnlyBufferDb(path: string): Database {
+  return openReadOnly(path);
 }
 
 export function openInMemoryBufferDb(): Database {

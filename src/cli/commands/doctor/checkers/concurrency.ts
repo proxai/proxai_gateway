@@ -14,8 +14,7 @@ export function checkG4JournalMode(signals: DoctorSignals): Finding | null {
     severity: Severity.warning,
     confidence: Confidence.confirmed,
     cause: `The database journal mode is set to '${mode}' instead of WAL, degrading concurrency.`,
-    action:
-      'Restart the daemon to re-initialize WAL mode, or delete ~/.proxai/buffer.db for a clean re-creation.',
+    action: `Restart the daemon to re-initialize WAL mode, or delete ${signals.configDirPath}/buffer.db for a clean re-creation.`,
   };
 }
 

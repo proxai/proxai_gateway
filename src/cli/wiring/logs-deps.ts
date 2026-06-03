@@ -1,5 +1,5 @@
 import type { LogsCommandDeps } from 'cli/commands/logs';
-import { openBufferDb } from 'services/buffer';
+import { openReadOnlyBufferDb } from 'services/buffer';
 import { buildProfileContext } from 'core/io/fs/profile.ts';
 import { consoleOutput } from 'cli/output.ts';
 import type { Database } from 'bun:sqlite';
@@ -18,7 +18,7 @@ export async function buildLogsDeps(inputs: BuildLogsDepsInputs = {}): Promise<L
   let buffer: Database | null = null;
 
   try {
-    buffer = openBufferDb(path);
+    buffer = openReadOnlyBufferDb(path);
   } catch {
     buffer = null;
   }

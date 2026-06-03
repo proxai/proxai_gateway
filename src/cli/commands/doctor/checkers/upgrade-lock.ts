@@ -14,8 +14,7 @@ export function checkE5UpgradeLockStale(signals: DoctorSignals): Finding | null 
     confidence: Confidence.confirmed,
     cause:
       'A stale upgrade lock (.upgrade.lock) file exists from a failed upgrade run, blocking future updates.',
-    action:
-      'Delete the stale lock file manually: "rm ~/.proxai/.upgrade.lock" and restart the daemon.',
+    action: `Delete the stale lock file manually: "rm ${signals.configDirPath}/.upgrade.lock" and restart the daemon.`,
   };
 }
 

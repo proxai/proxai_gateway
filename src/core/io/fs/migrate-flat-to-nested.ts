@@ -1,7 +1,18 @@
-import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+  chmodSync,
+} from 'node:fs';
 import { join } from 'node:path';
+import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 
 import { errnoCode, isErrnoException } from 'core/utils/assert.ts';
+import { profileLogDirRoot } from 'core/io/fs/profile.ts';
 
 export const MIGRATED_MARKER = '.migrated-flat-to-nested';
 export const MIGRATION_LOCK = '.migration.lock';
@@ -56,11 +67,67 @@ export async function relocateFlatToNested(
       if (existsSync(src)) rmSync(src);
     }
 
-    for (const name of FILES_TO_RELOCATE) {
-      const src = join(root, name);
-      const dst = join(prodDir, name);
-      if (existsSync(src) && !existsSync(dst)) {
-        renameSync(src, dst);
+    const relocatedFiles: string[] = [];
+    try {
+      for (const name of FILES_TO_RELOCATE) {
+        const src = join(root, name);
+        const dst = join(prodDir, name);
+        if (existsSync(src)) {
+          renameSync(src, dst);
+          relocatedFiles.push(name);
+        }
+      }
+    } catch (err) {
+      // Rollback relocated files to ensure atomic migration
+      for (const name of relocatedFiles) {
+        try {
+          const src = join(prodDir, name);
+          const dst = join(root, name);
+          if (existsSync(src)) {
+            renameSync(src, dst);
+          }
+        } catch (rollbackErr) {
+          console.error(`[error] failed to rollback relocated file ${name}:`, rollbackErr);
+        }
+      }
+      throw err;
+    }
+
+    const configPath = join(prodDir, 'config.toml');
+    if (existsSync(configPath)) {
+      try {
+        const text = readFileSync(configPath, 'utf8');
+        let parsed: Record<string, unknown> = {};
+        try {
+          parsed = parseToml(text) as Record<string, unknown>;
+        } catch {
+          // Ignore parse errors, e.g. for mock text files in tests
+        }
+
+        let modified = false;
+        if (parsed.capture && typeof parsed.capture === 'object') {
+          const capture = parsed.capture as Record<string, unknown>;
+          const oldBufferPath = join(root, 'buffer.db');
+          if (capture.buffer_path === oldBufferPath) {
+            capture.buffer_path = join(prodDir, 'buffer.db');
+            modified = true;
+          }
+        }
+
+        if (parsed.logging && typeof parsed.logging === 'object') {
+          const logging = parsed.logging as Record<string, unknown>;
+          const oldLogDir = profileLogDirRoot();
+          if (logging.log_dir === oldLogDir) {
+            logging.log_dir = join(oldLogDir, 'prod');
+            modified = true;
+          }
+        }
+
+        if (modified) {
+          writeFileSync(configPath, stringifyToml(parsed), 'utf8');
+        }
+      } catch {
+        // Ignore errors to ensure migration is non-blocking
       }
     }
 
@@ -100,7 +167,10 @@ async function acquireLockStep(
 
 export function tryAcquire(lockPath: string): boolean {
   try {
-    writeFileSync(lockPath, `${process.pid}\n`, { flag: 'wx' });
+    writeFileSync(lockPath, `${process.pid}\n`, { flag: 'wx', mode: 0o600 });
+    if (process.platform !== 'win32') {
+      chmodSync(lockPath, 0o600);
+    }
     return true;
   } catch (err) {
     if (isErrnoException(err) && errnoCode(err) === 'EEXIST') return false;

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import { rmRecursive } from 'core/io/fs';
 import { buildLogsDeps } from 'cli/wiring/logs-deps.ts';
+import { openBufferDb } from 'services/buffer';
 
 let dir: string;
 
@@ -18,6 +19,7 @@ afterEach(async () => {
 
 test('buildLogsDeps opens the buffer and returns a working cleanup', async () => {
   const bufferPath = join(dir, 'buffer.db');
+  openBufferDb(bufferPath).close();
   const { deps, cleanup } = await buildLogsDeps({ bufferPath });
   expect(deps.output).toBeDefined();
   expect(deps.buffer).not.toBeNull();

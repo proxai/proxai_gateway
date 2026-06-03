@@ -108,3 +108,72 @@ test('createLogger uses default stdout destination when no overrides given', asy
   const logger = await createLogger();
   expect(typeof logger.info).toBe('function');
 });
+
+test('createLogger with logDir creates a log file with 0o600 permissions', async () => {
+  if (process.platform === 'win32') return;
+  const { statSync } = await import('node:fs');
+  const logDir = join(dir, 'permissions-test');
+  await createLogger({ logDir, level: 'info' });
+  await Bun.sleep(100);
+  const entries = await readdir(logDir);
+  const matching = entries.filter((e) => /^structured\.\d{4}-\d{2}-\d{2}\.\d+\.log$/.test(e));
+  expect(matching.length).toBeGreaterThan(0);
+  const filePath = join(logDir, requireDefined(matching[0]));
+  const stat = statSync(filePath);
+  expect(stat.mode & 0o777).toBe(0o600);
+});
+
+test('secureLogStream hooks ready event to set 0o600 permissions', async () => {
+  if (process.platform === 'win32') return;
+  const { statSync, writeFileSync } = await import('node:fs');
+  const { EventEmitter } = await import('node:events');
+  const testFile = join(dir, 'ready-event-test.log');
+  writeFileSync(testFile, 'test');
+
+  class MockStream extends EventEmitter {
+    file = testFile;
+  }
+
+  const stream = new MockStream();
+  const { secureLogStream } = await import('core/log');
+  secureLogStream(stream);
+
+  // Set to 0o777 first
+  const { chmodSync } = await import('node:fs');
+  chmodSync(testFile, 0o777);
+  expect(statSync(testFile).mode & 0o777).toBe(0o777);
+
+  // Emit ready to trigger permissions clamp
+  stream.emit('ready');
+  expect(statSync(testFile).mode & 0o777).toBe(0o600);
+});
+
+test('secureLogStream registers error handler to prevent crashing', async () => {
+  const { EventEmitter } = await import('node:events');
+  class MockStream extends EventEmitter {
+    file = '/dev/null';
+  }
+
+  const stream = new MockStream();
+  const { secureLogStream } = await import('core/log');
+  secureLogStream(stream);
+
+  // Spy on process.stderr.write
+  const originalWrite = process.stderr.write;
+  let loggedError = '';
+  process.stderr.write = ((str: string) => {
+    loggedError = str;
+    return true;
+  }) as unknown as typeof process.stderr.write;
+
+  try {
+    expect(() => {
+      stream.emit('error', new Error('test-stream-error'));
+    }).not.toThrow();
+
+    expect(loggedError).toContain('[Logger Stream Error]');
+    expect(loggedError).toContain('test-stream-error');
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+});

@@ -31,10 +31,8 @@ import { buildDevDeps } from 'cli/wiring/dev-deps.ts';
 import { buildDoctorDeps } from 'cli/wiring/doctor-deps.ts';
 import { buildLogsDeps } from 'cli/wiring/logs-deps.ts';
 import {
-  buildPlatformServiceContext,
   buildProfileServiceContext,
   buildServiceUnitRecreate,
-  platformServiceUnitPath,
   resolveWindowsUserId,
 } from 'cli/wiring/platform.ts';
 import {
@@ -65,6 +63,10 @@ import type { ProfileName } from 'core/io/fs/profile.types.ts';
 import { VALID_PROFILES } from 'core/io/fs/profile.types.ts';
 import { GatewayError, PACKAGE_DESCRIPTION, PACKAGE_VERSION, UserAbortedError } from 'core/utils';
 import { loadConfigFromFile } from 'services/config';
+import { relocateLegacyRoot } from 'core/io/fs/migrate-legacy-root.ts';
+
+// Run legacy root directory relocation to standard OS paths at startup
+relocateLegacyRoot();
 
 const isDevMode = await readDevModeSentinel(join(profileRootDir(), 'DEV_MODE'));
 
@@ -312,7 +314,7 @@ program
     await runDaemonStartupRelocation();
     const profileName = parseProfileNameInternal(opts.profile);
     const profileCtx = buildProfileContext(profileName);
-    const platformCtx = buildPlatformServiceContext(process.platform, process.execPath);
+    const platformCtx = buildProfileServiceContext(process.platform, process.execPath, profileCtx);
     if (platformCtx !== null) {
       const windowsUserId =
         platformCtx.platform === 'win32' ? resolveWindowsUserId(process.env) : undefined;
@@ -497,15 +499,13 @@ withProfileOption(
 ).action(async (opts: { reset?: boolean; yes?: boolean; profile?: string }) => {
   const platform = process.platform;
   const profileCtx = buildProfileContext(parseProfileName(opts.profile));
-  const unitPath = platformServiceUnitPath(platform, profileCtx.configDir);
-  if (unitPath === null) exitUnsupportedPlatform('uninstall');
-  const ctx = buildPlatformServiceContext(platform, process.execPath, profileCtx.configDir);
+  const ctx = buildProfileServiceContext(platform, process.execPath, profileCtx);
   if (ctx === null) exitUnsupportedPlatform('uninstall');
   const result = await runUninstall(
     buildUninstallDeps({
       platform,
       programPath: process.execPath,
-      serviceUnitPath: unitPath,
+      serviceUnitPath: ctx.unitPath,
       serviceManager: ctx.serviceManager,
       profileCtx,
     }),

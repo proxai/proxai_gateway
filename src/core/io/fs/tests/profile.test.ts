@@ -15,8 +15,13 @@ function withPlatform<T>(platform: NodeJS.Platform, fn: () => T): T {
 }
 
 test('profileRootDir matches existing configDir output on current platform', () => {
-  if (process.platform === 'darwin' || process.platform === 'linux') {
-    expect(profileRootDir()).toBe(join(homedir(), '.proxai', 'proxai-gateway'));
+  if (process.platform === 'darwin') {
+    expect(profileRootDir()).toBe(
+      join(homedir(), 'Library', 'Application Support', 'proxai', 'proxai-gateway'),
+    );
+  }
+  if (process.platform === 'linux') {
+    expect(profileRootDir()).toBe(join(homedir(), '.config', 'proxai', 'proxai-gateway'));
   }
   if (process.platform === 'win32') {
     const localAppData = process.env['LOCALAPPDATA'] ?? join(homedir(), 'AppData', 'Local');
@@ -24,15 +29,17 @@ test('profileRootDir matches existing configDir output on current platform', () 
   }
 });
 
-test('profileRootDir on linux returns ~/.proxai/proxai-gateway', () => {
+test('profileRootDir on linux returns ~/.config/proxai/proxai-gateway', () => {
   withPlatform('linux', () => {
-    expect(profileRootDir()).toBe(join(homedir(), '.proxai', 'proxai-gateway'));
+    expect(profileRootDir()).toBe(join(homedir(), '.config', 'proxai', 'proxai-gateway'));
   });
 });
 
-test('profileRootDir on darwin returns ~/.proxai/proxai-gateway', () => {
+test('profileRootDir on darwin returns ~/Library/Application Support/proxai/proxai-gateway', () => {
   withPlatform('darwin', () => {
-    expect(profileRootDir()).toBe(join(homedir(), '.proxai', 'proxai-gateway'));
+    expect(profileRootDir()).toBe(
+      join(homedir(), 'Library', 'Application Support', 'proxai', 'proxai-gateway'),
+    );
   });
 });
 

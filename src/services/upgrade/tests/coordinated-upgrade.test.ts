@@ -91,6 +91,11 @@ test('happy path: dev running is stopped, binary replaced, state cleared, lock r
     downloadAndReplaceBinary: async () => {
       calls.push('replace');
       replaced = true;
+      if (process.platform !== 'win32') {
+        const lockPath = join(dir, UPGRADE_LOCK);
+        const stat = require('node:fs').statSync(lockPath);
+        expect(stat.mode & 0o777).toBe(0o600);
+      }
     },
     sleep: async (ms) => {
       sleepCalls.push(ms);

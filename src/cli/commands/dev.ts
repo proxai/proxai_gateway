@@ -1,10 +1,10 @@
 import chalk from 'chalk';
-import { mkdir } from 'node:fs/promises';
 
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult, OutputSink } from 'cli/cli.types.ts';
 import { AuthError } from 'core/utils';
 import { writeAtomic, sentinelHandle } from 'core/io/fs';
+import { setMode, ensureSecureBaseDirs } from 'core/io/fs/mode.ts';
 import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
 import { readBootId } from 'core/system/boot-id.ts';
 import type { ServiceManager } from 'cli/service-manager';
@@ -59,6 +59,7 @@ async function runDevOn(deps: DevCommandDeps): Promise<CommandResult> {
   const readBootIdFn = deps.readBootId ?? readBootId;
   const bootId = await readBootIdFn();
   await writeAtomic(deps.devModeSentinelPath, JSON.stringify({ bootId }));
+  await setMode(deps.devModeSentinelPath, 0o600);
 
   const configExists = await deps.devConfigExists();
   if (configExists && deps.devServiceManager !== null) {
@@ -143,7 +144,7 @@ async function runDevSetup(
   }
 
   try {
-    await mkdir(deps.devCtx.configDir, { recursive: true });
+    await ensureSecureBaseDirs([deps.devCtx.configDir, deps.devCtx.logDir]);
   } catch {}
 
   try {

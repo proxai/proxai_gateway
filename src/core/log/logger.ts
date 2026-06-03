@@ -57,12 +57,20 @@ export function defaultLogFilePath(): string {
 
 interface FileLikeStream {
   file?: unknown;
-  on?: (event: string, listener: () => void) => unknown;
+  on?: (event: string, listener: (...args: unknown[]) => void) => unknown;
 }
 
-function secureLogStream(stream: unknown): void {
-  if (process.platform === 'win32') return;
+export function secureLogStream(stream: unknown): void {
   const s = stream as FileLikeStream;
+  if (typeof s.on === 'function') {
+    s.on('error', (err: unknown) => {
+      process.stderr.write(
+        `[Logger Stream Error] ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
+      );
+    });
+  }
+
+  if (process.platform === 'win32') return;
   applySecureMode(s);
   if (typeof s.on === 'function') {
     s.on('ready', () => {

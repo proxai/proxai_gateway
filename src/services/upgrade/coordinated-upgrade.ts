@@ -1,4 +1,4 @@
-import { rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { errnoCode, isErrnoException } from 'core/utils/assert.ts';
@@ -31,7 +31,10 @@ export interface CoordinatedUpgradeResult {
 function acquireUpgradeLock(rootDir: string): void {
   const lockPath = join(rootDir, UPGRADE_LOCK);
   try {
-    writeFileSync(lockPath, `${process.pid}\n`, { flag: 'wx' });
+    writeFileSync(lockPath, `${process.pid}\n`, { flag: 'wx', mode: 0o600 });
+    if (process.platform !== 'win32') {
+      chmodSync(lockPath, 0o600);
+    }
   } catch (err) {
     if (isErrnoException(err) && errnoCode(err) === 'EEXIST') {
       throw new Error(`upgrade lock already held: ${lockPath}`, { cause: err });

@@ -17,8 +17,9 @@ export function profileRootDir(): string {
   }
   switch (process.platform) {
     case 'darwin':
+      return join(homedir(), 'Library', 'Application Support', ORG_NAME, APP_NAME);
     case 'linux':
-      return join(homedir(), `.${ORG_NAME}`, APP_NAME);
+      return join(homedir(), '.config', ORG_NAME, APP_NAME);
     case 'win32':
       return join(
         process.env['LOCALAPPDATA'] ?? join(homedir(), 'AppData', 'Local'),

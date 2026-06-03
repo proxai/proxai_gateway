@@ -20,9 +20,41 @@ export function startWatchLoop(deps: WatchLoopDeps): WatchLoopHandle {
     resolveDone = r;
   });
 
+  const sigintHandler = (): void => {
+    handleSignal('SIGINT');
+  };
+  const sigtermHandler = (): void => {
+    handleSignal('SIGTERM');
+  };
+  const sighupHandler = (): void => {
+    handleSignal('SIGHUP');
+  };
+  const uncaughtHandler = (err: unknown): void => {
+    cleanup();
+    console.error(err);
+    process.exit(1);
+  };
+
+  function removeHooks(): void {
+    process.off('SIGINT', sigintHandler);
+    process.off('SIGTERM', sigtermHandler);
+    process.off('SIGHUP', sighupHandler);
+    process.off('uncaughtException', uncaughtHandler);
+  }
+
+  function handleSignal(signal: 'SIGINT' | 'SIGTERM' | 'SIGHUP'): void {
+    cleanup();
+    try {
+      process.kill(process.pid, signal);
+    } catch {
+      process.exit(1);
+    }
+  }
+
   const cleanup = (): void => {
     if (stopped) return;
     stopped = true;
+    removeHooks();
     if (scheduled !== undefined) {
       clearTimeout(scheduled);
     }
@@ -32,6 +64,11 @@ export function startWatchLoop(deps: WatchLoopDeps): WatchLoopHandle {
     }
     if (resolveDone !== null) resolveDone();
   };
+
+  process.on('SIGINT', sigintHandler);
+  process.on('SIGTERM', sigtermHandler);
+  process.on('SIGHUP', sighupHandler);
+  process.on('uncaughtException', uncaughtHandler);
 
   const keyHandler = startKeyHandler({ stdin: deps.stdin, onQuit: cleanup });
 

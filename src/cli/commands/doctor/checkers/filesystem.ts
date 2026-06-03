@@ -10,10 +10,8 @@ export function checkF1ConfigDirNotWritable(signals: DoctorSignals): Finding | n
     code: 'F1',
     severity: Severity.critical,
     confidence: Confidence.confirmed,
-    cause:
-      'The gateway configuration directory (~/.proxai) is not writable due to restricted file permissions.',
-    action:
-      'Grant read and write permissions by running "chmod -R u+rw ~/.proxai" (macOS/Linux) or adjusting folder security access settings (Windows).',
+    cause: `The gateway configuration directory (${signals.configDirPath}) is not writable due to restricted file permissions.`,
+    action: `Grant read and write permissions by running "chmod -R u+rw ${signals.configDirPath}" (macOS/Linux) or adjusting folder security access settings (Windows).`,
   };
 }
 
@@ -37,10 +35,8 @@ export function checkF3LogDirNotWritable(signals: DoctorSignals): Finding | null
     code: 'F3',
     severity: Severity.warning,
     confidence: Confidence.confirmed,
-    cause:
-      'The gateway log directory (~/.proxai) is not writable due to restricted file permissions.',
-    action:
-      'Grant write permissions to the log directory by running "chmod -R u+rw ~/.proxai" (macOS/Linux) or adjusting folder security access settings (Windows).',
+    cause: `The gateway log directory (${signals.logDirPath}) is not writable due to restricted file permissions.`,
+    action: `Grant write permissions to the log directory by running "chmod -R u+rw ${signals.logDirPath}" (macOS/Linux) or adjusting folder security access settings (Windows).`,
   };
 }
 

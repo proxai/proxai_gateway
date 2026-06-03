@@ -1,6 +1,6 @@
 import { dirname } from 'node:path';
 
-import { ensureDir } from 'core/io/fs';
+import { ensureSecureBaseDirs } from 'core/io/fs/mode.ts';
 import { createLogger, pruneLogDirectory } from 'core/log';
 import { readBootId } from 'core/system';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
@@ -27,7 +27,7 @@ import type { RunCommandDeps } from 'cli/commands/run/run.types.ts';
 export type { RunCommandDeps } from 'cli/commands/run/run.types.ts';
 
 export async function runDaemon(deps: RunCommandDeps): Promise<CommandResult> {
-  await ensureDir(dirname(deps.config.capture.bufferPath));
+  await ensureSecureBaseDirs([dirname(deps.config.capture.bufferPath), deps.config.logging.logDir]);
 
   const logger =
     deps.logger ??

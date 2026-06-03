@@ -20,7 +20,7 @@ export interface WriteServiceUnitInput {
 }
 
 export async function writeServiceUnit(input: WriteServiceUnitInput): Promise<void> {
-  await ensureDir(dirname(input.serviceUnitPath));
+  await ensureDir(dirname(input.serviceUnitPath), 0o755);
   const profileName = input.profileName ?? 'prod';
   const programArgs = input.programArgs ?? ['run', '--profile', profileName];
   if (input.platform === 'win32') {

@@ -7,7 +7,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { columnExists, listTables, tableExists } from 'core/io/sqlite';
-import { BUFFER_TABLES, openBufferDb, openInMemoryBufferDb } from 'services/buffer';
+import {
+  BUFFER_TABLES,
+  openBufferDb,
+  openInMemoryBufferDb,
+  openReadOnlyBufferDb,
+} from 'services/buffer';
 
 let db: SqliteDatabase;
 
@@ -132,6 +137,48 @@ test('migrates pre-existing receipts table by adding user_prompt, source_path, e
       expect(columnExists(opened, BUFFER_TABLES.receipts, 'shipped_bytes')).toBe(true);
     } finally {
       opened.close();
+    }
+  } finally {
+    await rmRecursive(dir);
+  }
+});
+
+test('openReadOnlyBufferDb opens an existing database in readonly mode without migrations', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'proxai-buffer-readonly-'));
+  try {
+    const path = join(dir, 'test-readonly.db');
+
+    // 1. Create a database file with a basic table schema, but missing the new migrated columns
+    const seed = new Database(path, { create: true });
+    seed.run(
+      `CREATE TABLE source_cursors (
+         source_app TEXT NOT NULL,
+         source_path_hash TEXT NOT NULL,
+         source_path TEXT NOT NULL,
+         source_inode INTEGER NOT NULL DEFAULT -1,
+         watermark_table TEXT NOT NULL DEFAULT '__none__',
+         watermark_end INTEGER NOT NULL DEFAULT 0,
+         last_polled_at TEXT NOT NULL,
+         consecutive_errors INTEGER NOT NULL DEFAULT 0,
+         PRIMARY KEY (source_app, source_path_hash, source_inode, watermark_table)
+       )`,
+    );
+    seed.close();
+
+    // 2. Open it with openReadOnlyBufferDb
+    const dbRo = openReadOnlyBufferDb(path);
+    try {
+      // It should not write
+      expect(() =>
+        dbRo.run(
+          "INSERT INTO source_cursors (source_app, source_path_hash, source_path, last_polled_at) VALUES ('a', 'b', 'c', 'd')",
+        ),
+      ).toThrow();
+
+      // The new migrated columns should NOT exist yet because no schema migrations were performed
+      expect(columnExists(dbRo, BUFFER_TABLES.cursors, 'last_seen_size_bytes')).toBe(false);
+    } finally {
+      dbRo.close();
     }
   } finally {
     await rmRecursive(dir);

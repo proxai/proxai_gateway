@@ -68,6 +68,13 @@ test('runDev action="on" enables dev mode', async () => {
 
   expect(result.exitCode).toBe(EXIT_CODE.ok);
   expect(existsSync(mockSentinelPath)).toBe(true);
+
+  if (process.platform !== 'win32') {
+    const { statSync } = await import('node:fs');
+    const s = statSync(mockSentinelPath);
+    expect(s.mode & 0o777).toBe(0o600);
+  }
+
   const successMsgs = (deps.output as ReturnType<typeof captureOutput>).lines
     .filter((l) => l.level === 'success')
     .map((l) => l.msg);

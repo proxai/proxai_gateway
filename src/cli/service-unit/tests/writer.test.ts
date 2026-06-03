@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
 import { mkdtemp, readFile } from 'node:fs/promises';
+import { statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -26,6 +27,11 @@ test('writeServiceUnit emits a launchd plist on darwin', async () => {
   const text = await readFile(path, 'utf8');
   expect(text).toContain('<plist');
   expect(text).toContain('/usr/local/bin/proxai-gateway');
+
+  if (process.platform !== 'win32') {
+    const s = statSync(dir);
+    expect(s.mode & 0o777).toBe(0o755);
+  }
 });
 
 test('writeServiceUnit emits a systemd unit on linux', async () => {
@@ -258,4 +264,19 @@ test('ensureServiceUnitExists uses prod profile by default', async () => {
     },
   });
   expect(observedArgs).toEqual(['run', '--profile', 'prod']);
+});
+
+test('writeServiceUnit creates containing directory with 0o755 permissions', async () => {
+  const serviceDir = join(dir, 'nested-unit-dir');
+  const path = join(serviceDir, 'co.proxai.gateway.plist');
+  await writeServiceUnit({
+    serviceUnitPath: path,
+    programPath: '/usr/local/bin/proxai-gateway',
+    platform: 'darwin',
+  });
+
+  if (process.platform !== 'win32') {
+    const stat = statSync(serviceDir);
+    expect(stat.mode & 0o777).toBe(0o755);
+  }
 });

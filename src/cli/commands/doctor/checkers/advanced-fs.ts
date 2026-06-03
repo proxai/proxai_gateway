@@ -75,8 +75,7 @@ export function checkF12POSIXExtendedAclBlocked(signals: DoctorSignals): Finding
     confidence: Confidence.confirmed,
     cause:
       'Fine-grained POSIX Access Control Lists (ACLs) or immutable attributes are overriding permissions and blocking writes.',
-    action:
-      'Clear custom ACL and immutable flags: "chflags nouchg ~/.proxai" (macOS) or "chattr -i" (Linux).',
+    action: `Clear custom ACL and immutable flags: "chflags nouchg ${signals.configDirPath}" (macOS) or "chattr -i" (Linux).`,
   };
 }
 
@@ -142,7 +141,6 @@ export function checkF16SudoHijackOwnershipDrift(signals: DoctorSignals): Findin
     confidence: Confidence.confirmed,
     cause:
       'Gateway database directories have inherited root-level ownership, blocking standard user process writes.',
-    action:
-      'Restore ownership permissions to your active user: "sudo chown -R $(whoami) ~/.proxai".',
+    action: `Restore ownership permissions to your active user: "sudo chown -R $(whoami) ${signals.configDirPath}".`,
   };
 }

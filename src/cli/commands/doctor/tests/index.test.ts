@@ -369,3 +369,21 @@ test('in dev mode without explicit profile option, handles generic findings appe
     rmSync(sentinelPath, { force: true });
   }
 });
+
+test('dynamic path replacement of legacy ~/.proxai with space quotes path', async () => {
+  await writeFile(join(dir, 'config.toml'), 'api_key = "secret"\n');
+  const badDir = join(dir, 'unwritable path');
+  const out = captured();
+  const result = await runDoctor(
+    makeDeps(out, {
+      configDirPath: badDir,
+      configFilePath: join(dir, 'config.toml'),
+    }),
+    {},
+  );
+  expect(result.exitCode).toBe(0);
+  const joined = stripAnsi(out.lines.map((l) => l.msg).join('\n'));
+  expect(joined).toContain('F1');
+  expect(joined).not.toContain('~/.proxai');
+  expect(joined).toContain("unwritable path'");
+});

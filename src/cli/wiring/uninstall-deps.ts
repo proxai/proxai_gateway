@@ -43,8 +43,12 @@ export interface BuildUninstallDepsInputs {
 export function buildUninstallDeps(inputs: BuildUninstallDepsInputs): UninstallCommandDeps {
   const { profileCtx } = inputs;
   const devCtx = buildProfileContext('dev');
-  const devServiceManager = buildDevServiceManager(inputs.platform, devCtx.configDir);
-  const devServiceUnitPath = buildDevServiceUnitPath(inputs.platform, devCtx.configDir);
+  const devServiceManager = profileCtx.isDev
+    ? null
+    : buildDevServiceManager(inputs.platform, devCtx.configDir);
+  const devServiceUnitPath = profileCtx.isDev
+    ? null
+    : buildDevServiceUnitPath(inputs.platform, devCtx.configDir);
   return {
     output: consoleOutput(),
     prompts: inquirerPrompts(),
@@ -63,7 +67,10 @@ export function buildUninstallDeps(inputs: BuildUninstallDepsInputs): UninstallC
     sweep: createDefaultSweep(),
     binaryRemover: createDefaultBinaryRemover(inputs.platform),
     pathCleaner: createDefaultShellPathCleaner(inputs.platform),
-    installDir: join(homedir(), '.proxai', 'bin'),
+    installDir:
+      inputs.platform === 'win32'
+        ? join(process.env['LOCALAPPDATA'] ?? join(homedir(), 'AppData', 'Local'), 'proxai', 'bin')
+        : join(homedir(), '.proxai', 'bin'),
     currentExecPath: inputs.programPath,
   };
 }

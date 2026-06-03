@@ -210,6 +210,70 @@ function runCheckers(signals: DoctorSignals): Finding[] {
   return findings;
 }
 
+function replaceLegacyPaths(finding: Finding, deps: DoctorCommandDeps): Finding {
+  const quotePath = (p: string): string => (p.includes(' ') ? `'${p}'` : p);
+
+  const replaceText = (text: string): string => {
+    const isLogReference =
+      text.includes('log directory') ||
+      text.includes('log files') ||
+      text.includes('log-inode') ||
+      finding.code === 'F3' ||
+      finding.code === 'F14';
+
+    let result = text;
+    // Replace most specific paths first
+    result = result.replace(/~\/\.proxai\/config\.toml/g, quotePath(deps.configFilePath));
+    result = result.replace(/~\/\.proxai\/buffer\.db/g, quotePath(deps.bufferDbPath));
+    result = result.replace(
+      /~\/\.proxai\/\.upgrade\.lock/g,
+      quotePath(join(deps.configDirPath, '.upgrade.lock')),
+    );
+
+    if (isLogReference) {
+      result = result.replace(/~\/\.proxai/g, quotePath(deps.logDirPath));
+    } else {
+      result = result.replace(/~\/\.proxai/g, quotePath(deps.configDirPath));
+    }
+
+    // Additionally check if configDirPath or logDirPath is embedded in the checker message
+    // without quotes and has spaces, then quote it to keep shell command syntax safe.
+    const configDir = deps.configDirPath;
+    if (configDir.includes(' ')) {
+      const quotedConfigDir = `'${configDir}'`;
+      if (
+        result.includes(configDir) &&
+        !result.includes(quotedConfigDir) &&
+        !result.includes(`"${configDir}"`)
+      ) {
+        result = result.split(deps.configFilePath).join(quotePath(deps.configFilePath));
+        result = result.split(deps.bufferDbPath).join(quotePath(deps.bufferDbPath));
+        result = result.split(configDir).join(quotePath(configDir));
+      }
+    }
+
+    const logDir = deps.logDirPath;
+    if (logDir.includes(' ')) {
+      const quotedLogDir = `'${logDir}'`;
+      if (
+        result.includes(logDir) &&
+        !result.includes(quotedLogDir) &&
+        !result.includes(`"${logDir}"`)
+      ) {
+        result = result.split(logDir).join(quotePath(logDir));
+      }
+    }
+
+    return result;
+  };
+
+  return {
+    ...finding,
+    cause: replaceText(finding.cause),
+    action: replaceText(finding.action),
+  };
+}
+
 export async function runDoctor(
   deps: DoctorCommandDeps,
   options: DoctorCommandOptions,
@@ -225,7 +289,7 @@ export async function runDoctor(
 
   if (isDevMode && options.profile === undefined) {
     signals = await gatherSignals(deps);
-    const devFindings = runCheckers(signals);
+    const devFindings = runCheckers(signals).map((f) => replaceLegacyPaths(f, deps));
 
     const prodCtx = buildProfileContext('prod');
     const platform = deps.platform;
@@ -253,7 +317,7 @@ export async function runDoctor(
       profileCtx: prodCtx,
     };
     const prodSignals = await gatherSignals(prodDeps);
-    const prodFindings = runCheckers(prodSignals);
+    const prodFindings = runCheckers(prodSignals).map((f) => replaceLegacyPaths(f, prodDeps));
 
     const genericCodes = new Set(['C2', 'E2', 'F2', 'F4', 'F6', 'F7']);
     const combinedFindings: Finding[] = [];
@@ -290,7 +354,7 @@ export async function runDoctor(
     findings = combinedFindings;
   } else {
     signals = await gatherSignals(deps);
-    const rawFindings = runCheckers(signals);
+    const rawFindings = runCheckers(signals).map((f) => replaceLegacyPaths(f, deps));
 
     if (isDevMode) {
       const genericCodes = new Set(['C2', 'E2', 'F2', 'F4', 'F6', 'F7']);

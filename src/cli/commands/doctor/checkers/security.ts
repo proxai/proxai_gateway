@@ -37,7 +37,7 @@ export function checkB5PermissiveConfigPermissions(signals: DoctorSignals): Find
     confidence: Confidence.confirmed,
     cause:
       'The gateway configuration file stores plain-text API keys but has overly permissive group/world permissions.',
-    action: 'Restrict directory permissions to the owner only: "chmod 600 ~/.proxai/config.toml".',
+    action: `Restrict directory permissions to the owner only: "chmod 600 ${signals.configDirPath}/config.toml".`,
   };
 }
 
