@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { afterEach, expect, test } from 'bun:test';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +9,7 @@ import { LAUNCHD_LABEL, SYSTEMD_UNIT_NAME } from 'cli/cli.constants.ts';
 import { buildProfileContext } from 'core/io/fs/profile.ts';
 import { rmRecursive } from 'core/io/fs';
 import { openBufferDb } from 'services/buffer';
+import { writeConfigToFile, type GatewayConfig } from 'services/config';
 import {
   buildSetupDeps,
   buildSetupOptions,
@@ -29,6 +30,49 @@ const sm = {
   isRunning: async () => false,
   runtimeInfo: async () => ({ pid: null, startedAt: null }),
 } satisfies ServiceManager;
+
+const PROFILE_ROOT_ENV = 'PROXAI_TEST_PROFILE_ROOT';
+
+afterEach(() => {
+  delete process.env[PROFILE_ROOT_ENV];
+});
+
+function configWithPaths(bufferPath: string, logDir: string): GatewayConfig {
+  return {
+    account: {
+      apiKey: 'pxg_live_secret',
+      userId: 'u_1',
+      hostId: '01HZ-test-host',
+      installedAt: '2026-04-28T22:30:00Z',
+      installSource: 'bun',
+    },
+    backend: {
+      ingestUrl: 'https://nest.proxai.co/v1/raw_records',
+      verifyKeyUrl: 'https://nest.proxai.co/ingestion/verify-key',
+      watermarksUrl: 'https://nest.proxai.co/v1/watermarks',
+      registerHostIdUrl: 'https://nest.proxai.co/v1/host-ids/register',
+    },
+    capture: {
+      pollIntervalSec: 300,
+      bufferPath,
+      receiptRetentionDays: 30,
+      failedRetentionDays: 30,
+      bufferSoftPauseBytes: 700 * 1024 * 1024,
+      bufferSoftResumeBytes: 600 * 1024 * 1024,
+      uploadMaxBatchesPerSec: 5,
+      uploadMaxBytesPerMinute: 50 * 1024 * 1024,
+      uploadBackoffOn429Multiplier: 2,
+    },
+    logging: {
+      level: 'info',
+      logDir,
+    },
+    staleBinary: {
+      warnAfterDays: 90,
+      pauseAfterDays: 180,
+    },
+  };
+}
 
 test('resolveSetupServiceContext: dev profile resolves the dev launchd unit on darwin', () => {
   const ctx = resolveSetupServiceContext('darwin', '/bin/p', devProfileCtx);
@@ -73,8 +117,8 @@ test('resolveSetupServiceContext: prod profile returns nulls on an unsupported p
   expect(ctx.serviceManager).toBeNull();
 });
 
-test('buildSetupDeps: omits serviceManager when null and platform=darwin', () => {
-  const deps = buildSetupDeps({
+test('buildSetupDeps: omits serviceManager when null and platform=darwin', async () => {
+  const deps = await buildSetupDeps({
     platform: 'darwin',
     programPath: '/bin/p',
     serviceUnitPath: null,
@@ -88,8 +132,8 @@ test('buildSetupDeps: omits serviceManager when null and platform=darwin', () =>
   expect('windowsUserId' in deps).toBe(false);
 });
 
-test('buildSetupDeps: includes serviceManager when provided', () => {
-  const deps = buildSetupDeps({
+test('buildSetupDeps: includes serviceManager when provided', async () => {
+  const deps = await buildSetupDeps({
     platform: 'linux',
     programPath: '/bin/p',
     serviceUnitPath: '/tmp/x.service',
@@ -102,7 +146,7 @@ test('buildSetupDeps: includes serviceManager when provided', () => {
 });
 
 test('buildSetupDeps: configExists() resolves with a boolean', async () => {
-  const deps = buildSetupDeps({
+  const deps = await buildSetupDeps({
     platform: 'darwin',
     programPath: '/bin/p',
     serviceUnitPath: null,
@@ -117,13 +161,14 @@ test('buildSetupDeps: readLastSuccessAt handles absent, empty, and unreadable bu
   const tmp = await mkdtemp(join(tmpdir(), 'proxai-setup-deps-'));
   try {
     const bufferDbPath = join(tmp, 'buffer.db');
-    const deps = buildSetupDeps({
+    const configFilePath = join(tmp, 'config.toml');
+    const deps = await buildSetupDeps({
       platform: 'linux',
       programPath: '/bin/p',
       serviceUnitPath: null,
       serviceManager: null,
       env: {},
-      profileCtx: { ...profileCtx, bufferDbPath },
+      profileCtx: { ...profileCtx, bufferDbPath, configFilePath },
     });
     const read = deps.readLastSuccessAt;
     if (read === undefined) throw new Error('readLastSuccessAt not wired');
@@ -137,8 +182,45 @@ test('buildSetupDeps: readLastSuccessAt handles absent, empty, and unreadable bu
   }
 });
 
-test('buildSetupDeps: httpClientFactory returns a working HttpClient', () => {
-  const deps = buildSetupDeps({
+test('buildSetupDeps: follows config.toml capture.buffer_path and logging.log_dir, falling back to profileCtx defaults when absent', async () => {
+  const tmp = await mkdtemp(join(tmpdir(), 'proxai-setup-deps-config-'));
+  try {
+    process.env[PROFILE_ROOT_ENV] = tmp;
+    const ctx = buildProfileContext('prod');
+
+    const fallback = await buildSetupDeps({
+      platform: 'linux',
+      programPath: '/bin/p',
+      serviceUnitPath: null,
+      serviceManager: null,
+      env: {},
+      profileCtx: ctx,
+    });
+    expect(fallback.bufferDbPath).toBe(ctx.bufferDbPath);
+    expect(fallback.logDir).toBe(ctx.logDir);
+
+    const customBufferPath = join(tmp, 'custom', 'buffer.db');
+    const customLogDir = join(tmp, 'custom', 'logs');
+    expect(customBufferPath).not.toBe(ctx.bufferDbPath);
+    await writeConfigToFile(configWithPaths(customBufferPath, customLogDir), ctx.configFilePath);
+
+    const followed = await buildSetupDeps({
+      platform: 'linux',
+      programPath: '/bin/p',
+      serviceUnitPath: null,
+      serviceManager: null,
+      env: {},
+      profileCtx: ctx,
+    });
+    expect(followed.bufferDbPath).toBe(customBufferPath);
+    expect(followed.logDir).toBe(customLogDir);
+  } finally {
+    await rmRecursive(tmp);
+  }
+});
+
+test('buildSetupDeps: httpClientFactory returns a working HttpClient', async () => {
+  const deps = await buildSetupDeps({
     platform: 'darwin',
     programPath: '/bin/p',
     serviceUnitPath: null,
@@ -151,7 +233,7 @@ test('buildSetupDeps: httpClientFactory returns a working HttpClient', () => {
 });
 
 test('buildSetupDeps: readMachineUuid is wired and returns a string or throws GatewayError', async () => {
-  const deps = buildSetupDeps({
+  const deps = await buildSetupDeps({
     platform: 'darwin',
     programPath: '/bin/p',
     serviceUnitPath: null,
@@ -172,8 +254,8 @@ test('buildSetupDeps: readMachineUuid is wired and returns a string or throws Ga
   }
 });
 
-test('buildSetupDeps: sets windowsUserId on win32 when env supports it', () => {
-  const deps = buildSetupDeps({
+test('buildSetupDeps: sets windowsUserId on win32 when env supports it', async () => {
+  const deps = await buildSetupDeps({
     platform: 'win32',
     programPath: 'C:\\bin\\p.exe',
     serviceUnitPath: 'C:\\tmp\\x.xml',
@@ -184,9 +266,9 @@ test('buildSetupDeps: sets windowsUserId on win32 when env supports it', () => {
   expect(deps.windowsUserId).toBe('CORP\\alice');
 });
 
-test('buildSetupDeps: warns and omits windowsUserId on win32 when env is empty', () => {
+test('buildSetupDeps: warns and omits windowsUserId on win32 when env is empty', async () => {
   const warnings: string[] = [];
-  const deps = buildSetupDeps({
+  const deps = await buildSetupDeps({
     platform: 'win32',
     programPath: 'C:\\bin\\p.exe',
     serviceUnitPath: 'C:\\tmp\\x.xml',

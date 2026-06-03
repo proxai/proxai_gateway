@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -85,4 +85,47 @@ test('forwards windowsUserId to writer on win32 platform', async () => {
   const updated = readFileSync(unitPath, 'utf16le');
   expect(updated).toContain('--profile');
   expect(updated).toContain('mock-user-123');
+});
+
+test('rewrites a plist that has --profile but points at an outdated programPath', async () => {
+  const unitPath = join(dir, 'co.proxai.gateway.plist');
+  const newProgramPath = join(dir, 'proxai-gateway-new');
+  const oldProgramPath = join(dir, 'proxai-gateway-old');
+  const body = buildLaunchdPlist({
+    programPath: oldProgramPath,
+    programArgs: ['run', '--profile', 'prod'],
+  });
+  writeFileSync(unitPath, body);
+
+  await refreshServiceUnitIfLegacy({
+    serviceUnitPath: unitPath,
+    programPath: newProgramPath,
+    platform: 'darwin',
+    profileName: 'prod',
+  });
+
+  const updated = readFileSync(unitPath, 'utf8');
+  expect(updated).toContain(newProgramPath);
+  expect(updated).not.toContain(oldProgramPath);
+});
+
+test('does not throw when the service unit cannot be rewritten', async () => {
+  const unitDir = join(dir, 'unit-as-dir');
+  mkdirSync(unitDir);
+  const unitPath = join(unitDir, 'co.proxai.gateway.plist');
+  writeFileSync(
+    unitPath,
+    buildLaunchdPlist({ programPath: join(dir, 'old'), programArgs: ['run'] }),
+  );
+  rmSync(unitPath);
+  mkdirSync(unitPath);
+
+  await expect(
+    refreshServiceUnitIfLegacy({
+      serviceUnitPath: unitPath,
+      programPath: join(dir, 'new'),
+      platform: 'darwin',
+      profileName: 'prod',
+    }),
+  ).resolves.toBeUndefined();
 });

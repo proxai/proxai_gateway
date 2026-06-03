@@ -199,6 +199,10 @@ function persistDrainMetrics(
     setMetadata(ctx.buffer, METADATA_KEYS.drainLastCycleAt, completedAt);
     setMetadata(ctx.buffer, METADATA_KEYS.drainLastCycleDurationMs, durationMs.toString());
 
+    if ((drainResult.accepted > 0 || drainResult.recovered > 0) && drainResult.fatal === 0) {
+      setMetadata(ctx.buffer, METADATA_KEYS.uploadLastSuccessAt, completedAt);
+    }
+
     if (drainResult.retriable > 0 || drainResult.fatal > 0) {
       const errs = readNumberMetadata(ctx.buffer, METADATA_KEYS.drainCyclesWithErrors) + 1;
       setMetadata(ctx.buffer, METADATA_KEYS.drainCyclesWithErrors, errs.toString());

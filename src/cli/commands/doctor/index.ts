@@ -16,6 +16,7 @@ import { readBootId } from 'core/system/boot-id.ts';
 import { profileRootDir, buildProfileContext } from 'core/io/fs/profile.ts';
 import { nestVerifyKeyUrl } from 'services/config';
 import { buildPlatformServiceContext, platformServiceUnitPath } from 'cli/wiring/platform.ts';
+import { resolveProfilePaths } from 'cli/wiring/resolve-profile-paths.ts';
 import {
   checkA1NotSetUp,
   checkA2UnitNotRegistered,
@@ -299,12 +300,13 @@ export async function runDoctor(
         ? (buildPlatformServiceContext(platform, deps.binaryPath, prodCtx.configDir)
             ?.serviceManager ?? null)
         : null;
+    const prodPaths = await resolveProfilePaths(prodCtx);
     const prodDeps: DoctorCommandDeps = {
       output: deps.output,
-      bufferDbPath: prodCtx.bufferDbPath,
+      bufferDbPath: prodPaths.bufferDbPath,
       configFilePath: prodCtx.configFilePath,
       configDirPath: prodCtx.configDir,
-      logDirPath: prodCtx.logDir,
+      logDirPath: prodPaths.logDir,
       authFailedSentinelPath: prodCtx.sentinels.authFailed,
       bufferFullSentinelPath: prodCtx.sentinels.bufferFull,
       sessionStoppedSentinelPath: prodCtx.sentinels.sessionStopped,

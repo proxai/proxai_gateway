@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { createActor } from 'xstate';
+import { existsSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 
 import { sentinelHandle } from 'core/io/fs';
@@ -7,6 +8,7 @@ import { nowIsoUtc } from 'core/utils';
 import { formatTimeWithRelative } from 'core/utils/format.ts';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
+import { clearFailedState, openBufferDb } from 'services/buffer';
 import { loadConfigFromFile } from 'services/config';
 import type { GatewayConfig, InstallSource } from 'services/config';
 import { clearAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
@@ -99,6 +101,7 @@ async function runConfigure(
   await writeConfigArtifacts(config, deps);
   machine.send({ type: 'CONFIG_WRITTEN' });
   await clearAuthFailedSentinel(deps.authFailedSentinelPath);
+  await clearFailedAndSentinels(deps);
   await writeServiceUnitIfNeeded(deps);
 
   if (!isReplace) {
@@ -190,6 +193,7 @@ export async function runSetupReset(
     await unlink(deps.configPath);
   } catch {}
   await clearAuthFailedSentinel(deps.authFailedSentinelPath);
+  await clearFailedAndSentinels(deps);
   if (deps.sessionStoppedSentinelPath !== undefined) {
     try {
       await sentinelHandle(deps.sessionStoppedSentinelPath).remove();
@@ -216,5 +220,23 @@ async function tryLoadExistingConfig(deps: SetupCommandDeps): Promise<GatewayCon
     return await loadConfigFromFile(deps.configPath);
   } catch {
     return null;
+  }
+}
+
+async function clearFailedAndSentinels(deps: SetupCommandDeps): Promise<void> {
+  if (deps.bufferFullSentinelPath !== undefined) {
+    try {
+      await sentinelHandle(deps.bufferFullSentinelPath).remove();
+    } catch {}
+  }
+  if (existsSync(deps.bufferDbPath)) {
+    try {
+      const db = openBufferDb(deps.bufferDbPath);
+      try {
+        clearFailedState(db);
+      } finally {
+        db.close();
+      }
+    } catch {}
   }
 }

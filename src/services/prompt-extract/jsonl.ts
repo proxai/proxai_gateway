@@ -125,7 +125,7 @@ function extractCodexAssistant(rec: Record<string, unknown>): string | null {
   return extractTextFromContent(payload.content);
 }
 
-export type JsonlSourceApp = 'claude-code' | 'codex';
+export type JsonlSourceApp = 'claude-code' | 'codex' | 'claude-desktop';
 
 export function extractAssistantFromJsonl(text: string, sourceApp: JsonlSourceApp): string | null {
   const lines = text.split('\n');
@@ -140,10 +140,10 @@ export function extractAssistantFromJsonl(text: string, sourceApp: JsonlSourceAp
     if (!isRecord(parsed)) continue;
 
     let response: string | null = null;
-    if (sourceApp === 'claude-code') {
-      response = extractClaudeCodeAssistant(parsed);
-    } else {
+    if (sourceApp === 'codex') {
       response = extractCodexAssistant(parsed);
+    } else {
+      response = extractClaudeCodeAssistant(parsed);
     }
     if (response !== null) return response;
   }
@@ -163,10 +163,10 @@ export function extractFromJsonl(text: string, sourceApp: JsonlSourceApp): Promp
     if (!isRecord(parsed)) continue;
 
     let result: PromptResult | null = null;
-    if (sourceApp === 'claude-code') {
-      result = extractClaudeCodeUserPrompt(parsed);
-    } else {
+    if (sourceApp === 'codex') {
       result = extractCodexRolloutUserPrompt(parsed);
+    } else {
+      result = extractClaudeCodeUserPrompt(parsed);
     }
     if (result !== null) return result;
   }

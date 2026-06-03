@@ -82,6 +82,16 @@ test('returns null result when decoding throws unexpectedly', () => {
   });
 });
 
+test('extracts user prompt and assistant response for claude-desktop jsonl', () => {
+  const text = [
+    JSON.stringify({ type: 'user', message: { content: 'desktop prompt' } }),
+    JSON.stringify({ type: 'assistant', message: { content: 'desktop response' } }),
+  ].join('\n');
+  const result = extractConversation(input(text, 'claude-desktop', 'jsonl'));
+  expect(result.userPrompt).toBe('desktop prompt');
+  expect(result.assistantResponse).toBe('desktop response');
+});
+
 test('extractConversation returns user prompt and assistant response for jsonl', () => {
   const text = [
     JSON.stringify({ type: 'user', message: { content: 'do the thing' } }),

@@ -103,6 +103,49 @@ test('migrates pre-existing buffer DB by adding last_seen_size_bytes / last_seen
   }
 });
 
+test('migrates pre-existing upload_batches table by adding failed_at', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'proxai-buffer-migrate-batches-'));
+  try {
+    const path = join(dir, 'old-buffer-batches.db');
+
+    const seed = new Database(path, { create: true });
+    seed.run(
+      `CREATE TABLE upload_batches (
+         capture_id TEXT PRIMARY KEY NOT NULL,
+         source_app TEXT NOT NULL,
+         source_kind TEXT NOT NULL,
+         source_path TEXT NOT NULL,
+         source_path_hash TEXT NOT NULL,
+         source_inode INTEGER,
+         watermark_kind TEXT NOT NULL,
+         watermark_start INTEGER NOT NULL,
+         watermark_end INTEGER NOT NULL,
+         watermark_table TEXT,
+         agent_schema_version TEXT NOT NULL,
+         gateway_version TEXT NOT NULL,
+         captured_at_utc TEXT NOT NULL,
+         body_format TEXT NOT NULL,
+         body_compression TEXT NOT NULL,
+         body BLOB NOT NULL,
+         status TEXT NOT NULL DEFAULT 'pending',
+         attempts INTEGER NOT NULL DEFAULT 0,
+         created_at TEXT NOT NULL,
+         last_error TEXT
+       )`,
+    );
+    seed.close();
+
+    const opened = openBufferDb(path);
+    try {
+      expect(columnExists(opened, BUFFER_TABLES.batches, 'failed_at')).toBe(true);
+    } finally {
+      opened.close();
+    }
+  } finally {
+    await rmRecursive(dir);
+  }
+});
+
 test('migrates pre-existing receipts table by adding user_prompt, source_path, etc.', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'proxai-buffer-migrate-receipts-'));
   try {

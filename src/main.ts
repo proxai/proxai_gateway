@@ -63,10 +63,6 @@ import type { ProfileName } from 'core/io/fs/profile.types.ts';
 import { VALID_PROFILES } from 'core/io/fs/profile.types.ts';
 import { GatewayError, PACKAGE_DESCRIPTION, PACKAGE_VERSION, UserAbortedError } from 'core/utils';
 import { loadConfigFromFile } from 'services/config';
-import { relocateLegacyRoot } from 'core/io/fs/migrate-legacy-root.ts';
-
-// Run legacy root directory relocation to standard OS paths at startup
-relocateLegacyRoot();
 
 const isDevMode = await readDevModeSentinel(join(profileRootDir(), 'DEV_MODE'));
 
@@ -165,7 +161,7 @@ const setupCommand = withProfileOption(
   ) => {
     const inputs = await resolveSetupInputs(opts.profile);
     const optionsForRun = gatewayKey === undefined ? opts : { ...opts, apiKey: gatewayKey };
-    const result = await runSetup(buildSetupDeps(inputs), buildSetupOptions(optionsForRun));
+    const result = await runSetup(await buildSetupDeps(inputs), buildSetupOptions(optionsForRun));
     process.exit(result.exitCode);
   },
 );
@@ -189,7 +185,10 @@ withProfileOption(
   ) => {
     const inputs = await resolveSetupInputs(opts.profile);
     const optionsForRun = gatewayKey === undefined ? opts : { ...opts, apiKey: gatewayKey };
-    const result = await runSetupNew(buildSetupDeps(inputs), buildSetupOptions(optionsForRun));
+    const result = await runSetupNew(
+      await buildSetupDeps(inputs),
+      buildSetupOptions(optionsForRun),
+    );
     process.exit(result.exitCode);
   },
 );
@@ -203,7 +202,7 @@ withProfileOption(
     .option('-y, --yes', 'skip the confirmation prompt', false),
 ).action(async (opts: { yes?: boolean; profile?: string }) => {
   const inputs = await resolveSetupInputs(opts.profile);
-  const result = await runSetupReset(buildSetupDeps(inputs), { yes: opts.yes === true });
+  const result = await runSetupReset(await buildSetupDeps(inputs), { yes: opts.yes === true });
   process.exit(result.exitCode);
 });
 
@@ -717,7 +716,7 @@ logsCommand.action(
     const defaultProfile: ProfileName = isDevMode ? 'dev' : 'prod';
     const profileName = parseProfileName(opts.profile ?? defaultProfile);
     const profileCtx = buildProfileContext(profileName);
-    const { deps, cleanup } = await buildLogsDeps({ bufferPath: profileCtx.bufferDbPath });
+    const { deps, cleanup } = await buildLogsDeps({ profileCtx });
     const ctrl = new AbortController();
     process.on('SIGINT', () => ctrl.abort());
     process.on('SIGTERM', () => ctrl.abort());
@@ -761,7 +760,7 @@ doctorCommand.action(async (opts: { profile?: string; output?: string | boolean 
   const platform = process.platform;
   const serviceManager =
     buildProfileServiceContext(platform, process.execPath, profileCtx)?.serviceManager ?? null;
-  const result = await runDoctor(buildDoctorDeps({ serviceManager, platform, profileCtx }), {
+  const result = await runDoctor(await buildDoctorDeps({ serviceManager, platform, profileCtx }), {
     profile: opts.profile,
     output: opts.output,
   });

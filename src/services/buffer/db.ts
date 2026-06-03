@@ -2,6 +2,8 @@ import { Database } from 'bun:sqlite';
 
 import { columnExists, openReadOnly, openReadWrite } from 'core/io/sqlite';
 import {
+  BATCH_ALTER_ADD_FAILED_AT_DDL,
+  BATCH_COLS,
   BATCH_PATH_HASH_INDEX_DDL,
   BATCH_STATUS_INDEX_DDL,
   BATCH_TABLE_DDL,
@@ -56,6 +58,7 @@ function initializeSchema(db: Database): void {
   db.run(BATCH_TABLE_DDL);
   db.run(BATCH_STATUS_INDEX_DDL);
   db.run(BATCH_PATH_HASH_INDEX_DDL);
+  migrateBatchFailedAtColumn(db);
   db.run(CURSOR_TABLE_DDL);
   migrateCursorVacuumColumns(db);
   db.run(RECEIPT_TABLE_DDL);
@@ -70,6 +73,12 @@ function initializeSchema(db: Database): void {
   db.run(QUARANTINE_AT_INDEX_DDL);
   db.run(RESYNC_EVENTS_TABLE_DDL);
   db.run(RESYNC_EVENTS_RECOVERED_AT_INDEX_DDL);
+}
+
+function migrateBatchFailedAtColumn(db: Database): void {
+  if (!columnExists(db, BUFFER_TABLES.batches, BATCH_COLS.failedAt)) {
+    db.run(BATCH_ALTER_ADD_FAILED_AT_DDL);
+  }
 }
 
 function migrateCursorVacuumColumns(db: Database): void {

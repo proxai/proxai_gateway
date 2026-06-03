@@ -3,10 +3,12 @@ import type { Database } from 'bun:sqlite';
 
 import { generateUuidV7, requireDefined } from 'core/utils';
 import {
+  clearFailedState,
   countReceipts,
   deleteBatch,
   dropOldestPending,
   getBatch,
+  getDaemonState,
   getReceipt,
   insertBatch,
   markBatchDelivered,
@@ -14,7 +16,9 @@ import {
   nextPendingBatch,
   nextPendingBatchAfter,
   openInMemoryBufferDb,
+  recordResyncEvent,
   recordRetriableFailure,
+  setDaemonState,
 } from 'services/buffer';
 import { newBatch } from 'services/buffer/tests/fixtures.ts';
 
@@ -147,6 +151,20 @@ test('markBatchFailed sets status, error, attempts', () => {
   expect(stored.attempts).toBe(1);
 });
 
+test('markBatchFailed stamps failed_at', () => {
+  const batch = newBatch({ body: new Uint8Array(10) });
+  insertBatch(db, batch);
+  markBatchFailed(db, batch.captureId, 'boom', '2026-06-03T12:00:00.000Z');
+
+  const row = db
+    .query<
+      { failed_at: string | null },
+      [string]
+    >('SELECT failed_at FROM upload_batches WHERE capture_id = ?')
+    .get(batch.captureId);
+  expect(row?.failed_at).toBe('2026-06-03T12:00:00.000Z');
+});
+
 test('recordRetriableFailure increments attempts and stores error without changing status', () => {
   const batch = newBatch();
   insertBatch(db, batch);
@@ -219,4 +237,42 @@ test('deleteBatch is a no-op for an unknown id', () => {
   insertBatch(db, batch);
   deleteBatch(db, 'non-existent-id');
   expect(getBatch(db, batch.captureId)).not.toBeNull();
+});
+
+test('clearFailedState removes failed batches, resync events, and clears last_upload_error', () => {
+  const failed = newBatch({ body: new Uint8Array(50) });
+  insertBatch(db, failed);
+  markBatchFailed(db, failed.captureId, 'boom');
+
+  recordResyncEvent(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'hash',
+    watermarkKind: 'byte_range',
+    serverWatermarkEnd: 100,
+    skippedUnits: 10,
+    recoveredAt: '2026-06-03T12:00:00.000Z',
+  });
+
+  setDaemonState(db, {
+    lastCycleStartedAt: null,
+    lastCycleCompletedAt: null,
+    lastCycleDurationMs: null,
+    lastDrainAttempted: null,
+    lastDrainAccepted: null,
+    lastDrainRetriable: null,
+    lastDrainFatal: null,
+    lastDrainRecovered: null,
+    lastUploadError: 'failed auth',
+    lastConsecutiveRetriableBreak: null,
+    lastSourceCaptures: {},
+  });
+
+  clearFailedState(db);
+
+  expect(getBatch(db, failed.captureId)).toBeNull();
+  expect(getDaemonState(db)?.lastUploadError).toBeNull();
+  const resync = db
+    .query<{ count: number }, []>('SELECT COUNT(*) AS count FROM resync_events')
+    .get();
+  expect(resync?.count ?? 0).toBe(0);
 });

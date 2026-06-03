@@ -1,7 +1,7 @@
 import { expect, test, describe } from 'bun:test';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { rmRecursive } from 'core/io/fs';
 import {
   defaultClaudeDesktopSessionsRoot,
@@ -11,8 +11,23 @@ import {
 describe('discoverClaudeDesktopFiles', () => {
   test('resolves default sessions root', () => {
     const root = defaultClaudeDesktopSessionsRoot();
-    const expected = join('Library', 'Application Support', 'Claude', 'local-agent-mode-sessions');
-    expect(root).toContain(expected);
+    expect(root).toContain(join('Claude', 'local-agent-mode-sessions'));
+  });
+
+  test('resolves the sessions root per platform', () => {
+    expect(defaultClaudeDesktopSessionsRoot('darwin', {})).toBe(
+      join(homedir(), 'Library', 'Application Support', 'Claude', 'local-agent-mode-sessions'),
+    );
+
+    const roaming = join('C:', 'Users', 'x', 'AppData', 'Roaming');
+    expect(defaultClaudeDesktopSessionsRoot('win32', { APPDATA: roaming })).toBe(
+      join(roaming, 'Claude', 'local-agent-mode-sessions'),
+    );
+
+    const xdg = join(homedir(), '.config');
+    expect(defaultClaudeDesktopSessionsRoot('linux', { XDG_CONFIG_HOME: xdg })).toBe(
+      join(xdg, 'Claude', 'local-agent-mode-sessions'),
+    );
   });
 
   test('returns empty array when base directory does not exist', async () => {

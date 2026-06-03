@@ -240,6 +240,39 @@ test('logs warn when drain setMetadata throws (table dropped)', async () => {
   );
 });
 
+test('persistDrainMetrics records upload_last_success_at on a clean accepted cycle', async () => {
+  insertBatch(buffer, batchWith('payload-success'));
+  const ctx = makeContext();
+  const result = await runDrainCycle(ctx);
+  expect(result.drainResult?.accepted).toBe(1);
+  expect(result.drainResult?.fatal).toBe(0);
+  expect(getMetadata(buffer, METADATA_KEYS.uploadLastSuccessAt)).not.toBeNull();
+});
+
+test('persistDrainMetrics does not record success when a fatal occurred this cycle', async () => {
+  insertBatch(buffer, batchWith('payload-fatal'));
+  const ctx = makeContext({
+    http: new HttpClient({
+      apiKey: 'pxg_test',
+      hostId: 'h_test',
+      endpoints: {
+        ingest: 'https://api.example.com/v1/raw_records',
+        verifyKey: 'https://api.example.com/ingestion/verify-key',
+        watermarks: 'https://api.example.com/v1/watermarks',
+        registerHostId: 'https://api.example.com/v1/host-ids/register',
+      },
+      fetch: async () =>
+        new Response(JSON.stringify({ error: 'invalid_dto' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    }),
+  });
+  const result = await runDrainCycle(ctx);
+  expect(result.drainResult?.fatal).toBe(1);
+  expect(getMetadata(buffer, METADATA_KEYS.uploadLastSuccessAt)).toBeNull();
+});
+
 test('counts retriable / fatal in drain.cycles_with_errors', async () => {
   insertBatch(buffer, batchWith('p'));
   let calls = 0;

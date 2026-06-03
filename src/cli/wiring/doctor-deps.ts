@@ -4,6 +4,7 @@ import type { ServiceManager } from 'cli/service-manager';
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 import { nestVerifyKeyUrl } from 'services/config';
 import { PACKAGE_VERSION } from 'core/utils';
+import { resolveProfilePaths } from 'cli/wiring/resolve-profile-paths.ts';
 
 export interface BuildDoctorDepsInputs {
   serviceManager: ServiceManager | null;
@@ -11,14 +12,15 @@ export interface BuildDoctorDepsInputs {
   profileCtx: ProfileContext;
 }
 
-export function buildDoctorDeps(inputs: BuildDoctorDepsInputs): DoctorCommandDeps {
+export async function buildDoctorDeps(inputs: BuildDoctorDepsInputs): Promise<DoctorCommandDeps> {
   const { profileCtx } = inputs;
+  const { bufferDbPath, logDir } = await resolveProfilePaths(profileCtx);
   return {
     output: consoleOutput(),
-    bufferDbPath: profileCtx.bufferDbPath,
+    bufferDbPath,
     configFilePath: profileCtx.configFilePath,
     configDirPath: profileCtx.configDir,
-    logDirPath: profileCtx.logDir,
+    logDirPath: logDir,
     authFailedSentinelPath: profileCtx.sentinels.authFailed,
     bufferFullSentinelPath: profileCtx.sentinels.bufferFull,
     sessionStoppedSentinelPath: profileCtx.sentinels.sessionStopped,

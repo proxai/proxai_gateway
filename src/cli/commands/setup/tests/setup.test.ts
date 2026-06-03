@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { rmRecursive } from 'core/io/fs';
+import { rmRecursive, sentinelHandle } from 'core/io/fs';
 import { mkdtemp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +8,8 @@ import { runSetup, runSetupNew, runSetupReset } from 'cli/commands/setup';
 import { captureOutput } from 'cli/output.ts';
 import { scriptedPrompts } from 'cli/prompts.ts';
 import { deriveHostId } from 'core/system';
+import { getBatch, insertBatch, markBatchFailed, openBufferDb } from 'services/buffer';
+import { newBatch } from 'services/buffer/tests/fixtures.ts';
 import { HttpClient } from 'services/http';
 import {
   loadConfigFromFile,
@@ -637,6 +639,27 @@ test('maybeWriteConsentSentinel handles write error gracefully', async () => {
   };
   const result = await runSetup(d, { apiKey: VALID_KEY });
   expect(result.exitCode).toBe(0);
+});
+
+test('runConfigure clears failed batches and the buffer_full sentinel', async () => {
+  const d = deps(newControl());
+  d.bufferFullSentinelPath = join(d.logDir, 'BUFFER_FULL');
+  const sentinel = sentinelHandle(d.bufferFullSentinelPath);
+  await sentinel.write('full');
+
+  const seed = openBufferDb(d.bufferDbPath);
+  const failed = newBatch({ body: new Uint8Array(50) });
+  insertBatch(seed, failed);
+  markBatchFailed(seed, failed.captureId, 'old error');
+  seed.close();
+
+  const result = await runSetupNew(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+
+  const verify = openBufferDb(d.bufferDbPath);
+  expect(getBatch(verify, failed.captureId)).toBeNull();
+  verify.close();
+  expect(await sentinel.exists()).toBe(false);
 });
 
 // --- setup new (replace an existing key) -------------------------------------

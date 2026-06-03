@@ -86,6 +86,7 @@ const MARK_FAILED_SQL = `
   UPDATE ${BUFFER_TABLES.batches}
   SET ${BATCH_COLS.status} = '${BATCH_STATUS.failed}',
       ${BATCH_COLS.lastError} = ?,
+      ${BATCH_COLS.failedAt} = ?,
       ${BATCH_COLS.attempts} = ${BATCH_COLS.attempts} + 1
   WHERE ${BATCH_COLS.captureId} = ?
 `;
@@ -189,8 +190,13 @@ export function markBatchDelivered(
   tx();
 }
 
-export function markBatchFailed(db: Database, captureId: string, error: string): void {
-  db.query(MARK_FAILED_SQL).run(error, captureId);
+export function markBatchFailed(
+  db: Database,
+  captureId: string,
+  error: string,
+  failedAt: string = nowIsoUtc(),
+): void {
+  db.query(MARK_FAILED_SQL).run(error, failedAt, captureId);
 }
 
 export function deleteBatch(db: Database, captureId: string): void {
@@ -204,6 +210,17 @@ export function recordRetriableFailure(db: Database, captureId: string, error: s
 export function dropOldestPending(db: Database): string | null {
   const row = db.query<{ capture_id: string }, []>(DROP_OLDEST_PENDING_SQL).get();
   return row === null ? null : row.capture_id;
+}
+
+export function clearFailedState(db: Database): void {
+  const tx = db.transaction(() => {
+    db.query(
+      `DELETE FROM ${BUFFER_TABLES.batches} WHERE ${BATCH_COLS.status} = '${BATCH_STATUS.failed}'`,
+    ).run();
+    db.query(`DELETE FROM ${BUFFER_TABLES.resyncEvents}`).run();
+    db.query(`UPDATE ${BUFFER_TABLES.daemonState} SET last_upload_error = NULL WHERE id = 1`).run();
+  });
+  tx();
 }
 
 function rowToBatch(row: BatchRow): StoredBatch {

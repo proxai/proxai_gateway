@@ -42,7 +42,7 @@ const BUFFER_STATS_SQL = `
   SELECT
     COALESCE(SUM(CASE WHEN ${BATCH_COLS.status} = '${BATCH_STATUS.pending}' THEN 1 ELSE 0 END), 0) AS pending_count,
     COALESCE(SUM(CASE WHEN ${BATCH_COLS.status} = '${BATCH_STATUS.pending}' THEN LENGTH(${BATCH_COLS.body}) ELSE 0 END), 0) AS pending_bytes,
-    COALESCE(SUM(CASE WHEN ${BATCH_COLS.status} = '${BATCH_STATUS.failed}' THEN 1 ELSE 0 END), 0) AS failed_count
+    COALESCE(SUM(CASE WHEN ${BATCH_COLS.status} = '${BATCH_STATUS.failed}' AND (?1 IS NULL OR ${BATCH_COLS.failedAt} > ?1) THEN 1 ELSE 0 END), 0) AS failed_count
   FROM ${BUFFER_TABLES.batches}
 `;
 
@@ -73,7 +73,8 @@ const FAILED_BATCH_ERRORS_SQL = `
   FROM ${BUFFER_TABLES.batches}
   WHERE ${BATCH_COLS.status} = '${BATCH_STATUS.failed}'
     AND ${BATCH_COLS.lastError} IS NOT NULL
-  ORDER BY ${BATCH_COLS.createdAt} DESC
+    AND (?1 IS NULL OR ${BATCH_COLS.failedAt} > ?1)
+  ORDER BY ${BATCH_COLS.failedAt} DESC
   LIMIT 10
 `;
 
@@ -84,7 +85,7 @@ const RESYNC_COUNT_SQL = `
 const REGRESSION_LOOPS_SQL = `
   SELECT source_path_hash, COUNT(*) AS cnt
   FROM resync_events
-  WHERE recovered_at > datetime('now', '-1 hour')
+  WHERE recovered_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 hour')
   GROUP BY source_path_hash
   HAVING cnt > 3
   ORDER BY cnt DESC
@@ -122,7 +123,12 @@ interface RegressionRow {
 }
 
 export function queryDoctorBufferStats(db: Database): DoctorBufferStats {
-  const batchRow = db.query<BatchStatsRow, []>(BUFFER_STATS_SQL).get() ?? {
+  const successRow = db.query<MetaValueRow, []>(LAST_SUCCESS_SQL).get();
+  const lastSuccessAt = successRow?.value ?? null;
+
+  const batchRow = db
+    .query<BatchStatsRow, [string | null]>(BUFFER_STATS_SQL)
+    .get(lastSuccessAt) ?? {
     pending_count: 0,
     pending_bytes: 0,
     failed_count: 0,
@@ -136,9 +142,6 @@ export function queryDoctorBufferStats(db: Database): DoctorBufferStats {
 
   const pruneRow = db.query<MetaValueRow, []>(LAST_PRUNE_SQL).get();
   const lastPruneAt = pruneRow?.value ?? null;
-
-  const successRow = db.query<MetaValueRow, []>(LAST_SUCCESS_SQL).get();
-  const lastSuccessAt = successRow?.value ?? null;
 
   return {
     pendingCount: batchRow.pending_count,
@@ -174,7 +177,11 @@ export function queryDoctorDaemonState(db: Database): DoctorDaemonState {
 }
 
 export function queryDoctorRecentEvents(db: Database): DoctorRecentEvents {
-  const errorRows = db.query<FailedErrorRow, []>(FAILED_BATCH_ERRORS_SQL).all();
+  const successRow = db.query<MetaValueRow, []>(LAST_SUCCESS_SQL).get();
+  const lastSuccessAt = successRow?.value ?? null;
+  const errorRows = db
+    .query<FailedErrorRow, [string | null]>(FAILED_BATCH_ERRORS_SQL)
+    .all(lastSuccessAt);
   const failedBatchLastErrors: string[] = [];
   let authUnconfirmedCount = 0;
   let rateLimitedCount = 0;

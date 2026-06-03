@@ -3,6 +3,7 @@ import { runSetup } from 'cli/commands/setup';
 import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup';
 import { buildDevServiceManager, buildDevServiceUnitPath } from 'cli/wiring/dev-deps.ts';
 import { buildPlatformServiceContext, resolveWindowsUserId } from 'cli/wiring/platform.ts';
+import { resolveProfilePaths } from 'cli/wiring/resolve-profile-paths.ts';
 import { consoleOutput } from 'cli/output.ts';
 import { inquirerPrompts } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager';
@@ -52,17 +53,19 @@ export function resolveSetupServiceContext(
   };
 }
 
-export function buildSetupDeps(inputs: BuildSetupDepsInputs): SetupCommandDeps {
+export async function buildSetupDeps(inputs: BuildSetupDepsInputs): Promise<SetupCommandDeps> {
   const out = consoleOutput();
   const { profileCtx } = inputs;
+  const { bufferDbPath, logDir } = await resolveProfilePaths(profileCtx);
   const base: SetupCommandDeps = {
     output: out,
     prompts: inquirerPrompts(),
     configPath: profileCtx.configFilePath,
-    bufferDbPath: profileCtx.bufferDbPath,
-    logDir: profileCtx.logDir,
+    bufferDbPath,
+    logDir,
     defaultNestBaseUrl: profileCtx.defaultNestBaseUrl,
     authFailedSentinelPath: profileCtx.sentinels.authFailed,
+    bufferFullSentinelPath: profileCtx.sentinels.bufferFull,
     sessionStoppedSentinelPath: profileCtx.sentinels.sessionStopped,
     consentSentinelPath: profileCtx.sentinels.consent,
     serviceUnitPath: inputs.serviceUnitPath,
@@ -83,8 +86,8 @@ export function buildSetupDeps(inputs: BuildSetupDepsInputs): SetupCommandDeps {
     readMachineUuid: () => readMachineUuid(),
     readLastSuccessAt: async () => {
       try {
-        if (!(await Bun.file(profileCtx.bufferDbPath).exists())) return null;
-        const db = openReadOnlyBufferDb(profileCtx.bufferDbPath);
+        if (!(await Bun.file(bufferDbPath).exists())) return null;
+        const db = openReadOnlyBufferDb(bufferDbPath);
         try {
           return derivedUploadStats(db).lastSuccessAt;
         } finally {
@@ -145,9 +148,9 @@ export function invokeSetupInteractive(
   inputs: InvokeSetupInteractiveInputs,
   runner: RunSetupFn = runSetup,
 ): () => Promise<CommandResult> {
-  return () => {
+  return async () => {
     const installSource = inferInstallSource(inputs.programPath, inputs.platform);
     const options: SetupCommandOptions = { installSource };
-    return runner(buildSetupDeps(inputs), options);
+    return runner(await buildSetupDeps(inputs), options);
   };
 }

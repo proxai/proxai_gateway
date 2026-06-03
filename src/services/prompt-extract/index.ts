@@ -30,7 +30,7 @@ const NULL_CONVERSATION: ConversationResult = {
   assistantResponse: null,
 };
 
-const JSONL_SOURCE_APPS: ReadonlySet<string> = new Set(['claude-code', 'codex']);
+const JSONL_SOURCE_APPS: ReadonlySet<string> = new Set(['claude-code', 'codex', 'claude-desktop']);
 
 function isJsonlSourceApp(app: string): app is JsonlSourceApp {
   return JSONL_SOURCE_APPS.has(app);

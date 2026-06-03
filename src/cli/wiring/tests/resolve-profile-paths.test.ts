@@ -3,24 +3,12 @@ import { mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { ServiceManager } from 'cli/service-manager';
 import { rmRecursive } from 'core/io/fs';
 import { buildProfileContext } from 'core/io/fs/profile.ts';
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
-import { buildDoctorDeps } from 'cli/wiring/doctor-deps.ts';
+import { resolveProfilePaths } from 'cli/wiring/resolve-profile-paths.ts';
 import { writeConfigToFile } from 'services/config';
 import type { GatewayConfig } from 'services/config';
-
-const sm = {
-  ensureRegistered: async () => {},
-  start: async () => {},
-  stop: async () => {},
-  restart: async () => {},
-  unregister: async () => {},
-  isRegistered: async () => false,
-  isRunning: async () => false,
-  runtimeInfo: async () => ({ pid: null, startedAt: null }),
-} satisfies ServiceManager;
 
 let dir: string;
 let priorRoot: string | undefined;
@@ -57,7 +45,7 @@ function sampleConfig(bufferPath: string, logDir: string): GatewayConfig {
 }
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'proxai-doctor-deps-'));
+  dir = await mkdtemp(join(tmpdir(), 'proxai-resolve-paths-'));
   priorRoot = process.env['PROXAI_TEST_PROFILE_ROOT'];
   process.env['PROXAI_TEST_PROFILE_ROOT'] = dir;
 });
@@ -71,28 +59,7 @@ afterEach(async () => {
   await rmRecursive(dir);
 }, 30000);
 
-test('buildDoctorDeps wires profile-derived paths and service manager', async () => {
-  const profileCtx: ProfileContext = buildProfileContext('prod');
-  const deps = await buildDoctorDeps({ serviceManager: sm, platform: 'linux', profileCtx });
-  expect(deps.serviceManager).toBe(sm);
-  expect(deps.platform).toBe('linux');
-  expect(deps.bufferDbPath).toBe(profileCtx.bufferDbPath);
-  expect(deps.configFilePath).toBe(profileCtx.configFilePath);
-  expect(deps.configDirPath).toBe(profileCtx.configDir);
-  expect(deps.logDirPath).toBe(profileCtx.logDir);
-  expect(deps.authFailedSentinelPath).toBe(profileCtx.sentinels.authFailed);
-  expect(deps.bufferFullSentinelPath).toBe(profileCtx.sentinels.bufferFull);
-  expect(deps.sessionStoppedSentinelPath).toBe(profileCtx.sentinels.sessionStopped);
-  expect(deps.updateAvailableSentinelPath).toBe(profileCtx.sentinels.updateAvailable);
-  expect(typeof deps.nestVerifyKeyUrl).toBe('string');
-  expect(deps.nestVerifyKeyUrl.length).toBeGreaterThan(0);
-  expect(typeof deps.binaryPath).toBe('string');
-  expect(typeof deps.currentVersion).toBe('string');
-  expect(deps.output).toBeDefined();
-  expect(typeof deps.output.info).toBe('function');
-});
-
-test('buildDoctorDeps uses config buffer_path and log_dir when present', async () => {
+test('returns config buffer_path and log_dir when a valid config exists', async () => {
   const profileCtx: ProfileContext = buildProfileContext('prod');
   await mkdir(profileCtx.configDir, { recursive: true });
   const configuredBuffer = join(profileCtx.configDir, 'moved-buffer.db');
@@ -101,14 +68,25 @@ test('buildDoctorDeps uses config buffer_path and log_dir when present', async (
     sampleConfig(configuredBuffer, configuredLogDir),
     profileCtx.configFilePath,
   );
-  const deps = await buildDoctorDeps({ serviceManager: sm, platform: 'linux', profileCtx });
-  expect(deps.bufferDbPath).toBe(configuredBuffer);
-  expect(deps.logDirPath).toBe(configuredLogDir);
+
+  const resolved = await resolveProfilePaths(profileCtx);
+  expect(resolved.bufferDbPath).toBe(configuredBuffer);
+  expect(resolved.logDir).toBe(configuredLogDir);
 });
 
-test('buildDoctorDeps falls back to process.platform when platform omitted', async () => {
+test('falls back to profile defaults when no config file exists', async () => {
   const profileCtx: ProfileContext = buildProfileContext('prod');
-  const deps = await buildDoctorDeps({ serviceManager: null, profileCtx });
-  expect(deps.serviceManager).toBeNull();
-  expect(deps.platform).toBe(process.platform);
+
+  const resolved = await resolveProfilePaths(profileCtx);
+  expect(resolved.bufferDbPath).toBe(profileCtx.bufferDbPath);
+  expect(resolved.logDir).toBe(profileCtx.logDir);
+});
+
+test('falls back to profile defaults when the config file is unreadable', async () => {
+  const profileCtx: ProfileContext = buildProfileContext('prod');
+  await mkdir(profileCtx.configFilePath, { recursive: true });
+
+  const resolved = await resolveProfilePaths(profileCtx);
+  expect(resolved.bufferDbPath).toBe(profileCtx.bufferDbPath);
+  expect(resolved.logDir).toBe(profileCtx.logDir);
 });

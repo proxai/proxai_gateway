@@ -5,7 +5,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { requireDefined } from 'core/utils';
+import { nowIsoUtc, requireDefined } from 'core/utils';
 import {
   BUFFER_TABLES,
   getBatch,
@@ -109,6 +109,39 @@ test('queryDoctorBufferStats aggregates pending failed receipts and metadata', (
   expect(stats.receiptCount).toBe(1);
   expect(stats.lastPruneAt).toBe('2026-05-28T08:00:00.000Z');
   expect(stats.lastSuccessAt).toBe('2026-05-28T08:30:00.000Z');
+});
+
+test('queryDoctorBufferStats ignores failed batches that failed before the last success', () => {
+  const stale = newBatch({ body: new Uint8Array(50) });
+  insertBatch(db, stale);
+  markBatchFailed(db, stale.captureId, 'old boom', '2026-05-28T08:00:00.000Z');
+  setMetadata(db, 'upload_last_success_at', '2026-05-28T08:30:00.000Z');
+
+  expect(queryDoctorBufferStats(db).failedCount).toBe(0);
+});
+
+test('queryDoctorBufferStats still counts failures after the last success', () => {
+  const fresh = newBatch({ body: new Uint8Array(50) });
+  insertBatch(db, fresh);
+  markBatchFailed(db, fresh.captureId, 'new boom', '2026-05-28T09:00:00.000Z');
+  setMetadata(db, 'upload_last_success_at', '2026-05-28T08:30:00.000Z');
+
+  expect(queryDoctorBufferStats(db).failedCount).toBe(1);
+});
+
+test('queryDoctorResyncStats counts regression loops within the last hour using ISO timestamps', () => {
+  for (let i = 0; i < 4; i++) {
+    recordResyncEvent(db, {
+      sourceApp: 'claude-code',
+      sourcePathHash: 'hash-a',
+      watermarkKind: 'byte_range',
+      serverWatermarkEnd: 100 + i,
+      skippedUnits: 1,
+      recoveredAt: nowIsoUtc(),
+    });
+  }
+  const stats = queryDoctorResyncStats(db);
+  expect(stats.regressionLoops.some((l) => l.sourcePathHash === 'hash-a')).toBe(true);
 });
 
 test('queryDoctorDaemonState returns nulls when daemon_state and metadata are absent', () => {

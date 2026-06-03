@@ -72,6 +72,7 @@ export const BATCH_COLS = {
   attempts: 'attempts',
   createdAt: 'created_at',
   lastError: 'last_error',
+  failedAt: 'failed_at',
 } as const;
 
 export const CURSOR_COLS = {
@@ -158,7 +159,8 @@ export const BATCH_TABLE_DDL = `
     ${BATCH_COLS.status} TEXT NOT NULL DEFAULT '${BATCH_STATUS.pending}',
     ${BATCH_COLS.attempts} INTEGER NOT NULL DEFAULT 0,
     ${BATCH_COLS.createdAt} TEXT NOT NULL,
-    ${BATCH_COLS.lastError} TEXT
+    ${BATCH_COLS.lastError} TEXT,
+    ${BATCH_COLS.failedAt} TEXT
   )
 `;
 
@@ -170,6 +172,11 @@ export const BATCH_STATUS_INDEX_DDL = `
 export const BATCH_PATH_HASH_INDEX_DDL = `
   CREATE INDEX IF NOT EXISTS ${BUFFER_INDEXES.batchesPathHash}
     ON ${BUFFER_TABLES.batches} (${BATCH_COLS.sourcePathHash})
+`;
+
+export const BATCH_ALTER_ADD_FAILED_AT_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.batches}
+    ADD COLUMN ${BATCH_COLS.failedAt} TEXT
 `;
 
 export const CURSOR_TABLE_DDL = `
