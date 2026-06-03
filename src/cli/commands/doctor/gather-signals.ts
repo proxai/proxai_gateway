@@ -12,23 +12,6 @@ import { profileSystemdUnitName } from 'cli/service-unit/dev-labels.ts';
 /** Seam for tests — swap individual deps without mock.module. */
 export const __deps = {
   realpath,
-  checkNamedPipe: async (pipePath: string): Promise<boolean> => {
-    return new Promise((resolve) => {
-      const socket = connect(pipePath);
-      socket.on('connect', () => {
-        socket.end();
-        resolve(true);
-      });
-      socket.on('error', (err: unknown) => {
-        const error = err as { code?: string };
-        if (error && (error.code === 'ENOENT' || error.code === 'EINVAL')) {
-          resolve(false);
-        } else {
-          resolve(true);
-        }
-      });
-    });
-  },
 };
 
 async function probeWritable(dirPath: string): Promise<boolean> {

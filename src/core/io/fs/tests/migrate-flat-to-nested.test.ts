@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import {
   existsSync,
   mkdirSync,
@@ -10,7 +10,51 @@ import {
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 
+let shouldRenameSyncFailForRollback = false;
+let shouldReadFileSyncFailForConfig = false;
+let shouldRmSyncFailForReleaseLock = false;
+
+mock.module('node:fs', () => {
+  const actual = require('node:fs');
+  return {
+    ...actual,
+    renameSync: (src: string, dst: string) => {
+      if (
+        shouldRenameSyncFailForRollback &&
+        dst.includes('config.toml') &&
+        !dst.includes(`${sep}prod${sep}`)
+      ) {
+        throw new Error('mock renameSync failure');
+      }
+      return actual.renameSync(src, dst);
+    },
+    readFileSync: (...args: Parameters<typeof actual.readFileSync>) => {
+      const path = args[0];
+      if (
+        shouldReadFileSyncFailForConfig &&
+        typeof path === 'string' &&
+        path.includes('config.toml')
+      ) {
+        throw new Error('mock readFileSync failure');
+      }
+      return actual.readFileSync(...args);
+    },
+    rmSync: (...args: Parameters<typeof actual.rmSync>) => {
+      const path = args[0];
+      if (
+        shouldRmSyncFailForReleaseLock &&
+        typeof path === 'string' &&
+        path.includes('.migration.lock')
+      ) {
+        throw new Error('mock rmSync failure');
+      }
+      return actual.rmSync(...args);
+    },
+  };
+});
+
 import { rmRecursive } from 'core/io/fs';
+import { profileLogDirRoot } from 'core/io/fs/profile.ts';
 import {
   MIGRATED_MARKER,
   MIGRATION_LOCK,
@@ -26,6 +70,9 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  shouldRenameSyncFailForRollback = false;
+  shouldReadFileSyncFailForConfig = false;
+  shouldRmSyncFailForReleaseLock = false;
   await rmRecursive(dir);
 }, 30_000);
 
@@ -243,4 +290,105 @@ test('relocateFlatToNested rolls back already-relocated files if any file reloca
   expect(readFileSync(flatBuffer, 'utf8')).toBe('buffer-content');
 
   expect(existsSync(join(root, MIGRATED_MARKER))).toBe(false);
+});
+
+test('relocateFlatToNested rewrites config.toml log_dir to prod/ when it matches legacy path', async () => {
+  const root = join(dir, 'rewrite-logging');
+  mkdirSync(root);
+
+  const flatConfigPath = join(root, 'config.toml');
+  const oldLogDir = profileLogDirRoot();
+
+  const tomlContent = `
+[logging]
+log_dir = "${oldLogDir.replace(/\\/g, '\\\\')}"
+`;
+  writeFileSync(flatConfigPath, tomlContent);
+
+  await relocateFlatToNested(root);
+
+  const prodDir = join(root, 'prod');
+  const relocatedConfigPath = join(prodDir, 'config.toml');
+  expect(existsSync(relocatedConfigPath)).toBe(true);
+
+  const newContent = readFileSync(relocatedConfigPath, 'utf8');
+  expect(newContent).toContain('log_dir');
+  expect(newContent).toContain(join(oldLogDir, 'prod').replace(/\\/g, '\\\\'));
+});
+
+test('relocateFlatToNested console.errors and ignores rollback failures', async () => {
+  const root = join(dir, 'rollback-failure');
+  mkdirSync(root);
+
+  const flatConfig = join(root, 'config.toml');
+  const flatBuffer = join(root, 'buffer.db');
+
+  writeFileSync(flatConfig, 'config-content');
+  writeFileSync(flatBuffer, 'buffer-content');
+
+  const prodDir = join(root, 'prod');
+  mkdirSync(prodDir, { recursive: true });
+  mkdirSync(join(prodDir, 'buffer.db'), { recursive: true });
+
+  shouldRenameSyncFailForRollback = true;
+  try {
+    await expect(relocateFlatToNested(root)).rejects.toThrow();
+  } finally {
+    shouldRenameSyncFailForRollback = false;
+  }
+});
+
+test('relocateFlatToNested ignores errors during config.toml rewrite', async () => {
+  const root = join(dir, 'config-rewrite-error');
+  mkdirSync(root);
+
+  const flatConfigPath = join(root, 'config.toml');
+  writeFileSync(flatConfigPath, 'some-toml-data');
+
+  shouldReadFileSyncFailForConfig = true;
+  try {
+    await relocateFlatToNested(root);
+  } finally {
+    shouldReadFileSyncFailForConfig = false;
+  }
+
+  const prodDir = join(root, 'prod');
+  expect(existsSync(join(prodDir, 'config.toml'))).toBe(true);
+});
+
+test('tryAcquire skips chmodSync on win32 platform', () => {
+  const originalPlatform = process.platform;
+  Object.defineProperty(process, 'platform', {
+    value: 'win32',
+    configurable: true,
+  });
+  try {
+    const lockPath = join(dir, 'win32-acquire.lock');
+    const result = tryAcquire(lockPath);
+    expect(result).toBe(true);
+    expect(existsSync(lockPath)).toBe(true);
+  } finally {
+    Object.defineProperty(process, 'platform', {
+      value: originalPlatform,
+      configurable: true,
+    });
+  }
+});
+
+test('releaseLock swallows errors when rmSync throws', async () => {
+  const root = join(dir, 'release-lock-error');
+  mkdirSync(root);
+
+  // Trigger relocation which calls releaseLock in finally
+  // Set mock to make rmSync throw
+  const flatConfigPath = join(root, 'config.toml');
+  writeFileSync(flatConfigPath, 'some-toml-data');
+
+  shouldRmSyncFailForReleaseLock = true;
+  try {
+    // Should complete successfully because rmSync failure is swallowed
+    await relocateFlatToNested(root);
+  } finally {
+    shouldRmSyncFailForReleaseLock = false;
+  }
 });

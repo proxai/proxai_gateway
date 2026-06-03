@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 
 import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { rmRecursive } from 'core/io/fs';
@@ -9,6 +9,23 @@ import { openBufferDb } from 'services/buffer';
 import type { Stats } from 'node:fs';
 
 let rootOwnedStatDir: string | null = null;
+let shouldHomedirThrow = false;
+
+mock.module('node:os', () => {
+  const actual: typeof import('node:os') = import.meta.require('node:os');
+  return {
+    ...actual,
+    homedir: (): string => {
+      if (shouldHomedirThrow) {
+        const stack = new Error().stack || '';
+        if (stack.includes('probeSystemdExtended')) {
+          throw new Error('mock homedir error');
+        }
+      }
+      return actual.homedir();
+    },
+  };
+});
 
 mock.module('node:fs/promises', () => {
   const actual: typeof import('node:fs/promises') = import.meta.require('node:fs/promises');
@@ -66,6 +83,14 @@ let bufferDbPath: string;
 const origFetch = globalThis.fetch;
 const origWhich = Bun.which;
 const origSpawn = Bun.spawn;
+const origFile = Bun.file;
+
+let mockFiles: Record<string, { text?: () => Promise<string>; exists?: () => Promise<boolean> }> =
+  {};
+
+function setFile(fn: typeof Bun.file): void {
+  (Bun as unknown as { file: typeof Bun.file }).file = fn;
+}
 
 function setWhich(fn: typeof Bun.which): void {
   (Bun as unknown as { which: typeof Bun.which }).which = fn;
@@ -162,14 +187,40 @@ beforeEach(async () => {
       Promise.resolve(new Response('ok', { status: 200 }))) as unknown as typeof globalThis.fetch,
   );
   setWhich((() => null) as typeof Bun.which);
+  setFile(((
+    path: string | URL | ArrayBufferLike | Uint8Array | number,
+    options?: BlobPropertyBag,
+  ) => {
+    if (typeof path === 'string') {
+      if (mockFiles[path]) {
+        return {
+          text: mockFiles[path].text || (() => Promise.resolve('')),
+          exists: mockFiles[path].exists || (() => Promise.resolve(false)),
+        } as unknown as ReturnType<typeof Bun.file>;
+      }
+    } else if (path instanceof URL) {
+      const pathStr = path.pathname;
+      if (mockFiles[pathStr]) {
+        return {
+          text: mockFiles[pathStr].text || (() => Promise.resolve('')),
+          exists: mockFiles[pathStr].exists || (() => Promise.resolve(false)),
+        } as unknown as ReturnType<typeof Bun.file>;
+      }
+    }
+    // Bridge incompatible types via a single commented as unknown as TargetType cast
+    return origFile(path as unknown as string, options);
+  }) as typeof Bun.file);
 });
 
 afterEach(async () => {
   globalThis.fetch = origFetch;
   setWhich(origWhich);
   setSpawn(origSpawn);
+  setFile(origFile);
+  mockFiles = {};
   __deps.realpath = origRealpath;
   rootOwnedStatDir = null;
+  shouldHomedirThrow = false;
   await rmRecursive(dir);
 });
 
@@ -576,4 +627,67 @@ test('linux: systemdRateLimitHit is false when systemctl show Result is normal',
 
   const signals = await gatherSignals(makeDeps({ platform: 'linux' }));
   expect(signals.systemdExtended.systemdRateLimitHit).toBe(false);
+});
+
+test('linux: systemdHomeEncryptedTearing is true when /proc/mounts contains ecryptfs for home', async () => {
+  const home = homedir();
+  mockFiles['/proc/mounts'] = {
+    text: () =>
+      Promise.resolve(
+        `sysfs /sys sysfs rw 0 0\n/dev/sda1 / ext4 rw 0 0\n/home/user ${home} ecryptfs rw 0 0\n`,
+      ),
+    exists: () => Promise.resolve(true),
+  };
+
+  const signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+  expect(signals.systemdExtended.systemdHomeEncryptedTearing).toBe(true);
+});
+
+test('linux: systemdHomeEncryptedTearing is true when ~/.ecryptfs exists', async () => {
+  mockFiles['/proc/mounts'] = {
+    text: () => Promise.resolve(''),
+    exists: () => Promise.resolve(true),
+  };
+  mockFiles[join(homedir(), '.ecryptfs')] = {
+    exists: () => Promise.resolve(true),
+  };
+
+  const signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+  expect(signals.systemdExtended.systemdHomeEncryptedTearing).toBe(true);
+});
+
+test('linux: systemdHomeEncryptedTearing is true when ~/.Private exists', async () => {
+  mockFiles['/proc/mounts'] = {
+    text: () => Promise.resolve(''),
+    exists: () => Promise.resolve(true),
+  };
+  mockFiles[join(homedir(), '.ecryptfs')] = {
+    exists: () => Promise.resolve(false),
+  };
+  mockFiles[join(homedir(), '.Private')] = {
+    exists: () => Promise.resolve(true),
+  };
+
+  const signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+  expect(signals.systemdExtended.systemdHomeEncryptedTearing).toBe(true);
+});
+
+test('linux: systemdRateLimitHit catch block is covered when Bun.spawn throws', async () => {
+  setWhich(() => '/usr/bin/systemctl');
+  setSpawn(() => {
+    throw new Error('mock spawn error');
+  });
+
+  const signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+  expect(signals.systemdExtended.systemdRateLimitHit).toBe(false);
+});
+
+test('linux: systemdHomeEncryptedTearing catch block is covered when homedir throws', async () => {
+  shouldHomedirThrow = true;
+  try {
+    const signals = await gatherSignals(makeDeps({ platform: 'linux' }));
+    expect(signals.systemdExtended.systemdHomeEncryptedTearing).toBe(false);
+  } finally {
+    shouldHomedirThrow = false;
+  }
 });

@@ -387,3 +387,20 @@ test('dynamic path replacement of legacy ~/.proxai with space quotes path', asyn
   expect(joined).not.toContain('~/.proxai');
   expect(joined).toContain("unwritable path'");
 });
+
+test('dynamic path replacement of legacy ~/.proxai with space quotes log path', async () => {
+  await writeFile(join(dir, 'config.toml'), 'api_key = "secret"\n');
+  const badLogDir = join(dir, 'unwritable log path');
+  const out = captured();
+  const result = await runDoctor(
+    makeDeps(out, {
+      logDirPath: badLogDir,
+      configFilePath: join(dir, 'config.toml'),
+    }),
+    {},
+  );
+  expect(result.exitCode).toBe(0);
+  const joined = stripAnsi(out.lines.map((l) => l.msg).join('\n'));
+  expect(joined).toContain('F3');
+  expect(joined).toContain("unwritable log path'");
+});

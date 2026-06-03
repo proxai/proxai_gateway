@@ -1,9 +1,24 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, mock, test } from 'bun:test';
 import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { rmRecursive, writeAtomic } from 'core/io/fs';
+
+let shouldChmodFail = false;
+
+mock.module('node:fs/promises', () => {
+  const actual = require('node:fs/promises');
+  return {
+    ...actual,
+    chmod: async (path: string, mode: number) => {
+      if (shouldChmodFail) {
+        throw new Error('mock chmod error');
+      }
+      return actual.chmod(path, mode);
+    },
+  };
+});
 
 let dir: string;
 
@@ -54,4 +69,21 @@ test('writeAtomic cleans up tmp and rethrows when rename fails', async () => {
   const files = await readdir(dir);
   const orphans = files.filter((f) => f.startsWith('is-a-dir.') && f.endsWith('.tmp'));
   expect(orphans).toEqual([]);
+});
+
+test('writeAtomic accepts mode and chmods successfully', async () => {
+  const path = join(dir, 'e.txt');
+  await writeAtomic(path, 'with mode', 0o600);
+  expect(await Bun.file(path).text()).toBe('with mode');
+});
+
+test('writeAtomic catches chmod errors gracefully and still writes file', async () => {
+  const path = join(dir, 'f.txt');
+  shouldChmodFail = true;
+  try {
+    await writeAtomic(path, 'with failing chmod', 0o600);
+    expect(await Bun.file(path).text()).toBe('with failing chmod');
+  } finally {
+    shouldChmodFail = false;
+  }
 });
