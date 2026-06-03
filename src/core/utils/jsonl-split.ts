@@ -30,7 +30,6 @@ export function splitJsonlAtBoundary(bytes: Uint8Array, options: JsonlSplitOptio
       remaining.byteLength <= options.maxDecompressedBytes
     ) {
       chunks.push(remaining);
-      cursor = total;
       break;
     }
 

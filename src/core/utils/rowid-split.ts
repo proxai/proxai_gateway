@@ -30,7 +30,6 @@ export function splitRowsByCompressedSize<T>(
       remainingRaw <= options.maxDecompressedBytes
     ) {
       chunks.push(remaining);
-      cursor = total;
       break;
     }
 
