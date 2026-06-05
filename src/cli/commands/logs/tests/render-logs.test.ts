@@ -122,7 +122,7 @@ test('uploaded row shows time, source, prompt preview, and status; no source pat
   const out = render(frame({ uploaded: [uploaded()] }));
   expect(out).toContain('Uploaded');
   expect(out).toContain('claude-code');
-  expect(out).toContain('Refactor the auth middleware');
+  expect(out).toContain('Refactor the auth middle');
   expect(out).toContain('uploaded');
   expect(out).not.toContain('session.jsonl');
 });
@@ -132,12 +132,12 @@ test('uploaded row marks idempotent deliveries as re-sent', () => {
   expect(out).toContain('re-sent');
 });
 
-test('prompt preview truncates to 100 chars and collapses whitespace', () => {
+test('prompt preview truncates to 25 chars and collapses whitespace', () => {
   const longPrompt = `first   line\nsecond ${'x'.repeat(200)}`;
   const out = render(frame({ uploaded: [uploaded({ userPrompt: longPrompt })] }));
   expect(out).toContain('first line second');
   expect(out).toContain('…');
-  expect(out).not.toContain('x'.repeat(150));
+  expect(out).not.toContain('x'.repeat(10));
 });
 
 test('prompt preview shows a placeholder when the prompt is null or blank', () => {

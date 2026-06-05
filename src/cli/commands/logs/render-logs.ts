@@ -11,7 +11,7 @@ import type {
   UploadedRecord,
 } from 'cli/commands/logs/logs.types.ts';
 
-const PROMPT_PREVIEW_MAX = 100;
+const PROMPT_PREVIEW_MAX = 25;
 const DETAIL_INDENT = '              ';
 
 function oneLine(s: string): string {
