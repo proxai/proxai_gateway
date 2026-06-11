@@ -774,7 +774,39 @@ test('capture-cycle handles synchronous error in pollSourceInWorker catch block'
   expect(result.sourceResults['cursor']?.errors[0]?.reason).toContain('closed');
 });
 
-test('threads desktopCliSessionIds into the claude-code worker options', async () => {
+function emptyCaptureWorker(postedInputs: WorkerInput[], sourceName: string): typeof Worker {
+  return asWorkerCtor(
+    class MockWorker {
+      onmessage: WorkerMessageHandler = null;
+      onerror: WorkerErrorHandler = null;
+      postMessage(message: WorkerInput): void {
+        postedInputs.push(message);
+        setTimeout(() => {
+          if (this.onmessage) {
+            this.onmessage(
+              asMessageEvent({
+                data: {
+                  sourceName,
+                  success: true,
+                  captureResult: {
+                    filesProcessed: 0,
+                    capturedBytes: 0,
+                    batches: [],
+                    quarantine: [],
+                    cursors: [],
+                  },
+                },
+              }),
+            );
+          }
+        }, 0);
+      }
+      terminate(): void {}
+    },
+  );
+}
+
+test('threads desktopCliSessionIds into the in-process claude-code worker options', async () => {
   __deps.isCompiledBinary = () => true;
   let seen: ReadonlySet<string> | undefined;
   __deps.handleCapture = (async (_name: string, options: WorkerInput['options']) => {
@@ -790,28 +822,46 @@ test('threads desktopCliSessionIds into the claude-code worker options', async (
   expect(seen).toBe(ids);
 });
 
-test('does not thread desktopCliSessionIds into non claude-code workers', async () => {
-  __deps.isCompiledBinary = () => true;
-  let seen: ReadonlySet<string> | undefined = new Set(['placeholder']);
-  __deps.handleCapture = (async (_name: string, options: WorkerInput['options']) => {
-    seen = options.desktopCliSessionIds;
-    return null;
-  }) as unknown as typeof __deps.handleCapture;
+test('threads desktopCliSessionIds into the claude-code worker options', async () => {
+  __deps.isCompiledBinary = () => false;
+  const originalWorker = globalThis.Worker;
+  const postedInputs: WorkerInput[] = [];
+  globalThis.Worker = emptyCaptureWorker(postedInputs, 'claude-code');
 
-  const ctx = makeContext([{ name: 'cursor', poll: stubPoll }], {
-    loadDesktopCliSessionIds: async () => new Set(['sess-a']),
-  });
-  await runCaptureCycle(ctx);
-  expect(seen).toBeUndefined();
+  try {
+    const ids = new Set(['sess-a']);
+    const ctx = makeContext([{ name: 'claude-code', poll: stubPoll }], {
+      loadDesktopCliSessionIds: async () => ids,
+    });
+    await runCaptureCycle(ctx);
+    expect(postedInputs[0]?.options.desktopCliSessionIds).toBe(ids);
+  } finally {
+    globalThis.Worker = originalWorker;
+  }
+});
+
+test('does not thread desktopCliSessionIds into non claude-code workers', async () => {
+  __deps.isCompiledBinary = () => false;
+  const originalWorker = globalThis.Worker;
+  const postedInputs: WorkerInput[] = [];
+  globalThis.Worker = emptyCaptureWorker(postedInputs, 'cursor');
+
+  try {
+    const ctx = makeContext([{ name: 'cursor', poll: stubPoll }], {
+      loadDesktopCliSessionIds: async () => new Set(['sess-a']),
+    });
+    await runCaptureCycle(ctx);
+    expect(postedInputs[0]?.options.desktopCliSessionIds).toBeUndefined();
+  } finally {
+    globalThis.Worker = originalWorker;
+  }
 });
 
 test('continues capture when loadDesktopCliSessionIds throws', async () => {
-  __deps.isCompiledBinary = () => true;
-  let seen: ReadonlySet<string> | undefined = new Set(['placeholder']);
-  __deps.handleCapture = (async (_name: string, options: WorkerInput['options']) => {
-    seen = options.desktopCliSessionIds;
-    return null;
-  }) as unknown as typeof __deps.handleCapture;
+  __deps.isCompiledBinary = () => false;
+  const originalWorker = globalThis.Worker;
+  const postedInputs: WorkerInput[] = [];
+  globalThis.Worker = emptyCaptureWorker(postedInputs, 'claude-code');
 
   const warnings: string[] = [];
   const logger = {
@@ -827,15 +877,19 @@ test('continues capture when loadDesktopCliSessionIds throws', async () => {
     child: () => logger,
   };
 
-  const ctx = makeContext([{ name: 'claude-code', poll: stubPoll }], {
-    loadDesktopCliSessionIds: async () => {
-      throw new Error('sidecar boom');
-    },
-    logger,
-  });
-  await runCaptureCycle(ctx);
-  expect(seen).toBeUndefined();
-  expect(warnings).toContain('capture.desktop_sidecar_failed');
+  try {
+    const ctx = makeContext([{ name: 'claude-code', poll: stubPoll }], {
+      loadDesktopCliSessionIds: async () => {
+        throw new Error('sidecar boom');
+      },
+      logger,
+    });
+    await runCaptureCycle(ctx);
+    expect(postedInputs[0]?.options.desktopCliSessionIds).toBeUndefined();
+    expect(warnings).toContain('capture.desktop_sidecar_failed');
+  } finally {
+    globalThis.Worker = originalWorker;
+  }
 });
 
 test('threaded worker forwards desktopCliSessionIds for the claude-code source', async () => {
