@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.types.ts';
 
-// Define a mock self at the top of the file so that the dynamic import registers the listener
 let postMessageCalled = false;
 let postedMessage: WorkerOutput | null = null;
 
@@ -20,8 +19,10 @@ const mockSelf = {
 
 (globalThis as { self?: unknown }).self = mockSelf;
 
-const importPath = 'services/polling/poll-worker.ts?real=true';
-const { handleCapture, handleInspect, dispatchWorkerMessage } = await import(importPath);
+const importPath = 'services/polling/poll-worker.ts';
+const { handleCapture, handleInspect, dispatchWorkerMessage, registerWorkerHandler } = await import(
+  importPath
+);
 
 let dir: string;
 
@@ -31,6 +32,23 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rmRecursive(dir);
+});
+
+test('registerWorkerHandler wires dispatchWorkerMessage onto a worker-scope self', () => {
+  const original = (globalThis as { self?: unknown }).self;
+  try {
+    mockSelf.onmessage = null;
+    (globalThis as { self?: unknown }).self = mockSelf;
+    registerWorkerHandler();
+    expect(mockSelf.onmessage).toBe(dispatchWorkerMessage);
+
+    const bare: { onmessage: unknown; postMessage?: unknown } = { onmessage: 'untouched' };
+    (globalThis as { self?: unknown }).self = bare;
+    registerWorkerHandler();
+    expect(bare.onmessage).toBe('untouched');
+  } finally {
+    (globalThis as { self?: unknown }).self = original;
+  }
 });
 
 // Helper to create a fake cursor SQLite DB
