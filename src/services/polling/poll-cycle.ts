@@ -21,6 +21,9 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
   if (ctx.minimumMtimeOverride !== undefined) {
     captureCtx.minimumMtimeOverride = ctx.minimumMtimeOverride;
   }
+  if (ctx.loadDesktopCliSessionIds !== undefined) {
+    captureCtx.loadDesktopCliSessionIds = ctx.loadDesktopCliSessionIds;
+  }
   const captureResult = await runCaptureCycle(captureCtx);
 
   if (captureResult.authFailed || captureResult.bufferFull) {

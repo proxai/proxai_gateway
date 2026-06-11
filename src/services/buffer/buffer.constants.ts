@@ -54,6 +54,7 @@ export function uploadBytesShippedKey(sourceApp: string): string {
 export const BATCH_COLS = {
   captureId: 'capture_id',
   sourceApp: 'source_app',
+  sourcePlatform: 'source_platform',
   sourceKind: 'source_kind',
   sourcePath: 'source_path',
   sourcePathHash: 'source_path_hash',
@@ -142,6 +143,7 @@ export const BATCH_TABLE_DDL = `
   CREATE TABLE IF NOT EXISTS ${BUFFER_TABLES.batches} (
     ${BATCH_COLS.captureId} TEXT PRIMARY KEY NOT NULL,
     ${BATCH_COLS.sourceApp} TEXT NOT NULL,
+    ${BATCH_COLS.sourcePlatform} TEXT,
     ${BATCH_COLS.sourceKind} TEXT NOT NULL,
     ${BATCH_COLS.sourcePath} TEXT NOT NULL,
     ${BATCH_COLS.sourcePathHash} TEXT NOT NULL,
@@ -177,6 +179,11 @@ export const BATCH_PATH_HASH_INDEX_DDL = `
 export const BATCH_ALTER_ADD_FAILED_AT_DDL = `
   ALTER TABLE ${BUFFER_TABLES.batches}
     ADD COLUMN ${BATCH_COLS.failedAt} TEXT
+`;
+
+export const BATCH_ALTER_ADD_SOURCE_PLATFORM_DDL = `
+  ALTER TABLE ${BUFFER_TABLES.batches}
+    ADD COLUMN ${BATCH_COLS.sourcePlatform} TEXT
 `;
 
 export const CURSOR_TABLE_DDL = `

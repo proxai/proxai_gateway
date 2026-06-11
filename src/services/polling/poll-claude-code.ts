@@ -3,6 +3,7 @@ import {
   defaultClaudeCodeProjectsRoot,
   discoverClaudeCodeFiles,
 } from 'sources/claude-code';
+import type { ClaudeCodeCollectorContext } from 'sources/claude-code';
 import type {
   SourcePoller,
   SourcePollerContext,
@@ -11,18 +12,21 @@ import type {
 
 export interface ClaudeCodeSourcePollerOptions {
   baseDir?: string;
+  desktopCliSessionIds?: ReadonlySet<string>;
 }
 
 export function makeClaudeCodeSourcePoller(
   options: ClaudeCodeSourcePollerOptions = {},
 ): SourcePoller {
   const baseDir = options.baseDir ?? defaultClaudeCodeProjectsRoot();
-  return (ctx) => pollClaudeCode(ctx, baseDir);
+  const desktopCliSessionIds = options.desktopCliSessionIds;
+  return (ctx) => pollClaudeCode(ctx, baseDir, desktopCliSessionIds);
 }
 
 async function pollClaudeCode(
   ctx: SourcePollerContext,
   baseDir: string,
+  desktopCliSessionIds: ReadonlySet<string> | undefined,
 ): Promise<SourcePollerResult> {
   const result: SourcePollerResult = {
     filesProcessed: 0,
@@ -44,8 +48,18 @@ async function pollClaudeCode(
     return result;
   }
 
+  const collectorCtx: ClaudeCodeCollectorContext = {
+    buffer: ctx.buffer,
+    gatewayVersion: ctx.gatewayVersion,
+    maxDecompressedBytes: ctx.maxDecompressedBytes,
+  };
+  if (ctx.logger !== undefined) collectorCtx.logger = ctx.logger;
+  if (desktopCliSessionIds !== undefined) {
+    collectorCtx.desktopCliSessionIds = desktopCliSessionIds;
+  }
+
   for (const file of files) {
-    const collectResult = await collectClaudeCodeFile(file, ctx);
+    const collectResult = await collectClaudeCodeFile(file, collectorCtx);
     result.filesProcessed++;
     result.capturedBatches += collectResult.capturedBatches;
     result.capturedBytes += collectResult.capturedBytes;

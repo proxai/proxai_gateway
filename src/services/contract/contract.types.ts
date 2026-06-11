@@ -1,5 +1,14 @@
 export type SourceApp = 'claude-code' | 'cursor' | 'codex' | 'claude-desktop';
 
+export type SourcePlatform =
+  | 'claude-code-cli'
+  | 'claude-code-desktop'
+  | 'claude-cowork-desktop'
+  | 'codex-cli'
+  | 'codex-desktop'
+  | 'cursor-ide'
+  | 'cursor-cli';
+
 export type SourceKind = 'jsonl_append' | 'sqlite_kv_snapshot' | 'sqlite_table_snapshot';
 
 export type BodyFormat = 'jsonl' | 'kv_pairs_json' | 'sqlite_rows_json';
@@ -38,6 +47,7 @@ export interface RawRecordDTO {
   capture_id: string;
   host_id: string;
   source_app: SourceApp;
+  source_platform?: SourcePlatform | null;
   source_kind: SourceKind;
   source_path: string;
   source_path_hash: string;

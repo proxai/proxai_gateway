@@ -51,6 +51,27 @@ test('getBatch returns null for unknown id', () => {
   expect(getBatch(db, generateUuidV7())).toBeNull();
 });
 
+test('insertBatch + getBatch round-trips a present source_platform', () => {
+  const batch = newBatch({ sourcePlatform: 'claude-code-desktop' });
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId);
+  expect(stored?.sourcePlatform).toBe('claude-code-desktop');
+});
+
+test('insertBatch stores null source_platform when absent', () => {
+  const batch = newBatch();
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId);
+  expect(stored?.sourcePlatform).toBeNull();
+});
+
+test('insertBatch stores null source_platform when explicitly null', () => {
+  const batch = newBatch({ sourcePlatform: null });
+  insertBatch(db, batch);
+  const stored = getBatch(db, batch.captureId);
+  expect(stored?.sourcePlatform).toBeNull();
+});
+
 test('insertBatch supports null source_inode for sqlite snapshots', () => {
   const batch = newBatch({
     sourceApp: 'cursor',

@@ -15,6 +15,7 @@ export interface ClaudeCodeCollectorContext {
   gatewayVersion: string;
   maxDecompressedBytes: number;
   logger?: MinimalLogger;
+  desktopCliSessionIds?: ReadonlySet<string>;
 }
 
 export interface ClaudeCodeCollectorResult {

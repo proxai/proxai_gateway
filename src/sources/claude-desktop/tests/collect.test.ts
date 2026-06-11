@@ -1,7 +1,11 @@
 import { expect, test, describe } from 'bun:test';
 import { openInMemoryBufferDb } from 'services/buffer/db.ts';
-import { getCursorWithFallback } from 'services/buffer';
-import { collectClaudeDesktopFile } from 'sources/claude-desktop';
+import { getCursorWithFallback, nextPendingBatch } from 'services/buffer';
+import { zstdDecompressSync, requireDefined } from 'core/utils';
+import {
+  CLAUDE_DESKTOP_DEFAULT_AGENT_SCHEMA_VERSION,
+  collectClaudeDesktopFile,
+} from 'sources/claude-desktop';
 import type { DiscoveredClaudeDesktopFile } from 'sources/claude-desktop';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -146,6 +150,54 @@ describe('collectClaudeDesktopFile', () => {
 
     db.close();
     await rmRecursive(testDir);
+  });
+
+  test('sets source_platform on the batch but not in the body, and bumps the schema version', async () => {
+    const db = openInMemoryBufferDb();
+    const testDir = await mkdtemp(join(tmpdir(), 'proxai-test-claude-desktop-'));
+    const tempFile = join(testDir, 'audit.jsonl');
+
+    await writeFile(
+      tempFile,
+      JSON.stringify({
+        type: 'user',
+        uuid: 'u-1',
+        session_id: 'sess-1',
+        client_platform: 'mac',
+        message: { content: 'hello world' },
+      }) + '\n',
+    );
+
+    const stat = (await statFile(tempFile)) as unknown as { inode: bigint; size: number };
+    const file: DiscoveredClaudeDesktopFile = {
+      sourcePath: tempFile,
+      sourcePathHash: 'hash-platform',
+      inode: Number(stat.inode),
+      sizeBytes: stat.size,
+      lastModifiedMs: Date.now(),
+    };
+
+    const res = await collectClaudeDesktopFile(file, {
+      buffer: db,
+      maxDecompressedBytes: 10_000,
+    });
+    expect(res.errors).toEqual([]);
+    expect(res.capturedBatches).toBe(1);
+
+    const batch = requireDefined(nextPendingBatch(db));
+    expect(batch.sourceApp).toBe('claude-desktop');
+    expect(batch.sourcePlatform).toBe('claude-cowork-desktop');
+    expect(batch.agentSchemaVersion).toBe(CLAUDE_DESKTOP_DEFAULT_AGENT_SCHEMA_VERSION);
+
+    const body = new TextDecoder().decode(zstdDecompressSync(batch.body));
+    expect(body).not.toContain('source_platform');
+
+    db.close();
+    await rmRecursive(testDir);
+  });
+
+  test('bumped default schema version is the v2 marker', () => {
+    expect(CLAUDE_DESKTOP_DEFAULT_AGENT_SCHEMA_VERSION).toBe('claude-desktop/v2');
   });
 
   test('records errors on file read failure', async () => {

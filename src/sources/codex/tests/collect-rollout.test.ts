@@ -497,3 +497,36 @@ test('advances cursor and returns zero batches when no dialogue records are foun
   });
   expect(cursor?.watermarkEnd).toBeGreaterThan(0);
 });
+
+test('tags codex-cli when session_meta source is cli', async () => {
+  const file = await makeFile(
+    '{"type":"session_meta","payload":{"source":"cli","originator":"codex-tui"}}\n',
+  );
+  await collectCodexRollout(file, ctx(buffer), '0.1.0');
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourceApp).toBe('codex');
+  expect(batch.sourcePlatform).toBe('codex-cli');
+});
+
+test('tags codex-desktop when session_meta source is vscode', async () => {
+  const file = await makeFile('{"type":"session_meta","payload":{"source":"vscode"}}\n');
+  await collectCodexRollout(file, ctx(buffer), '0.1.0');
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourcePlatform).toBe('codex-desktop');
+});
+
+test('tags codex-desktop when session_meta originator is Codex Desktop', async () => {
+  const file = await makeFile('{"type":"session_meta","payload":{"originator":"Codex Desktop"}}\n');
+  await collectCodexRollout(file, ctx(buffer), '0.1.0');
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourcePlatform).toBe('codex-desktop');
+});
+
+test('falls back to codex-cli when no session_meta platform signal is present', async () => {
+  const file = await makeFile(
+    '{"type":"response_item","payload":{"type":"message","role":"user","content":"hi"}}\n',
+  );
+  await collectCodexRollout(file, ctx(buffer), '0.1.0');
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourcePlatform).toBe('codex-cli');
+});

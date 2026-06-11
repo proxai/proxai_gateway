@@ -16,9 +16,10 @@ import {
   setCursor,
 } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
-import type { CodexTable } from 'services/contract';
+import type { CodexTable, SourcePlatform } from 'services/contract';
 import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
+import { classifyCodexPlatform } from 'sources/codex/source-platform.ts';
 import {
   CODEX_BODY_COMPRESSION,
   CODEX_SOURCE_APP,
@@ -33,6 +34,16 @@ import type {
 import type { SourceIdentity } from 'sources/codex/resolve-state-identity.ts';
 
 type CodexRow = Record<string, unknown> & { rowid: number };
+
+function sourcePlatformForRows(rows: readonly CodexRow[]): SourcePlatform {
+  for (const row of rows) {
+    const source = typeof row['source'] === 'string' ? row['source'] : null;
+    if (classifyCodexPlatform(source, null) === 'codex-desktop') {
+      return 'codex-desktop';
+    }
+  }
+  return 'codex-cli';
+}
 
 interface SliceMeasurement {
   redactedJson: string;
@@ -208,6 +219,7 @@ export function collectOneTable(
     const batch: NewBatch = {
       captureId: generateUuidV7(),
       sourceApp: CODEX_SOURCE_APP,
+      sourcePlatform: sourcePlatformForRows(slice),
       sourceKind: CODEX_STATE_SOURCE_KIND,
       sourcePath: identity.sourcePath,
       sourcePathHash: identity.sourcePathHash,

@@ -5,7 +5,8 @@ import { mkdir, mkdtemp, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { countByStatus, openInMemoryBufferDb } from 'services/buffer';
+import { countByStatus, nextPendingBatch, openInMemoryBufferDb } from 'services/buffer';
+import { requireDefined } from 'core/utils';
 import { makeClaudeCodeSourcePoller } from 'services/polling/poll-claude-code.ts';
 
 let dir: string;
@@ -144,6 +145,44 @@ test('minimumMtimeOverride: skips files older than cutoff', async () => {
 
   expect(result.filesProcessed).toBe(1);
   expect(result.capturedBatches).toBe(1);
+});
+
+test('forwards desktopCliSessionIds so a matching session is tagged claude-code-desktop', async () => {
+  await seedSession(
+    'project-a',
+    'sess-desktop.jsonl',
+    '{"type":"user","message":{"content":"hi"}}\n',
+  );
+  const poller = makeClaudeCodeSourcePoller({
+    baseDir: dir,
+    desktopCliSessionIds: new Set(['sess-desktop']),
+  });
+  const logger = {
+    info: () => undefined,
+    debug: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+    fatal: () => undefined,
+    trace: () => undefined,
+    child: () => logger,
+  };
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+    logger,
+  });
+  expect(result.capturedBatches).toBe(1);
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourcePlatform).toBe('claude-code-desktop');
+});
+
+test('tags sessions claude-code-cli when no desktopCliSessionIds option is given', async () => {
+  await seedSession('project-a', 'sess-cli.jsonl', '{"type":"user","message":{"content":"hi"}}\n');
+  const poller = makeClaudeCodeSourcePoller({ baseDir: dir });
+  await poller({ buffer, gatewayVersion: 'gw-0.1', maxDecompressedBytes: 9 * 1024 * 1024 });
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourcePlatform).toBe('claude-code-cli');
 });
 
 test('default minimumMtime (null): processes all historical files unconditionally', async () => {

@@ -3,6 +3,7 @@ import type {
   BodyFormat,
   SourceApp,
   SourceKind,
+  SourcePlatform,
   WatermarkKind,
 } from 'services/contract';
 
@@ -14,6 +15,7 @@ export interface WorkerInput {
     gatewayVersion: string;
     maxDecompressedBytes: number;
     captureSubAgents: boolean;
+    desktopCliSessionIds?: ReadonlySet<string>;
     priorCursors?: Array<{
       sourcePathHash: string;
       sourcePath: string;
@@ -49,6 +51,7 @@ export interface WorkerOutput {
     batches: Array<{
       captureId: string;
       sourceApp: SourceApp;
+      sourcePlatform: SourcePlatform | null;
       sourceKind: SourceKind;
       sourcePath: string;
       sourcePathHash: string;

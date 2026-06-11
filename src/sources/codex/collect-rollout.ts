@@ -10,7 +10,9 @@ import {
 import { getCursor, getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
+import type { SourcePlatform } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
+import { codexPlatformFromSessionMeta } from 'sources/codex/source-platform.ts';
 import {
   CODEX_BODY_COMPRESSION,
   CODEX_ROLLOUT_BODY_FORMAT,
@@ -145,12 +147,16 @@ export async function collectCodexRollout(
     }
     const kept: KeptLine[] = [];
 
+    let detectedSourcePlatform: SourcePlatform | null = null;
     let currentOffset = 0;
     for (const line of lines) {
       const lineByteLength = ENCODER.encode(line).byteLength;
       const lineEndOffset = currentOffset + lineByteLength + 1;
 
       if (line.trim().length > 0) {
+        if (detectedSourcePlatform === null) {
+          detectedSourcePlatform = codexPlatformFromSessionMeta(line);
+        }
         try {
           const parsed = JSON.parse(line);
           if (isCodexDialogueRecord(parsed)) {
@@ -164,6 +170,8 @@ export async function collectCodexRollout(
       }
       currentOffset = lineEndOffset;
     }
+
+    const sourcePlatform: SourcePlatform = detectedSourcePlatform ?? 'codex-cli';
 
     const filteredText = kept.map((k) => k.text).join('\n') + '\n';
     if (kept.length === 0) {
@@ -255,6 +263,7 @@ export async function collectCodexRollout(
       const batch: NewBatch = {
         captureId: generateUuidV7(),
         sourceApp: CODEX_SOURCE_APP,
+        sourcePlatform,
         sourceKind: CODEX_ROLLOUT_SOURCE_KIND,
         sourcePath: file.sourcePath,
         sourcePathHash: file.sourcePathHash,

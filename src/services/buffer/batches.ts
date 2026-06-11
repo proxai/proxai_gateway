@@ -15,6 +15,7 @@ import type {
 interface BatchRow {
   capture_id: string;
   source_app: string;
+  source_platform: string | null;
   source_kind: string;
   source_path: string;
   source_path_hash: string;
@@ -39,6 +40,7 @@ const INSERT_BATCH_SQL = `
   INSERT INTO ${BUFFER_TABLES.batches} (
     ${BATCH_COLS.captureId},
     ${BATCH_COLS.sourceApp},
+    ${BATCH_COLS.sourcePlatform},
     ${BATCH_COLS.sourceKind},
     ${BATCH_COLS.sourcePath},
     ${BATCH_COLS.sourcePathHash},
@@ -56,7 +58,7 @@ const INSERT_BATCH_SQL = `
     ${BATCH_COLS.status},
     ${BATCH_COLS.attempts},
     ${BATCH_COLS.createdAt}
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '${BATCH_STATUS.pending}', 0, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '${BATCH_STATUS.pending}', 0, ?)
 `;
 
 const GET_BATCH_SQL = `SELECT * FROM ${BUFFER_TABLES.batches} WHERE ${BATCH_COLS.captureId} = ?`;
@@ -113,6 +115,7 @@ export function insertBatch(db: Database, batch: NewBatch): void {
   db.query(INSERT_BATCH_SQL).run(
     batch.captureId,
     batch.sourceApp,
+    batch.sourcePlatform ?? null,
     batch.sourceKind,
     batch.sourcePath,
     batch.sourcePathHash,
@@ -227,6 +230,7 @@ function rowToBatch(row: BatchRow): StoredBatch {
   return {
     captureId: row.capture_id,
     sourceApp: row.source_app as SourceApp,
+    sourcePlatform: row.source_platform,
     sourceKind: row.source_kind as SourceKind,
     sourcePath: row.source_path,
     sourcePathHash: row.source_path_hash,

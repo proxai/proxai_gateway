@@ -106,6 +106,42 @@ test('accepts each codex table value', () => {
   }
 });
 
+test('accepts a present, valid source_platform', () => {
+  for (const sp of [
+    'claude-code-cli',
+    'claude-code-desktop',
+    'claude-cowork-desktop',
+    'codex-cli',
+    'codex-desktop',
+    'cursor-ide',
+    'cursor-cli',
+  ] as const) {
+    expect(() => validateRawRecordDTO(claudeCodeDto({ source_platform: sp }))).not.toThrow();
+  }
+});
+
+test('accepts an absent source_platform', () => {
+  const dto = claudeCodeDto();
+  delete (dto as { source_platform?: unknown }).source_platform;
+  expect(() => validateRawRecordDTO(dto)).not.toThrow();
+});
+
+test('accepts a null source_platform', () => {
+  expect(() => validateRawRecordDTO(claudeCodeDto({ source_platform: null }))).not.toThrow();
+});
+
+test('rejects a present, invalid source_platform string', () => {
+  expect(() =>
+    validateRawRecordDTO(claudeCodeDto({ source_platform: 'codex-ide' as never })),
+  ).toThrow(/source_platform/);
+});
+
+test('rejects a non-string source_platform', () => {
+  expect(() => validateRawRecordDTO(claudeCodeDto({ source_platform: 42 as never }))).toThrow(
+    /source_platform/,
+  );
+});
+
 test('rejects non-object DTO', () => {
   expect(() => validateRawRecordDTO(null)).toThrow(ValidationError);
   expect(() => validateRawRecordDTO('string')).toThrow(ValidationError);

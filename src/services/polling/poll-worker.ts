@@ -6,9 +6,13 @@ import type {
   BodyFormat,
   SourceApp,
   SourceKind,
+  SourcePlatform,
   WatermarkKind,
 } from 'services/contract';
-import { makeClaudeCodeSourcePoller } from 'services/polling/poll-claude-code.ts';
+import {
+  makeClaudeCodeSourcePoller,
+  type ClaudeCodeSourcePollerOptions,
+} from 'services/polling/poll-claude-code.ts';
 import { makeCodexSourcePoller } from 'services/polling/poll-codex.ts';
 import { makeCursorSourcePoller } from 'services/polling/poll-cursor.ts';
 import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.types.ts';
@@ -501,7 +505,11 @@ export async function handleCapture(
     let poller;
     const pollerOpts = options.baseDir !== undefined ? { baseDir: options.baseDir } : {};
     if (sourceName === 'claude-code') {
-      poller = makeClaudeCodeSourcePoller(pollerOpts);
+      const claudeCodeOpts: ClaudeCodeSourcePollerOptions = { ...pollerOpts };
+      if (options.desktopCliSessionIds !== undefined) {
+        claudeCodeOpts.desktopCliSessionIds = options.desktopCliSessionIds;
+      }
+      poller = makeClaudeCodeSourcePoller(claudeCodeOpts);
     } else if (sourceName === 'cursor') {
       poller = makeCursorSourcePoller(pollerOpts);
     } else if (sourceName === 'codex') {
@@ -521,6 +529,7 @@ export async function handleCapture(
     interface BatchRow {
       capture_id: string;
       source_app: SourceApp;
+      source_platform: SourcePlatform | null;
       source_kind: SourceKind;
       source_path: string;
       source_path_hash: string;
@@ -585,6 +594,7 @@ export async function handleCapture(
       batches: batches.map((b) => ({
         captureId: b.capture_id,
         sourceApp: b.source_app,
+        sourcePlatform: b.source_platform,
         sourceKind: b.source_kind,
         sourcePath: b.source_path,
         sourcePathHash: b.source_path_hash,

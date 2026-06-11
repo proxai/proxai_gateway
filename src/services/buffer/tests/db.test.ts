@@ -146,6 +146,60 @@ test('migrates pre-existing upload_batches table by adding failed_at', async () 
   }
 });
 
+test('migrates pre-existing upload_batches table by adding source_platform', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'proxai-buffer-migrate-platform-'));
+  try {
+    const path = join(dir, 'old-buffer-platform.db');
+
+    const seed = new Database(path, { create: true });
+    seed.run(
+      `CREATE TABLE upload_batches (
+         capture_id TEXT PRIMARY KEY NOT NULL,
+         source_app TEXT NOT NULL,
+         source_kind TEXT NOT NULL,
+         source_path TEXT NOT NULL,
+         source_path_hash TEXT NOT NULL,
+         source_inode INTEGER,
+         watermark_kind TEXT NOT NULL,
+         watermark_start INTEGER NOT NULL,
+         watermark_end INTEGER NOT NULL,
+         watermark_table TEXT,
+         agent_schema_version TEXT NOT NULL,
+         gateway_version TEXT NOT NULL,
+         captured_at_utc TEXT NOT NULL,
+         body_format TEXT NOT NULL,
+         body_compression TEXT NOT NULL,
+         body BLOB NOT NULL,
+         status TEXT NOT NULL DEFAULT 'pending',
+         attempts INTEGER NOT NULL DEFAULT 0,
+         created_at TEXT NOT NULL,
+         last_error TEXT
+       )`,
+    );
+    seed.close();
+
+    const opened = openBufferDb(path);
+    try {
+      expect(columnExists(opened, BUFFER_TABLES.batches, 'source_platform')).toBe(true);
+    } finally {
+      opened.close();
+    }
+
+    const reopened = openBufferDb(path);
+    try {
+      expect(columnExists(reopened, BUFFER_TABLES.batches, 'source_platform')).toBe(true);
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    await rmRecursive(dir);
+  }
+});
+
+test('fresh upload_batches schema includes source_platform', () => {
+  expect(columnExists(db, BUFFER_TABLES.batches, 'source_platform')).toBe(true);
+});
+
 test('migrates pre-existing receipts table by adding user_prompt, source_path, etc.', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'proxai-buffer-migrate-receipts-'));
   try {

@@ -44,6 +44,20 @@ test('buildRunDeps: wires sentinels, version strings, abort, exitProcess', () =>
   expect(deps.xstateInspect).toBeUndefined();
 });
 
+test('buildRunDeps: binds loadDesktopCliSessionIds returning a set', async () => {
+  const ctrl = new AbortController();
+  const deps = buildRunDeps({
+    config: cfg,
+    abortSignal: ctrl.signal,
+    binaryPath: '/bin/p',
+    exitProcess: () => {},
+    profileCtx: prodCtx,
+  });
+  expect(typeof deps.loadDesktopCliSessionIds).toBe('function');
+  const ids = await deps.loadDesktopCliSessionIds?.();
+  expect(ids instanceof Set).toBe(true);
+});
+
 test('buildRunDeps: preserves xstateInspect when provided', () => {
   const ctrl = new AbortController();
   const deps = buildRunDeps({

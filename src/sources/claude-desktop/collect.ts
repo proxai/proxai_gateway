@@ -36,10 +36,6 @@ interface CliMetadata {
   sessionId: string;
 }
 
-/**
- * Scans a session directory for File A (.claude/projects/*\/ *.jsonl) files
- * and maps their CLI metadata by uuid (user) and message.id (assistant).
- */
 async function loadCliMetadataMap(sessionDir: string): Promise<{
   userMap: Map<string, CliMetadata>;
   assistantMap: Map<string, CliMetadata>;
@@ -126,7 +122,6 @@ export async function collectClaudeDesktopFile(
           continue;
         }
 
-        // Correlate using uuid (user) or message.id (assistant)
         let cliMeta: CliMetadata | undefined;
         if (parsed.type === 'user' && typeof parsed.uuid === 'string') {
           cliMeta = userMap.get(parsed.uuid);
@@ -137,7 +132,6 @@ export async function collectClaudeDesktopFile(
           }
         }
 
-        // Merge CLI metadata if found
         if (cliMeta !== undefined) {
           parsed.cwd = cliMeta.cwd;
           parsed.gitBranch = cliMeta.gitBranch;
@@ -145,7 +139,6 @@ export async function collectClaudeDesktopFile(
           parsed.agentVersion = cliMeta.version;
         }
 
-        // Rename and standardize File B audit keys
         if (typeof parsed.session_id === 'string') {
           parsed.desktopSessionId = parsed.session_id;
           delete parsed.session_id;
@@ -154,9 +147,6 @@ export async function collectClaudeDesktopFile(
           parsed.clientPlatform = parsed.client_platform;
           delete parsed.client_platform;
         }
-
-        // Inject source_platform into body turn
-        parsed.source_platform = 'claude-cowork-desktop';
 
         keptLines.push(JSON.stringify(parsed));
       } catch {}
@@ -178,7 +168,6 @@ export async function collectClaudeDesktopFile(
     const filteredText = keptLines.join('\n') + '\n';
     const filteredBytes = ENCODER.encode(filteredText);
 
-    // Extract agentSchemaVersion from first record or fallback
     let agentSchemaVersion = CLAUDE_DESKTOP_DEFAULT_AGENT_SCHEMA_VERSION;
     const firstLine = keptLines[0];
     if (firstLine !== undefined) {
@@ -210,6 +199,7 @@ export async function collectClaudeDesktopFile(
       insertBatch(context.buffer, {
         captureId,
         sourceApp: CLAUDE_DESKTOP_SOURCE_APP,
+        sourcePlatform: 'claude-cowork-desktop',
         sourceKind: CLAUDE_DESKTOP_SOURCE_KIND,
         sourcePath: file.sourcePath,
         sourcePathHash: file.sourcePathHash,

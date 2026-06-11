@@ -22,7 +22,7 @@ export function buildCaptureContext(input: {
   logger: Logger;
 }): CaptureCycleContext {
   const { buffer, deps, sources, logger } = input;
-  return {
+  const ctx: CaptureCycleContext = {
     buffer,
     gatewayVersion: deps.gatewayVersion,
     sources,
@@ -39,6 +39,10 @@ export function buildCaptureContext(input: {
     },
     logger,
   };
+  if (deps.loadDesktopCliSessionIds !== undefined) {
+    ctx.loadDesktopCliSessionIds = deps.loadDesktopCliSessionIds;
+  }
+  return ctx;
 }
 
 export function buildDrainContext(input: {

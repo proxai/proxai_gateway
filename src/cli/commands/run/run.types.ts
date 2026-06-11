@@ -39,4 +39,5 @@ export interface RunCommandDeps {
   httpClient?: HttpClient;
   readBootId?: () => Promise<string>;
   coordinatedUpgradeDeps?: CoordinatedUpgradeDeps;
+  loadDesktopCliSessionIds?: () => Promise<ReadonlySet<string>>;
 }

@@ -59,6 +59,34 @@ test('preserves capture metadata fields verbatim', () => {
   expect(dto.body_compression).toBe(stored.bodyCompression);
 });
 
+test('carries a valid source_platform through to the DTO', () => {
+  const batch = newClaudeCodeBatch('payload', { sourcePlatform: 'claude-code-desktop' });
+  insertBatch(db, batch);
+  const stored = requireDefined(getBatch(db, batch.captureId));
+
+  const dto = buildRawRecordDTO(stored, TEST_HOST_ID);
+  expect(dto.source_platform).toBe('claude-code-desktop');
+  expect(() => validateRawRecordDTO(dto)).not.toThrow();
+});
+
+test('emits null source_platform when the batch has none', () => {
+  const batch = newClaudeCodeBatch('payload');
+  insertBatch(db, batch);
+  const stored = requireDefined(getBatch(db, batch.captureId));
+
+  const dto = buildRawRecordDTO(stored, TEST_HOST_ID);
+  expect(dto.source_platform).toBeNull();
+});
+
+test('coerces an unrecognized stored source_platform to null', () => {
+  const batch = newClaudeCodeBatch('payload', { sourcePlatform: 'bogus-platform' });
+  insertBatch(db, batch);
+  const stored = requireDefined(getBatch(db, batch.captureId));
+
+  const dto = buildRawRecordDTO(stored, TEST_HOST_ID);
+  expect(dto.source_platform).toBeNull();
+});
+
 test('byte_range watermark omits table', () => {
   const batch = newClaudeCodeBatch('payload', { watermarkStart: 100, watermarkEnd: 250 });
   insertBatch(db, batch);

@@ -310,6 +310,41 @@ test('handleCapture: supports options.priorCursors, custom baseDir, and throws o
   ).rejects.toThrow('Unknown source poller: unknown-poller');
 });
 
+test('handleCapture: threads desktopCliSessionIds and tags the batch source_platform', async () => {
+  const projectDir = join(dir, 'proj');
+  await mkdir(projectDir, { recursive: true });
+  const logPath = join(projectDir, 'sess-desktop.jsonl');
+  await writeFile(logPath, '{"type":"user","message":{"content":"hi"}}\n');
+
+  const outcome = await handleCapture('claude-code', {
+    baseDir: dir,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+    captureSubAgents: false,
+    desktopCliSessionIds: new Set(['sess-desktop']),
+  });
+
+  expect(outcome.batches.length).toBe(1);
+  expect(outcome.batches[0]?.sourcePlatform).toBe('claude-code-desktop');
+});
+
+test('handleCapture: claude-code batch is codex-cli-free and defaults source_platform to cli', async () => {
+  const projectDir = join(dir, 'proj');
+  await mkdir(projectDir, { recursive: true });
+  const logPath = join(projectDir, 'sess-cli.jsonl');
+  await writeFile(logPath, '{"type":"user","message":{"content":"hi"}}\n');
+
+  const outcome = await handleCapture('claude-code', {
+    baseDir: dir,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+    captureSubAgents: false,
+  });
+
+  expect(outcome.batches.length).toBe(1);
+  expect(outcome.batches[0]?.sourcePlatform).toBe('claude-code-cli');
+});
+
 test('handleCapture: runs capture for cursor successfully, maps quarantine', async () => {
   // Mock Database.prototype.query specifically to return quarantine rows
   const originalQuery = Database.prototype.query;

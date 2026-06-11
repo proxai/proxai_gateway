@@ -177,6 +177,18 @@ test('persists the rowid range watermark with end = last_rowid + 1', async () =>
   expect(cursor?.watermarkEnd).toBe(4);
 });
 
+test('tags every cursor batch as cursor-ide', async () => {
+  const file = await makeDb([
+    { key: 'composerData:c1', value: '{"_v":13}' },
+    { key: 'bubbleId:c1:b1', value: '{"_v":3,"text":"hi"}' },
+    { key: 'bubbleId:c1:b2', value: '{"_v":3,"text":"there"}' },
+  ]);
+  await collectCursorFile(file, ctx(buffer));
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourceApp).toBe('cursor');
+  expect(batch.sourcePlatform).toBe('cursor-ide');
+});
+
 test('does nothing on a second poll with no new rows', async () => {
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13}' },

@@ -309,6 +309,7 @@ export function processRows(input: ProcessRowsInput): void {
     const batch: NewBatch = {
       captureId: generateUuidV7(),
       sourceApp: CURSOR_SOURCE_APP,
+      sourcePlatform: 'cursor-ide',
       sourceKind: CURSOR_SOURCE_KIND,
       sourcePath: input.effectiveSourcePath,
       sourcePathHash: input.effectiveSourcePathHash,
