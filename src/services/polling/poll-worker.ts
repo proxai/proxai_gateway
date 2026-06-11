@@ -662,6 +662,10 @@ export async function dispatchWorkerMessage(event: MessageEvent<WorkerInput>): P
   }
 }
 
-if (typeof self !== 'undefined' && typeof self.postMessage === 'function') {
-  self.onmessage = dispatchWorkerMessage;
+export function registerWorkerHandler(): void {
+  if (typeof self !== 'undefined' && typeof self.postMessage === 'function') {
+    self.onmessage = dispatchWorkerMessage;
+  }
 }
+
+registerWorkerHandler();

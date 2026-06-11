@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.types.ts';
 
-// Define a mock self at the top of the file so that the dynamic import registers the listener
 const mockSelf = {
   onmessage: null as ((event: MessageEvent<WorkerInput>) => void) | null,
   postMessage: (_message: WorkerOutput) => {},
@@ -13,7 +12,7 @@ const mockSelf = {
 
 (globalThis as { self?: unknown }).self = mockSelf;
 
-const importPath = 'services/polling/poll-worker.ts?real=true';
+const importPath = 'services/polling/poll-worker.ts';
 const { handleInspect } = await import(importPath);
 
 let dir: string;
