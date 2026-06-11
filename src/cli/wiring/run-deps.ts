@@ -4,6 +4,7 @@ import { buildRunCoordinatedUpgradeDeps } from 'cli/wiring/upgrade-restore-deps.
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 import { GATEWAY_USER_AGENT, PACKAGE_VERSION } from 'core/utils';
 import type { GatewayConfig } from 'services/config';
+import { loadDesktopCliSessionIds } from 'sources/claude-desktop';
 
 export interface BuildRunDepsInputs {
   config: GatewayConfig;
@@ -17,6 +18,7 @@ export interface BuildRunDepsInputs {
 
 export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
   const platform = inputs.platform ?? process.platform;
+  const env = process.env;
   const deps: RunCommandDeps = {
     profileCtx: inputs.profileCtx,
     output: consoleOutput(),
@@ -32,6 +34,7 @@ export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
     installSource: inputs.config.account.installSource,
     devMode: inputs.profileCtx.isDev,
     exitProcess: inputs.exitProcess,
+    loadDesktopCliSessionIds: () => loadDesktopCliSessionIds(platform, env),
   };
   if (inputs.xstateInspect !== undefined) {
     deps.xstateInspect = inputs.xstateInspect;

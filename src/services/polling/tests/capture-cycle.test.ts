@@ -385,6 +385,7 @@ test('capture-cycle runs worker successfully with cursors, batches, quarantine',
                       {
                         captureId: generateUuidV7(),
                         sourceApp: 'cursor',
+                        sourcePlatform: 'cursor-ide',
                         sourceKind: 'sqlite_kv_snapshot',
                         sourcePath: '/tmp/c.db',
                         sourcePathHash: 'b'.repeat(64),
@@ -771,4 +772,115 @@ test('capture-cycle handles synchronous error in pollSourceInWorker catch block'
   const result = await runCaptureCycle(ctx);
   expect(result.sourceResults['cursor']?.errors.length).toBe(1);
   expect(result.sourceResults['cursor']?.errors[0]?.reason).toContain('closed');
+});
+
+test('threads desktopCliSessionIds into the claude-code worker options', async () => {
+  __deps.isCompiledBinary = () => true;
+  let seen: ReadonlySet<string> | undefined;
+  __deps.handleCapture = (async (_name: string, options: WorkerInput['options']) => {
+    seen = options.desktopCliSessionIds;
+    return null;
+  }) as unknown as typeof __deps.handleCapture;
+
+  const ids = new Set(['sess-a']);
+  const ctx = makeContext([{ name: 'claude-code', poll: stubPoll }], {
+    loadDesktopCliSessionIds: async () => ids,
+  });
+  await runCaptureCycle(ctx);
+  expect(seen).toBe(ids);
+});
+
+test('does not thread desktopCliSessionIds into non claude-code workers', async () => {
+  __deps.isCompiledBinary = () => true;
+  let seen: ReadonlySet<string> | undefined = new Set(['placeholder']);
+  __deps.handleCapture = (async (_name: string, options: WorkerInput['options']) => {
+    seen = options.desktopCliSessionIds;
+    return null;
+  }) as unknown as typeof __deps.handleCapture;
+
+  const ctx = makeContext([{ name: 'cursor', poll: stubPoll }], {
+    loadDesktopCliSessionIds: async () => new Set(['sess-a']),
+  });
+  await runCaptureCycle(ctx);
+  expect(seen).toBeUndefined();
+});
+
+test('continues capture when loadDesktopCliSessionIds throws', async () => {
+  __deps.isCompiledBinary = () => true;
+  let seen: ReadonlySet<string> | undefined = new Set(['placeholder']);
+  __deps.handleCapture = (async (_name: string, options: WorkerInput['options']) => {
+    seen = options.desktopCliSessionIds;
+    return null;
+  }) as unknown as typeof __deps.handleCapture;
+
+  const warnings: string[] = [];
+  const logger = {
+    info: () => undefined,
+    debug: () => undefined,
+    warn: (obj: unknown) => {
+      const event = (obj as { event?: unknown }).event;
+      if (typeof event === 'string') warnings.push(event);
+    },
+    error: () => undefined,
+    fatal: () => undefined,
+    trace: () => undefined,
+    child: () => logger,
+  };
+
+  const ctx = makeContext([{ name: 'claude-code', poll: stubPoll }], {
+    loadDesktopCliSessionIds: async () => {
+      throw new Error('sidecar boom');
+    },
+    logger,
+  });
+  await runCaptureCycle(ctx);
+  expect(seen).toBeUndefined();
+  expect(warnings).toContain('capture.desktop_sidecar_failed');
+});
+
+test('threaded worker forwards desktopCliSessionIds for the claude-code source', async () => {
+  __deps.isCompiledBinary = () => false;
+  const originalWorker = globalThis.Worker;
+  const postedInputs: WorkerInput[] = [];
+  globalThis.Worker = asWorkerCtor(
+    class MockWorker {
+      onmessage: WorkerMessageHandler = null;
+      onerror: WorkerErrorHandler = null;
+      postMessage(message: WorkerInput): void {
+        postedInputs.push(message);
+        setTimeout(() => {
+          if (this.onmessage) {
+            this.onmessage(
+              asMessageEvent({
+                data: {
+                  sourceName: 'claude-code',
+                  success: true,
+                  captureResult: {
+                    filesProcessed: 0,
+                    capturedBytes: 0,
+                    batches: [],
+                    quarantine: [],
+                    cursors: [],
+                  },
+                },
+              }),
+            );
+          }
+        }, 0);
+      }
+      terminate(): void {}
+    },
+  );
+
+  try {
+    const ids = new Set(['sess-threaded']);
+    const ctx = makeContext([{ name: 'claude-code', poll: stubPoll }], {
+      loadDesktopCliSessionIds: async () => ids,
+    });
+    await runCaptureCycle(ctx);
+    expect(postedInputs.length).toBe(1);
+    expect(postedInputs[0]?.options.desktopCliSessionIds).toBe(ids);
+  } finally {
+    globalThis.Worker = originalWorker;
+  }
 });

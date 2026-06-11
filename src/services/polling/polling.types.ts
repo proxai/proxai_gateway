@@ -64,6 +64,7 @@ export interface CaptureCycleContext {
   capturePolicy: CapturePolicy;
   logger?: MinimalLogger;
   minimumMtimeOverride?: Date | null;
+  loadDesktopCliSessionIds?: () => Promise<ReadonlySet<string>>;
 }
 
 export interface CaptureCycleResult {
@@ -153,6 +154,7 @@ export interface PollCycleContext {
   exitProcess?: () => void;
 
   minimumMtimeOverride?: Date | null;
+  loadDesktopCliSessionIds?: () => Promise<ReadonlySet<string>>;
 }
 
 export interface PollCycleResult {

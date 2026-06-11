@@ -48,6 +48,35 @@ interface ThreadRow {
   model?: string;
 }
 
+async function makeThreadsWithSource(rows: { id: string; source: string }[]): Promise<{
+  sourcePath: string;
+  sourcePathHash: string;
+  inode: number;
+  sizeBytes: number;
+  lastModifiedMs: number;
+}> {
+  const path = join(dir, 'state_9.sqlite');
+  const db = new Database(path, { create: true });
+  db.run(`CREATE TABLE threads (id TEXT PRIMARY KEY, cli_version TEXT, source TEXT)`);
+  for (const r of rows) {
+    db.query('INSERT INTO threads (id, cli_version, source) VALUES (?, ?, ?)').run(
+      r.id,
+      '0.126.0',
+      r.source,
+    );
+  }
+  db.close();
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('file missing after write');
+  return {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+}
+
 interface DynamicToolRow {
   thread_id: string;
   position: number;
@@ -993,4 +1022,33 @@ test('every codex-state batch satisfies BOTH compressed AND decompressed caps', 
     expect(decoded.byteLength).toBeLessThanOrEqual(BODY_MAX_DECOMPRESSED_BYTES);
     deleteBatch(buffer, batch.captureId);
   }
+});
+
+test('threads batch is tagged codex-cli when the source column is cli', async () => {
+  const file = await makeThreadsWithSource([{ id: 't1', source: 'cli' }]);
+  const { result } = await collectCodexState(file, ctx(buffer));
+  expect(result.errors).toEqual([]);
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourceApp).toBe('codex');
+  expect(batch.watermarkTable).toBe('threads');
+  expect(batch.sourcePlatform).toBe('codex-cli');
+});
+
+test('threads batch is tagged codex-desktop when any row source is vscode', async () => {
+  const file = await makeThreadsWithSource([
+    { id: 't1', source: 'cli' },
+    { id: 't2', source: 'vscode' },
+  ]);
+  const { result } = await collectCodexState(file, ctx(buffer));
+  expect(result.errors).toEqual([]);
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourcePlatform).toBe('codex-desktop');
+});
+
+test('threads batch defaults to codex-cli when the threads table has no source column', async () => {
+  const file = await makeStateDb({ threads: [{ id: 't1', cli_version: '0.126.0' }] });
+  const { result } = await collectCodexState(file, ctx(buffer));
+  expect(result.errors).toEqual([]);
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourcePlatform).toBe('codex-cli');
 });

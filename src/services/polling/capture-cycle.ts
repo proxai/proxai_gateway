@@ -142,6 +142,8 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
 
   cycleMachine.send({ type: 'GATE_CLEAR' });
 
+  const desktopCliSessionIds = await resolveDesktopCliSessionIds(ctx);
+
   const sourceResults: Record<string, SourcePollerResult> = {};
   const promises = ctx.sources.map(async (source) => {
     const sourceLog = log?.child({ source_app: source.name });
@@ -156,7 +158,7 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
 
     let result: SourcePollerResult;
     if (isDefaultSource) {
-      result = await pollSourceInWorker(source, ctx, pollActor);
+      result = await pollSourceInWorker(source, ctx, pollActor, desktopCliSessionIds);
     } else {
       const sourceCtx: SourcePollerContext = {
         buffer: ctx.buffer,
@@ -253,6 +255,21 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
     sourceResults,
     pressureResult,
   };
+}
+
+async function resolveDesktopCliSessionIds(
+  ctx: CaptureCycleContext,
+): Promise<ReadonlySet<string> | undefined> {
+  if (ctx.loadDesktopCliSessionIds === undefined) return undefined;
+  try {
+    return await ctx.loadDesktopCliSessionIds();
+  } catch (err) {
+    ctx.logger?.warn(
+      { event: 'capture.desktop_sidecar_failed', error: (err as Error).message ?? String(err) },
+      'failed to load desktop cli session ids; treating all claude-code sessions as cli',
+    );
+    return undefined;
+  }
 }
 
 async function evaluateGateReason(
@@ -403,6 +420,7 @@ async function pollSourceInWorker(
   source: RegisteredSource,
   ctx: CaptureCycleContext,
   pollActor: Actor<SourcePollMachine> | null,
+  desktopCliSessionIds: ReadonlySet<string> | undefined,
 ): Promise<SourcePollerResult> {
   try {
     const cursorRows = ctx.buffer
@@ -422,9 +440,9 @@ async function pollSourceInWorker(
 
     const isCompiled = __deps.isCompiledBinary();
     if (isCompiled) {
-      return runInProcessWorker(source, ctx, priorCursors, pollActor);
+      return runInProcessWorker(source, ctx, priorCursors, pollActor, desktopCliSessionIds);
     }
-    return runThreadedWorker(source, ctx, priorCursors, pollActor);
+    return runThreadedWorker(source, ctx, priorCursors, pollActor, desktopCliSessionIds);
   } catch (e) {
     return {
       filesProcessed: 0,
@@ -447,6 +465,7 @@ async function runInProcessWorker(
   ctx: CaptureCycleContext,
   priorCursors: PriorCursors,
   pollActor: Actor<SourcePollMachine> | null,
+  desktopCliSessionIds: ReadonlySet<string> | undefined,
 ): Promise<SourcePollerResult> {
   const sourceApp = assertSourceApp(source.name);
   const workerActor = createActor(workerMachine, {
@@ -464,6 +483,9 @@ async function runInProcessWorker(
   };
   if (source.baseDir !== undefined) {
     optionsObj.baseDir = source.baseDir;
+  }
+  if (source.name === 'claude-code' && desktopCliSessionIds !== undefined) {
+    optionsObj.desktopCliSessionIds = desktopCliSessionIds;
   }
   const capture = await __deps.handleCapture(source.name, optionsObj);
   if (!capture) {
@@ -485,6 +507,7 @@ function runThreadedWorker(
   ctx: CaptureCycleContext,
   priorCursors: PriorCursors,
   pollActor: Actor<SourcePollMachine> | null,
+  desktopCliSessionIds: ReadonlySet<string> | undefined,
 ): Promise<SourcePollerResult> {
   return new Promise<SourcePollerResult>((resolve) => {
     try {
@@ -562,6 +585,9 @@ function runThreadedWorker(
       };
       if (source.baseDir !== undefined) {
         optionsObj.baseDir = source.baseDir;
+      }
+      if (source.name === 'claude-code' && desktopCliSessionIds !== undefined) {
+        optionsObj.desktopCliSessionIds = desktopCliSessionIds;
       }
 
       const workerInput: WorkerInput = {

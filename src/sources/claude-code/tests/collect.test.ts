@@ -22,7 +22,12 @@ import {
   BODY_TARGET_COMPRESSED_BYTES,
   BODY_TARGET_DECOMPRESSED_BYTES,
 } from 'services/contract';
-import { collectClaudeCodeFile, isDialogueRecord, claudeFirstText } from 'sources/claude-code';
+import {
+  collectClaudeCodeFile,
+  deriveClaudeCodeSessionId,
+  isDialogueRecord,
+  claudeFirstText,
+} from 'sources/claude-code';
 import type { ClaudeCodeCollectorContext, DiscoveredClaudeCodeFile } from 'sources/claude-code';
 
 let dir: string;
@@ -708,4 +713,67 @@ test('extractAgentSchemaVersion falls back when redaction yields invalid JSON', 
   await collectClaudeCodeFile(file, ctx(buffer));
   const batch = nextPendingBatch(buffer);
   expect(batch?.agentSchemaVersion).toBe('unknown');
+});
+
+test('tags claude-code-cli when the session id is not in the desktop set', async () => {
+  const file = await makeFile('{"type":"user","message":{"content":"hi"}}\n', 'cli-session.jsonl');
+  const result = await collectClaudeCodeFile(file, {
+    ...ctx(buffer),
+    desktopCliSessionIds: new Set(['some-other-id']),
+  });
+  expect(result.capturedBatches).toBe(1);
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourceApp).toBe('claude-code');
+  expect(batch.sourcePlatform).toBe('claude-code-cli');
+});
+
+test('tags claude-code-desktop when the session id is in the desktop set', async () => {
+  const file = await makeFile(
+    '{"type":"user","message":{"content":"hi"}}\n',
+    'desktop-session.jsonl',
+  );
+  const result = await collectClaudeCodeFile(file, {
+    ...ctx(buffer),
+    desktopCliSessionIds: new Set(['desktop-session']),
+  });
+  expect(result.capturedBatches).toBe(1);
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourcePlatform).toBe('claude-code-desktop');
+});
+
+test('defaults to claude-code-cli when no desktop set is provided', async () => {
+  const file = await makeFile('{"type":"user","message":{"content":"hi"}}\n', 'no-set.jsonl');
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourcePlatform).toBe('claude-code-cli');
+});
+
+test('deriveClaudeCodeSessionId uses the filename for a top-level transcript', () => {
+  expect(deriveClaudeCodeSessionId(join('a', 'b', 'sess-123.jsonl'))).toBe('sess-123');
+});
+
+test('deriveClaudeCodeSessionId uses the parent session dir for a subagent transcript', () => {
+  const subagentPath = join('proj', 'sess-abc', 'subagents', 'agent-deadbeef.jsonl');
+  expect(deriveClaudeCodeSessionId(subagentPath)).toBe('sess-abc');
+});
+
+test('subagent transcript inherits its parent session desktop classification', async () => {
+  const subDir = join(dir, 'sess-xyz', 'subagents');
+  await Bun.write(join(subDir, 'agent-1.jsonl'), '{"type":"user","message":{"content":"hi"}}\n');
+  const sourcePath = join(subDir, 'agent-1.jsonl');
+  const stat = await statFile(sourcePath);
+  if (!stat.exists) throw new Error('subagent file missing');
+  const file: DiscoveredClaudeCodeFile = {
+    sourcePath,
+    sourcePathHash: sha256Hex(sourcePath),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+  await collectClaudeCodeFile(file, {
+    ...ctx(buffer),
+    desktopCliSessionIds: new Set(['sess-xyz']),
+  });
+  const batch = requireDefined(nextPendingBatch(buffer));
+  expect(batch.sourcePlatform).toBe('claude-code-desktop');
 });

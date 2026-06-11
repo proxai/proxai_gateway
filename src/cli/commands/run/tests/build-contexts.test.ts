@@ -98,6 +98,19 @@ test('buildCaptureContext: correctly maps capture context fields', () => {
   expect(ctx.bufferPolicy.receiptRetentionDays).toBe(deps.config.capture.receiptRetentionDays);
   expect(ctx.capturePolicy.maxDecompressedBytes).toBe(2000);
   expect(ctx.logger).toBe(mockLogger);
+  expect(ctx.loadDesktopCliSessionIds).toBeUndefined();
+});
+
+test('buildCaptureContext: forwards loadDesktopCliSessionIds when present on deps', () => {
+  const loader = async (): Promise<ReadonlySet<string>> => new Set(['sess']);
+  const deps = makeMockDeps({ loadDesktopCliSessionIds: loader });
+  const ctx = buildCaptureContext({
+    buffer: mockDb,
+    deps,
+    sources: mockSources,
+    logger: mockLogger,
+  });
+  expect(ctx.loadDesktopCliSessionIds).toBe(loader);
 });
 
 test('buildDrainContext: correctly maps drain context fields', () => {

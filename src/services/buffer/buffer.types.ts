@@ -11,6 +11,7 @@ export type BatchStatus = 'pending' | 'failed';
 export interface NewBatch {
   captureId: string;
   sourceApp: SourceApp;
+  sourcePlatform?: string | null;
   sourceKind: SourceKind;
   sourcePath: string;
   sourcePathHash: string;

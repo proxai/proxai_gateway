@@ -8,6 +8,7 @@ import {
   VALID_CODEX_TABLES,
   VALID_SOURCE_APPS,
   VALID_SOURCE_KINDS,
+  VALID_SOURCE_PLATFORMS,
   VALID_WATERMARK_KINDS,
 } from 'services/contract/contract.constants.ts';
 import type {
@@ -36,6 +37,7 @@ export function validateRawRecordDTO(value: unknown): asserts value is RawRecord
   if (!VALID_SOURCE_APPS.includes(sourceApp as never)) {
     throw new ValidationError(`source_app must be one of: ${VALID_SOURCE_APPS.join(', ')}`);
   }
+  validateSourcePlatform(dto['source_platform']);
   const sourceKind = dto['source_kind'];
   if (!VALID_SOURCE_KINDS.includes(sourceKind as never)) {
     throw new ValidationError(`source_kind must be one of: ${VALID_SOURCE_KINDS.join(', ')}`);
@@ -92,6 +94,17 @@ function asNonEmptyString(value: unknown, field: string): string {
     throw new ValidationError(`${field} must be a non-empty string`);
   }
   return value;
+}
+
+function validateSourcePlatform(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (typeof value !== 'string' || !VALID_SOURCE_PLATFORMS.includes(value as never)) {
+    throw new ValidationError(
+      `source_platform must be one of: ${VALID_SOURCE_PLATFORMS.join(', ')}`,
+    );
+  }
 }
 
 function validateWatermark(wm: Record<string, unknown>, variant: SourceVariantSpec): Watermark {

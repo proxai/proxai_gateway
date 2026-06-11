@@ -185,5 +185,6 @@ test('compat: covers optional cycle params', async () => {
   ctx.logger = mockLogger;
   ctx.minimumMtimeOverride = new Date('2026-05-08T00:00:00Z');
   ctx.pacer = mockPacer;
+  ctx.loadDesktopCliSessionIds = async () => new Set(['sess']);
   await runPollCycle(ctx);
 });

@@ -1,3 +1,5 @@
+import { basename, dirname } from 'node:path';
+
 import { readJsonlRange } from 'core/io/jsonl';
 import {
   OversizedDecompressedSliceError,
@@ -10,6 +12,7 @@ import {
 import { getCursor, getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
+import type { SourcePlatform } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
 import {
   CLAUDE_CODE_BODY_COMPRESSION,
@@ -26,6 +29,24 @@ import type {
 
 const DECODER = new TextDecoder('utf-8', { fatal: false });
 const ENCODER = new TextEncoder();
+
+const CLAUDE_CODE_SUBAGENT_DIR = 'subagents';
+
+export function deriveClaudeCodeSessionId(sourcePath: string): string {
+  const parentDir = dirname(sourcePath);
+  if (basename(parentDir) === CLAUDE_CODE_SUBAGENT_DIR) {
+    return basename(dirname(parentDir));
+  }
+  return basename(sourcePath, '.jsonl');
+}
+
+function resolveClaudeCodeSourcePlatform(
+  sourcePath: string,
+  desktopCliSessionIds: ReadonlySet<string> | undefined,
+): SourcePlatform {
+  const sessionId = deriveClaudeCodeSessionId(sourcePath);
+  return desktopCliSessionIds?.has(sessionId) ? 'claude-code-desktop' : 'claude-code-cli';
+}
 
 interface SliceRedaction {
   redactedBytes: Uint8Array;
@@ -255,6 +276,10 @@ export async function collectClaudeCodeFile(
     const filteredBytes = ENCODER.encode(filteredText);
     const redactedFullText = applyRedaction(filteredText).redacted;
     const agentSchemaVersion = extractAgentSchemaVersion(redactedFullText);
+    const sourcePlatform = resolveClaudeCodeSourcePlatform(
+      file.sourcePath,
+      context.desktopCliSessionIds,
+    );
 
     const redactSlice = createSliceRedactor();
     const sourceSlices = splitJsonlAtBoundary(filteredBytes, {
@@ -330,6 +355,7 @@ export async function collectClaudeCodeFile(
       const batch: NewBatch = {
         captureId: generateUuidV7(),
         sourceApp: CLAUDE_CODE_SOURCE_APP,
+        sourcePlatform,
         sourceKind: CLAUDE_CODE_SOURCE_KIND,
         sourcePath: file.sourcePath,
         sourcePathHash: file.sourcePathHash,

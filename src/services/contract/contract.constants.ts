@@ -4,6 +4,7 @@ import type {
   CodexTable,
   SourceApp,
   SourceKind,
+  SourcePlatform,
   SourceVariantSpec,
   WatermarkKind,
 } from 'services/contract/contract.types.ts';
@@ -13,6 +14,16 @@ export const VALID_SOURCE_APPS: readonly SourceApp[] = [
   'cursor',
   'codex',
   'claude-desktop',
+];
+
+export const VALID_SOURCE_PLATFORMS: readonly SourcePlatform[] = [
+  'claude-code-cli',
+  'claude-code-desktop',
+  'claude-cowork-desktop',
+  'codex-cli',
+  'codex-desktop',
+  'cursor-ide',
+  'cursor-cli',
 ];
 
 export const VALID_SOURCE_KINDS: readonly SourceKind[] = [

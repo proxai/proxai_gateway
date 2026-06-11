@@ -9,4 +9,7 @@ export const CLAUDE_DESKTOP_SESSIONS_DIR = 'local-agent-mode-sessions';
 export const CLAUDE_DESKTOP_AUDIT_GLOB_PATTERN = '*/*/local_*/audit.jsonl';
 export const CLAUDE_DESKTOP_TRANSCRIPT_GLOB_PATTERN = '.claude/projects/*/*.jsonl';
 
-export const CLAUDE_DESKTOP_DEFAULT_AGENT_SCHEMA_VERSION = 'unknown';
+export const CLAUDE_DESKTOP_SIDECAR_DIR = 'claude-code-sessions';
+export const CLAUDE_DESKTOP_SIDECAR_GLOB_PATTERN = '*/*/local_*.json';
+
+export const CLAUDE_DESKTOP_DEFAULT_AGENT_SCHEMA_VERSION = 'claude-desktop/v2';
