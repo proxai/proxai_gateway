@@ -41,6 +41,7 @@ import {
 import {
   checkD1NoAgentActivity,
   checkD2OneSourceErroring,
+  checkD3SourceCaptureErrors,
 } from 'cli/commands/doctor/checkers/capture.ts';
 import {
   checkE1StaleBinary,
@@ -163,6 +164,7 @@ const ALL_CHECKERS: readonly Checker[] = [
   checkC13OutboxTimeout,
   checkD1NoAgentActivity,
   checkD2OneSourceErroring,
+  checkD3SourceCaptureErrors,
   checkE1StaleBinary,
   checkE2BrewUpdatePending,
   checkE3WriteFailed,

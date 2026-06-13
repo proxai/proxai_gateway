@@ -198,7 +198,6 @@ test('doctor writes HTML report to specified absolute output path', async () => 
   expect(content).toContain('<!DOCTYPE html>');
   expect(content).toContain('<div class="wordmark">ProxAI</div>');
   expect(content).not.toContain('cdn.tailwindcss.com');
-  expect(content).not.toContain('Antigravity');
   const count = content.split('Diagnostics Summary').length - 1;
   expect(count).toBe(1);
 });

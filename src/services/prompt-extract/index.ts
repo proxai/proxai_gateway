@@ -3,6 +3,10 @@ import {
   extractAssistantFromCursorKvPairs,
   extractFromCursorKvPairs,
 } from 'services/prompt-extract/cursor.ts';
+import {
+  extractAssistantFromGeminiRows,
+  extractFromGeminiRows,
+} from 'services/prompt-extract/gemini.ts';
 import { extractAssistantFromJsonl, extractFromJsonl } from 'services/prompt-extract/jsonl.ts';
 import type { JsonlSourceApp } from 'services/prompt-extract/jsonl.ts';
 
@@ -55,6 +59,10 @@ export function extractUserPrompt(
       return extractFromCursorKvPairs(text);
     }
 
+    if (input.bodyFormat === 'sqlite_rows_json' && input.sourceApp === 'gemini') {
+      return extractFromGeminiRows(text);
+    }
+
     return NULL_RESULT;
   } catch {
     return NULL_RESULT;
@@ -84,6 +92,15 @@ export function extractConversation(
         userPrompt: prompt.userPrompt,
         userPromptAddedAt: prompt.userPromptAddedAt,
         assistantResponse: extractAssistantFromCursorKvPairs(text),
+      };
+    }
+
+    if (input.bodyFormat === 'sqlite_rows_json' && input.sourceApp === 'gemini') {
+      const prompt = extractFromGeminiRows(text);
+      return {
+        userPrompt: prompt.userPrompt,
+        userPromptAddedAt: prompt.userPromptAddedAt,
+        assistantResponse: extractAssistantFromGeminiRows(text),
       };
     }
 

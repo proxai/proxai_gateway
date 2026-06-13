@@ -7,6 +7,7 @@ const PER_SOURCE_ENV_VAR: Readonly<Record<SourceApp, string>> = {
   codex: 'PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_CODEX',
   cursor: 'PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_CURSOR',
   'claude-desktop': 'PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_CLAUDE_DESKTOP',
+  gemini: 'PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_GEMINI',
 };
 
 const TRUTHY_VALUES: ReadonlySet<string> = new Set(['1', 'true', 'yes']);
@@ -29,4 +30,5 @@ export const SUB_AGENT_CAPTURE_BY_SOURCE: Readonly<Record<SourceApp, boolean>> =
   codex: resolveSubAgentCapture('codex'),
   cursor: resolveSubAgentCapture('cursor'),
   'claude-desktop': resolveSubAgentCapture('claude-desktop'),
+  gemini: resolveSubAgentCapture('gemini'),
 };

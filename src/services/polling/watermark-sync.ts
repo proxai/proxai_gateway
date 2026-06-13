@@ -2,6 +2,7 @@ import type { Database } from 'bun:sqlite';
 
 import type { MinimalLogger } from 'core/log';
 import { setCursor } from 'services/buffer';
+import type { SourceApp } from 'services/contract';
 import type { HttpClient, ServerWatermark } from 'services/http';
 
 export interface SyncWatermarksDeps {
@@ -41,7 +42,7 @@ export async function syncServerWatermarks(
       continue;
     }
     setCursor(buffer, {
-      sourceApp: w.sourceApp as 'claude-code' | 'cursor' | 'codex',
+      sourceApp: w.sourceApp as SourceApp,
       sourcePathHash: w.sourcePathHash,
       sourcePath: '',
       sourceInode: null,
@@ -53,7 +54,7 @@ export async function syncServerWatermarks(
   return result;
 }
 
-const KNOWN_APPS = new Set<string>(['claude-code', 'cursor', 'codex']);
+const KNOWN_APPS = new Set<string>(['claude-code', 'cursor', 'codex', 'gemini']);
 
 function isApplicable(w: ServerWatermark): boolean {
   if (!KNOWN_APPS.has(w.sourceApp)) return false;

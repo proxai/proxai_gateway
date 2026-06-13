@@ -160,6 +160,12 @@ function renderSignalsAppendix(signals: DoctorSignals, width: number): string {
     `  cursor_exists:           ${colorBool(signals.sourcePaths.cursorExists, 'neutral')}`,
   );
   lines.push(`  codex_exists:            ${colorBool(signals.sourcePaths.codexExists, 'neutral')}`);
+  lines.push(
+    `  claude_desktop_exists:   ${colorBool(signals.sourcePaths.claudeDesktopExists, 'neutral')}`,
+  );
+  lines.push(
+    `  gemini_exists:           ${colorBool(signals.sourcePaths.geminiExists, 'neutral')}`,
+  );
   lines.push('');
   lines.push('Resync events:');
   lines.push(`  total_count:             ${formatNum(signals.resyncEvents.totalCount)}`);
@@ -170,6 +176,16 @@ function renderSignalsAppendix(signals: DoctorSignals, width: number): string {
     }
   } else {
     lines.push(`  regression_loops:        ${chalk.dim('none')}`);
+  }
+  if (signals.captureErrors.length > 0) {
+    lines.push('  capture_errors:');
+    for (const e of signals.captureErrors) {
+      lines.push(
+        `    ${e.sourceApp}: ${formatNum(e.maxConsecutiveErrors)} consecutive on ${formatNum(e.affectedFiles)} file(s)`,
+      );
+    }
+  } else {
+    lines.push(`  capture_errors:          ${chalk.dim('none')}`);
   }
   lines.push(
     `  systemd_linger:          ${colorNullableBool(signals.systemdLingerEnabled, 'goodTrue')}`,
@@ -390,6 +406,24 @@ function htmlRegressionLoops(
     .join('<br>');
 }
 
+function htmlCaptureErrors(
+  errors: ReadonlyArray<{
+    readonly sourceApp: string;
+    readonly maxConsecutiveErrors: number;
+    readonly affectedFiles: number;
+  }>,
+): string {
+  if (errors.length === 0) {
+    return '<span class="v-null">none</span>';
+  }
+  return errors
+    .map(
+      (e) =>
+        `<span class="v-str">${escapeHtml(e.sourceApp)}</span> <span class="v-null">·</span> <span class="v-num">${e.maxConsecutiveErrors.toString()}</span><span class="v-null"> consecutive on </span><span class="v-num">${e.affectedFiles.toString()}</span><span class="v-null"> file(s)</span>`,
+    )
+    .join('<br>');
+}
+
 function sigRow(key: string, valueHtml: string): string {
   return `<div class="row"><span class="k">${key}</span><span class="v">${valueHtml}</span></div>`;
 }
@@ -515,10 +549,13 @@ export function generateDoctorHtml(
       sigRow('claude_code_exists', htmlBool(signals.sourcePaths.claudeCodeExists, 'neutral')),
       sigRow('cursor_exists', htmlBool(signals.sourcePaths.cursorExists, 'neutral')),
       sigRow('codex_exists', htmlBool(signals.sourcePaths.codexExists, 'neutral')),
+      sigRow('claude_desktop_exists', htmlBool(signals.sourcePaths.claudeDesktopExists, 'neutral')),
+      sigRow('gemini_exists', htmlBool(signals.sourcePaths.geminiExists, 'neutral')),
     ]),
     sigCard('Host & Resync', [
       sigRow('resync_total', htmlNum(signals.resyncEvents.totalCount)),
       sigRow('regression_loops', htmlRegressionLoops(signals.resyncEvents.regressionLoops)),
+      sigRow('capture_errors', htmlCaptureErrors(signals.captureErrors)),
       sigRow('systemd_linger', htmlNullableBool(signals.systemdLingerEnabled, 'goodTrue')),
       sigRow('macos_quarantine', htmlNullableBool(signals.macOsQuarantineXattr, 'goodFalse')),
       sigRow('clock_skew_ms', htmlNullableNum(signals.clockSkewMs)),

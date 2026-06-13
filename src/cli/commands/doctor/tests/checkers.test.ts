@@ -27,6 +27,7 @@ import {
 import {
   checkD1NoAgentActivity,
   checkD2OneSourceErroring,
+  checkD3SourceCaptureErrors,
 } from 'cli/commands/doctor/checkers/capture.ts';
 import {
   checkE1StaleBinary,
@@ -165,11 +166,14 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
       claudeCodeExists: true,
       cursorExists: false,
       codexExists: false,
+      claudeDesktopExists: false,
+      geminiExists: false,
     },
     resyncEvents: {
       totalCount: 0,
       regressionLoops: [],
     },
+    captureErrors: [],
     platform: 'linux',
     systemdLingerEnabled: true,
     macOsQuarantineXattr: null,
@@ -669,6 +673,8 @@ test('D1: no agent activity, info when source dirs exist', () => {
           claudeCodeExists: true,
           cursorExists: false,
           codexExists: false,
+          claudeDesktopExists: false,
+          geminiExists: false,
         },
       }),
     ),
@@ -686,12 +692,33 @@ test('D1: warning when no source dirs exist at all', () => {
           claudeCodeExists: false,
           cursorExists: false,
           codexExists: false,
+          claudeDesktopExists: false,
+          geminiExists: false,
         },
       }),
     ),
   );
   expect(warn.code).toBe('D1');
   expect(warn.severity).toBe(Severity.warning);
+});
+
+test('D1: info (not warning) when only the gemini source dir exists', () => {
+  const info = requireDefined(
+    checkD1NoAgentActivity(
+      baseSignals({
+        buffer: { ...baseSignals().buffer, pendingCount: 0, receiptCount: 0 },
+        sourcePaths: {
+          claudeCodeExists: false,
+          cursorExists: false,
+          codexExists: false,
+          claudeDesktopExists: false,
+          geminiExists: true,
+        },
+      }),
+    ),
+  );
+  expect(info.code).toBe('D1');
+  expect(info.severity).toBe(Severity.info);
 });
 
 test('D2: one source erroring on retriable events with empty buffer', () => {
@@ -727,6 +754,38 @@ test('D2: one source erroring on retriable events with empty buffer', () => {
     ),
   );
   expect(f.code).toBe('D2');
+});
+
+test('D3: null when no source has capture errors', () => {
+  expect(checkD3SourceCaptureErrors(baseSignals({ captureErrors: [] }))).toBeNull();
+});
+
+test('D3: null when capture errors are below the persistent threshold', () => {
+  expect(
+    checkD3SourceCaptureErrors(
+      baseSignals({
+        captureErrors: [{ sourceApp: 'gemini', maxConsecutiveErrors: 2, affectedFiles: 1 }],
+      }),
+    ),
+  ).toBeNull();
+});
+
+test('D3: warning naming gemini when it has persistent capture errors', () => {
+  const finding = requireDefined(
+    checkD3SourceCaptureErrors(
+      baseSignals({
+        captureErrors: [
+          { sourceApp: 'gemini', maxConsecutiveErrors: 5, affectedFiles: 2 },
+          { sourceApp: 'cursor', maxConsecutiveErrors: 1, affectedFiles: 1 },
+        ],
+      }),
+    ),
+  );
+  expect(finding.code).toBe('D3');
+  expect(finding.severity).toBe(Severity.warning);
+  expect(finding.cause).toContain('gemini');
+  expect(finding.cause).toContain('5 consecutive failures across 2 file(s)');
+  expect(finding.cause).not.toContain('cursor');
 });
 
 test('E1: stale binary requires mtime, non-brew, age>=60d, and an upgrade-failure event', () => {

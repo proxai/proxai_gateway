@@ -44,7 +44,7 @@ docs/superpowers/
 # emitted by `bun run ai:sync` and are not committed.
 AGENTS.md
 CLAUDE.md
-GEMINI.md
+/GEMINI.md
 .mcp.json
 .ai-dist-manifest.json
 .dist-hooks/

@@ -38,6 +38,15 @@ import {
   isAgentKvConversationBlob,
   trimCursorRowValue,
 } from 'sources/cursor';
+import {
+  discoverGeminiConversations,
+  defaultGeminiCliConversationsDir,
+  defaultGeminiIdeConversationsDir,
+  geminiPlatformForRoot,
+  measureGeminiUploadSize,
+  GEMINI_USER_STEP_TYPE,
+  type DiscoveredGeminiFile,
+} from 'sources/gemini';
 
 // Why: Bun's worker entrypoint exposes `self` as a `DedicatedWorkerGlobalScope`
 // equivalent at runtime. The shape we use is a narrow subset — message handler
@@ -198,6 +207,36 @@ async function analyzeJsonlLogFile(
     promptCount,
     error,
   };
+}
+
+async function discoverGeminiFilesForInspect(
+  baseDir: string | undefined,
+): Promise<DiscoveredGeminiFile[]> {
+  if (baseDir !== undefined) {
+    try {
+      return await discoverGeminiConversations(baseDir, {
+        minimumMtime: null,
+        sourcePlatform: geminiPlatformForRoot('cli'),
+      });
+    } catch {
+      return [];
+    }
+  }
+  const roots: { dir: string; kind: 'cli' | 'ide' }[] = [
+    { dir: defaultGeminiCliConversationsDir(), kind: 'cli' },
+    { dir: defaultGeminiIdeConversationsDir(), kind: 'ide' },
+  ];
+  const collected: DiscoveredGeminiFile[] = [];
+  for (const root of roots) {
+    try {
+      const found = await discoverGeminiConversations(root.dir, {
+        minimumMtime: null,
+        sourcePlatform: geminiPlatformForRoot(root.kind),
+      });
+      collected.push(...found);
+    } catch {}
+  }
+  return collected;
 }
 
 export async function handleInspect(
@@ -455,6 +494,53 @@ export async function handleInspect(
       }
     } catch (err) {
       errors.push(`codex rollout: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  } else if (sourceName === 'gemini') {
+    const geminiFiles = await discoverGeminiFilesForInspect(options.baseDir);
+    for (const f of geminiFiles) {
+      filesProcessed++;
+      totalBytes += f.sizeBytes;
+      updateChronological(null, f.lastModifiedMs);
+
+      let snapshot: { path: string; cleanup: () => Promise<void> } | null = null;
+      try {
+        snapshot = await snapshotSqlite(f.sourcePath);
+        const db = openReadOnly(snapshot.path);
+        try {
+          const stepsCheck = db
+            .query("SELECT name FROM sqlite_master WHERE type='table' AND name='steps'")
+            .get();
+          if (stepsCheck !== null) {
+            const countRow = db
+              .query<{ count: number }, []>('SELECT COUNT(*) AS count FROM "steps"')
+              .get();
+            if (countRow !== null) {
+              recordCount += countRow.count;
+              telemetryRecordCount += countRow.count;
+            }
+            const promptRow = db
+              .query<
+                { count: number },
+                [number]
+              >('SELECT COUNT(*) AS count FROM "steps" WHERE step_type = ?')
+              .get(GEMINI_USER_STEP_TYPE);
+            if (promptRow !== null) {
+              promptCount += promptRow.count;
+            }
+          }
+          const uploadSize = measureGeminiUploadSize(db, options.maxDecompressedBytes);
+          telemetryRawBytes += uploadSize.rawBytes;
+          telemetryCompressedBytes += uploadSize.compressedBytes;
+        } finally {
+          db.close();
+        }
+      } catch (err) {
+        errors.push(`${f.sourcePath}: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        if (snapshot !== null) {
+          await snapshot.cleanup();
+        }
+      }
     }
   }
 

@@ -71,6 +71,16 @@ test('returns null result for the codex sqlite_rows_json fallthrough', () => {
   });
 });
 
+test('dispatches gemini sqlite_rows_json bodies to the gemini extractor', () => {
+  const text = JSON.stringify([
+    { role: 'user', text: 'hello gemini', iso_timestamp: '2026-06-01T00:00:00.000Z' },
+  ]);
+  expect(extractUserPrompt(input(text, 'gemini', 'sqlite_rows_json'))).toEqual({
+    userPrompt: 'hello gemini',
+    userPromptAddedAt: '2026-06-01T00:00:00.000Z',
+  });
+});
+
 test('returns null result when decoding throws unexpectedly', () => {
   const text = JSON.stringify({ type: 'user', content: 'hello claude' });
   const throwingDecode = (): string | null => {
@@ -114,6 +124,16 @@ test('extractConversation returns prompt and response for cursor kv pairs', () =
   const result = extractConversation(input(body, 'cursor', 'kv_pairs_json'));
   expect(result.userPrompt).toBe('ask');
   expect(result.assistantResponse).toBe('reply');
+});
+
+test('extractConversation returns prompt and response for gemini sqlite rows', () => {
+  const body = JSON.stringify([
+    { role: 'user', text: 'ask gemini' },
+    { role: 'assistant', text: 'gemini reply' },
+  ]);
+  const result = extractConversation(input(body, 'gemini', 'sqlite_rows_json'));
+  expect(result.userPrompt).toBe('ask gemini');
+  expect(result.assistantResponse).toBe('gemini reply');
 });
 
 test('extractConversation returns all-null for unsupported source/format combos', () => {

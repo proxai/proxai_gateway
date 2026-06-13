@@ -49,7 +49,7 @@
         "src/services/polling/poll-claude-code.ts",
         "src/services/polling/poll-codex.ts",
         "src/services/polling/poll-cursor.ts",
-        "src/services/polling/poll-gemini-cli.ts",
+        "src/services/polling/poll-gemini.ts",
         "src/services/polling/daemon-loops.ts",
         "src/services/polling/auth-recovery.ts",
         "src/services/polling/capture-cycle.ts",

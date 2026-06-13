@@ -3,18 +3,22 @@ import {
   SOURCE_NAME_CODEX,
   SOURCE_NAME_CURSOR,
   SOURCE_NAME_CLAUDE_DESKTOP,
+  SOURCE_NAME_GEMINI,
 } from 'services/polling/polling.constants.ts';
 import type { RegisteredSource } from 'services/polling/polling.types.ts';
 import { makeClaudeCodeSourcePoller } from 'services/polling/poll-claude-code.ts';
 import { makeCodexSourcePoller } from 'services/polling/poll-codex.ts';
 import { makeCursorSourcePoller } from 'services/polling/poll-cursor.ts';
 import { makeClaudeDesktopSourcePoller } from 'services/polling/poll-claude-desktop.ts';
+import { makeGeminiSourcePoller } from 'services/polling/poll-gemini.ts';
 
 export interface DefaultSourcesOptions {
   claudeCodeBaseDir?: string;
   cursorBaseDir?: string;
   codexBaseDir?: string;
   claudeDesktopBaseDir?: string;
+  geminiCliBaseDir?: string;
+  geminiIdeBaseDir?: string;
 }
 
 export function buildDefaultSources(options: DefaultSourcesOptions = {}): RegisteredSource[] {
@@ -41,7 +45,22 @@ export function buildDefaultSources(options: DefaultSourcesOptions = {}): Regist
         ? { baseDir: options.claudeDesktopBaseDir }
         : {}),
     },
+    {
+      name: SOURCE_NAME_GEMINI,
+      poll: makeGeminiSourcePoller(buildGeminiPollerOptions(options)),
+      ...(options.geminiCliBaseDir !== undefined ? { baseDir: options.geminiCliBaseDir } : {}),
+    },
   ];
+}
+
+function buildGeminiPollerOptions(options: DefaultSourcesOptions): {
+  cliBaseDir?: string;
+  ideBaseDir?: string;
+} {
+  const out: { cliBaseDir?: string; ideBaseDir?: string } = {};
+  if (options.geminiCliBaseDir !== undefined) out.cliBaseDir = options.geminiCliBaseDir;
+  if (options.geminiIdeBaseDir !== undefined) out.ideBaseDir = options.geminiIdeBaseDir;
+  return out;
 }
 
 function buildPollerOptions(baseDir: string | undefined): { baseDir?: string } {

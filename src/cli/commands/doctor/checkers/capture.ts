@@ -8,7 +8,9 @@ export function checkD1NoAgentActivity(signals: DoctorSignals): Finding | null {
   const anySourceExists =
     signals.sourcePaths.claudeCodeExists ||
     signals.sourcePaths.cursorExists ||
-    signals.sourcePaths.codexExists;
+    signals.sourcePaths.codexExists ||
+    signals.sourcePaths.claudeDesktopExists ||
+    signals.sourcePaths.geminiExists;
 
   if (anySourceExists) {
     return {
@@ -26,9 +28,35 @@ export function checkD1NoAgentActivity(signals: DoctorSignals): Finding | null {
     code: 'D1',
     severity: Severity.warning,
     confidence: Confidence.likely,
-    cause: 'No supported coding agents (Claude Code, Cursor, Codex) are detected on this system.',
+    cause:
+      'No supported coding agents (Claude Code, Cursor, Codex, Claude Desktop, Gemini/Antigravity) are detected on this system.',
     action:
       'Install a supported coding agent, start a session, and run a prompt to begin capturing activity.',
+  };
+}
+
+const PERSISTENT_CAPTURE_ERROR_THRESHOLD = 3;
+
+export function checkD3SourceCaptureErrors(signals: DoctorSignals): Finding | null {
+  const persistent = signals.captureErrors.filter(
+    (e) => e.maxConsecutiveErrors >= PERSISTENT_CAPTURE_ERROR_THRESHOLD,
+  );
+  if (persistent.length === 0) return null;
+
+  const detail = persistent
+    .map(
+      (e) =>
+        `${e.sourceApp} (${e.maxConsecutiveErrors.toString()} consecutive failures across ${e.affectedFiles.toString()} file(s))`,
+    )
+    .join(', ');
+
+  return {
+    code: 'D3',
+    severity: Severity.warning,
+    confidence: Confidence.confirmed,
+    cause: `One or more sources are persistently failing to capture: ${detail}.`,
+    action:
+      'Run "proxai-gateway inspect" to identify the unreadable source files, then verify the source databases exist and are not corrupted or locked.',
   };
 }
 
