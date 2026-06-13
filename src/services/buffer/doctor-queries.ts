@@ -1,6 +1,11 @@
 import { Database } from 'bun:sqlite';
 
-import { BATCH_COLS, BATCH_STATUS, BUFFER_TABLES } from 'services/buffer/buffer.constants.ts';
+import {
+  BATCH_COLS,
+  BATCH_STATUS,
+  BUFFER_TABLES,
+  CURSOR_COLS,
+} from 'services/buffer/buffer.constants.ts';
 
 export interface DoctorBufferStats {
   readonly pendingCount: number;
@@ -36,6 +41,12 @@ export interface RegressionLoop {
 export interface DoctorResyncStats {
   readonly totalCount: number;
   readonly regressionLoops: readonly RegressionLoop[];
+}
+
+export interface DoctorCaptureError {
+  readonly sourceApp: string;
+  readonly maxConsecutiveErrors: number;
+  readonly affectedFiles: number;
 }
 
 const BUFFER_STATS_SQL = `
@@ -90,6 +101,17 @@ const REGRESSION_LOOPS_SQL = `
   HAVING cnt > 3
   ORDER BY cnt DESC
   LIMIT 20
+`;
+
+const CAPTURE_ERRORS_SQL = `
+  SELECT
+    ${CURSOR_COLS.sourceApp} AS source_app,
+    MAX(${CURSOR_COLS.consecutiveErrors}) AS max_errors,
+    COUNT(DISTINCT ${CURSOR_COLS.sourcePathHash}) AS affected_files
+  FROM ${BUFFER_TABLES.cursors}
+  WHERE ${CURSOR_COLS.consecutiveErrors} > 0
+  GROUP BY ${CURSOR_COLS.sourceApp}
+  ORDER BY max_errors DESC
 `;
 
 interface BatchStatsRow {
@@ -235,6 +257,25 @@ export function queryDoctorResyncStats(db: Database): DoctorResyncStats {
   }
 }
 
+interface CaptureErrorRow {
+  source_app: string;
+  max_errors: number;
+  affected_files: number;
+}
+
+export function queryDoctorCaptureErrors(db: Database): readonly DoctorCaptureError[] {
+  try {
+    const rows = db.query<CaptureErrorRow, []>(CAPTURE_ERRORS_SQL).all();
+    return rows.map((row) => ({
+      sourceApp: row.source_app,
+      maxConsecutiveErrors: row.max_errors,
+      affectedFiles: row.affected_files,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export function tableExists(db: Database, tableName: string): boolean {
   try {
     const row = db
@@ -263,6 +304,7 @@ export interface DoctorAllQueries {
   readonly daemonState: DoctorDaemonState;
   readonly recentEvents: DoctorRecentEvents;
   readonly resyncStats: DoctorResyncStats;
+  readonly captureErrors: readonly DoctorCaptureError[];
   readonly dbReadable: boolean;
   readonly receiptsTableReadable: boolean;
 }
@@ -308,6 +350,7 @@ export function queryAllDoctorData(bufferDbPath: string): DoctorAllQueries {
       daemonState: EMPTY_DAEMON_STATE,
       recentEvents: EMPTY_RECENT_EVENTS,
       resyncStats: EMPTY_RESYNC_STATS,
+      captureErrors: [],
       dbReadable: false,
       receiptsTableReadable: false,
     };
@@ -317,6 +360,7 @@ export function queryAllDoctorData(bufferDbPath: string): DoctorAllQueries {
   let daemonState: DoctorDaemonState = EMPTY_DAEMON_STATE;
   let recentEvents: DoctorRecentEvents = EMPTY_RECENT_EVENTS;
   let resyncStats: DoctorResyncStats = EMPTY_RESYNC_STATS;
+  let captureErrors: readonly DoctorCaptureError[] = [];
   const dbReadable = true;
   let receiptsTableReadable = false;
 
@@ -335,6 +379,9 @@ export function queryAllDoctorData(bufferDbPath: string): DoctorAllQueries {
   try {
     resyncStats = queryDoctorResyncStats(db);
   } catch {}
+  try {
+    captureErrors = queryDoctorCaptureErrors(db);
+  } catch {}
 
   try {
     db.close();
@@ -345,6 +392,7 @@ export function queryAllDoctorData(bufferDbPath: string): DoctorAllQueries {
     daemonState,
     recentEvents,
     resyncStats,
+    captureErrors,
     dbReadable,
     receiptsTableReadable,
   };

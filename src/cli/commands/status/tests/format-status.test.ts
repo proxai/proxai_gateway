@@ -132,6 +132,7 @@ test('renderBufferSection prints per-source pending sub-rows with bytes when any
       cursor: { pending: 2, pendingBytes: 324, failed: 0, failedBytes: 0, delivered: 0 },
       codex: { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
       'claude-desktop': { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
+      gemini: { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
     },
     now: NOW,
   });
@@ -165,6 +166,7 @@ test('renderBufferSection prints per-source failed sub-rows when failed count > 
       cursor: { pending: 0, pendingBytes: 0, failed: 1, failedBytes: 1024, delivered: 0 },
       codex: { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
       'claude-desktop': { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
+      gemini: { pending: 0, pendingBytes: 0, failed: 0, failedBytes: 0, delivered: 0 },
     },
     now: NOW,
   });

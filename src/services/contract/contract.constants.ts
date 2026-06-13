@@ -2,6 +2,7 @@ import type {
   BodyCompression,
   BodyFormat,
   CodexTable,
+  GeminiTable,
   SourceApp,
   SourceKind,
   SourcePlatform,
@@ -14,6 +15,7 @@ export const VALID_SOURCE_APPS: readonly SourceApp[] = [
   'cursor',
   'codex',
   'claude-desktop',
+  'gemini',
 ];
 
 export const VALID_SOURCE_PLATFORMS: readonly SourcePlatform[] = [
@@ -24,6 +26,8 @@ export const VALID_SOURCE_PLATFORMS: readonly SourcePlatform[] = [
   'codex-desktop',
   'cursor-ide',
   'cursor-cli',
+  'antigravity-cli',
+  'antigravity-ide',
 ];
 
 export const VALID_SOURCE_KINDS: readonly SourceKind[] = [
@@ -46,6 +50,12 @@ export const VALID_CODEX_TABLES: readonly CodexTable[] = [
   'threads',
   'thread_dynamic_tools',
   'thread_spawn_edges',
+];
+
+export const VALID_GEMINI_TABLES: readonly GeminiTable[] = [
+  'trajectory_meta',
+  'steps',
+  'trajectory_metadata_blob',
 ];
 
 export const SOURCE_VARIANTS: readonly SourceVariantSpec[] = [
@@ -83,6 +93,13 @@ export const SOURCE_VARIANTS: readonly SourceVariantSpec[] = [
     bodyFormat: 'jsonl',
     watermarkKind: 'byte_range',
     watermarkTableRequired: false,
+  },
+  {
+    sourceApp: 'gemini',
+    sourceKind: 'sqlite_table_snapshot',
+    bodyFormat: 'sqlite_rows_json',
+    watermarkKind: 'rowid_range',
+    watermarkTableRequired: true,
   },
 ];
 

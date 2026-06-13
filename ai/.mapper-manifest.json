@@ -1,19 +1,19 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-01T10:00:42.340Z",
-  "sourceHash": "16a75699f67203789609c79662b69005",
+  "generatedAt": "2026-06-13T13:14:21.766Z",
+  "sourceHash": "e6c8c96d3b50d286e27d45334fab371d",
   "files": [
     {
       "path": "CLAUDE.md",
-      "hash": "f78abab55c116f2f"
+      "hash": "7044c326536a45ce"
     },
     {
       "path": "AGENTS.md",
-      "hash": "c6a41aab1bd081c7"
+      "hash": "e54bc708647089fb"
     },
     {
       "path": ".agents/AGENTS.md",
-      "hash": "e4328511a7357b44"
+      "hash": "9fb9d9d16b31e03b"
     },
     {
       "path": ".claude/rules/_always.md",
@@ -177,19 +177,19 @@
     },
     {
       "path": ".claude/rules/services/bun-sqlite.md",
-      "hash": "1430b33b5f925b90"
+      "hash": "742d0ece05544ca2"
     },
     {
       "path": ".cursor/rules/services-bun-sqlite.mdc",
-      "hash": "511fa25105b36de8"
+      "hash": "8139c5a856343985"
     },
     {
       "path": ".codex/rules/services/bun-sqlite.md",
-      "hash": "a1e2ba8a5b578eae"
+      "hash": "3ce81da26ecc6de8"
     },
     {
       "path": ".agents/rules/services/bun-sqlite.md",
-      "hash": "a1e2ba8a5b578eae"
+      "hash": "3ce81da26ecc6de8"
     },
     {
       "path": ".claude/rules/services/config.md",
@@ -1120,6 +1120,22 @@
       "hash": "7d01006fd08e6ce4"
     },
     {
+      "path": ".claude/knowledge/sources/formats/antigravity-format.md",
+      "hash": "79d638e4eef70975"
+    },
+    {
+      "path": ".cursor/knowledge/sources/formats/antigravity-format.md",
+      "hash": "79d638e4eef70975"
+    },
+    {
+      "path": ".codex/knowledge/sources/formats/antigravity-format.md",
+      "hash": "79d638e4eef70975"
+    },
+    {
+      "path": ".agents/knowledge/sources/formats/antigravity-format.md",
+      "hash": "79d638e4eef70975"
+    },
+    {
       "path": ".claude/knowledge/sources/formats/claude-code-format.md",
       "hash": "714fea1ddc0284c7"
     },
@@ -1185,19 +1201,19 @@
     },
     {
       "path": ".claude/knowledge/sources/parsers/_overview.md",
-      "hash": "05322afdb823e02e"
+      "hash": "0397998466183d55"
     },
     {
       "path": ".cursor/knowledge/sources/parsers/_overview.md",
-      "hash": "05322afdb823e02e"
+      "hash": "0397998466183d55"
     },
     {
       "path": ".codex/knowledge/sources/parsers/_overview.md",
-      "hash": "05322afdb823e02e"
+      "hash": "0397998466183d55"
     },
     {
       "path": ".agents/knowledge/sources/parsers/_overview.md",
-      "hash": "05322afdb823e02e"
+      "hash": "0397998466183d55"
     },
     {
       "path": ".claude/knowledge/sources/parsers/claude-code.md",
@@ -1264,20 +1280,36 @@
       "hash": "13113b909f8cf27f"
     },
     {
+      "path": ".claude/knowledge/sources/parsers/gemini.md",
+      "hash": "4b2808fab294d74b"
+    },
+    {
+      "path": ".cursor/knowledge/sources/parsers/gemini.md",
+      "hash": "4b2808fab294d74b"
+    },
+    {
+      "path": ".codex/knowledge/sources/parsers/gemini.md",
+      "hash": "4b2808fab294d74b"
+    },
+    {
+      "path": ".agents/knowledge/sources/parsers/gemini.md",
+      "hash": "4b2808fab294d74b"
+    },
+    {
       "path": ".claude/knowledge/sources/source-formats.md",
-      "hash": "cfd470bfa40a0e85"
+      "hash": "cd85fd1ed37103f0"
     },
     {
       "path": ".cursor/knowledge/sources/source-formats.md",
-      "hash": "cfd470bfa40a0e85"
+      "hash": "cd85fd1ed37103f0"
     },
     {
       "path": ".codex/knowledge/sources/source-formats.md",
-      "hash": "cfd470bfa40a0e85"
+      "hash": "cd85fd1ed37103f0"
     },
     {
       "path": ".agents/knowledge/sources/source-formats.md",
-      "hash": "cfd470bfa40a0e85"
+      "hash": "cd85fd1ed37103f0"
     },
     {
       "path": ".claude/knowledge/sources/source-platform-conventions.md",

@@ -71,11 +71,14 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
       claudeCodeExists: false,
       cursorExists: false,
       codexExists: false,
+      claudeDesktopExists: false,
+      geminiExists: false,
     },
     resyncEvents: {
       totalCount: 0,
       regressionLoops: [],
     },
+    captureErrors: [],
     platform: 'linux',
     systemdLingerEnabled: null,
     macOsQuarantineXattr: null,
@@ -248,12 +251,15 @@ test('signals appendix renders populated optional values and regression loops', 
       totalCount: 7,
       regressionLoops: [{ sourcePathHash: 'abc123', countInLastHour: 9 }],
     },
+    captureErrors: [{ sourceApp: 'gemini', maxConsecutiveErrors: 4, affectedFiles: 2 }],
     platform: 'linux',
     systemdLingerEnabled: false,
     macOsQuarantineXattr: true,
     clockSkewMs: 4000,
   });
   const out = stripAnsi(renderDoctorOutput([], signals));
+  expect(out).toContain('capture_errors:');
+  expect(out).toContain('gemini: 4 consecutive on 2 file(s)');
   expect(out).toContain(
     `last_prune_at:           ${formatLocalTimestamp('2026-05-28T00:00:00.000Z')}`,
   );
@@ -385,6 +391,7 @@ test('generateDoctorHtml renders populated signals and a single-severity summary
       totalCount: 7,
       regressionLoops: [{ sourcePathHash: 'abc123', countInLastHour: 9 }],
     },
+    captureErrors: [{ sourceApp: 'gemini', maxConsecutiveErrors: 4, affectedFiles: 2 }],
     systemdLingerEnabled: false,
     macOsQuarantineXattr: true,
     clockSkewMs: 4000,
@@ -392,6 +399,7 @@ test('generateDoctorHtml renders populated signals and a single-severity summary
   const findings: Finding[] = [makeFinding({ code: 'B1', severity: Severity.critical })];
 
   const html = generateDoctorHtml(findings, signals, '2026-05-28T12:00:00Z');
+  expect(html).toContain('consecutive on');
   expect(html).toContain('Critical Issues (1)');
   expect(html).not.toContain('Warnings (');
   expect(html).not.toContain('Info (');

@@ -15,15 +15,18 @@ import {
   openBufferDb,
   openInMemoryBufferDb,
   recordResyncEvent,
+  setCursor,
   setDaemonState,
   setMetadata,
 } from 'services/buffer';
 import type { DaemonStateSnapshot } from 'services/buffer';
+import type { SourceApp } from 'services/contract';
 import { newBatch } from 'services/buffer/tests/fixtures.ts';
 import {
   checkReceiptsTableReadable,
   queryAllDoctorData,
   queryDoctorBufferStats,
+  queryDoctorCaptureErrors,
   queryDoctorDaemonState,
   queryDoctorRecentEvents,
   queryDoctorResyncStats,
@@ -393,3 +396,40 @@ test('queryAllDoctorData swallows per-query failures when core tables are missin
     await rmRecursive(dir);
   }
 }, 30_000);
+
+function seedCursor(
+  sourceApp: SourceApp,
+  sourcePathHash: string,
+  watermarkTable: string,
+  consecutiveErrors: number,
+): void {
+  setCursor(db, {
+    sourceApp,
+    sourcePathHash,
+    sourcePath: `/src/${sourcePathHash}`,
+    sourceInode: null,
+    watermarkTable,
+    watermarkEnd: 1,
+    consecutiveErrors,
+    lastSeenSizeBytes: null,
+    lastSeenPageCount: null,
+  });
+}
+
+test('queryDoctorCaptureErrors aggregates consecutive errors per source and excludes clean cursors', () => {
+  seedCursor('gemini', 'h1', 'steps', 5);
+  seedCursor('gemini', 'h1', 'trajectory_meta', 2);
+  seedCursor('gemini', 'h2', 'steps', 3);
+  seedCursor('claude-code', 'h4', 'main', 1);
+  seedCursor('cursor', 'h3', 'main', 0);
+
+  expect(queryDoctorCaptureErrors(db)).toEqual([
+    { sourceApp: 'gemini', maxConsecutiveErrors: 5, affectedFiles: 2 },
+    { sourceApp: 'claude-code', maxConsecutiveErrors: 1, affectedFiles: 1 },
+  ]);
+});
+
+test('queryDoctorCaptureErrors returns empty when the cursors table is unavailable', () => {
+  db.run(`DROP TABLE ${BUFFER_TABLES.cursors}`);
+  expect(queryDoctorCaptureErrors(db)).toEqual([]);
+});

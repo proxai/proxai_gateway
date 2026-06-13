@@ -1,4 +1,4 @@
-export type SourceApp = 'claude-code' | 'cursor' | 'codex' | 'claude-desktop';
+export type SourceApp = 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'gemini';
 
 export type SourcePlatform =
   | 'claude-code-cli'
@@ -7,7 +7,9 @@ export type SourcePlatform =
   | 'codex-cli'
   | 'codex-desktop'
   | 'cursor-ide'
-  | 'cursor-cli';
+  | 'cursor-cli'
+  | 'antigravity-cli'
+  | 'antigravity-ide';
 
 export type SourceKind = 'jsonl_append' | 'sqlite_kv_snapshot' | 'sqlite_table_snapshot';
 
@@ -18,6 +20,8 @@ export type BodyCompression = 'zstd';
 export type WatermarkKind = 'byte_range' | 'rowid_range';
 
 export type CodexTable = 'threads' | 'thread_dynamic_tools' | 'thread_spawn_edges';
+
+export type GeminiTable = 'trajectory_meta' | 'steps' | 'trajectory_metadata_blob';
 
 export interface ByteRangeWatermark {
   kind: 'byte_range';

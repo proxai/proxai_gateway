@@ -34,6 +34,7 @@ export type FindingCode =
   | 'C7'
   | 'D1'
   | 'D2'
+  | 'D3'
   | 'E1'
   | 'E2'
   | 'E3'
@@ -78,6 +79,7 @@ export type FindingCode =
   | 'C13'
   | 'D1'
   | 'D2'
+  | 'D3'
   | 'E1'
   | 'E2'
   | 'E3'
@@ -176,6 +178,8 @@ export interface DoctorSignals {
     readonly claudeCodeExists: boolean;
     readonly cursorExists: boolean;
     readonly codexExists: boolean;
+    readonly claudeDesktopExists: boolean;
+    readonly geminiExists: boolean;
   };
   readonly resyncEvents: {
     readonly totalCount: number;
@@ -184,6 +188,11 @@ export interface DoctorSignals {
       readonly countInLastHour: number;
     }>;
   };
+  readonly captureErrors: ReadonlyArray<{
+    readonly sourceApp: string;
+    readonly maxConsecutiveErrors: number;
+    readonly affectedFiles: number;
+  }>;
   readonly platform: NodeJS.Platform;
   readonly systemdLingerEnabled: boolean | null;
   readonly macOsQuarantineXattr: boolean | null;

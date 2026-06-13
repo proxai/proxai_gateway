@@ -20,11 +20,15 @@ export async function snapshotSqlite(
 ): Promise<Snapshot> {
   const open = options.openImpl ?? openReadOnly;
   const tmpPath = join(tmpdir(), `proxai-snap-${randomUUID()}.sqlite`);
-  const db = openWithCantopenFallback(open, sourcePath);
   try {
-    db.run(`VACUUM INTO '${escapeSqliteString(tmpPath)}'`);
-  } finally {
-    db.close();
+    vacuumInto(open(sourcePath), tmpPath);
+  } catch (firstErr) {
+    await unlink(tmpPath).catch(() => undefined);
+    try {
+      vacuumInto(open(sourcePath, { immutable: true }), tmpPath);
+    } catch {
+      throw firstErr;
+    }
   }
   return {
     path: tmpPath,
@@ -34,15 +38,11 @@ export async function snapshotSqlite(
   };
 }
 
-function openWithCantopenFallback(open: SnapshotOpenImpl, sourcePath: string): Database {
+function vacuumInto(db: Database, tmpPath: string): void {
   try {
-    return open(sourcePath);
-  } catch (firstErr) {
-    try {
-      return open(sourcePath, { immutable: true });
-    } catch {
-      throw firstErr;
-    }
+    db.run(`VACUUM INTO '${escapeSqliteString(tmpPath)}'`);
+  } finally {
+    db.close();
   }
 }
 

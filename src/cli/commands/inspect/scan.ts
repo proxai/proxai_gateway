@@ -33,6 +33,7 @@ export function resolveSourceBaseDir(
   if (sourceName === 'cursor') return baseDirs.cursor;
   if (sourceName === 'codex') return baseDirs.codex;
   if (sourceName === 'claude-desktop') return baseDirs.claudeDesktop;
+  if (sourceName === 'gemini') return baseDirs.gemini;
   return undefined;
 }
 

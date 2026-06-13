@@ -39,11 +39,12 @@ import { deriveHealth } from 'cli/commands/status/derive-health.ts';
 import type { UploadBySource } from 'cli/commands/status/render-upload.ts';
 import type { StatusCommandDeps, StatusSnapshot } from 'cli/commands/status/status.types.ts';
 
-const SOURCE_ORDER: ('claude-code' | 'cursor' | 'codex' | 'claude-desktop')[] = [
+const SOURCE_ORDER: ('claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'gemini')[] = [
   'claude-code',
   'cursor',
   'codex',
   'claude-desktop',
+  'gemini',
 ];
 
 export function readShippedBySource(db: Database): UploadBySource {

@@ -172,6 +172,7 @@ export function countsBySource(db: Database): CountsBySource {
     cursor: emptySourceCounts(),
     codex: emptySourceCounts(),
     'claude-desktop': emptySourceCounts(),
+    gemini: emptySourceCounts(),
   };
   const batchRows = db
     .query<

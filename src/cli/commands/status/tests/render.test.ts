@@ -54,6 +54,7 @@ const mockSourceCounts: CountsBySource = {
   cursor: emptySourceCounts,
   codex: emptySourceCounts,
   'claude-desktop': emptySourceCounts,
+  gemini: emptySourceCounts,
 };
 
 const mockSnapshot: StatusSnapshot = {
@@ -622,6 +623,7 @@ test('render-sections renderHistorySection', () => {
         'claude-code': 5,
         codex: 0,
         'claude-desktop': 0,
+        gemini: 0,
       },
     },
   };

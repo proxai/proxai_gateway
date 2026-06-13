@@ -73,7 +73,15 @@ test('runInspect: succeeds with empty directories', async () => {
   const out = captureOutput();
   const result = await runInspect(
     { output: out, configExists: () => Promise.resolve(true), gatewayVersion: '1.0.0' },
-    { baseDirs: { claudeCode: tempDir, cursor: tempDir, claudeDesktop: tempDir, codex: tempDir } },
+    {
+      baseDirs: {
+        claudeCode: tempDir,
+        cursor: tempDir,
+        claudeDesktop: tempDir,
+        codex: tempDir,
+        gemini: tempDir,
+      },
+    },
   );
   expect(result.exitCode).toBe(0);
   expect(out.lines.some((l) => l.msg.includes('ProxAI Telemetry Dry-Run Inspection'))).toBe(true);
@@ -182,7 +190,15 @@ test('runInspect: reports a markdown save failure gracefully', async () => {
   shouldFailFs = true;
   const result = await runInspect(
     { output: out, configExists: () => Promise.resolve(true), gatewayVersion: '1.0.0' },
-    { baseDirs: { claudeCode: tempDir, cursor: tempDir, claudeDesktop: tempDir, codex: tempDir } },
+    {
+      baseDirs: {
+        claudeCode: tempDir,
+        cursor: tempDir,
+        claudeDesktop: tempDir,
+        codex: tempDir,
+        gemini: tempDir,
+      },
+    },
   );
   expect(result.exitCode).toBe(0);
   expect(out.lines.some((l) => l.msg.includes('Failed to save markdown report'))).toBe(true);

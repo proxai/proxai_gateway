@@ -8,6 +8,8 @@ import type { DoctorCommandDeps, DoctorSignals } from 'cli/commands/doctor/docto
 import { queryAllDoctorData } from 'services/buffer/doctor-queries.ts';
 import { readAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
 import { profileSystemdUnitName } from 'cli/service-unit/dev-labels.ts';
+import { defaultClaudeDesktopSessionsRoot } from 'sources/claude-desktop';
+import { defaultGeminiCliConversationsDir, defaultGeminiIdeConversationsDir } from 'sources/gemini';
 
 /** Seam for tests — swap individual deps without mock.module. */
 export const __deps = {
@@ -525,6 +527,9 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     claudeCodeExists,
     cursorExists,
     codexExists,
+    claudeDesktopExists,
+    geminiCliExists,
+    geminiIdeExists,
     networkResult,
     diskFreeBytes,
     installSource,
@@ -543,6 +548,9 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     probeSourcePathExists([homedir(), '.claude']),
     probeSourcePathExists([cursorConfigDir]),
     probeSourcePathExists([homedir(), '.codex']),
+    probeSourcePathExists([defaultClaudeDesktopSessionsRoot(deps.platform)]),
+    probeSourcePathExists([defaultGeminiCliConversationsDir()]),
+    probeSourcePathExists([defaultGeminiIdeConversationsDir()]),
     probeNestReachable(deps.nestVerifyKeyUrl),
     probeDiskFreeBytes(deps.configDirPath, deps.platform),
     probeInstallSource(deps.binaryPath, deps.platform),
@@ -636,11 +644,14 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
       claudeCodeExists,
       cursorExists,
       codexExists,
+      claudeDesktopExists,
+      geminiExists: geminiCliExists || geminiIdeExists,
     },
     resyncEvents: {
       totalCount: dbData.resyncStats.totalCount,
       regressionLoops: [...dbData.resyncStats.regressionLoops],
     },
+    captureErrors: [...dbData.captureErrors],
     platform: deps.platform,
     systemdLingerEnabled,
     macOsQuarantineXattr,

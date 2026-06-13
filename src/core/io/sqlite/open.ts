@@ -1,4 +1,5 @@
 import { chmodSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 import { Database, constants } from 'bun:sqlite';
 
@@ -6,11 +7,18 @@ export interface OpenReadOnlyOptions {
   immutable?: boolean;
 }
 
-export function openReadOnly(path: string, _options?: OpenReadOnlyOptions): Database {
+export function openReadOnly(path: string, options?: OpenReadOnlyOptions): Database {
   const flags = constants.SQLITE_OPEN_READONLY | constants.SQLITE_OPEN_URI;
-  const db = new Database(path, flags);
+  const target = options?.immutable === true ? immutableUri(path) : path;
+  const db = new Database(target, flags);
   db.run('PRAGMA busy_timeout = 5000;');
   return db;
+}
+
+function immutableUri(path: string): string {
+  const url = pathToFileURL(path);
+  url.searchParams.set('immutable', '1');
+  return url.href;
 }
 
 export function openReadWrite(path: string): Database {

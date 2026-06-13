@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { rmRecursive } from 'core/io/fs';
+import { existsSync, unlinkSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { openReadOnly, snapshotSqlite } from 'core/io/sqlite';
+import { openReadOnly, openReadWrite, snapshotSqlite } from 'core/io/sqlite';
 import type { SnapshotOpenImpl } from 'core/io/sqlite/snapshot.ts';
 import { seedTestDatabase } from 'core/io/sqlite/tests/fixtures.ts';
 
@@ -112,4 +113,29 @@ test('snapshot propagates other errors after trying immutable fallback', async (
   };
   await expect(snapshotSqlite(dbPath, { openImpl: fakeOpen })).rejects.toThrow('disk i/o error');
   expect(calls).toBe(2);
+});
+
+test('snapshotSqlite recovers a closed WAL database whose -wal/-shm are absent', async () => {
+  const closedWalPath = join(dir, 'closed-wal.sqlite');
+  const writer = openReadWrite(closedWalPath);
+  writer.run('CREATE TABLE thing (id INTEGER PRIMARY KEY, name TEXT)');
+  writer.run("INSERT INTO thing (name) VALUES ('survivor')");
+  writer.run('PRAGMA wal_checkpoint(TRUNCATE)');
+  writer.close();
+  for (const sidecar of [`${closedWalPath}-wal`, `${closedWalPath}-shm`]) {
+    if (existsSync(sidecar)) unlinkSync(sidecar);
+  }
+
+  const snap = await snapshotSqlite(closedWalPath);
+  try {
+    const reader = openReadOnly(snap.path);
+    try {
+      const rows = reader.query<{ name: string }, []>('SELECT name FROM thing').all();
+      expect(rows.map((r) => r.name)).toEqual(['survivor']);
+    } finally {
+      reader.close();
+    }
+  } finally {
+    await snap.cleanup();
+  }
 });
