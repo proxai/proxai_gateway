@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import {
   existsSync,
   mkdirSync,
@@ -330,12 +330,23 @@ test('relocateFlatToNested console.errors and ignores rollback failures', async 
   mkdirSync(prodDir, { recursive: true });
   mkdirSync(join(prodDir, 'buffer.db'), { recursive: true });
 
+  let errorCallCount = 0;
+  let loggedMessage = '';
+  const errorSpy = spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+    errorCallCount += 1;
+    loggedMessage = String(args[0]);
+  });
+
   shouldRenameSyncFailForRollback = true;
   try {
     await expect(relocateFlatToNested(root)).rejects.toThrow();
   } finally {
     shouldRenameSyncFailForRollback = false;
+    errorSpy.mockRestore();
   }
+
+  expect(errorCallCount).toBe(1);
+  expect(loggedMessage).toContain('failed to rollback relocated file');
 });
 
 test('relocateFlatToNested ignores errors during config.toml rewrite', async () => {
