@@ -510,6 +510,25 @@ test('probeInstallSource handles realpath throwing', async () => {
   expect(signals.binary.installSource).toBeNull();
 });
 
+test('config install_source overrides the path-based probe', async () => {
+  await writeFile(
+    join(dir, 'config.toml'),
+    [
+      '[account]',
+      'api_key = "k"',
+      'user_id = "u_1"',
+      'host_id = "h"',
+      'installed_at = "2026-04-28T22:30:00Z"',
+      'install_source = "github_release"',
+      '',
+    ].join('\n'),
+  );
+  __deps.realpath = (() =>
+    Promise.resolve('/opt/homebrew/bin/proxai')) as unknown as typeof __deps.realpath;
+  const signals = await gatherSignals(makeDeps({ binaryPath: '/some/path' }));
+  expect(signals.binary.installSource).toBe('github_release');
+});
+
 test('control socket exists and active', async () => {
   await writeFile(join(dir, 'control.sock'), '');
   const signals = await gatherSignals(makeDeps({ serviceManager: okServiceManager(true, true) }));

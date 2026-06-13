@@ -10,6 +10,7 @@ import { readAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts
 import { profileSystemdUnitName } from 'cli/service-unit/dev-labels.ts';
 import { defaultClaudeDesktopSessionsRoot } from 'sources/claude-desktop';
 import { defaultGeminiCliConversationsDir, defaultGeminiIdeConversationsDir } from 'sources/gemini';
+import { loadConfigFromString, type InstallSource } from 'services/config';
 
 /** Seam for tests — swap individual deps without mock.module. */
 export const __deps = {
@@ -125,6 +126,14 @@ async function probeInstallSource(
       return 'npm';
     }
     return 'manual';
+  } catch {
+    return null;
+  }
+}
+
+function readInstallSourceFromConfigText(text: string): InstallSource | null {
+  try {
+    return loadConfigFromString(text).account.installSource;
   } catch {
     return null;
   }
@@ -558,11 +567,13 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
 
   let configParses = false;
   let apiKeyPresent = false;
+  let configInstallSource: InstallSource | null = null;
   if (configExists) {
     try {
       const text = await Bun.file(deps.configFilePath).text();
       configParses = text.length > 0;
       apiKeyPresent = configParses && text.includes('api_key') && !text.includes('api_key = ""');
+      configInstallSource = readInstallSourceFromConfigText(text);
     } catch {
       configParses = false;
       apiKeyPresent = false;
@@ -623,7 +634,7 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     binary: {
       version: deps.currentVersion,
       mtime: binaryMtime,
-      installSource,
+      installSource: configInstallSource ?? installSource,
     },
     recentEvents: {
       authUnconfirmedCount: dbData.recentEvents.authUnconfirmedCount,
