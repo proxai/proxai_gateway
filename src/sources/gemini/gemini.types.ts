@@ -53,6 +53,8 @@ export interface NormalizedStep {
   model: string | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  cacheReadInputTokens: number | null;
+  cacheCreationInputTokens: number | null;
 }
 
 export interface GeminiStepRow {
@@ -66,6 +68,11 @@ export interface GeminiStepRow {
   iso_timestamp: string | null;
   turn_id: string | null;
   conversation_id: string | null;
+  model: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_input_tokens: number | null;
+  cache_creation_input_tokens: number | null;
 }
 
 export interface GeminiTrajectoryMetaRow {

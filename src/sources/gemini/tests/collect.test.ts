@@ -173,6 +173,11 @@ test('captures all three tables and emits decoded plaintext step rows', async ()
       iso_timestamp: new Date(1781035381 * 1000).toISOString(),
       turn_id: null,
       conversation_id: 'cascade-1',
+      model: null,
+      input_tokens: null,
+      output_tokens: null,
+      cache_read_input_tokens: null,
+      cache_creation_input_tokens: null,
     },
     {
       idx: 1,
@@ -185,6 +190,11 @@ test('captures all three tables and emits decoded plaintext step rows', async ()
       iso_timestamp: new Date(1781035382 * 1000).toISOString(),
       turn_id: null,
       conversation_id: 'cascade-1',
+      model: null,
+      input_tokens: null,
+      output_tokens: null,
+      cache_read_input_tokens: null,
+      cache_creation_input_tokens: null,
     },
     {
       idx: 2,
@@ -197,6 +207,11 @@ test('captures all three tables and emits decoded plaintext step rows', async ()
       iso_timestamp: new Date(1781035383 * 1000).toISOString(),
       turn_id: null,
       conversation_id: 'cascade-1',
+      model: null,
+      input_tokens: null,
+      output_tokens: null,
+      cache_read_input_tokens: null,
+      cache_creation_input_tokens: null,
     },
   ]);
 });

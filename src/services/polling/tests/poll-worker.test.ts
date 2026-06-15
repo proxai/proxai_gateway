@@ -1,10 +1,20 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test, mock } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { rmRecursive } from 'core/io/fs';
 import { mkdir, mkdtemp, writeFile, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { WorkerInput, WorkerOutput } from 'services/polling/poll-worker.types.ts';
+
+let mockHomeDir = '/tmp';
+
+mock.module('node:os', () => {
+  const actual: typeof import('node:os') = import.meta.require('node:os');
+  return {
+    ...actual,
+    homedir: () => mockHomeDir,
+  };
+});
 
 let postMessageCalled = false;
 let postedMessage: WorkerOutput | null = null;
@@ -28,6 +38,7 @@ let dir: string;
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'proxai-poll-worker-tests-'));
+  mockHomeDir = dir;
 });
 
 afterEach(async () => {

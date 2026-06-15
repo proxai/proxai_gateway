@@ -19,6 +19,9 @@ const NANOS_PER_MILLISECOND = 1_000_000;
 
 export function decodeStep(stepType: number, payload: Uint8Array): NormalizedStep {
   const tree = scanProto(payload);
+  const modelVal = pNum(tree, '5.9.1') ?? pNum(tree, '5.11');
+  const promptTokens = pNum(tree, '5.9.2');
+  const cachedTokens = pNum(tree, '5.9.5');
   return {
     stepType,
     role: roleForStep(stepType, tree),
@@ -34,9 +37,11 @@ export function decodeStep(stepType: number, payload: Uint8Array): NormalizedSte
       requestId: pStr(tree, '5.9.11') ?? null,
       sessionId: sessionIdForStep(tree),
     },
-    model: null,
-    inputTokens: null,
-    outputTokens: null,
+    model: modelVal !== null ? String(modelVal) : null,
+    inputTokens: promptTokens !== null ? promptTokens + (cachedTokens ?? 0) : null,
+    outputTokens: pNum(tree, '5.9.3'),
+    cacheReadInputTokens: cachedTokens,
+    cacheCreationInputTokens: pNum(tree, '5.9.10'),
   };
 }
 
@@ -58,6 +63,11 @@ export function decodeStepRow(
     iso_timestamp: step.isoTimestamp,
     turn_id: step.ids.turnGroup,
     conversation_id: step.ids.cascadeId,
+    model: step.model,
+    input_tokens: step.inputTokens,
+    output_tokens: step.outputTokens,
+    cache_read_input_tokens: step.cacheReadInputTokens,
+    cache_creation_input_tokens: step.cacheCreationInputTokens,
   };
 }
 
