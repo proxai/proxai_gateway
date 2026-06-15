@@ -260,3 +260,33 @@ test('decodeTrajectoryMetadataBlobRow yields null fields when absent', () => {
   expect(row.workspace_path).toBeNull();
   expect(row.git_remote).toBeNull();
 });
+
+test('decodes token usage, caching, and model from step_payload 5.9 envelope', () => {
+  const payload = concatBytes([
+    varintField(1, 15),
+    msgField(5, [
+      varintField(3, 2),
+      msgField(9, [
+        varintField(1, 1132),
+        varintField(2, 5000),
+        varintField(3, 300),
+        varintField(5, 20000),
+        varintField(10, 80),
+      ]),
+    ]),
+  ]);
+
+  const step = decodeStep(15, payload);
+  expect(step.model).toBe('1132');
+  expect(step.inputTokens).toBe(25000); // 5000 + 20000
+  expect(step.outputTokens).toBe(300);
+  expect(step.cacheReadInputTokens).toBe(20000);
+  expect(step.cacheCreationInputTokens).toBe(80);
+
+  const row = decodeStepRow(42, 15, 3, payload);
+  expect(row.model).toBe('1132');
+  expect(row.input_tokens).toBe(25000);
+  expect(row.output_tokens).toBe(300);
+  expect(row.cache_read_input_tokens).toBe(20000);
+  expect(row.cache_creation_input_tokens).toBe(80);
+});
