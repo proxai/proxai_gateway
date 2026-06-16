@@ -25,6 +25,7 @@ import { runUpgradePostRespawnRestore } from 'services/upgrade/coordinated-upgra
 import { autoUpgradeFromConfig } from 'cli/wiring/auto-upgrade.ts';
 import { buildUpgradePostRespawnRestoreDeps } from 'cli/wiring/upgrade-restore-deps.ts';
 import { runRescue } from 'cli/commands/rescue/index.ts';
+import { ensureWatchdogUnitExists } from 'cli/service-unit/watchdog-writer.ts';
 
 import { inquirerPrompts } from 'cli/prompts.ts';
 import { consoleOutput, silentOutput } from 'cli/output.ts';
@@ -34,6 +35,7 @@ import { buildLogsDeps } from 'cli/wiring/logs-deps.ts';
 import {
   buildProfileServiceContext,
   buildServiceUnitRecreate,
+  buildWatchdogServiceContext,
   resolveWindowsUserId,
 } from 'cli/wiring/platform.ts';
 import {
@@ -334,6 +336,22 @@ program
               profileName,
             };
       await refreshServiceUnitIfLegacy(refreshConfig);
+      const watchdogCtx = buildWatchdogServiceContext(
+        platformCtx.platform,
+        process.execPath,
+        profileCtx,
+      );
+      if (watchdogCtx !== null) {
+        try {
+          await ensureWatchdogUnitExists({
+            platform: platformCtx.platform,
+            profileName,
+            programPath: process.execPath,
+            ...watchdogCtx.watchdogUnitPaths,
+          });
+          await watchdogCtx.watchdogManager.install();
+        } catch {}
+      }
     }
     if (!profileCtx.isDev) {
       try {
