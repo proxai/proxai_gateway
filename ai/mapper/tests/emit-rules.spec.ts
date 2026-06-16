@@ -65,7 +65,7 @@ describe('emitRules', () => {
     expect(paths).toContain('.codex/rules/scoped.md');
   });
 
-  test('emits .md files to .agents/rules/ verbatim', async () => {
+  test('emits .md files to .agents/rules/ with trigger always_on frontmatter', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
     cfg.paths.antigravityDir = '.agents';
@@ -74,25 +74,28 @@ describe('emitRules', () => {
 
     const always = await readFile(join(repo, '.agents/rules/_always.md'), 'utf8');
     expect(always).toContain('Rule 1');
-    expect(always).not.toContain('---');
+    expect(always).toContain('trigger: always_on');
+    expect(always).toContain('description: "_always"');
 
     const paths = mani.files().map((f) => f.path);
     expect(paths).toContain('.agents/rules/_always.md');
     expect(paths).toContain('.agents/rules/scoped.md');
   });
 
-  test('codex/agent rules files contain verbatim body without cursor frontmatter', async () => {
+  test('codex rules contain verbatim body without any frontmatter, agent rules contain trigger without cursor details', async () => {
     const tree = await loadTree(FIXTURE);
     const cfg = await loadConfig(FIXTURE);
     cfg.paths.antigravityDir = '.agents';
     const mani = new Manifest(repo);
     await emitRules(repo, tree, cfg, mani);
 
-    for (const dir of ['.codex/rules', '.agents/rules']) {
-      const content = await readFile(join(repo, dir, '_always.md'), 'utf8');
-      expect(content).not.toContain('alwaysApply');
-      expect(content).not.toContain('description:');
-    }
+    const codexContent = await readFile(join(repo, '.codex/rules', '_always.md'), 'utf8');
+    expect(codexContent).not.toContain('---');
+    expect(codexContent).toContain('Rule 1');
+
+    const agentContent = await readFile(join(repo, '.agents/rules', '_always.md'), 'utf8');
+    expect(agentContent).toContain('trigger: always_on');
+    expect(agentContent).not.toContain('alwaysApply');
   });
 
   test('nested rules preserve subdirs for Claude/Antigravity but flatten for Cursor', async () => {
@@ -218,7 +221,8 @@ describe('emitRules', () => {
 
     // Assert lazy-load rule IS emitted to .agents/rules/ and .codex/rules/ normally
     const agentsLazy = await readFile(join(repo, '.agents/rules/lazy-rule.md'), 'utf8');
-    expect(agentsLazy).toBe('Lazy rule body\n');
+    expect(agentsLazy).toContain('trigger: model_decision');
+    expect(agentsLazy).toContain('Lazy rule body');
 
     const codexLazy = await readFile(join(repo, '.codex/rules/lazy-rule.md'), 'utf8');
     expect(codexLazy).toBe('Lazy rule body\n');

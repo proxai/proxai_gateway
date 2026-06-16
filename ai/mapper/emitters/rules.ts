@@ -59,7 +59,15 @@ export async function emitRules(
 
     if (cfg.tools.antigravity) {
       const rel = join(cfg.paths.antigravityDir, 'rules', `${rule.subpath}.md`);
-      const content = body + '\n';
+      let content = '';
+      if (activation === 'contextual') {
+        const globsYaml = globsArray.map((g) => `  - "${g}"`).join('\n');
+        content = `---\ntrigger: glob\nglobs:\n${globsYaml}\ndescription: "${desc.replace(/"/g, '\\"')}"\n---\n\n${body}\n`;
+      } else if (activation === 'lazy-load') {
+        content = `---\ntrigger: model_decision\ndescription: "${desc.replace(/"/g, '\\"')}"\n---\n\n${body}\n`;
+      } else {
+        content = `---\ntrigger: always_on\ndescription: "${desc.replace(/"/g, '\\"')}"\n---\n\n${body}\n`;
+      }
       await writeFileAtomic(join(repoRoot, rel), content);
       mani.recordEmit(rel, hashOf(content));
     }
