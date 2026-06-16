@@ -1,4 +1,5 @@
 import { expect, test, mock } from 'bun:test';
+import { join } from 'node:path';
 import {
   watchdogLaunchdLabel,
   watchdogSystemdTimerName,
@@ -33,19 +34,20 @@ test('watchdog labels and names mapped correctly', () => {
 
 test('watchdog default paths constructed correctly', () => {
   const original = process.env['PROXAI_TEST_PROFILE_ROOT'];
-  process.env['PROXAI_TEST_PROFILE_ROOT'] = '/tmp/test';
+  const testRoot = join('/tmp', 'test');
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = testRoot;
   try {
     expect(watchdogLaunchdPlistPath('prod')).toBe(
-      '/tmp/test/Library/LaunchAgents/co.proxai.gateway.watchdog.plist',
+      join(testRoot, 'Library', 'LaunchAgents', 'co.proxai.gateway.watchdog.plist'),
     );
     expect(watchdogSystemdTimerPath('prod')).toBe(
-      '/tmp/test/.config/systemd/user/proxai-gateway-watchdog.timer',
+      join(testRoot, '.config', 'systemd', 'user', 'proxai-gateway-watchdog.timer'),
     );
     expect(watchdogSystemdServicePath('prod')).toBe(
-      '/tmp/test/.config/systemd/user/proxai-gateway-watchdog.service',
+      join(testRoot, '.config', 'systemd', 'user', 'proxai-gateway-watchdog.service'),
     );
-    expect(defaultWatchdogScheduledTaskXmlPath('/tmp/test')).toBe(
-      '/tmp/test/scheduled-task-watchdog.xml',
+    expect(defaultWatchdogScheduledTaskXmlPath(testRoot)).toBe(
+      join(testRoot, 'scheduled-task-watchdog.xml'),
     );
   } finally {
     if (original === undefined) {
@@ -137,11 +139,45 @@ test('ensureWatchdogUnitExists logic', async () => {
   expect(resultExists).toBe(false);
 });
 
+test('ensureWatchdogUnitExists default deps coverage', async () => {
+  const { rm, mkdtemp } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { existsSync } = await import('node:fs');
+
+  const dir = await mkdtemp(join(tmpdir(), 'proxai-watchdog-writer-default-'));
+  try {
+    const plistPath = join(dir, 'co.proxai.gateway.watchdog.plist');
+
+    const writerMock = mock(() => Promise.resolve());
+    const result1 = await ensureWatchdogUnitExists({
+      platform: 'darwin',
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      plistPath,
+      writer: writerMock,
+    });
+    expect(result1).toBe(true);
+    expect(writerMock).toHaveBeenCalledTimes(1);
+
+    const fileExistsMock = mock(() => Promise.resolve(false));
+    const result2 = await ensureWatchdogUnitExists({
+      platform: 'darwin',
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      plistPath,
+      fileExists: fileExistsMock,
+    });
+    expect(result2).toBe(true);
+    expect(existsSync(plistPath)).toBe(true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('writeWatchdogServiceUnit for darwin, win32, linux', async () => {
   const { rm } = await import('node:fs/promises');
   const { mkdtemp } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
-  const { join } = await import('node:path');
   const { existsSync } = await import('node:fs');
 
   const dir = await mkdtemp(join(tmpdir(), 'proxai-watchdog-writer-'));
