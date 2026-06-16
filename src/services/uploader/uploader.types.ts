@@ -14,9 +14,6 @@ export interface UploaderContext {
   logger?: MinimalLogger;
   pacer?: Pacer;
   writeAuthFailedSentinelFn?: (sentinelPath: string, reason: string) => Promise<void>;
-  // Injectable so tests force an extract failure without globally mocking
-  // services/prompt-extract — a process-wide mock leaks into other files'
-  // prompt-extract tests. Defaults to the real extractUserPrompt.
   extractUserPrompt?: (input: PromptExtractInput) => PromptExtractResult;
 }
 

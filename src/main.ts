@@ -24,6 +24,7 @@ import { defaultReplayDeps, runReplay } from 'cli/commands/replay';
 import { runUpgradePostRespawnRestore } from 'services/upgrade/coordinated-upgrade.ts';
 import { autoUpgradeFromConfig } from 'cli/wiring/auto-upgrade.ts';
 import { buildUpgradePostRespawnRestoreDeps } from 'cli/wiring/upgrade-restore-deps.ts';
+import { runRescue } from 'cli/commands/rescue/index.ts';
 
 import { inquirerPrompts } from 'cli/prompts.ts';
 import { consoleOutput, silentOutput } from 'cli/output.ts';
@@ -354,6 +355,19 @@ program
         profileCtx,
       }),
     );
+    process.exit(result.exitCode);
+  });
+
+program
+  .command('rescue', { hidden: true })
+  .description('Rescue/restart the daemon if it is wedged or crashed.')
+  .option('--profile <name>', 'profile to rescue (prod | dev)', 'prod')
+  .action(async (opts: { profile?: string }) => {
+    const profileName = parseProfileNameInternal(opts.profile);
+    const result = await runRescue({
+      profileName,
+      programPath: process.execPath,
+    });
     process.exit(result.exitCode);
   });
 

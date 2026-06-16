@@ -32,6 +32,8 @@ function buildDevServiceManager(
   return getServiceManager({ platform, unitPath, profile: 'dev' });
 }
 
+import { buildWatchdogServiceContext } from 'cli/wiring/platform.ts';
+
 export interface BuildUninstallDepsInputs {
   platform: NodeJS.Platform;
   programPath: string;
@@ -49,6 +51,11 @@ export function buildUninstallDeps(inputs: BuildUninstallDepsInputs): UninstallC
   const devServiceUnitPath = profileCtx.isDev
     ? null
     : buildDevServiceUnitPath(inputs.platform, devCtx.configDir);
+  const watchdogCtx = buildWatchdogServiceContext(inputs.platform, inputs.programPath, profileCtx);
+  const devWatchdogCtx = profileCtx.isDev
+    ? null
+    : buildWatchdogServiceContext(inputs.platform, inputs.programPath, devCtx);
+
   return {
     output: consoleOutput(),
     prompts: inquirerPrompts(),
@@ -72,6 +79,10 @@ export function buildUninstallDeps(inputs: BuildUninstallDepsInputs): UninstallC
         ? join(process.env['LOCALAPPDATA'] ?? join(homedir(), 'AppData', 'Local'), 'proxai', 'bin')
         : join(homedir(), '.proxai', 'bin'),
     currentExecPath: inputs.programPath,
+    watchdogManager: watchdogCtx?.watchdogManager,
+    watchdogUnitPaths: watchdogCtx?.watchdogUnitPaths,
+    devWatchdogManager: devWatchdogCtx?.watchdogManager,
+    devWatchdogUnitPaths: devWatchdogCtx?.watchdogUnitPaths,
   };
 }
 

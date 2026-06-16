@@ -2,9 +2,9 @@
 
 Sentinels are zero-or-small content files under each profile's `configDir` (or at `profileRootDir()` for root-level coordination files) whose **existence** gates loops in the daemon. They are the only out-of-process coordination channel between the daemon and the CLI commands; the daemon never reads CLI memory and CLI never reads daemon memory.
 
-## Per-profile sentinels (five per profile)
+## Per-profile sentinels (six per profile)
 
-All five live inside `<profileRootDir>/<profile>/` — i.e. inside `prod/` or `dev/` depending on which daemon writes them. Source: `src/core/io/fs/paths.ts`, resolved via `ProfileContext.sentinels.*`.
+All six live inside `<profileRootDir>/<profile>/` — i.e. inside `prod/` or `dev/` depending on which daemon writes them. Source: `src/core/io/fs/profile.ts`, resolved via `ProfileContext.sentinels.*`.
 
 | File                | Writer                              | Clearer                     | Body                                                  |
 | ------------------- | ----------------------------------- | --------------------------- | ----------------------------------------------------- |
@@ -13,6 +13,7 @@ All five live inside `<profileRootDir>/<profile>/` — i.e. inside `prod/` or `d
 | `SESSION_STOPPED`   | `stop` CLI                          | self-clear on boot mismatch | `{ boot_id, set_at }` JSON                            |
 | `CONSENT_ACCEPTED`  | `setup` CLI                         | `uninstall --reset`         | informational (never gates)                           |
 | `UPDATE_AVAILABLE`  | `runBrewSentinelCheck` (brew only)  | same, on no-update          | `{ latest_version, current_version, detected_at, asset_url? }` JSON |
+| `RESCUE_LEDGER`     | `writeRescueLedger` in rescue CLI   | resets on boot mismatch     | `{ bootId, lastRescueAt, consecutiveFailures, attempts }` JSON |
 
 ## Root-level coordination sentinel: DEV_MODE
 
@@ -93,4 +94,4 @@ The other start-triggering paths (`start`, `restart`, `setup`, auto-upgrade resp
 - **Full reset**: `uninstall --reset` + fresh `setup`. Wipes both profile dirs, clears all sentinels, `buffer.db`, `config.toml`.
 - **Malformed body**: every reader catches `JSON.parse` errors and returns `null` or default. Gate observers only call `exists()`, so a corrupted body never throws at the gate.
 
-[source: src/core/io/fs/sentinel.ts; src/core/io/fs/atomic.ts; src/core/io/fs/paths.ts; src/core/io/fs/profile.ts; src/core/io/fs/dev-mode-sentinel.ts; src/services/polling/capture-cycle.ts; src/services/polling/drain-cycle.ts; src/services/polling/heartbeat-cycle.ts; src/services/polling/*-sentinel.ts]
+[source: src/core/io/fs/sentinel.ts; src/core/io/fs/atomic.ts; src/core/io/fs/profile.ts; src/core/io/fs/dev-mode-sentinel.ts; src/services/polling/capture-cycle.ts; src/services/polling/drain-cycle.ts; src/services/polling/heartbeat-cycle.ts; src/services/polling/*-sentinel.ts; src/services/rescue/rescue-ledger.ts]

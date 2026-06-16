@@ -2,7 +2,7 @@
 
 # Foundations (01)
 
-*Last Updated: 2026-05-27*
+*Last Updated: 2026-06-16*
 
 Foundations cover what proxai_gateway is at a high level, what it is built on, and how it ships per platform. Read this section before any other to anchor terminology — every later section assumes the mental model and source-tree layout established here.
 

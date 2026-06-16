@@ -17,6 +17,7 @@ test('contains required Task tags', () => {
   expect(xml).toContain('<Principal id="Author">');
   expect(xml).toContain('<Command>C:\\Program Files\\proxai\\proxai-gateway.exe</Command>');
   expect(xml).toContain('<Arguments>&quot;run&quot;</Arguments>');
+  expect(xml).toContain('<Count>10</Count>');
 });
 
 test('embeds the provided userId in trigger and principal', () => {

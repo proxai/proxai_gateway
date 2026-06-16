@@ -84,5 +84,6 @@ export async function verifyAndRegister(
 
 function formatError(prefix: string, err: unknown): string {
   if (err instanceof GatewayError) return `${prefix}: ${err.message}`;
-  return `${prefix}: ${(err as Error).message ?? String(err)}`;
+  if (err instanceof Error) return `${prefix}: ${err.message}`;
+  return `${prefix}: ${String(err)}`;
 }

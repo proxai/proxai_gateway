@@ -58,6 +58,7 @@ export type FindingCode =
   | 'A13'
   | 'A14'
   | 'A15'
+  | 'A16'
   | 'B1'
   | 'B2'
   | 'B3'
@@ -261,6 +262,10 @@ export interface DoctorSignals {
     readonly systemdRateLimitHit: boolean | null;
     readonly systemdHomeEncryptedTearing: boolean | null;
   };
+  readonly rescue: {
+    readonly consecutiveFailures: number;
+    readonly lastRescueAt: string | null;
+  };
   readonly configDirPath: string;
   readonly logDirPath: string;
 }
@@ -286,10 +291,6 @@ export interface DoctorCommandDeps {
   readonly binaryPath: string;
   readonly currentVersion: string;
   readonly profileCtx: ProfileContext;
-  // Injectable so the sudo-ownership check is testable on a Windows runner,
-  // where the real process.getuid is undefined. Defaults to process.getuid.
-  readonly getuid?: () => number;
-  // Injectable so DEV_MODE detection is deterministic in tests — the real
-  // readBootId throws on CI Linux (empty /proc boot_id). Defaults to readBootId.
-  readonly readBootId?: () => Promise<string>;
+  readonly getuid?: (() => number) | undefined;
+  readonly readBootId?: (() => Promise<string>) | undefined;
 }

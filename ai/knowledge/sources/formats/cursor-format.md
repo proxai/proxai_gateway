@@ -83,8 +83,7 @@ JSON object with `role` and `content`:
 ## Version contract
 
 `extractAgentSchemaVersion` (extract-version.ts:8) returns
-`"<composerVersion>:<bubbleVersion>"`. Per-component fallback is the literal
-`'unknown'`, so the full fallback is `'unknown:unknown'`. The composer and
+`"<composerVersion>:<bubbleVersion>"`, falling back to `'unknown'` if both are missing (or `<composerVersion>:unknown` / `unknown:<bubbleVersion>` if only one is missing). The composer and
 bubble schemas evolve independently in Cursor, so the dual form lets the server
 detect skew on either side.
 

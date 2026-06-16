@@ -169,6 +169,7 @@ function makeDeps(over: Partial<DoctorCommandDeps> = {}): DoctorCommandDeps {
         sessionStopped: join(dir, 'SESSION_STOPPED'),
         consent: join(dir, 'CONSENT'),
         updateAvailable: join(dir, 'UPDATE_AVAILABLE'),
+        rescueLedger: join(dir, 'rescue-ledger.json'),
       },
       controlSocketPath: join(dir, 'control.sock'),
       defaultNestBaseUrl: 'https://nest.example',
@@ -178,6 +179,7 @@ function makeDeps(over: Partial<DoctorCommandDeps> = {}): DoctorCommandDeps {
 }
 
 beforeEach(async () => {
+  process.env['PROXAI_TEST_BOOT_ID'] = 'test-boot-id';
   dir = await mkdtemp(join(tmpdir(), 'proxai-doctor-gather-'));
   bufferDbPath = join(dir, 'buffer.db');
   const db = openBufferDb(bufferDbPath);
@@ -207,12 +209,12 @@ beforeEach(async () => {
         } as unknown as ReturnType<typeof Bun.file>;
       }
     }
-    // Bridge incompatible types via a single commented as unknown as TargetType cast
     return origFile(path as unknown as string, options);
   }) as typeof Bun.file);
 });
 
 afterEach(async () => {
+  delete process.env['PROXAI_TEST_BOOT_ID'];
   globalThis.fetch = origFetch;
   setWhich(origWhich);
   setSpawn(origSpawn);
@@ -571,8 +573,6 @@ test('win32: probeDiskFreeBytes handles spawn throwing', async () => {
 
 test('linux: root-owned config dir under non-root process flags sudo ownership drift', async () => {
   rootOwnedStatDir = dir;
-  // Inject getuid: the real process.getuid is undefined on the Windows runner,
-  // so platform:'linux' alone can't exercise the non-root sudo-drift path.
   const signals = await gatherSignals(makeDeps({ platform: 'linux', getuid: () => 1000 }));
   expect(signals.filesystemExtended.sudoOwnershipDrift).toBe(true);
 });

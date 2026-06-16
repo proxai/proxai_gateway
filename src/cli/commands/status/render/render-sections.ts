@@ -120,7 +120,7 @@ export function renderUploadSection(s: StatusSnapshot): string[] {
   if (s.drainCyclesTotal > 0 || s.totalBatchesShipped > 0) {
     lines.push(
       rowCountBytes(
-        'All-time',
+        '12-Month',
         s.totalBatchesShipped,
         'batches',
         s.totalBytesShipped,
@@ -138,7 +138,7 @@ export function renderUploadSection(s: StatusSnapshot): string[] {
       }
     }
   } else {
-    lines.push(rowText('All-time', chalk.dim('no drain cycles yet')));
+    lines.push(rowText('12-Month', chalk.dim('no drain cycles yet')));
   }
 
   if (s.drainCyclesTotal > 0) {
@@ -205,7 +205,7 @@ export function renderUploadSection(s: StatusSnapshot): string[] {
 
 export function renderHistorySection(s: StatusSnapshot): string[] {
   if (s.history === null) return [];
-  const lines: string[] = [sectionDivider('History (All-Time)')];
+  const lines: string[] = [sectionDivider('History (12-Month)')];
   lines.push(
     rowText(
       'Captured',

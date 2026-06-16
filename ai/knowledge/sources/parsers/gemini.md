@@ -62,10 +62,13 @@ Text source per `step_type` (`textForStep`): 14→`19.2`, 15→`20.3`,
 25→`34.11`||`34.14`, 132→`140.2.1`; all other steps emit `text: null` (the
 opaque tool-result blob is never used as text). `toolName` =
 `5.4.2`||`20.7.2`||`5.4.9`; `toolArgsJson` = `5.4.3`||`20.7.3`. ISO
-timestamp is computed from `5.1.{1,2}` (epoch seconds + nanos). `model`,
-`inputTokens`, `outputTokens` are always emitted `null` in v1 (the model
-display name + ground-truth tokens require a `gen_metadata` join that is
-not captured).
+timestamp is computed from `5.1.{1,2}` (epoch seconds + nanos). `model`
+and token usage fields (`inputTokens`, `outputTokens`, `cacheReadInputTokens`,
+`cacheCreationInputTokens`) are decoded if available in the protobuf payload.
+`model` is decoded from `5.9.1` or `5.11`. `inputTokens` is computed as the
+sum of `5.9.2` (prompt tokens) and `5.9.5` (cached tokens). `outputTokens`
+comes from `5.9.3`. `cacheReadInputTokens` maps to `5.9.5`, and
+`cacheCreationInputTokens` maps to `5.9.10`.
 
 ## Capture (`collectGeminiConversation` → `collectOneGeminiTable`)
 
@@ -119,7 +122,7 @@ the `BODY_TARGET_COMPRESSED_BYTES` and `maxDecompressedBytes` budgets.
 
 ### Per-table body shapes
 
-- `steps` → `{ idx, step_type, status, role, text, tool_name, tool_args_json, iso_timestamp, turn_id, conversation_id }` (text + tool_args_json redacted; `conversation_id` = `cascade_id` from the payload).
+- `steps` → `{ idx, step_type, status, role, text, tool_name, tool_args_json, iso_timestamp, turn_id, conversation_id, model, input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens }` (text + tool_args_json redacted; `conversation_id` = `cascade_id` from the payload; other fields are decoded from protobuf if available).
 - `trajectory_meta` → `{ idx, trajectory_id, cascade_id, trajectory_type, source }` (usually 1 row; `cascade_id` is the downstream `chat_id`).
 - `trajectory_metadata_blob` → `{ idx, workspace_path, git_remote }` (decoded from the blob; redacted).
 
@@ -157,7 +160,7 @@ making progress. `consecutiveErrors` is bumped for the table.
 - **Decode before redact.** Never ship `step_payload` as base64 protobuf — redaction must see plaintext (§ Redaction runs on the decoded plaintext).
 - **Never infer the tool from `step_type`.** Read the embedded `5.4.2` / `20.7.2` tool name. Types 5, 17, and 132 each host several tools.
 - **Stub rows are normal.** ~3% of type-5 and ~20% of type-17 rows have no `5.4` envelope (null `tool_name`); the row stays addressable by `(cascade_id, idx)`.
-- **`model` / token usage are best-effort null in v1.** The display name + ground-truth tokens live in `gen_metadata`, which is not in `GEMINI_ALLOWED_TABLES`.
+- **`model` / token usage are best-effort decoded from the protobuf step payload.** If the config id and token counters exist in the protobuf, they are populated; however, the model display name and ground-truth tokens require a `gen_metadata` join which is not in `GEMINI_ALLOWED_TABLES`.
 - **One `.db` = up to three table cursors.** A cycle with new rows in all three tables produces three batches sharing one `source_path_hash`.
 
 [source: src/sources/gemini/discover.ts; src/sources/gemini/source-platform.ts; src/sources/gemini/proto-scan.ts; src/sources/gemini/step-decode.ts; src/sources/gemini/collect.ts; src/sources/gemini/process-rows.ts; src/sources/gemini/resolve-identity.ts; src/sources/gemini/gemini.constants.ts; src/services/polling/poll-gemini.ts; src/services/polling/default-sources.ts; src/services/polling/capture-cycle.ts; src/services/polling/poll-worker.ts; src/services/contract/contract.constants.ts]

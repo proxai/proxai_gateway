@@ -79,3 +79,66 @@ export function buildServiceUnitRecreate(
   }
   return recreate;
 }
+
+import {
+  watchdogLaunchdLabel,
+  watchdogSystemdTimerName,
+  watchdogSystemdServiceName,
+  watchdogWindowsTaskName,
+  watchdogLaunchdPlistPath,
+  watchdogSystemdTimerPath,
+  watchdogSystemdServicePath,
+  defaultWatchdogScheduledTaskXmlPath,
+} from 'cli/service-unit/watchdog-labels.ts';
+import { getWatchdogManager } from 'cli/watchdog-manager/index.ts';
+import type { WatchdogManager } from 'cli/watchdog-manager/types.ts';
+
+export interface WatchdogServiceContext {
+  platform: NodeJS.Platform;
+  watchdogUnitPaths: {
+    timerPath?: string;
+    servicePath?: string;
+    plistPath?: string;
+    xmlPath?: string;
+  };
+  watchdogManager: WatchdogManager;
+}
+
+export function buildWatchdogServiceContext(
+  platform: NodeJS.Platform,
+  _programPath: string,
+  profileCtx: ProfileContext,
+): WatchdogServiceContext | null {
+  if (platform !== 'darwin' && platform !== 'linux' && platform !== 'win32') {
+    return null;
+  }
+  const profileName = profileCtx.name;
+  const plistPath = watchdogLaunchdPlistPath(profileName);
+  const timerPath = watchdogSystemdTimerPath(profileName);
+  const servicePath = watchdogSystemdServicePath(profileName);
+  const xmlPath = defaultWatchdogScheduledTaskXmlPath(profileCtx.configDir);
+
+  const watchdogManager = getWatchdogManager({
+    platform,
+    profile: profileName,
+    label: watchdogLaunchdLabel(profileName),
+    plistPath,
+    timerName: watchdogSystemdTimerName(profileName),
+    timerPath,
+    serviceName: watchdogSystemdServiceName(profileName),
+    servicePath,
+    taskName: watchdogWindowsTaskName(profileName),
+    xmlPath,
+  });
+
+  return {
+    platform,
+    watchdogUnitPaths: {
+      plistPath,
+      timerPath,
+      servicePath,
+      xmlPath,
+    },
+    watchdogManager,
+  };
+}

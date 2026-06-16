@@ -16,7 +16,6 @@ describe('collectClaudeDesktopFile', () => {
   test('returns zero batches when file size equals watermark', async () => {
     const db = openInMemoryBufferDb();
 
-    // Create a clean, isolated test directory inside tmpdir
     const testDir = await mkdtemp(join(tmpdir(), 'proxai-test-claude-desktop-'));
     const tempFile = join(testDir, 'audit.jsonl');
 
@@ -25,7 +24,6 @@ describe('collectClaudeDesktopFile', () => {
       '{"type":"user","uuid":"123","message":{"role":"user","content":"hello"}}\n',
     );
 
-    // Stat the temp file to get its real size
     const stat = await statFile(tempFile);
     if (!stat.exists) {
       throw new Error(`Test file not found: ${tempFile}`);
@@ -40,7 +38,6 @@ describe('collectClaudeDesktopFile', () => {
       lastModifiedMs: Date.now(),
     };
 
-    // First collection runs, processes the file, and sets the watermark
     let res = await collectClaudeDesktopFile(file, {
       buffer: db,
       maxDecompressedBytes: 1000,
@@ -48,7 +45,6 @@ describe('collectClaudeDesktopFile', () => {
 
     expect(res.errors).toEqual([]);
 
-    // Second collection: file size is equal to watermark, returns zero batches and zero errors
     res = await collectClaudeDesktopFile(file, {
       buffer: db,
       maxDecompressedBytes: 1000,
@@ -65,11 +61,9 @@ describe('collectClaudeDesktopFile', () => {
     const db = openInMemoryBufferDb();
     const testDir = await mkdtemp(join(tmpdir(), 'proxai-test-claude-desktop-'));
 
-    // Create a matching CLI transcript file structure
     const transcriptDir = join(testDir, '.claude', 'projects', 'p1');
     await Bun.write(join(transcriptDir, 'transcript.jsonl'), '');
 
-    // Write CLI metadata into it
     const cliMetadataContent =
       [
         JSON.stringify({
@@ -88,18 +82,14 @@ describe('collectClaudeDesktopFile', () => {
           gitBranch: 'feat',
           sessionId: 'session-def',
         }),
-        // malformed line to test parsing error gracefully
         '{invalid json}',
-        // empty line to test trim
         '',
       ].join('\n') + '\n';
     await writeFile(join(transcriptDir, 'transcript.jsonl'), cliMetadataContent);
 
-    // Create the audit.jsonl file (File B)
     const tempFile = join(testDir, 'audit.jsonl');
     const auditContent =
       [
-        // user record to correlate
         JSON.stringify({
           type: 'user',
           uuid: 'user-123',
@@ -107,30 +97,28 @@ describe('collectClaudeDesktopFile', () => {
           client_platform: 'mac',
           message: { content: 'hello' },
         }),
-        // assistant record to correlate
         JSON.stringify({
           type: 'assistant',
           message: { id: 'msg-456', content: 'hi' },
         }),
-        // replay record to be skipped
         JSON.stringify({
           type: 'user',
           isReplay: true,
           uuid: 'user-123',
           message: { content: 'replay' },
         }),
-        // non-dialogue record to be skipped
         JSON.stringify({
           type: 'other',
         }),
-        // invalid json record to be skipped
         '{invalid json}',
-        // empty line to be skipped
         '',
       ].join('\n') + '\n';
     await writeFile(tempFile, auditContent);
 
-    const stat = (await statFile(tempFile)) as unknown as { inode: bigint; size: number };
+    const stat = await statFile(tempFile);
+    if (!stat.exists) {
+      throw new Error(`Test file not found: ${tempFile}`);
+    }
     const file: DiscoveredClaudeDesktopFile = {
       sourcePath: tempFile,
       sourcePathHash: 'hash-desktop-collect',
@@ -168,7 +156,10 @@ describe('collectClaudeDesktopFile', () => {
       }) + '\n',
     );
 
-    const stat = (await statFile(tempFile)) as unknown as { inode: bigint; size: number };
+    const stat = await statFile(tempFile);
+    if (!stat.exists) {
+      throw new Error(`Test file not found: ${tempFile}`);
+    }
     const file: DiscoveredClaudeDesktopFile = {
       sourcePath: tempFile,
       sourcePathHash: 'hash-platform',
@@ -231,10 +222,12 @@ describe('collectClaudeDesktopFile', () => {
     const testDir = await mkdtemp(join(tmpdir(), 'proxai-test-claude-desktop-'));
     const tempFile = join(testDir, 'audit.jsonl');
 
-    // Only non-dialogue record
     await writeFile(tempFile, '{"type":"other"}\n');
 
-    const stat = (await statFile(tempFile)) as unknown as { inode: bigint; size: number };
+    const stat = await statFile(tempFile);
+    if (!stat.exists) {
+      throw new Error(`Test file not found: ${tempFile}`);
+    }
     const file: DiscoveredClaudeDesktopFile = {
       sourcePath: tempFile,
       sourcePathHash: 'hash-no-dialogue',
@@ -270,15 +263,17 @@ describe('collectClaudeDesktopFile', () => {
 
     await writeFile(tempFile, '{"type":"other"}\n');
 
-    const stat = (await statFile(tempFile)) as unknown as { inode: bigint; size: number };
-    // Truncate the file to 0 bytes
+    const stat = await statFile(tempFile);
+    if (!stat.exists) {
+      throw new Error(`Test file not found: ${tempFile}`);
+    }
     await writeFile(tempFile, '');
 
     const file: DiscoveredClaudeDesktopFile = {
       sourcePath: tempFile,
       sourcePathHash: 'hash-zero-bytes',
       inode: Number(stat.inode),
-      sizeBytes: stat.size, // positive size
+      sizeBytes: stat.size,
       lastModifiedMs: Date.now(),
     };
 

@@ -24,6 +24,7 @@ For every CLI command there is a paired wiring file. `main.ts` calls `buildXxxDe
 | `redaction-deps.ts` | `runRedactionTest`, `runRedactionList` | yes | console emit only |
 | `auto-upgrade.ts` | helper used by `start-deps` | n/a | wraps `services/upgrade.runAutoUpgrade`, swallows config-load failures |
 | `platform.ts` | shared by setup/start/stop/restart/uninstall | n/a | `buildPlatformServiceContext`, `buildServiceUnitRecreate`, `resolveWindowsUserId` |
+| `resolve-profile-paths.ts` | helper used to resolve paths | n/a | loads config from file, falls back to `ProfileContext` default paths |
 | `version-string.ts` | top-level `program.version(...)` | n/a | reads `install_source` from `config.toml` synchronously |
 
 ## `ProfileContext` threading

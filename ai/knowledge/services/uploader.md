@@ -39,7 +39,7 @@ The cursor pagination (`nextPendingBatchAfter`) is by `(createdAt ASC, captureId
 
 | kind | When | Side effects on `buffer.db` | Counters |
 | --- | --- | --- | --- |
-| `accepted` | `http.uploadRawRecord` returned `{ accepted: true, ... }`. | `markBatchDelivered` (insert receipt + delete batch in one tx). | `accepted++`, `acceptedBytes += body.byteLength`, `acceptedBySource[app] += {batches:1, bytes}`. |
+| `accepted` | `http.uploadRawRecord` returned `{ accepted: true, ... }`. | `markBatchDelivered` (extracts user prompt and performs: insert receipt + delete batch in one tx). | `accepted++`, `acceptedBytes += body.byteLength`, `acceptedBySource[app] += {batches:1, bytes}`. |
 | `recovered` | `WatermarkRegressionError` (server 400 with `error: 'watermark_regression'`). | `setCursorFromRegression(db, batch, currentServerWatermarkEnd)` writes the server watermark onto the cursor row; `deleteBatch` removes the stale row. | `recovered++`. NOT marked failed. |
 | `retriable` | `RateLimitError`, `RetriableError`, `NetworkError`, or `AuthError` where `verifyKey()` was inconclusive (threw a non-`AuthError`) or succeeded (transient 401). | `recordRetriableFailure(db, captureId, message)` (attempts++ + lastError). Row stays `pending`. | `retriable++`, `lastRetriableRetryAfterMs = outcome.retryAfterMs`, `lastUploadError = outcome.error`. Tells pacer to back off. |
 | `fatal` | `ValidationError` (local or server 400/408/413), any other `GatewayError`, definitive auth failure (`verifyKey` returned `{ success: false }` or threw `AuthError`), or unknown exception. | `markBatchFailed(db, captureId, message)` (status='failed', attempts++, lastError). Failed rows are eligible for `pruneBuffer` after `failedRetentionDays`. | `fatal++`, `lastUploadError = error`. |
@@ -67,7 +67,7 @@ A single 401/403 does not write the `AUTH_FAILED` sentinel — that would be too
 3. If `verifyKey` returned `{ success: false }` → definitive failure. `finalizeAuthFailure(ctx, batch, message || 'key not accepted')`.
 4. If `verifyKey` returned `{ success: true }` → transient. `recordRetriableFailure`, log `upload.auth_transient`, return `retriable` with `reason: 'auth_unconfirmed'`.
 
-`finalizeAuthFailure`: `markBatchFailed(db, captureId, 'ingestion key invalid')`, try `writeAuthFailedSentinel(path, reason)`, log `auth.invalid` (FATAL level). Returns `{ kind: 'fatal', captureId, error: 'ingestion key invalid' }`.
+`finalizeAuthFailure`: `markBatchFailed(db, captureId, 'gateway key invalid')`, try `writeAuthFailedSentinel(path, reason)`, log `auth.invalid` (FATAL level). Returns `{ kind: 'fatal', captureId, error: 'gateway key invalid' }`.
 
 ## DTO build (`build-dto.ts`)
 
@@ -79,7 +79,7 @@ A single 401/403 does not write the `AUTH_FAILED` sentinel — that would be too
 
 ## Pacer (`pacer.ts`)
 
-`createPacer({ maxBatchesPerSec, maxBytesPerMinute, backoffMultiplier? = 2, now?, sleep? })` returns `{ acquire, notifyRetryAfter, notify429, notifyServiceUnavailable }`. Token buckets:
+`createPacer({ maxBatchesPerSec, maxBytesPerMinute, backoffMultiplier? = 2, now?, sleep? })` returns `{ acquire, notifyRetryAfter, notify429, notifyServiceUnavailable, stop }`. Token buckets:
 
 | Bucket | Window | Capacity | Refill |
 | --- | --- | --- | --- |

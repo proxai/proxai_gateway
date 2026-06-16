@@ -14,17 +14,19 @@ export function buildSystemdUnit(input: SystemdUnitInput): string {
   const args = input.programArgs ?? ['run'];
   const exec = [input.programPath, ...args].join(' ');
   const desc = input.description ?? 'ProxAI Gateway';
-  const restartSec = input.restartSec ?? 10;
+  const restartSec = input.restartSec ?? 5;
 
   return `[Unit]
 Description=${desc}
 After=network-online.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 ExecStart=${exec}
-Restart=on-failure
+Restart=always
 RestartSec=${restartSec.toString()}s
+OOMScoreAdjust=-100
 
 [Install]
 WantedBy=default.target

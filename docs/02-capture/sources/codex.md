@@ -193,7 +193,7 @@ The same `source_path_hash` is shared across both table cursors because they com
 ## Per-source quirks
 
 - **No sub-agent record discriminator at line level.** Unlike Claude Code (which puts `agentId` on every sub-agent line), Codex distinguishes parent vs. child threads purely by `thread_spawn_edges`. A child thread's rollout JSONL looks identical to a parent's — the rollout is "self-contained" per thread.
-- **VACUUM detection runs against the state sqlite.** `detectVacuum` compares `last_seen_size_bytes` / `last_seen_page_count` / `max(rowid)+1` against the cursor row; a regression flips the source path to `#gen-N` and starts a new cursor at rowid 0.
+- **VACUUM detection runs against the state sqlite.** `detectVacuum` compares `last_seen_size_bytes` / `last_seen_page_count` / `max(rowid)+1` against the cursor row; a regression flips the source path to `#gen=N` and starts a new cursor at rowid 0.
 - **Codex rotates `state_<N>.sqlite` by integer.** When the daemon next discovers a higher-numbered state file, the lower-numbered cursor stays put (no new writes) and a new cursor for the higher number starts at rowid 0. Two new table cursors get created on the new generation — one per allow-listed table.
 - **Rollout files are append-only after creation.** No mid-file rewrites; byte-range watermarks are stable.
 - **Schema-version probing reads the first `session_meta` line.** Costs a single small read; if absent, `agent_schema_version = "unknown"`.

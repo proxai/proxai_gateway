@@ -9,9 +9,6 @@ import { startDaemonActors } from 'services/state-machines/daemon-actors';
 import type { SentinelWatcherPaths } from 'services/state-machines/sentinel-watcher';
 import type { MinimalLogger } from 'core/log';
 
-// Inject this fake into startDaemonActors instead of mock.module('boot-id'):
-// a global module mock leaks 'mock-boot-id-daemon-actors' into boot-id.test.ts
-// under CI's file-load order.
 const DAEMON_ACTORS_BOOT_ID = 'mock-boot-id-daemon-actors';
 const fakeReadBootId = (): Promise<string> => Promise.resolve(DAEMON_ACTORS_BOOT_ID);
 

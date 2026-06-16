@@ -32,9 +32,9 @@ proxai-gateway tail --level fatal --since 24h | grep auto_upgrade
 
 ## Stage 2: write_failed recovery
 
-`replaceBinary` (`release-fetch.ts:99-112`) does:
-- POSIX: `Bun.write(binaryPath, bytes)` then `setMode(0o755)`.
-- Windows: `Bun.write(<binaryPath>.new, bytes)`.
+`replaceBinary` (`release-fetch.ts`) does:
+- POSIX: writes to `<binaryPath>.new`, sets permissions to `0o755`, and atomically renames the sibling to `<binaryPath>`.
+- Windows: writes `<binaryPath>.new` instead (staged sibling).
 
 A failure means either:
 - Disk full → check `df -h` / `Get-PSDrive`.

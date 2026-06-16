@@ -10,7 +10,12 @@
 | `systemd-unit.ts` | `buildSystemdUnit(input)`, `defaultSystemdUnitPath(unitName?)` |
 | `scheduled-task-xml.ts` | `buildScheduledTaskXml(input)`, `defaultScheduledTaskXmlPath()`, `defaultScheduledTaskName()`, `encodeScheduledTaskXml(xml)` |
 | `writer.ts` | `writeServiceUnit(input)`, `ensureServiceUnitExists(deps)`, types `WriteServiceUnitInput`, `ServiceUnitRecreateConfig`, `EnsureServiceUnitDeps` |
-| `index.ts` | re-exports of all four |
+| `watchdog-labels.ts` | `watchdogLaunchdLabel`, `watchdogSystemdTimerName`, `watchdogSystemdServiceName`, `watchdogWindowsTaskName` |
+| `watchdog-launchd-plist.ts` | `buildWatchdogLaunchdPlist(input)`, `watchdogLaunchdPlistPath` |
+| `watchdog-systemd-units.ts` | `buildWatchdogSystemdService(input)`, `buildWatchdogSystemdTimer(input)` |
+| `watchdog-scheduled-task-xml.ts` | `buildWatchdogScheduledTaskXml(input)`, `defaultWatchdogScheduledTaskXmlPath` |
+| `watchdog-writer.ts` | `writeWatchdogServiceUnit(input)`, `ensureWatchdogUnitExists(deps)`, types `WriteWatchdogServiceUnitInput`, `EnsureWatchdogUnitDeps` |
+| `index.ts` | re-exports of the generators and writers |
 
 The naming "service-unit" rather than "service-file" is borrowed from systemd terminology and applies even to the launchd plist and Windows Task XML, both of which are conceptually "the file the OS service manager loads to learn how to run our process".
 
@@ -18,9 +23,21 @@ The naming "service-unit" rather than "service-file" is borrowed from systemd te
 
 | Builder | Body kind | Trigger | Restart policy | Process model |
 | --- | --- | --- | --- | --- |
-| `buildLaunchdPlist` | UTF-8 plist (XML doctype) | `RunAtLoad=true` + `KeepAlive.SuccessfulExit=false` | restart on any non-zero exit | foreground process under launchd |
-| `buildSystemdUnit` | UTF-8 ini-style unit | `[Install] WantedBy=default.target` (loaded on user session) | `Restart=on-failure`, `RestartSec=10s` | `Type=simple` |
-| `buildScheduledTaskXml` | UTF-16 LE + BOM Task XML | `LogonTrigger` (start when user logs on) | `RestartOnFailure: Interval=PT1M, Count=3` | `Principal LogonType=InteractiveToken`, `RunLevel=LeastPrivilege` |
+| `buildLaunchdPlist` | UTF-8 plist (XML doctype) | `RunAtLoad=true` + `KeepAlive=true` | restart always | foreground process under launchd |
+| `buildSystemdUnit` | UTF-8 ini-style unit | `[Install] WantedBy=default.target` (loaded on user session) | `Restart=always`, `RestartSec=5s` (default) | `Type=simple` |
+| `buildScheduledTaskXml` | UTF-16 LE + BOM Task XML | `LogonTrigger` (start when user logs on) | `RestartOnFailure: Interval=PT1M, Count=10` | `Principal LogonType=InteractiveToken`, `RunLevel=LeastPrivilege` |
+| `buildWatchdogLaunchdPlist` | UTF-8 plist (XML doctype) | `StartInterval=900` (runs every 15 minutes) + `RunAtLoad=true` | — | Background process type under launchd |
+| `buildWatchdogSystemdTimer` | UTF-8 ini-style timer | `OnBootSec=2min` + `OnUnitActiveSec=15min` | — | Timer triggering the oneshot service |
+| `buildWatchdogSystemdService` | UTF-8 ini-style unit | Triggered by timer | — | Type=oneshot systemd service |
+| `buildWatchdogScheduledTaskXml` | UTF-16 LE + BOM Task XML | `TimeTrigger` (starts 2026-01-01) + repeating interval (15m) | — | Principal LogonType=S4U (suppresses console window flashes), RunLevel=LeastPrivilege |
+
+## Watchdog Scheduled Task & Timer Management
+
+The `watchdog-manager` (`src/cli/watchdog-manager/`) wraps platform-specific commands to manage the watchdog scheduled task/timer:
+- **macOS (`launchctl.ts`)**: Registers/unregisters plist via `launchctl bootstrap` or `gui/<uid>`.
+- **Linux (`systemctl.ts`)**: Enables/disables and starts/stops the systemd timer unit (`systemctl enable/start/disable/stop`).
+- **Windows (`schtasks.ts`)**: Registers the task via `schtasks /Create /XML` (ensuring UTF-16 LE + BOM format) and deletes it via `schtasks /Delete`.
+
 
 All three default to `programArgs = ['run']` (i.e. the hidden `run` subcommand is the actual daemon body) and accept a custom `programPath`. The launchd builder optionally takes `stdoutPath` / `stderrPath`; the systemd builder optionally takes `description` / `restartSec`; the Windows builder optionally takes `userId` (defaults to `INTERACTIVE` placeholder).
 
@@ -32,7 +49,7 @@ All three default to `programArgs = ['run']` (i.e. the hidden `run` subcommand i
 
 `writer.ts:18` is the only function that performs the actual disk write. It:
 
-1. `ensureDir(dirname(serviceUnitPath))` — creates parent dirs at `0o700` on POSIX.
+1. `ensureDir(dirname(serviceUnitPath))` — creates parent dirs at `0o755` on POSIX.
 2. Branches on `input.platform`:
    - `win32` → `buildScheduledTaskXml` → `encodeScheduledTaskXml` → `writeAtomic(bytes)`.
    - `darwin` → `buildLaunchdPlist` → `writeAtomic(string)` → `setMode(0o644)`.

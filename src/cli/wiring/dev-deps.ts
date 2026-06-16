@@ -9,6 +9,8 @@ import { devLaunchdLabel, devSystemdUnitName } from 'cli/service-unit/dev-labels
 import { defaultSystemdUnitPath } from 'cli/service-unit/systemd-unit.ts';
 import { defaultScheduledTaskXmlPath } from 'cli/service-unit/scheduled-task-xml.ts';
 import { writeServiceUnit } from 'cli/service-unit/writer.ts';
+import { writeWatchdogServiceUnit } from 'cli/service-unit/watchdog-writer.ts';
+import { buildWatchdogServiceContext } from 'cli/wiring/platform.ts';
 import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 import {
@@ -27,7 +29,6 @@ import type { ServiceManagerDeps } from 'cli/service-manager';
 import type { WriteServiceUnitInput } from 'cli/service-unit/writer.ts';
 import type { GatewayConfig } from 'services/config';
 
-/** Seam for tests — swap individual deps without mock.module. */
 export const __deps = {
   getServiceManager: (deps: ServiceManagerDeps): ServiceManager => getServiceManager(deps),
   createHttpClient: (options: {
@@ -59,6 +60,11 @@ export const __deps = {
     defaultScheduledTaskXmlPath(configDir),
   devLaunchdLabel: (): string => devLaunchdLabel(),
   devSystemdUnitName: (): string => devSystemdUnitName(),
+  buildWatchdogServiceContext: (
+    platform: NodeJS.Platform,
+    programPath: string,
+    profileCtx: ProfileContext,
+  ) => buildWatchdogServiceContext(platform, programPath, profileCtx),
 };
 
 export function buildDevServiceUnitPath(
@@ -160,6 +166,20 @@ export function buildDevDeps(): DevCommandDeps {
       });
       if (devServiceManager !== null) {
         await devServiceManager.ensureRegistered();
+      }
+      const watchdogCtx = __deps.buildWatchdogServiceContext(
+        process.platform,
+        process.execPath,
+        devCtx,
+      );
+      if (watchdogCtx !== null) {
+        await writeWatchdogServiceUnit({
+          platform: process.platform,
+          profileName: 'dev',
+          programPath: process.execPath,
+          ...watchdogCtx.watchdogUnitPaths,
+        });
+        await watchdogCtx.watchdogManager.install();
       }
     },
   };

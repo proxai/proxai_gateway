@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { runUninstall } from 'cli/commands/uninstall';
 import { buildConfirmationMessage } from 'cli/commands/uninstall/confirmation-message.ts';
 import type { UninstallCommandDeps } from 'cli/commands/uninstall';
+import type { WatchdogManager } from 'cli/watchdog-manager/types.ts';
 import type { PackageManagerSweep, PmDetection, SweepablePm } from 'services/uninstall';
 import type {
   BinaryRemovalOptions,
@@ -1145,4 +1146,98 @@ test('idempotent non-dev: prints "uninstalled and reset" when nothing exists and
     true,
   );
   expect(output.lines.some((l) => l.msg === 'no installation found')).toBe(false);
+});
+
+test('watchdog uninstall is called before daemon stop and unregister', async () => {
+  await writeConfig();
+  const order: string[] = [];
+
+  const watchdogManager: WatchdogManager = {
+    isInstalled: async () => false,
+    install: async () => {},
+    uninstall: async () => {
+      order.push('watchdog.uninstall');
+    },
+  };
+
+  const { sm } = fakeManager();
+  const originalStop = sm.stop;
+  const originalUnregister = sm.unregister;
+
+  sm.stop = async () => {
+    order.push('daemon.stop');
+    await originalStop();
+  };
+  sm.unregister = async () => {
+    order.push('daemon.unregister');
+    await originalUnregister();
+  };
+
+  const deps = {
+    ...depsFor(sm),
+    watchdogManager,
+  };
+
+  const result = await runUninstall(deps, { yes: true });
+  expect(result.exitCode).toBe(0);
+  expect(order).toEqual(['watchdog.uninstall', 'daemon.stop', 'daemon.unregister']);
+});
+
+test('watchdog and dev watchdog uninstall handles all unit paths', async () => {
+  await writeConfig();
+  const watchdogManager = {
+    isInstalled: async () => false,
+    install: async () => {},
+    uninstall: async () => {},
+  };
+  const devWatchdogManager = {
+    isInstalled: async () => false,
+    install: async () => {},
+    uninstall: async () => {},
+  };
+
+  const watchdogUnitPaths = {
+    plistPath: join(tmpRoot, 'prod.plist'),
+    xmlPath: join(tmpRoot, 'prod.xml'),
+    timerPath: join(tmpRoot, 'prod.timer'),
+    servicePath: join(tmpRoot, 'prod.service'),
+  };
+  const devWatchdogUnitPaths = {
+    plistPath: join(tmpRoot, 'dev.plist'),
+    xmlPath: join(tmpRoot, 'dev.xml'),
+    timerPath: join(tmpRoot, 'dev.timer'),
+    servicePath: join(tmpRoot, 'dev.service'),
+  };
+
+  await writeFile(watchdogUnitPaths.plistPath, '<plist/>');
+  await writeFile(watchdogUnitPaths.xmlPath, '<xml/>');
+  await writeFile(watchdogUnitPaths.timerPath, '[Timer]');
+  await writeFile(watchdogUnitPaths.servicePath, '[Service]');
+
+  await writeFile(devWatchdogUnitPaths.plistPath, '<plist/>');
+  await writeFile(devWatchdogUnitPaths.xmlPath, '<xml/>');
+  await writeFile(devWatchdogUnitPaths.timerPath, '[Timer]');
+  await writeFile(devWatchdogUnitPaths.servicePath, '[Service]');
+
+  const { sm } = fakeManager();
+  const deps = {
+    ...depsFor(sm),
+    watchdogManager: watchdogManager as unknown as WatchdogManager,
+    watchdogUnitPaths,
+    devWatchdogManager: devWatchdogManager as unknown as WatchdogManager,
+    devWatchdogUnitPaths,
+  };
+
+  const result = await runUninstall(deps, { yes: true });
+  expect(result.exitCode).toBe(0);
+
+  expect(await Bun.file(watchdogUnitPaths.plistPath).exists()).toBe(false);
+  expect(await Bun.file(watchdogUnitPaths.xmlPath).exists()).toBe(false);
+  expect(await Bun.file(watchdogUnitPaths.timerPath).exists()).toBe(false);
+  expect(await Bun.file(watchdogUnitPaths.servicePath).exists()).toBe(false);
+
+  expect(await Bun.file(devWatchdogUnitPaths.plistPath).exists()).toBe(false);
+  expect(await Bun.file(devWatchdogUnitPaths.xmlPath).exists()).toBe(false);
+  expect(await Bun.file(devWatchdogUnitPaths.timerPath).exists()).toBe(false);
+  expect(await Bun.file(devWatchdogUnitPaths.servicePath).exists()).toBe(false);
 });

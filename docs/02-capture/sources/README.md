@@ -23,7 +23,7 @@ Read the parent first; come here when you need the source's full record surface,
 | Claude Desktop | [claude-desktop.md](./claude-desktop.md) | `jsonl` audit lines, enriched from the matching CLI transcript | Authoritative `audit.jsonl`, filtered to genuine `user`/`assistant` dialogue (shared `isDialogueRecord`, plus `isReplay` dropped); each kept record is reshaped — CLI metadata merged, audit keys renamed, `source_platform` injected | `PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_CLAUDE_DESKTOP` is wired but has no effect — discovery does not branch on it. |
 | Gemini (Antigravity) | [gemini.md](./gemini.md) | three allow-listed sqlite tables (`trajectory_meta`, `steps`, `trajectory_metadata_blob`) from `*.db` Cascade trajectory DBs | Both roots (CLI + IDE, one source, discriminated by `source_platform`); each `steps` row's protobuf `step_payload` is **decoded to plaintext before redaction** | n/a — sub-agent (`invoke_subagent`) work lives in separate `.db` conversations, captured in their own right. |
 
-`PROXAI_GATEWAY_CAPTURE_SUB_AGENTS` is the global override; if truthy, all four per-source flags resolve to true. Defaults are all `false`. See [6.4 Maintainer Debug Flags](../../06-operations/6.4-maintainer-debug-flags.md).
+`PROXAI_GATEWAY_CAPTURE_SUB_AGENTS` is the global override; if truthy, all five per-source flags resolve to true. Defaults are all `false`. See [6.4 Maintainer Debug Flags](../../06-operations/6.4-maintainer-debug-flags.md).
 
 ## What "capture decisions" means
 

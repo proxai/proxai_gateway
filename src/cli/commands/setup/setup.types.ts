@@ -1,6 +1,7 @@
 import type { OutputSink } from 'cli/cli.types.ts';
 import type { PromptSink } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager';
+import type { WatchdogManager } from 'cli/watchdog-manager/types.ts';
 import type { InstallSource } from 'services/config';
 import type { HttpClient } from 'services/http';
 
@@ -26,6 +27,13 @@ export interface SetupCommandDeps {
   platform: NodeJS.Platform;
   windowsUserId?: string;
   serviceManager?: ServiceManager;
+  watchdogUnitPaths?: {
+    timerPath?: string;
+    servicePath?: string;
+    plistPath?: string;
+    xmlPath?: string;
+  };
+  watchdogManager?: WatchdogManager;
 }
 
 export interface SetupCommandOptions {

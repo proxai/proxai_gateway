@@ -168,26 +168,6 @@ test('scaleSegments: targetSum <= 0 clamps to minWidth', () => {
 });
 
 test('scaleSegments: excess currentSum > targetSum is reduced correctly', () => {
-  // originalSegments length = 3, targetTotalWidth = 15 => targetSum = 15 - 3 - 1 = 11.
-  // orig = [10, 10, 10] -> floor(10 * (11 / 30)) = 3 -> max(4, 3) = 4 -> [4, 4, 4] -> sum = 12 > 11.
-  // excess = 12 - 11 = 1. reduces one segment by 1 to yield sum of 11.
-  // Wait, minWidth is 4. If all segments are at minWidth 4, they cannot be reduced below minWidth!
-  // Let's design a test case where some segments are > minWidth, but the sum is still greater than targetSum!
-  // E.g., originalSegments = [10, 10, 5], originalSum = 25.
-  // targetTotalWidth = 16 => targetSum = 16 - 3 - 1 = 12.
-  // orig[0] -> floor(10 * 12/25) = 4 -> max(4, 4) = 4
-  // orig[1] -> floor(10 * 12/25) = 4 -> max(4, 4) = 4
-  // orig[2] -> floor(5 * 12/25) = 2 -> max(4, 2) = 4
-  // Clamped = [4, 4, 4], sum = 12 == targetSum.
-  // What if targetTotalWidth = 15 => targetSum = 11.
-  // Clamped still is [4, 4, 4] due to minWidth, sum = 12 > 11. But we can't reduce any because they are all at minWidth!
-  // Let's choose: originalSegments = [20, 20, 5], originalSum = 45.
-  // targetTotalWidth = 17 => targetSum = 13.
-  // floor(20 * 13/45) = 5 -> max(4, 5) = 5
-  // floor(20 * 13/45) = 5 -> max(4, 5) = 5
-  // floor(5 * 13/45) = 1 -> max(4, 1) = 4
-  // Clamped = [5, 5, 4], sum = 14 > 13.
-  // excess = 1. Reduces first eligible segment by 1 (5 -> 4), resulting in [4, 5, 4] or [5, 4, 4], sum = 13.
   const orig = [20, 20, 5];
   const result = scaleSegments(orig, 17);
   expect(result.reduce((sum, val) => sum + val, 0)).toBe(13);
@@ -195,7 +175,7 @@ test('scaleSegments: excess currentSum > targetSum is reduced correctly', () => 
 });
 
 test('formatTitle: handles title longer than targetLen when targetLen < 4', () => {
-  expect(formatTitle('TitleText', 5)).toBe('Tit'); // targetLen = 5 - 2 = 3. 3 < 4, slices to title.slice(0, 3) -> 'Tit'
+  expect(formatTitle('TitleText', 5)).toBe('Tit');
 });
 
 test('formatCell: handles string longer than width when width < 4', () => {

@@ -6,6 +6,7 @@
 
 | Component | Removed by | Always? |
 | --- | --- | --- |
+| Watchdog scheduled task/timer | Removed via watchdog manager *before* stopping the daemon | Yes. |
 | The npm/pnpm/yarn/bun global install | `createSweep().uninstall(name)` | Only if `createSweep().detectAll()` finds it installed for that PM. Multi-PM is possible (e.g. installed via brew but also globally via npm) — every detected PM is uninstalled. |
 | The brew formula `proxai-gateway` | `createSweep().uninstallBrew()` | Only if brew is available AND `brew list --formula --versions proxai-gateway` succeeds. |
 | Direct binary at `<execPath>` (e.g. `~/.proxai/bin/proxai-gateway`) | `createDefaultBinaryRemover(platform).remove(execPath, { installDir? })` | When `isDirectBinary(execPath)` returns true (path is not under `node_modules/` or `Cellar/`). |
@@ -21,7 +22,7 @@
 - Log files (under `logDir()`)
 - Any `quarantined_records` metadata still in `buffer.db`
 
-The `uninstall` command does NOT touch these. Reinstalling re-uses the existing config and buffer. To fully reset, use `uninstall --reset` (which clears `configDir()` and `logDir()` as a separate step; that logic lives in the CLI command, not in `services/uninstall`).
+The `uninstall` command does NOT touch these. Reinstalling re-uses the existing config and buffer. To fully reset, use `uninstall --reset` (which clears `configDir()` and `logDir()`, and deletes the watchdog ledger file as a separate step; that logic lives in the CLI command, not in `services/uninstall`).
 
 ## Per-platform paths
 

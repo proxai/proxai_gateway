@@ -32,9 +32,6 @@ import type { ServiceManager } from 'cli/service-manager';
 import { profileRootDir } from 'core/io/fs/profile.ts';
 import { homedir } from 'node:os';
 import { writeFileSync, rmSync, mkdirSync } from 'node:fs';
-
-// Injected as deps.readBootId so DEV_MODE detection is deterministic — the real
-// readBootId throws on CI Linux (empty /proc boot_id) and is slow on Windows.
 const DOCTOR_BOOT_ID = 'test-boot-id-doctor';
 
 let dir: string;
@@ -42,6 +39,7 @@ let bufferDbPath: string;
 
 const origHome = process.env.HOME;
 const origProfileRoot = process.env['PROXAI_TEST_PROFILE_ROOT'];
+const origBootId = process.env['PROXAI_TEST_BOOT_ID'];
 const origFetch = globalThis.fetch;
 const origWhich = Bun.which;
 
@@ -102,6 +100,7 @@ function makeDeps(output: OutputSink, over: Partial<DoctorCommandDeps> = {}): Do
         sessionStopped: join(dir, 'SESSION_STOPPED'),
         consent: join(dir, 'CONSENT'),
         updateAvailable: join(dir, 'UPDATE_AVAILABLE'),
+        rescueLedger: join(dir, 'rescue-ledger.json'),
       },
       controlSocketPath: join(dir, 'control.sock'),
       defaultNestBaseUrl: 'https://nest.example',
@@ -114,6 +113,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'proxai-doctor-index-'));
   process.env.HOME = dir;
   process.env['PROXAI_TEST_PROFILE_ROOT'] = dir;
+  process.env['PROXAI_TEST_BOOT_ID'] = DOCTOR_BOOT_ID;
   mkdirSync(profileRootDir(), { recursive: true });
   bufferDbPath = join(dir, 'buffer.db');
   const db = openBufferDb(bufferDbPath);
@@ -129,6 +129,11 @@ afterEach(async () => {
     delete process.env['PROXAI_TEST_PROFILE_ROOT'];
   } else {
     process.env['PROXAI_TEST_PROFILE_ROOT'] = origProfileRoot;
+  }
+  if (origBootId === undefined) {
+    delete process.env['PROXAI_TEST_BOOT_ID'];
+  } else {
+    process.env['PROXAI_TEST_BOOT_ID'] = origBootId;
   }
   globalThis.fetch = origFetch;
   (Bun as unknown as { which: typeof Bun.which }).which = origWhich;

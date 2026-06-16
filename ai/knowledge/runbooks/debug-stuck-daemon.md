@@ -9,3 +9,6 @@
 7. If `AUTH_FAILED` keeps reappearing: the ingestion key may be revoked. Verify at proxai.co and run `setup new` with the new key.
 8. Check `buffer.soft_pause` events — if they're frequent, the uploader is too slow for the capture rate. Increase `upload_max_bytes_per_minute` in `config.toml`.
 9. To inspect raw DB state: `proxai-gateway inspect` (dry-run scan across all sources, generates a markdown report in `/tmp/proxai-gateway/reports/`).
+10. Check the `proxai-gateway doctor` output for finding `A16` (tripped circuit breaker warning).
+11. The watchdog uses an attempt ledger (`RESCUE_LEDGER` located in the config directory) to track health. If 3 consecutive rescue failures occur, the circuit breaker trips and halts auto-recovery. Resolve the underlying root cause (such as invalid keys via `proxai-gateway setup new`) and reset the circuit breaker by manually starting the daemon via `proxai-gateway start`.
+12. Inspect the structured logs for any `*.loop.crashed` or `*.cycle.timeout` messages to diagnose crashed loop states or cycle timeout conditions.

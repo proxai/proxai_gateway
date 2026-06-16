@@ -16,12 +16,12 @@ File B (`audit.jsonl`) is the record stream. File A transcripts carry the CLI
 metadata (`cwd`, `version`, `gitBranch`, `sessionId`) that the desktop audit log
 does not, so the collector reads File A purely to enrich File B records.
 
-## Base directory (macOS-only)
+## Base directory (cross-platform)
 
-`~/Library/Application Support/Claude/local-agent-mode-sessions`
-(`CLAUDE_DESKTOP_SESSIONS_SUBPATH` joined with `homedir()`). There is **no
-platform branch** in `discover.ts`, so the source is effectively macOS-only —
-the path only exists where the Claude Desktop app is installed.
+Resolved cross-platform by `defaultClaudeDesktopSessionsRoot()`, which joins `claudeDesktopUserDataRoot()` with `local-agent-mode-sessions`:
+- **macOS**: `~/Library/Application Support/Claude/local-agent-mode-sessions`
+- **Windows**: `%APPDATA%/Claude/local-agent-mode-sessions` (falls back to `~/AppData/Roaming/Claude/local-agent-mode-sessions`)
+- **Linux**: `$XDG_CONFIG_HOME/Claude/local-agent-mode-sessions` (falls back to `~/.config/Claude/local-agent-mode-sessions`)
 
 ## Correlation (collect.ts)
 
@@ -63,8 +63,15 @@ transforms is a parser-shape change under
 
 `agentSchemaVersion` is taken from the first kept record's merged `agentVersion`
 (i.e. File A's `version`), prefixed: `claude-desktop/<version>`. Falls back to
-the literal `'unknown'` (`CLAUDE_DESKTOP_DEFAULT_AGENT_SCHEMA_VERSION`) when no
+the default schema version `'claude-desktop/v2'` (`CLAUDE_DESKTOP_DEFAULT_AGENT_SCHEMA_VERSION`) when no
 correlated version is found.
+
+## Sidecar sessions
+
+Claude Desktop can run standard Claude Code as a sidecar process. The sidecar CLI session IDs are stored in JSON files under the `claude-code-sessions` directory (`CLAUDE_DESKTOP_SIDECAR_DIR` = `'claude-code-sessions'`) within the user data root.
+- Glob pattern: `*/*/local_*.json` (`CLAUDE_DESKTOP_SIDECAR_GLOB_PATTERN`)
+- Extraction: `loadDesktopCliSessionIds` reads these files and extracts `cliSessionId` to return a set of active desktop CLI session IDs.
+- Integration: These session IDs are threaded into `claude-code` capture logic to mark their `sourcePlatform` as `'claude-code-desktop'` instead of `'claude-code-cli'`.
 
 ## Encoding and line discipline
 
@@ -81,4 +88,4 @@ The full `audit.jsonl` path is hashed (sha256) as `sourcePathHash`; the file
 inode is the fallback cursor key. The cursor advances even when a byte range
 yields zero kept records, so empty/replay-only ranges are not re-scanned.
 
-[source: src/sources/claude-desktop/collect.ts; src/sources/claude-desktop/discover.ts; src/sources/claude-desktop/claude-desktop.constants.ts; ai/knowledge/sources/source-platform-conventions.md]
+[source: src/sources/claude-desktop/collect.ts; src/sources/claude-desktop/discover.ts; src/sources/claude-desktop/sidecar.ts; src/sources/claude-desktop/claude-desktop.constants.ts; ai/knowledge/sources/source-platform-conventions.md]

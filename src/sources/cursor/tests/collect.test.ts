@@ -668,18 +668,13 @@ test('selectCursorSql(false) and selectCursorSql(true) are identical and query c
 
 test('filters out invalid or empty bubbleId rows during processRows', async () => {
   const file = await makeDb([
-    // invalid JSON
     { key: 'bubbleId:c1:b1', value: '{invalid' },
-    // valid JSON but not object
     { key: 'bubbleId:c1:b2', value: '"bare string"' },
-    // valid object but missing text
     { key: 'bubbleId:c1:b3', value: '{"_v":3}' },
-    // valid object but text is not string
     { key: 'bubbleId:c1:b4', value: '{"_v":3,"text":123}' },
-    // valid object but text is empty
     { key: 'bubbleId:c1:b5', value: '{"_v":3,"text":"   "}' },
   ]);
   const result = await collectCursorFile(file, ctx(buffer));
   expect(result.errors).toEqual([]);
-  expect(result.capturedBatches).toBe(0); // all rows filtered out!
+  expect(result.capturedBatches).toBe(0);
 });

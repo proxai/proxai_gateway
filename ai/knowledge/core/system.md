@@ -24,7 +24,7 @@ Errors uniformly take the form `unable to read machine UUID for platform <platfo
 | --- | --- | --- |
 | `darwin` | `sysctl -n kern.boottime` → extract `sec=<epoch>` → `sha256Hex('darwin:<epoch>')` | 64-char hex |
 | `linux` | read `/proc/sys/kernel/random/boot_id` → trim | UUID-format string |
-| `win32` | `powershell -Command "(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToFileTimeUtc()"` → `sha256Hex('win32:<filetime>')` | 64-char hex |
+| `win32` | `powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToFileTimeUtc()"` → `sha256Hex('win32:<filetime>')` | 64-char hex |
 
 Linux returns the raw boot-id (it's already random per boot). macOS and Windows hash a boot timestamp because the underlying value isn't UUID-shaped. The platform prefix in the hash input (`darwin:`, `win32:`) prevents accidental collisions if a Linux host happened to have the same numeric epoch — defensive only.
 
@@ -60,4 +60,4 @@ This module deliberately does not expose:
 
 The boundary is "facts the OS reports that the backend needs in order to identify the install". Anything else lives in `cli/` or `services/`.
 
-[source: src/core/system/index.ts:1; src/core/system/machine-uuid.ts:27,44,67,77,107; src/core/system/boot-id.ts:27,44,64,76,101,105; src/core/system/host-id.ts:1]
+[source: src/core/system/index.ts:1; src/core/system/machine-uuid.ts:27,44,67,77,107; src/core/system/boot-id.ts:27,48,68,80,105,109; src/core/system/host-id.ts:1]

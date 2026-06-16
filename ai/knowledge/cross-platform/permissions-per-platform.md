@@ -6,11 +6,13 @@ The daemon runs entirely as the invoking user — never root, never `Administrat
 
 | Path | Mode | Enforced by |
 | --- | --- | --- |
-| `configDir()` (created on demand) | `0o700` | `ensureDir(path, 0o700)` in `core/io/fs/mode.ts:3` |
-| `buffer.db`, `buffer.db-wal`, `buffer.db-shm` | `0o600` | `openReadWrite` calls `setModeSilent` in `core/io/sqlite/open.ts:25-29` |
+| `configDir()` (created on demand) | `0o700` | `ensureDir(path, 0o700)` in `core/io/fs/mode.ts:8` |
+| base directories containing `ORG_NAME` | `0o700` | `ensureSecureBaseDirs(paths)` in `core/io/fs/mode.ts:33` |
+| `buffer.db`, `buffer.db-wal`, `buffer.db-shm` | `0o600` | `openReadWrite` calls `setModeSilent` in `core/io/sqlite/open.ts:31-35` |
 | Sentinel files (any under `configDir()`) | `0o600` | `sentinelHandle().write` follows `writeAtomic` with `setMode(path, 0o600)` (`core/io/fs/sentinel.ts:18`) |
-| Service-unit files (`*.plist`, `*.service`) | `0o644` | `writeServiceUnit` calls `setMode(path, 0o644)` (`cli/service-unit/writer.ts:35`) |
-| Active log file | `0o600` | `secureLogStream` chmods on open and `ready` (`core/log/logger.ts:63-79`) |
+| Service-unit files (`*.plist`, `*.service`) | `0o644` | `writeServiceUnit` calls `setMode(path, 0o644)` (`cli/service-unit/writer.ts:46`) |
+| Watchdog unit files (`*.plist`, `*.timer`, `*.service`) | `0o644` | `writeWatchdogServiceUnit` calls `setMode(path, 0o644)` (`cli/service-unit/watchdog-writer.ts:35,67,69`) |
+| Active log file | `0o600` | `secureLogStream` chmods on open and `ready` via `applySecureMode` (`core/log/logger.ts:86`) |
 | Rotated log files | `0o600` | `pruneLogDirectory` chmods survivors (`core/log/prune.ts:53`) |
 
 All chmod calls go through `setMode` (`core/io/fs/mode.ts:10`) or `setModeSilent` (sqlite, log). Both short-circuit on `process.platform === 'win32'` and never throw. `ensureDir` also skips the post-mkdir chmod on Windows. The "silent" variants additionally swallow errors so that a single read-only file in the log directory does not bring the daemon down.

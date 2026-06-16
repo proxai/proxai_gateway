@@ -114,6 +114,46 @@ export async function runUninstall(
 
   machine.send({ type: 'BEGIN' });
 
+  if (deps.devWatchdogManager !== undefined) {
+    try {
+      await deps.devWatchdogManager.uninstall();
+    } catch {}
+    if (deps.devWatchdogUnitPaths !== undefined) {
+      if (deps.devWatchdogUnitPaths.plistPath) {
+        await removeUnitFile(uninstallDeps, deps.devWatchdogUnitPaths.plistPath);
+      }
+      if (deps.devWatchdogUnitPaths.xmlPath) {
+        await removeUnitFile(uninstallDeps, deps.devWatchdogUnitPaths.xmlPath);
+      }
+      if (deps.devWatchdogUnitPaths.timerPath) {
+        await removeUnitFile(uninstallDeps, deps.devWatchdogUnitPaths.timerPath);
+      }
+      if (deps.devWatchdogUnitPaths.servicePath) {
+        await removeUnitFile(uninstallDeps, deps.devWatchdogUnitPaths.servicePath);
+      }
+    }
+  }
+
+  if (deps.watchdogManager !== undefined) {
+    try {
+      await deps.watchdogManager.uninstall();
+    } catch {}
+    if (deps.watchdogUnitPaths !== undefined) {
+      if (deps.watchdogUnitPaths.plistPath) {
+        await removeUnitFile(uninstallDeps, deps.watchdogUnitPaths.plistPath);
+      }
+      if (deps.watchdogUnitPaths.xmlPath) {
+        await removeUnitFile(uninstallDeps, deps.watchdogUnitPaths.xmlPath);
+      }
+      if (deps.watchdogUnitPaths.timerPath) {
+        await removeUnitFile(uninstallDeps, deps.watchdogUnitPaths.timerPath);
+      }
+      if (deps.watchdogUnitPaths.servicePath) {
+        await removeUnitFile(uninstallDeps, deps.watchdogUnitPaths.servicePath);
+      }
+    }
+  }
+
   if (deps.devServiceManager !== null) {
     try {
       await deps.devServiceManager.stop();

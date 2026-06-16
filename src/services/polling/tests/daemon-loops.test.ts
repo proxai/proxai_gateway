@@ -355,8 +355,12 @@ interface FakeLogger {
 function makeFakeLogger(entries: { level: string; msg: string }[]): FakeLogger {
   function record(level: string): (...args: unknown[]) => void {
     return (...args: unknown[]) => {
+      const first = args[0];
       const last = args[args.length - 1];
-      const msg = typeof last === 'string' ? last : JSON.stringify(last);
+      let msg = typeof last === 'string' ? last : JSON.stringify(last);
+      if (args.length > 1 && typeof first === 'object' && first !== null) {
+        msg = JSON.stringify(first) + ' ' + msg;
+      }
       entries.push({ level, msg });
     };
   }
@@ -414,4 +418,232 @@ test('daemon-loops unwinds when the abort signal flips between iterations', asyn
     heartbeatIntervalMs: 1,
   });
   expect(calls).toBeGreaterThan(1);
+});
+
+test('supervised loops restart on unexpected error and continue if under crash limit', async () => {
+  const ctrl = new AbortController();
+  const ctxs = makeContexts();
+  const entries: { level: string; msg: string }[] = [];
+  const logger = makeFakeLogger(entries);
+  ctxs.capture.logger = logger;
+  ctxs.drain.logger = logger;
+  ctxs.heartbeat.logger = logger;
+
+  let sleepCount = 0;
+  await runDaemonLoops(ctxs, {
+    abortSignal: ctrl.signal,
+    captureIntervalMs: 1,
+    drainIntervalMs: 10000,
+    heartbeatIntervalMs: 10000,
+    sleep: async (ms, signal) => {
+      sleepCount++;
+      if (ms !== 1000 && sleepCount === 1) {
+        throw new Error('unexpected crash');
+      }
+      ctrl.abort();
+      if (signal?.aborted) return;
+    },
+  });
+
+  const crashLogs = entries.filter((e) => e.msg.includes('loop crashed, restarting'));
+  expect(crashLogs.length).toBeGreaterThanOrEqual(1);
+});
+
+test('supervised loops exit process when consecutive crash limit is reached', async () => {
+  const ctrl = new AbortController();
+  const ctxs = makeContexts();
+  const entries: { level: string; msg: string }[] = [];
+  const logger = makeFakeLogger(entries);
+  ctxs.capture.logger = logger;
+  ctxs.drain.logger = logger;
+  ctxs.heartbeat.logger = logger;
+
+  const origExit = process.exit;
+  let exitCode: number | null = null;
+  process.exit = ((code?: number) => {
+    exitCode = code ?? 0;
+    ctrl.abort();
+    throw new Error('process exited');
+  }) as unknown as typeof process.exit;
+
+  try {
+    await runDaemonLoops(ctxs, {
+      abortSignal: ctrl.signal,
+      captureIntervalMs: 1,
+      drainIntervalMs: 10000,
+      heartbeatIntervalMs: 10000,
+      sleep: async (ms) => {
+        if (ms !== 1000) {
+          throw new Error('always crash');
+        }
+      },
+    });
+  } catch (err) {
+    expect((err as Error).message).toBe('process exited');
+  } finally {
+    process.exit = origExit;
+  }
+
+  expect(exitCode as unknown as number).toBe(1);
+  const fatalLog = entries.find((e) => e.msg.includes('exiting process'));
+  expect(fatalLog).toBeDefined();
+});
+
+test('supervised loops exit process when consecutive crash limit is reached (no fatal logger)', async () => {
+  const ctrl = new AbortController();
+  const ctxs = makeContexts();
+  const entries: { level: string; msg: string }[] = [];
+  const logger = makeFakeLogger(entries);
+  delete (logger as { fatal?: unknown }).fatal;
+  ctxs.capture.logger = logger;
+  ctxs.drain.logger = logger;
+  ctxs.heartbeat.logger = logger;
+
+  const origExit = process.exit;
+  let exitCode: number | null = null;
+  process.exit = ((code?: number) => {
+    exitCode = code ?? 0;
+    ctrl.abort();
+    throw new Error('process exited');
+  }) as unknown as typeof process.exit;
+
+  try {
+    await runDaemonLoops(ctxs, {
+      abortSignal: ctrl.signal,
+      captureIntervalMs: 1,
+      drainIntervalMs: 10000,
+      heartbeatIntervalMs: 10000,
+      sleep: async (ms) => {
+        if (ms !== 1000) {
+          throw new Error('always crash');
+        }
+      },
+    });
+  } catch (err) {
+    expect((err as Error).message).toBe('process exited');
+  } finally {
+    process.exit = origExit;
+  }
+
+  expect(exitCode as unknown as number).toBe(1);
+  const fatalLog = entries.find((e) => e.msg.includes('exiting process'));
+  expect(fatalLog).toBeDefined();
+});
+
+test('capture loop cycle timeout logs timeout event and continues', async () => {
+  const origSetTimeout = globalThis.setTimeout;
+  const entries: { level: string; msg: string }[] = [];
+  const logger = makeFakeLogger(entries);
+
+  globalThis.setTimeout = ((cb: () => void, ms: number) => {
+    if (ms === 90000) {
+      return origSetTimeout(cb, 1);
+    }
+    return origSetTimeout(cb, ms);
+  }) as unknown as typeof globalThis.setTimeout;
+
+  try {
+    const ctrl = new AbortController();
+    const ctxs = makeContexts();
+    ctxs.capture.logger = logger;
+    ctxs.capture.sources = [
+      {
+        name: 'hanging',
+        poll: () => new Promise<never>(() => {}),
+      },
+    ];
+
+    let sleepCalls = 0;
+    await runDaemonLoops(ctxs, {
+      abortSignal: ctrl.signal,
+      captureIntervalMs: 1,
+      drainIntervalMs: 10000,
+      heartbeatIntervalMs: 10000,
+      sleep: async (_ms, signal) => {
+        sleepCalls++;
+        if (sleepCalls >= 2) {
+          ctrl.abort();
+        }
+        if (signal?.aborted) return;
+      },
+    });
+  } finally {
+    globalThis.setTimeout = origSetTimeout;
+  }
+
+  const timeoutEntry = entries.find((e) => e.msg.includes('capture cycle timed out'));
+  expect(timeoutEntry).toBeDefined();
+});
+
+test('supervised loops reset crash count when running successfully for >10s', async () => {
+  const ctrl = new AbortController();
+  const ctxs = makeContexts();
+  const entries: { level: string; msg: string }[] = [];
+  const logger = makeFakeLogger(entries);
+  ctxs.capture.logger = logger;
+  ctxs.drain.logger = logger;
+  ctxs.heartbeat.logger = logger;
+
+  const origNow = Date.now;
+  let shouldJump = false;
+  Date.now = () => {
+    const real = origNow();
+    return shouldJump ? real + 20000 : real;
+  };
+
+  try {
+    let sleepCount = 0;
+    await runDaemonLoops(ctxs, {
+      abortSignal: ctrl.signal,
+      captureIntervalMs: 1,
+      drainIntervalMs: 10000,
+      heartbeatIntervalMs: 10000,
+      sleep: async (ms, signal) => {
+        sleepCount++;
+        if (ms !== 1000 && sleepCount === 1) {
+          shouldJump = true;
+          throw new Error('unexpected crash');
+        }
+        ctrl.abort();
+        if (signal?.aborted) return;
+      },
+    });
+  } finally {
+    Date.now = origNow;
+  }
+
+  const crashLogs = entries.filter((e) => e.msg.includes('loop crashed, restarting'));
+  expect(crashLogs.length).toBeGreaterThanOrEqual(1);
+  expect(crashLogs[0]?.msg).toContain('"consecutiveCrashes":1');
+});
+
+test('heartbeat loop cycle error logs error event and continues', async () => {
+  const ctrl = new AbortController();
+  const ctxs = makeContexts();
+  const entries: { level: string; msg: string }[] = [];
+  ctxs.heartbeat.logger = makeFakeLogger(entries);
+
+  const heartbeatBuffer = openInMemoryBufferDb();
+  heartbeatBuffer.close();
+  ctxs.heartbeat.buffer = heartbeatBuffer;
+  delete (ctxs.heartbeat as { staleBinary?: unknown }).staleBinary;
+
+  let sleepCalls = 0;
+  await runDaemonLoops(ctxs, {
+    abortSignal: ctrl.signal,
+    captureIntervalMs: 10000,
+    drainIntervalMs: 10000,
+    heartbeatIntervalMs: 1,
+    sleep: async (ms, signal) => {
+      sleepCalls++;
+      if (sleepCalls > 50 || entries.some((e) => e.msg.includes('heartbeat cycle threw'))) {
+        ctrl.abort();
+      }
+      if (signal?.aborted) return;
+      await new Promise((r) => setTimeout(r, Math.min(ms, 2)));
+    },
+  });
+
+  const errorEntry = entries.find((e) => e.msg.includes('heartbeat cycle threw'));
+  expect(errorEntry).toBeDefined();
 });

@@ -23,7 +23,6 @@ import { isAuthFailed } from 'services/polling/auth-failed-sentinel.ts';
 import { isBufferFull, writeBufferFullSentinel } from 'services/polling/buffer-full-sentinel.ts';
 import { handleCapture } from 'services/polling/poll-worker.ts';
 
-/** Seam for tests — swap individual deps without mock.module. */
 export const __deps = {
   handleCapture,
   VALID_SOURCE_APPS: VALID_SOURCE_APPS as readonly string[],

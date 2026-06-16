@@ -70,6 +70,11 @@ steps(idx INT PK, step_type INT, status INT, has_subtrajectory,
 `trajectory_metadata_blob(id TEXT, data BLOB)` — `data` is a protobuf
 embedding the workspace URI + git remote/branch + project ids.
 
+The gateway queries `rowid AS rid, data` and flattens it into the row object:
+- `idx` is set to the SQLite `rid`.
+- `workspace_path` is parsed from the protobuf at path `1.1`, `1.2`, or `7`.
+- `git_remote` is parsed from the protobuf at path `1.3.2`.
+
 ## `step_type` semantics
 
 `step_type` is a **coarse render/category bucket; it does NOT name the
@@ -109,8 +114,12 @@ Every step shares the `step_payload.5` (`StepMeta`) envelope:
 `5`=system/agent-text/lite); `5.1` is a `{1:epoch_seconds, 2:nanos}`
 google.protobuf.Timestamp (**not** an ISO string — ISO is derived from the
 binary); `5.20.4` carries the `cascade_id`, `5.20.1` the `trajectory_id`,
-`5.20.2` the `idx`. Inline ISO strings exist only inside step-101
-(`114.1`) and step-98 (`111.1`) text.
+`5.20.2` the `idx`.
+In addition:
+- `5.12` carries the `turn_id` / `turn_group` UUID.
+- `5.9.11` carries the `request_id`.
+- `5.9.8.2` (field `2` inside the map/message at `5.9.8`) carries the `session_id`.
+Inline ISO strings exist only inside step-101 (`114.1`) and step-98 (`111.1`) text.
 
 ## Reliability notes
 

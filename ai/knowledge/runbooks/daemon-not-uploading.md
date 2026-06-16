@@ -108,4 +108,11 @@ If drain is too slow for the capture rate, this pattern oscillates.
 Look for repeated `buffer.soft_pause` / `buffer.soft_resume` events.
 Mitigation: increase `upload_max_bytes_per_minute` in `config.toml`.
 
-[source: src/services/uploader/upload-batch.ts, src/services/uploader/drain-buffer.ts, src/services/polling/drain-cycle.ts, src/services/buffer/pressure.ts, ai/knowledge/runbooks/debug-stuck-daemon.md]
+### 7. Repeated Daemon Crashes and Watchdog Restarts
+
+If the daemon crashes repeatedly but is immediately restarted by the native OS supervisor or the periodic watchdog, it may continue to capture data and write it to the buffer database, while never staying up long enough to upload batches.
+- Inspect the watchdog ledger (`RESCUE_LEDGER` in the config directory) to see the history of rescue attempts.
+- Compare timestamps in the ledger's `attempts` array or system supervisor logs (like `journalctl` or `log show`) to see if the process is cycling.
+- If the daemon crashes repeatedly, follow the troubleshooting steps in `debug-stuck-daemon.md` to identify startup or loop crash causes.
+
+[source: src/services/uploader/upload-batch.ts, src/services/uploader/drain-buffer.ts, src/services/polling/drain-cycle.ts, src/services/buffer/pressure.ts, src/services/rescue/rescue-ledger.ts, ai/knowledge/runbooks/debug-stuck-daemon.md]

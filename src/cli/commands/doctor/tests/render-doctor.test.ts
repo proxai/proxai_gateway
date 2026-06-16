@@ -147,6 +147,10 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
       systemdRateLimitHit: false,
       systemdHomeEncryptedTearing: false,
     },
+    rescue: {
+      consecutiveFailures: 0,
+      lastRescueAt: null,
+    },
     configDirPath: '/Users/test/.proxai',
     logDirPath: '/Users/test/.proxai/log',
   };

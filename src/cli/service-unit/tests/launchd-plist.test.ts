@@ -15,16 +15,11 @@ test('contains required plist tags and Label', () => {
   expect(xml).toContain('<key>KeepAlive</key>');
 });
 
-test('KeepAlive is a dict with SuccessfulExit=false (restart only on failure)', () => {
+test('KeepAlive is true (restart always)', () => {
   const xml = buildLaunchdPlist({ programPath: '/x' });
   expect(xml).toContain('<key>KeepAlive</key>');
-  expect(xml).toContain('<key>SuccessfulExit</key>');
-
-  const ka = xml.slice(xml.indexOf('<key>KeepAlive</key>'));
-  expect(ka).toMatch(
-    /<key>KeepAlive<\/key>\s*<dict>\s*<key>SuccessfulExit<\/key>\s*<false\/>\s*<\/dict>/,
-  );
-  expect(xml).not.toMatch(/<key>KeepAlive<\/key>\s*<true\/>/);
+  expect(xml).toContain('<true/>');
+  expect(xml).not.toContain('<key>SuccessfulExit</key>');
 });
 
 test('overrides label when provided', () => {

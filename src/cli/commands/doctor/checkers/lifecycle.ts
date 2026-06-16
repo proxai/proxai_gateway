@@ -59,12 +59,8 @@ export function checkA4Crashed(signals: DoctorSignals): Finding | null {
       'Restart the service by running "proxai-gateway restart". If the issue persists, run "proxai-gateway logs" to inspect the failure logs.',
   };
 }
-
 export function checkA5Wedged(signals: DoctorSignals): Finding | null {
   if (!signals.daemonRunning) return null;
-  // Capture is intentionally paused while AUTH_FAILED is set (auth recovery in
-  // progress), so a stale capture cycle is expected, not a wedge — B1 already
-  // covers the real problem.
   if (signals.sentinels.authFailed) return null;
   const lastCycleAt = signals.daemonState.captureLastCycleAt;
   if (lastCycleAt === null) return null;
@@ -81,4 +77,19 @@ export function checkA5Wedged(signals: DoctorSignals): Finding | null {
     action:
       'Restart the background daemon to clear the stall and resume capture: "proxai-gateway restart"',
   };
+}
+
+export function checkA16RescueCircuitBreakerTripped(signals: DoctorSignals): Finding | null {
+  if (signals.rescue.consecutiveFailures >= 3 && !signals.daemonRunning) {
+    return {
+      code: 'A16',
+      severity: Severity.critical,
+      confidence: Confidence.confirmed,
+      cause:
+        'The rescue circuit breaker was tripped because the daemon failed to start 3 or more times consecutively.',
+      action:
+        'Inspect the daemon logs to find why it keeps failing to start, then run "proxai-gateway logs" and "proxai-gateway restart". Once the daemon stays up, auto-recovery resumes automatically.',
+    };
+  }
+  return null;
 }

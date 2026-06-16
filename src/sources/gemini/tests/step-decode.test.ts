@@ -278,7 +278,7 @@ test('decodes token usage, caching, and model from step_payload 5.9 envelope', (
 
   const step = decodeStep(15, payload);
   expect(step.model).toBe('1132');
-  expect(step.inputTokens).toBe(25000); // 5000 + 20000
+  expect(step.inputTokens).toBe(25000);
   expect(step.outputTokens).toBe(300);
   expect(step.cacheReadInputTokens).toBe(20000);
   expect(step.cacheCreationInputTokens).toBe(80);

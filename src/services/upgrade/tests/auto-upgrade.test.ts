@@ -407,12 +407,7 @@ test('fetch dep undefined falls through to globalThis.fetch and emits no_release
   expect(entries).toHaveLength(0);
 });
 
-test('EXIT_CODE.upgradeRespawn is non-zero so service managers respawn', () => {
-  // launchd: KeepAlive.SuccessfulExit=false  — respawn only on non-zero exit
-  // systemd: Restart=on-failure              — respawn only on non-zero exit
-  // schtasks: RestartOnFailure.Count=3       — respawn only on non-zero exit
-  // If this drifts to 0, the daemon stops after an auto-upgrade instead of
-  // resuming under the new binary.
+test('EXIT_CODE.upgradeRespawn is non-zero so service managers (launchd, systemd, schtasks) respawn on non-zero exit (rather than stopping after an auto-upgrade)', () => {
   expect(EXIT_CODE.upgradeRespawn).not.toBe(0);
   expect(EXIT_CODE.upgradeRespawn).toBeGreaterThan(0);
 });

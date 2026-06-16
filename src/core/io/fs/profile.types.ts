@@ -6,6 +6,7 @@ export interface ProfileSentinelPaths {
   readonly sessionStopped: string;
   readonly consent: string;
   readonly updateAvailable: string;
+  readonly rescueLedger: string;
 }
 
 export interface ProfileContext {

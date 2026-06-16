@@ -10,7 +10,7 @@
 | `linux` | `systemctl --user` | `proxai-gateway.service` | `~/.config/systemd/user/proxai-gateway.service` |
 | `win32` | `schtasks` (per-user Scheduled Task) | `ProxAI Gateway` (task name) | `<configDir>/scheduled-task.xml` |
 
-The label / unit name / task name are constants in `cli/cli.constants.ts:11-13`.
+The label / unit name / task name are constants in `cli/cli.constants.ts:15-17`.
 
 ## Install / start / stop / restart / unregister
 
@@ -47,8 +47,16 @@ All three managers obey the same contract; the difference is the argv they emit.
 - PID resolution is two-step: `schtasks /Query /V` does not include the PID, so when the task is reported as `Running`, the manager additionally runs `tasklist /FI "IMAGENAME eq proxai-gateway.exe" /FO CSV /NH` and parses CSV. If multiple `proxai-gateway.exe` processes exist, the first valid PID wins.
 - `parseSchtasksQuery` concatenates `Start Date` and `Start Time` from `/V LIST` output and parses with `Date.parse`. Locale-dependent date formatting is the user's locale (we don't force `/FO TABLE` or set a code page).
 
+## Watchdog specifics
+
+A separate watchdog manager interface exists (`getWatchdogManager({ platform, plistPath, xmlPath, timerName, timerPath, serviceName, servicePath, taskName })` in `cli/watchdog-manager/index.ts`) for managing daemon keep-alive:
+
+- **macOS (`launchctl`):** Plist `~/Library/LaunchAgents/co.proxai.gateway.watchdog.plist` (or dev version) is bootstrapped (`launchctl bootstrap gui/<uid> <plistPath>`) and uninstalled via bootout (`launchctl bootout gui/<uid>/<label>`).
+- **Linux (`systemctl --user`):** The watchdog timer (`proxai-gateway-watchdog.timer`) and service (`proxai-gateway-watchdog.service`) are enabled/started with `--now` (`systemctl --user enable --now <timerName>`) and disabled (`systemctl --user disable --now <timerName>`).
+- **Windows (`schtasks`):** A per-user Scheduled Task (`ProxAI Gateway Watchdog`) is registered from the generated XML (`schtasks /Create /TN <taskName> /XML <xmlPath> /F`) and deleted (`schtasks /Delete /TN <taskName> /F`).
+
 ## Spawning the tool
 
 `defaultSpawn` (in `service-manager/run-command.ts:13`) returns a `SpawnFn` that defers to `Bun.spawn(argv, { stdout: 'pipe', stderr: 'pipe' })`. Tests inject a fake `SpawnFn` instead of mocking `Bun.spawn`. There is no PATH-resolution step in production — the OS finds `launchctl` / `systemctl` / `schtasks` / `tasklist` itself. If a binary is missing, the spawn fails and the manager reports the failure verbatim.
 
-[source: src/cli/service-manager/index.ts:23; src/cli/service-manager/launchctl.ts:5,19,131; src/cli/service-manager/systemctl.ts:5,144; src/cli/service-manager/schtasks.ts:5,133,146,161; src/cli/service-manager/run-command.ts:3,13; src/cli/service-manager/types.ts:1; src/cli/cli.constants.ts:11]
+[source: src/cli/service-manager/index.ts:130; src/cli/service-manager/launchctl.ts:4,16,132; src/cli/service-manager/systemctl.ts:4,143; src/cli/service-manager/schtasks.ts:4,135,148,163; src/cli/service-manager/run-command.ts:3,13; src/cli/service-manager/types.ts:1; src/cli/cli.constants.ts:15; src/cli/watchdog-manager/index.ts:15; src/cli/watchdog-manager/launchctl.ts:17; src/cli/watchdog-manager/systemctl.ts:5; src/cli/watchdog-manager/schtasks.ts:5]

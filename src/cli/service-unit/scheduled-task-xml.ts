@@ -53,7 +53,7 @@ export function buildScheduledTaskXml(input: ScheduledTaskXmlInput): string {
     <Priority>7</Priority>
     <RestartOnFailure>
       <Interval>PT1M</Interval>
-      <Count>3</Count>
+      <Count>10</Count>
     </RestartOnFailure>
   </Settings>
   <Actions Context="Author">

@@ -37,7 +37,7 @@ export function renderUploadSection(input: UploadSectionInput): string[] {
     const b = formatBytes(input.totalBytesShipped).padStart(BYTES_COL);
     const cy = input.drainCyclesTotal.toString();
     lines.push(
-      `  ${keyCol('All-time')}${c} ${chalk.dim('batches shipped')}   ·   ${b} ${chalk.dim('compressed')}   ·   ${cy} ${chalk.dim('drain cycles')}`,
+      `  ${keyCol('12-Month')}${c} ${chalk.dim('batches shipped')}   ·   ${b} ${chalk.dim('compressed')}   ·   ${cy} ${chalk.dim('drain cycles')}`,
     );
 
     if (input.shippedBySource !== null) {
@@ -48,7 +48,7 @@ export function renderUploadSection(input: UploadSectionInput): string[] {
       }
     }
   } else {
-    lines.push(`  ${keyCol('All-time')}${chalk.dim('— no drain cycles completed yet')}`);
+    lines.push(`  ${keyCol('12-Month')}${chalk.dim('— no drain cycles completed yet')}`);
   }
 
   if (input.drainCyclesTotal > 0) {

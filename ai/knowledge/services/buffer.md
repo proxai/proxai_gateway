@@ -1,6 +1,6 @@
 # buffer
 
-`src/services/buffer/` is the bun:sqlite layer for everything captured-or-shipped. One file, one database (`buffer.db`), six tables, no migrations framework.
+`src/services/buffer/` is the bun:sqlite layer for everything captured-or-shipped. One file, one database (`buffer.db`), seven tables, no migrations framework.
 
 ## Open settings
 
@@ -19,6 +19,7 @@
 | `buffer_metadata` | Singleton-ish KV: `capture_cycles_total`, `drain_cycles_total`, `upload_total_bytes_shipped`, `latest_known_version`, per-source ship counters. | `key` | Never pruned; values are incremented in place. |
 | `daemon_state` | Singleton row (`id = 1` CHECK). Last cycle timing, last drain counters, last-error, per-source capture results as JSON. | `id = 1` | Always upserted; never deleted. |
 | `quarantined_records` | Metadata-only record of oversized rows skipped during capture. Body content is **never** stored here. | autoincrement `id` | `pruneQuarantinedOlderThan` inside `pruneBuffer`. |
+| `resync_events` | Logs of watermark regression events when client resyncs with the server. | autoincrement `id` | `pruneBuffer` past `receiptRetentionDays`. |
 
 ## The dedup story
 
@@ -28,7 +29,7 @@
 
 ## Eviction & retention
 
-- `pruneBuffer({ db, receiptRetentionDays, failedRetentionDays })` deletes in one transaction: old receipts, old failed batches, old quarantined rows, then writes `metadata.last_prune_at`. Defaults are both 30 days.
+- `pruneBuffer({ db, receiptRetentionDays, failedRetentionDays })` deletes in one transaction: old receipts, old failed batches, old quarantined rows, old resync events, then writes `metadata.last_prune_at`. Defaults are both 365 days.
 - Pending batches are intentionally never time-pruned — the gateway promises eventual delivery. The only way to drop pending bytes without shipping is `dropOldestPending`, currently only invoked by manual recovery.
 - Quarantine eviction shares the `failedRetentionDays` cutoff (treated as the same "obsolete" budget).
 

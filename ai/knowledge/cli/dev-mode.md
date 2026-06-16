@@ -13,8 +13,8 @@ The flag is stored as a boot-scoped sentinel: the root `DEV_MODE` file at `<prof
 `readDevModeSentinel(path)` reads and validates this file:
 - No file → `false`.
 - File with matching `bootId` → `true`.
-- File with mismatched `bootId` (i.e. the machine rebooted since the flag was set) → self-clears the file and returns `false`.
-- Malformed JSON → self-clears and returns `false`.
+- File with mismatched `bootId` (i.e. the machine rebooted since the flag was set) → preserves the file and returns `false`.
+- Malformed JSON → preserves the file and returns `false`.
 
 The CLI is "in dev mode" iff the flag is present **and** its boot id matches the live value. A reboot automatically exits dev mode.
 

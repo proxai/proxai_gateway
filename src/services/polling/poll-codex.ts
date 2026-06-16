@@ -13,10 +13,6 @@ import type {
   SourcePollerResult,
 } from 'services/polling/polling.types.ts';
 
-// Injectable codex boundary. Tests drive failure paths by passing fakes here
-// instead of `mock.module('sources/codex', …)`: a process-wide module mock
-// leaks the fake (throwing state collector, fake-state.sqlite, empty rollouts)
-// into every other file's real codex tests under CI's file-load order.
 export interface CodexSourceDeps {
   discoverCodexStateSqlite: typeof discoverCodexStateSqlite;
   collectCodexState: typeof collectCodexState;

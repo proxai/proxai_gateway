@@ -59,6 +59,7 @@ function buildSentinelPaths(configDir: string): ProfileSentinelPaths {
     sessionStopped: join(configDir, 'SESSION_STOPPED'),
     consent: join(configDir, 'CONSENT_ACCEPTED'),
     updateAvailable: join(configDir, 'UPDATE_AVAILABLE'),
+    rescueLedger: join(configDir, 'RESCUE_LEDGER'),
   };
 }
 

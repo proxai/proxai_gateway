@@ -22,7 +22,6 @@ test('getServiceManager builds launchctl manager for darwin', async () => {
   });
   expect(sm).toBeDefined();
 
-  // Test wrapping methods delegation and success states
   await expect(sm.isRegistered()).resolves.toBe(true);
   await expect(sm.isRunning()).resolves.toBe(false);
   await expect(sm.runtimeInfo()).resolves.toEqual({ pid: null, startedAt: null });
@@ -59,11 +58,6 @@ test('getServiceManager builds schtasks manager for win32', async () => {
 });
 
 test('wrapWithMachine handles error throws gracefully with Error object', async () => {
-  // We test the error wrapping logic by manually passing custom inner manager
-  // But wait, getServiceManager doesn't let us pass an arbitrary inner manager.
-  // Wait, we can test it by making the mock spawn function throw or fail,
-  // which will cause the inner manager (e.g. launchctl/systemctl) to throw an Error!
-  // Let's do that to trigger error flows on each wrapped method.
   const { spawn } = mockSpawn(() => {
     throw new Error('spawn-failed');
   });
@@ -101,7 +95,6 @@ test('getServiceManager returns a no-op manager under PROXAI_TEST_PROFILE_ROOT w
 });
 
 test('wrapWithMachine handles non-Error object throws gracefully', async () => {
-  // To throw a non-Error, we can make spawn throw a raw string.
   const spawn: SpawnFn = () => {
     throw 'spawn-string-failed';
   };

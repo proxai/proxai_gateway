@@ -30,49 +30,92 @@ A checker that reports B1 when `AUTH_FAILED` is absent is **wrong**. B2 must alw
 
 ## Scenario catalog (full list)
 
-### A — Lifecycle / not running
+### A — Lifecycle, Strays, and Process Issues
 - **A1** Config absent → not set up.
 - **A2** Config present, unit not registered (and not intentionally stopped) → "run start / setup new".
 - **A3** Unit registered, process not running, `SESSION_STOPPED` present → stopped by user.
 - **A4** Unit registered, process not running, `SESSION_STOPPED` absent → crashed/failed to spawn.
-- **A5** Process running but last-cycle timestamp stale > 2× interval → wedged.
+- **A5** Process running but last-cycle timestamp stale > 2× interval → wedged daemon.
+- **A6** Abrupt termination → Daemon stopped without running clean exit routines (crashed or SIGKILL).
+- **A7** Zombie daemon → Conflicting or orphaned background process running outside service manager.
+- **A8** Graceful termination lockup → Daemon trapped in graceful shutdown socket draining.
+- **A9** Helper process unhealthy → Native background helper processes crashed/uninitialized.
+- **A10** Watcher thread lag/exhaustion → Thread pools saturated, watch directories too broad.
+- **A11** Windows service unquoted path → Registry binPath contains spaces but is unquoted (privilege hijack risk).
+- **A12** Windows Task Scheduler XML corrupt → Task Scheduler XML definition corrupt/unparseable.
+- **A13** Systemd runtime directory missing → XDG_RUNTIME_DIR missing in non-interactive shell.
+- **A14** Systemd rate limit hit → Service manager rate-limited the daemon (start-limit-hit).
+- **A15** Systemd home encrypted tearing → User home directory encrypted, tearing down linger files on logout.
+- **A16** Rescue circuit breaker tripped → Daemon failed to start >= 3 times consecutively.
 
-### B — Auth
+### B — Auth and Security
 - **B1** `AUTH_FAILED` present → CONFIRMED bad/revoked key.
-- **B2** `AUTH_FAILED` absent + `authUnconfirmedCount > 0` → CONFIRMED network failure, NOT a key problem.
+- **B2** `AUTH_FAILED` absent + `authUnconfirmedCount > 0` → CONFIRMED network/DNS issue, NOT a key problem.
+- **B3** Ingest key auth error → Upload failed with 403 or invalid key.
+- **B4** Insecure API key transmission → SSL validation disabled (NODE_TLS_REJECT_UNAUTHORIZED=0).
+- **B5** Permissive config permissions → Config file has overly permissive group/world write permissions.
+- **B6** Overly broad directory watches → config.toml monitoring root or too many folders.
 
-### C — Upload blocked/slow
-- **C1** `upload.rate_limited` with large `retry_after_ms` → server rate-limiting this host.
-- **C2** `upload.retriable` kind=NetworkError or verify-key ping fails → endpoint unreachable.
-- **C3** Pending rising + drain not advancing + no gating sentinel → drain wedged.
-- **C4** `BUFFER_FULL` present + drain advancing + pending bytes falling → healthy recovery (informational, not a fault).
-- **C5** Repeated `buffer.soft_pause`/`buffer.soft_resume` pairs → drain too slow for capture rate.
-- **C6** Failed count rising + `upload.fatal` kind=ValidationError → parser emitting invalid records (CHRONIC BUG — surface for the team).
-- **C7** `quarantined_records` count > 0 → oversized rows skipped by design (informational).
+### C — Upload and Network
+- **C1** `upload.rate_limited` with large `retry_after_ms` → Server rate-limiting this host.
+- **C2** `upload.retriable` kind=NetworkError or verify-key ping fails → Endpoint unreachable.
+- **C3** Pending rising + drain not advancing + no gating sentinel → Drain wedged.
+- **C4** `BUFFER_FULL` present + drain advancing + pending bytes falling → Healthy recovery (informational, not a fault).
+- **C5** Repeated `buffer.soft_pause`/`buffer.soft_resume` pairs → Drain too slow for capture rate.
+- **C6** Failed count rising + `upload.fatal` kind=ValidationError → Parser emitting invalid records (CHRONIC BUG).
+- **C7** `quarantined_records` count > 0 → Oversized rows skipped by design (informational).
+- **C8** Outbound TLS inspection → Corporate proxy decryption detected (needs root CA export).
+- **C9** Global proxy mismatch → OS HTTP proxy setting not inherited by daemon execution context.
+- **C10** DNS hijack/captive portal → Network redirects DNS to private landing page/captive portal.
+- **C11** Throttler reset clock skew → Clock skew > 30s causing invalid rate-limit calculations.
+- **C12** Thundering herd jitter → Resync events executing retry loops in lockstep.
+- **C13** Outbox timeouts → Network outbox experiencing persistent timeouts.
 
 ### D — Capture not happening
-- **D1** Capture cycles advancing but pending=0 & receipts=0 over a long window → no agent activity or source dirs absent.
-- **D2** `source.poll` error events scoped to one app → single-source parser/format issue.
+- **D1** Capture cycles advancing but pending=0 & receipts=0 over a long window → No agent activity or source dirs absent.
+- **D2** `source.poll` error events scoped to one app → Single-source parser/format issue.
+- **D3** Source capture errors → Continuous capture process crashes on specific apps.
 
-### E — Binary / upgrade
-- **E1** Binary age ≥60d + recent `auto_upgrade.*failed` events → stale binary + upgrade failing (branch on specific event for cause).
-- **E2** `UPDATE_AVAILABLE` + install_source=brew → brew upgrade pending (informational, not a fault).
-- **E3** `auto_upgrade.write_failed` → disambiguate by disk-free (full), binary-path writability, uid mismatch.
-- **E4** `auto_upgrade.success` logged but `--version` old + binary mtime recent → service manager didn't cleanly restart.
+### E — Binary, Paths, and Upgrade Lock
+- **E1** Binary age ≥60d + recent `auto_upgrade.*failed` events → Stale binary + upgrade failing (branch on specific cause).
+- **E2** `UPDATE_AVAILABLE` + install_source=brew → Brew upgrade pending (informational).
+- **E3** `auto_upgrade.write_failed` → Disambiguate by disk-free (full), binary-path writability, uid mismatch.
+- **E4** `auto_upgrade.success` logged but `--version` old + binary mtime recent → Service manager didn't cleanly restart.
+- **E5** Upgrade lock stale → Stale .upgrade.lock blocking updates.
+- **E6** Staged upgrade binary corrupt → Coordinate startup crashes from corrupted temp files.
+- **E7** Homebrew relocation drift → Rosetta x64 emulation path collisions on Apple Silicon.
 
-### F — Filesystem / environment
-- **F1** configDir not writable → fix permissions.
-- **F2** Disk space low → free space; buffer can't grow, upgrades will fail.
-- **F3** logDir not writable → logging degraded.
-- **F4** Clock/UTC skew → watermark/timestamp anomalies possible.
-- **F5** (Linux) systemd absent or linger disabled on headless host → daemon stops on logout.
-- **F6** (Windows) USERDOMAIN/USERNAME unresolvable → task creation context issue.
+### F — Filesystem, Advanced FS, and Performance
+- **F1** configDir not writable → Fix permissions.
+- **F2** Disk space low → Free space; buffer can't grow, upgrades will fail.
+- **F3** logDir not writable → Logging degraded.
+- **F4** Clock/UTC skew → Watermark/timestamp anomalies possible.
+- **F5** (Linux) systemd absent or linger disabled on headless host → Daemon stops on logout.
+- **F6** (Windows) USERDOMAIN/USERNAME unresolvable → Task creation context issue.
 - **F7** (macOS) `com.apple.quarantine` xattr on binary → "xattr -d".
+- **F8** macOS TCC FDA blocked → Privacy & Security Full Disk Access missing.
+- **F9** macOS Gatekeeper translocation → Binary translocated or quarantined by Gatekeeper.
+- **F10** Sandboxed terminal locks → Gateway run within sandboxed editor terminal.
+- **F11** Symlink traversal loop → Infinite symbolic link recursion inside monitored folders.
+- **F12** POSIX Extended ACL blocked → Immutable attributes or custom ACL blocking writes.
+- **F13** Broken Windows Junction → Junction points to offline volume/share.
+- **F14** Log rotation inode drift → Tailing stale, unlinked log file after rotation.
+- **F15** Physical write exhaustion → Volume remounted read-only (EROFS) or ran out of inodes (ENOSPC).
+- **F16** Sudo hijack ownership drift → Root-level ownership on config/db folders.
+- **F17** V8 sync event loop lag → High CPU sync delay (>100ms) blocking heartbeats/watchers.
+- **F18** V8 heap exhaustion → Garbage collection thrashing under memory pressure.
 
-### G — Data integrity
-- **G1** Cross-check `upload_receipts` row count against any lingering `buffer_metadata` counter → if counter says zero but table has rows, it's a counter-wiring bug, not empty data.
+### G — Data Integrity and SQLite Concurrency
+- **G1** Cross-check `upload_receipts` row count against any lingering `buffer_metadata` counter → Broken counter wiring if mismatch.
 - **G2** SQLite open/integrity error → buffer.db corrupt or unreadable.
-- **G3** Repeated `resync_events` rows for the same `source_path_hash` in a short window → watermark-regression loop (stale backup, duplicate host, or vacuum storm).
+- **G3** Repeated `resync_events` rows for the same `source_path_hash` in a short window → Watermark-regression loop.
+- **G4** Non-WAL journal mode → Database journal set to rollback mode instead of WAL.
+- **G5** Database busy timeout low → Busy timeout < 2000ms causing write lock conflicts.
+- **G6** Database transaction lockup → Leaked transaction holding write locks.
+- **G7** WAL checkpoint starvation → Unclosed read transaction blocks WAL truncation.
+- **G8** Uncommitted journal stale lock → Zombie process holding WAL journal write lock.
+- **G9** Inconsistent session UUIDs → Cloned IDE workspace database producing duplicate UUIDs.
+- **G10** Telemetry zstd compression CPU spikes → Single telemetry cycle cpu spike > 1.5s.
 
 ## Output shape
 

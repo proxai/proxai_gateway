@@ -617,11 +617,11 @@ test('collectClaudeCodeFile handles non-Error exception gracefully', async () =>
     lastModifiedMs: Date.now(),
   };
 
-  const fakeDb = {
+  const fakeDb = bridgeDatabase({
     query: () => {
       throw 'database string exception';
     },
-  } as unknown as Database;
+  });
 
   const result = await collectClaudeCodeFile(fakeFile, {
     ...ctx(buffer),
@@ -777,3 +777,7 @@ test('subagent transcript inherits its parent session desktop classification', a
   const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.sourcePlatform).toBe('claude-code-desktop');
 });
+
+function bridgeDatabase(db: unknown): Database {
+  return db as unknown as Database;
+}

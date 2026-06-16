@@ -20,14 +20,10 @@ This naming convention is structurally designed to scale to other upcoming sourc
 
 ---
 
-## 2. Integration & Upload Contract Transition Strategy
+## 2. Integration & Upload Contract Promotion (Implemented & Active)
 
-To allow swift deployment of platform tracking without breaking active database tables or upstream API integrations, a two-phase rollout strategy is established:
+The rollout strategy has transitioned to being fully implemented:
 
-### Phase 1: Body Embedding (Active)
-* **Rule**: The gateway parser resolves the `source_platform` at runtime (using directory checks and session JSON exists checks) and **injects it directly inside the enqueued record body object** (rather than the top-level database column / upload DTO envelope).
-* **Rationale**: Prevents any breaking database schema migrations or REST endpoint payload failures on the active staging/production environments.
+* **Top-Level Column**: The `source_platform` field has been promoted to a formal, first-class column in the database buffer schema (`upload_batches` table) and is a top-level property of the raw record upload DTO contract (`RawRecordDTO.source_platform`).
+* **Runtime Resolution**: The gateway parser resolves the `source_platform` at runtime (using directory checks, session JSON exists checks, and platform mappings) and populates the field directly in the enqueued record batches and the REST upload payloads.
 
-### Phase 2: Top-Level Promotion (Future Intention)
-* **Goal**: Explicitly promote the `source_platform` field to a formal, first-class column in the database buffer schema and a top-level property of the raw record upload DTO contract.
-* **Scope**: This migration will be coordinated globally across the `proxai_nest` backend analytics dashboards, raw upload ingestion endpoints, and `proxai_gateway` client daemons.

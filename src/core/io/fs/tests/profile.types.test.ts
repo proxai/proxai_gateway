@@ -18,8 +18,9 @@ test('ProfileSentinelPaths shape is structurally correct at type level', () => {
     sessionStopped: '/c',
     consent: '/d',
     updateAvailable: '/e',
+    rescueLedger: '/f',
   };
-  expect(Object.keys(sentinels).length).toBe(5);
+  expect(Object.keys(sentinels).length).toBe(6);
 });
 
 test('ProfileContext shape is structurally correct at type level', () => {
@@ -36,6 +37,7 @@ test('ProfileContext shape is structurally correct at type level', () => {
       sessionStopped: '/config/SESSION_STOPPED',
       consent: '/config/CONSENT_ACCEPTED',
       updateAvailable: '/config/UPDATE_AVAILABLE',
+      rescueLedger: '/config/RESCUE_LEDGER',
     },
     controlSocketPath: '/config/control.sock',
     defaultNestBaseUrl: 'https://proxainest-production.up.railway.app',

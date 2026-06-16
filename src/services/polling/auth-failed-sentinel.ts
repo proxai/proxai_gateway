@@ -52,12 +52,6 @@ export async function readAuthFailedSentinel(
   }
 }
 
-/**
- * Merge recovery progress into the existing AUTH_FAILED sentinel, preserving the
- * original `reason` / `detected_at`. No-op when the sentinel has already been
- * cleared (e.g. `setup new` ran) so a recovery write never resurrects a sentinel
- * the user just removed.
- */
 export async function recordAuthRecoveryState(
   sentinelPath: string,
   state: AuthRecoveryState,

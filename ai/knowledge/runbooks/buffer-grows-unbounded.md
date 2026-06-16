@@ -47,7 +47,7 @@ working as designed. The drain will eventually clear
 
 ## Phase 2: stuck failed batches
 
-Failed batches sit in `buffer.db` for `failed_retention_days` (30 by
+Failed batches sit in `buffer.db` for `failed_retention_days` (365 by
 default). They are bounded but visible.
 
 A failed batch indicates `markBatchFailed` was called (drain treats

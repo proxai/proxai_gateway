@@ -86,7 +86,7 @@ collector's SELECT — it's reserved for future use. Format details in
 - `sourceInode: null` (cursor uses path-hash only — sqlite snapshot decouples
   inode from logical identity)
 - `agentSchemaVersion`: `<composerVersion>:<bubbleVersion>`, e.g.
-  `"3:14"`, falling back to `'unknown:unknown'`.
+  `"3:14"`, falling back to `'unknown'` if both are missing (or `<composerVersion>:unknown` / `unknown:<bubbleVersion>` if only one is missing).
 - Body: `zstd(redact(JSON.stringify({ rows: slice })))` (the body envelope is
   `{ rows: [...] }`).
 

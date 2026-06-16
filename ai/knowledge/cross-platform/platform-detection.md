@@ -19,20 +19,20 @@ The pattern is "one switch, near the leaf". Production code never branches on pl
 
 | Branch point | What forks | File:line |
 | --- | --- | --- |
-| `configDir()` / `logDir()` | per-OS directory layout | `core/io/fs/paths.ts:7,23` |
-| `controlSocketPath()` | unix socket vs named pipe | `core/io/fs/paths.ts:77` |
-| `platformServiceUnitPath()` | plist vs systemd unit vs XML | `cli/wiring/platform.ts:8` |
+| `profileRootDir()` / `profileLogDirRoot()` | per-OS directory layout | `core/io/fs/profile.ts:14,34` |
+| `buildControlSocketPath()` | unix socket vs named pipe | `core/io/fs/profile.ts:66` |
+| `platformServiceUnitPath()` | plist vs systemd unit vs XML | `cli/wiring/platform.ts:11` |
 | `getServiceManager()` | launchctl vs systemctl vs schtasks | `cli/service-manager/index.ts:23` |
-| `writeServiceUnit()` | unit-file content + encoding | `cli/service-unit/writer.ts:18` |
-| `setMode()` / `ensureDir()` | skip chmod on Windows | `core/io/fs/mode.ts:5,11` |
-| `openReadWrite()` (sqlite) | skip chmod on Windows | `core/io/sqlite/open.ts:25` |
-| `secureLogStream()` | skip chmod on Windows | `core/log/logger.ts:64` |
+| `writeServiceUnit()` | unit-file content + encoding | `cli/service-unit/writer.ts:22` |
+| `setMode()` / `ensureDir()` | skip chmod on Windows | `core/io/fs/mode.ts:8,28` |
+| `openReadWrite()` (sqlite) | skip chmod on Windows | `core/io/sqlite/open.ts:31` |
+| `secureLogStream()` | skip chmod on Windows | `core/log/logger.ts:73` |
 | `rmRecursive()` | retry on EBUSY only on Windows | `core/io/fs/rm-recursive.ts:29` |
-| `readMachineUuid()` | `ioreg` vs `/etc/machine-id` vs `reg query` | `core/system/machine-uuid.ts:31` |
-| `readBootId()` | `sysctl` vs `/proc/.../boot_id` vs PowerShell | `core/system/boot-id.ts:32` |
-| `replaceBinary()` (upgrade) | stage `.new` on Windows, in-place elsewhere | `services/upgrade/release-fetch.ts` (used at `cli/commands/upgrade.ts:95,111`) |
+| `readMachineUuid()` | `ioreg` vs `/etc/machine-id` vs `reg query` | `core/system/machine-uuid.ts:28` |
+| `readBootId()` | `sysctl` vs `/proc/.../boot_id` vs PowerShell | `core/system/boot-id.ts:27` |
+| `replaceBinary()` (upgrade) | stage `.new` on Windows, in-place elsewhere | `services/upgrade/release-fetch.ts:101` (used at `cli/commands/upgrade.ts:152`) |
 | `resolveReportDir()` (inspect) | `tmpdir()` on Windows, `/tmp/...` on POSIX | `cli/commands/inspect/report.ts:29` |
-| `resolveWindowsUserId(env)` | only invoked on `win32` | `cli/wiring/platform.ts:15` |
+| `resolveWindowsUserId(env)` | only invoked on `win32` | `cli/wiring/platform.ts:22` |
 
 ## What the daemon does NOT fork on
 

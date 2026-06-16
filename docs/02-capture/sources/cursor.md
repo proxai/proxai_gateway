@@ -147,7 +147,7 @@ Reads run against a **Bun snapshot** of the live sqlite file (`snapshotSqlite`),
 - **Second Attempt (Rescue)**: If *any* opening error is thrown (such as `SQLITE_CANTOPEN` or Bun's general `"unable to open database file"`), it immediately retries by appending the `immutable=1` URI query parameter. This instructs SQLite to fully bypass active writes and journal/WAL locks to guarantee safe point-in-time capture without interrupting Cursor. If both attempts fail, the original error is thrown to prevent masking true disk or file issues.
 
 
-VACUUM detection: `cursorDiskKV` is large enough that Cursor occasionally runs `VACUUM` on its sqlite. The gateway's three signals (file shrank, page count dropped, max rowid regressed) flip the source path to `#gen-N` and start a fresh cursor at rowid 0 after a rebuild, so old watermarks never get reused against the rebuilt database.
+VACUUM detection: `cursorDiskKV` is large enough that Cursor occasionally runs `VACUUM` on its sqlite. The gateway's three signals (file shrank, page count dropped, max rowid regressed) flip the source path to `#gen=N` and start a fresh cursor at rowid 0 after a rebuild, so old watermarks never get reused against the rebuilt database.
 
 ## How the receiver parses the body
 

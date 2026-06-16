@@ -42,7 +42,7 @@ db.run('UPDATE upload_batches SET ...');
   handle is fine; opening one is not.
 - Re-implementing any UPSERT, DELETE, or SELECT against
   `upload_batches`, `source_cursors`, `upload_receipts`,
-  `buffer_metadata`, `daemon_state`, or `quarantined_records`.
+  `buffer_metadata`, `daemon_state`, `quarantined_records`, or `resync_events`.
 - Touching `buffer.db` from a CLI command without going through the
   buffer API. The CLI passes the opened `Database` through to
   `services/buffer/*` functions.

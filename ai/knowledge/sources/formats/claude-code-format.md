@@ -54,7 +54,7 @@ content.type === 'text' &&
 typeof content === 'string' && content.trim().length > 0;
 ```
 
-## Drop rules (collect.ts:93)
+## Drop rules (collect.ts:142)
 
 A line is dropped (returns `false` from `isDialogueRecord`) when any of:
 
@@ -107,4 +107,4 @@ The full path `~/.claude/projects/<project>/<session>.jsonl` is hashed
 is stable. Inode is captured as a fallback cursor key in case a future tooling
 change rewrites the file in place.
 
-[source: src/sources/claude-code/collect.ts:88-198; src/sources/claude-code/collect.ts:405-430; src/sources/claude-code/claude-code.constants.ts:8-12]
+[source: src/sources/claude-code/collect.ts:83-203; src/sources/claude-code/collect.ts:421-446; src/sources/claude-code/claude-code.constants.ts:8-12]
