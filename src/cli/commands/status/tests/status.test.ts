@@ -5,9 +5,6 @@ import { rmRecursive } from 'core/io/fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-// Injected as deps.readBootId so DEV_MODE detection is deterministic — the real
-// readBootId throws on CI Linux (empty /proc boot_id) and the slow Windows WMI
-// read lets watch mode auto-quit before the first frame renders.
 const STATUS_BOOT_ID = 'test-boot-id-status';
 
 import {

@@ -19,7 +19,7 @@ snapshot. The authoritative version for a release is the git tag
 existing `v*` tag and today's UTC date. CI stamps that version into
 `package.json` at build time via `npm version --no-git-tag-version
 --allow-same-version` in both the `build` and `npm-publish` jobs
-(`.github/workflows/release.yml:82-83, 195-196`).
+(`.github/workflows/release.yml` in both the `build` and `npm-publish` steps).
 
 ## What this rule prohibits
 

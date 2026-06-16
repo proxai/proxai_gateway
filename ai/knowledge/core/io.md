@@ -6,14 +6,17 @@
 
 | Helper | Signature | Notes |
 | --- | --- | --- |
-| `writeAtomic(path, data)` | `(string, string \| Uint8Array) → Promise<void>` | `Bun.write(path.uuid.tmp, data)` then `rename`; unlinks tmp on rename failure (`atomic.ts:4`) |
-| `ensureDir(path, mode = 0o700)` | `(string, number?) → Promise<void>` | `mkdir({ recursive: true, mode })` + post-mkdir `chmod` on POSIX (`mode.ts:3`) |
-| `setMode(path, mode)` | `(string, number) → Promise<void>` | no-op on Windows; `chmod` elsewhere (`mode.ts:10`) |
+| `writeAtomic(path, data, mode?)` | `(string, string \| Uint8Array, number?) → Promise<void>` | `Bun.write(path.uuid.tmp, data)` then `rename`; chmods to `mode` on POSIX if specified, unlinks tmp on failure (`atomic.ts:4`) |
+| `ensureDir(path, mode = 0o700)` | `(string, number?) → Promise<void>` | `mkdir({ recursive: true, mode })` + post-mkdir `chmod` on POSIX (`mode.ts:8`) |
+| `ensureSecureBaseDirs(paths)` | `(string \| string[]) → Promise<void>` | recursively ensures the base directories (containing `ORG_NAME`) exist and are set to `0o700` (`mode.ts:33`) |
+| `setMode(path, mode)` | `(string, number) → Promise<void>` | no-op on Windows; `chmod` elsewhere (`mode.ts:28`) |
 | `statFile(path)` | `(string) → Promise<StatResult>` | bigint stat with `ENOENT → { exists: false }` (`stat.ts:5`) |
 | `rmRecursive(path, opts?)` | `(string, RmRecursiveOptions?) → Promise<void>` | Windows-aware retry loop, see below (`rm-recursive.ts:25`) |
 | `sentinelHandle(path)` | `(string) → SentinelHandle` | `exists`/`read`/`write`/`remove` for sentinel files (`sentinel.ts:7`) |
-| `expandHome(path)` | `(string) → string` | resolves `~`, `~/...`, `~\...` (`paths.ts:88`) |
-| path helpers | — | `configDir`, `logDir`, `bufferDbPath`, `configFilePath`, all sentinel paths, `controlSocketPath` (`paths.ts`) |
+| `expandHome(path)` | `(string) → string` | resolves `~`, `~/...`, `~\...` (`paths.ts:6`) |
+| `profileRootDir()` | `() → string` | returns profile root directory (`profile.ts:14`) |
+| `profileLogDirRoot()` | `() → string` | returns log root directory (`profile.ts:34`) |
+| `buildProfileContext(profile)` | `(ProfileName) → ProfileContext` | returns `configDir`, `logDir`, `bufferDbPath`, `configFilePath`, `sentinels`, `controlSocketPath` (`profile.ts:78`) |
 
 Constants: `ORG_NAME = 'proxai'`, `APP_NAME = 'proxai-gateway'` (`fs.constants.ts:1`).
 
@@ -65,7 +68,7 @@ Read/write helpers and snapshot capture for sqlite sources.
 | Helper | Signature | Notes |
 | --- | --- | --- |
 | `openReadOnly(path, opts?)` | `(string, { immutable?: boolean }) → Database` | `immutable=true` switches to URI mode with `SQLITE_OPEN_READONLY | SQLITE_OPEN_URI` (`open.ts:10`) |
-| `openReadWrite(path)` | `(string) → Database` | `create: true`, sets WAL + `synchronous=NORMAL` + `foreign_keys=ON`, chmods 0o600 on POSIX (`open.ts:19`) |
+| `openReadWrite(path)` | `(string) → Database` | `create: true`, sets WAL + `synchronous=NORMAL` + `foreign_keys=ON`, chmods 0o600 on POSIX (`open.ts:24`) |
 | `snapshotSqlite(sourcePath, opts?)` | `(string, SnapshotSqliteOptions?) → Promise<Snapshot>` | Opens read-only, `VACUUM INTO '<tmp>'`, returns `{ path, cleanup }` (`snapshot.ts:17`) |
 | `tableExists(db, name)` | `(Database, string) → boolean` | `sqlite_master` lookup (`introspect.ts:3`) |
 | `listTables(db)` | `(Database) → string[]` | Excludes `sqlite_%` system tables (`introspect.ts:13`) |
@@ -81,4 +84,4 @@ Read/write helpers and snapshot capture for sqlite sources.
 
 `columnExists` and `maxRowid` template the table name into a `"..."`-quoted identifier with `table.replace(/"/g, '""')` to handle double-quotes in table names. Use these helpers rather than building your own DDL string.
 
-[source: src/core/io/fs/atomic.ts:4; src/core/io/fs/mode.ts:3,10; src/core/io/fs/sentinel.ts:7; src/core/io/fs/rm-recursive.ts:25,37; src/core/io/fs/paths.ts:6,22,40,44,77,88; src/core/io/fs/fs.constants.ts:1; src/core/io/fs/stat.ts:5; src/core/io/jsonl/reader.ts:4; src/core/io/jsonl/parser.ts:4; src/core/io/jsonl/jsonl.constants.ts:1; src/core/io/sqlite/open.ts:10,19; src/core/io/sqlite/snapshot.ts:17,37; src/core/io/sqlite/introspect.ts:3,13,23,29,34]
+[source: src/core/io/fs/atomic.ts:4; src/core/io/fs/mode.ts:8,28,33; src/core/io/fs/profile.ts:14,34,78; src/core/io/fs/sentinel.ts:7; src/core/io/fs/rm-recursive.ts:25,37; src/core/io/fs/paths.ts:6,14; src/core/io/fs/fs.constants.ts:1; src/core/io/fs/stat.ts:5; src/core/io/jsonl/reader.ts:4; src/core/io/jsonl/parser.ts:4; src/core/io/jsonl/jsonl.constants.ts:1; src/core/io/sqlite/open.ts:10,24; src/core/io/sqlite/snapshot.ts:17,37; src/core/io/sqlite/introspect.ts:3,13,23,29,34]

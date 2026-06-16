@@ -46,8 +46,6 @@ function ctxWith(fetchFn: FetchFn): UploaderContext {
     db,
     http: createTestHttpClient(fetchFn),
     hostId: TEST_HOST_ID,
-    // Injected (not mock.module) so a forced extract failure stays local to
-    // this file and never leaks into other prompt-extract tests.
     extractUserPrompt: (input) => {
       if (forceExtractUserPromptThrow) throw new Error('forced extract failure');
       return realPromptExtract.extractUserPrompt(input);
@@ -791,7 +789,7 @@ test('OversizedDecompressedSliceError thrown by http surfaces raw_bytes/cap/slic
 
 test('extractUserPrompt throwing is gracefully handled in uploadBatch', async () => {
   const batch = newClaudeCodeBatch('payload');
-  batch.body = new Uint8Array([1, 2, 3, 4]); // non-zstd bytes trigger decompression throws inside extractUserPrompt
+  batch.body = new Uint8Array([1, 2, 3, 4]);
   insertBatch(db, batch);
   const stored = requireDefined(getBatch(db, batch.captureId));
 

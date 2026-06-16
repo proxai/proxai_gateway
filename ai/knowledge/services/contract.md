@@ -10,7 +10,8 @@
 interface RawRecordDTO {
   capture_id: string;
   host_id: string;
-  source_app: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop';
+  source_app: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'gemini';
+  source_platform?: 'claude-code-cli' | 'claude-code-desktop' | 'claude-cowork-desktop' | 'codex-cli' | 'codex-desktop' | 'cursor-ide' | 'cursor-cli' | 'antigravity-cli' | 'antigravity-ide' | null;
   source_kind: 'jsonl_append' | 'sqlite_kv_snapshot' | 'sqlite_table_snapshot';
   source_path: string;
   source_path_hash: string;
@@ -30,11 +31,11 @@ interface RawRecordDTO {
 | Kind | Fields | Used by |
 | --- | --- | --- |
 | `byte_range` | `{ kind: 'byte_range', start, end, table: null }` | claude-code, codex rollouts, claude-desktop |
-| `rowid_range` | `{ kind: 'rowid_range', start, end, table: string \| null }` | cursor (table: null), codex state (table: 'threads' / 'thread_dynamic_tools' / 'thread_spawn_edges') |
+| `rowid_range` | `{ kind: 'rowid_range', start, end, table: string \| null }` | cursor (table: null), codex state (table: 'threads' / 'thread_dynamic_tools' / 'thread_spawn_edges'), gemini (table: 'trajectory_meta' / 'steps' / 'trajectory_metadata_blob') |
 
 ## `SOURCE_VARIANTS` matrix
 
-Five entries; canonical enumeration of allowed `(sourceApp, sourceKind, bodyFormat, watermarkKind, watermarkTableRequired)` tuples. Server and gateway both validate against this matrix.
+Six entries; canonical enumeration of allowed `(sourceApp, sourceKind, bodyFormat, watermarkKind, watermarkTableRequired)` tuples. Server and gateway both validate against this matrix.
 
 | sourceApp | sourceKind | bodyFormat | watermarkKind | tableRequired |
 | --- | --- | --- | --- | --- |
@@ -43,6 +44,7 @@ Five entries; canonical enumeration of allowed `(sourceApp, sourceKind, bodyForm
 | `cursor` | `sqlite_kv_snapshot` | `kv_pairs_json` | `rowid_range` | false |
 | `codex` | `sqlite_table_snapshot` | `sqlite_rows_json` | `rowid_range` | true |
 | `claude-desktop` | `jsonl_append` | `jsonl` | `byte_range` | false |
+| `gemini` | `sqlite_table_snapshot` | `sqlite_rows_json` | `rowid_range` | true |
 
 Codex appears twice (rollouts JSONL + state SQLite). Adding a new agent requires a new entry here and a matching test case in `validateRawRecordDTO` tests.
 
@@ -64,13 +66,13 @@ An `asserts value is RawRecordDTO` predicate. Throws `ValidationError` (which th
 1. Object shape (not null, not array).
 2. `capture_id` matches UUIDv7 via `isUuidV7`.
 3. `host_id`, `source_path`, `source_path_hash`, `agent_schema_version`, `gateway_version` are non-empty strings.
-4. `source_app`, `source_kind`, `body_format`, `body_compression` are in their respective `VALID_*` lists.
+4. `source_app`, `source_kind`, `body_format`, `body_compression` are in their respective `VALID_*` lists. `source_platform` (if provided) is in `VALID_SOURCE_PLATFORMS`.
 5. `watermark` is an object with a recognised `kind`.
 6. `(source_app, source_kind, body_format, watermark.kind)` exists in `SOURCE_VARIANTS` — else "tuple is not in the allowed matrix".
 7. `validateWatermark(wm, variant)`:
    - `start`, `end` non-negative integers ≤ `MAX_SAFE_WATERMARK`, `start < end`.
    - `byte_range` → `table` MUST be `null`.
-   - `sqlite_table_snapshot` (table required) → `table` MUST be a non-empty string in `VALID_CODEX_TABLES`.
+   - `sqlite_table_snapshot` (table required) → `table` MUST be a non-empty string in `VALID_CODEX_TABLES` (for Codex) or `VALID_GEMINI_TABLES` (for Gemini).
    - `sqlite_kv_snapshot` → `table` MUST be `null`.
 8. `validateSourceInode(value, variant)`: SQLite snapshot variants MUST have `source_inode: null`; JSONL variants accept `null` or non-negative integer.
 9. `validateCapturedAtUtc(value)`: matches `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$` AND `Date.parse` is finite. Z suffix is required.
@@ -86,4 +88,4 @@ An `asserts value is RawRecordDTO` predicate. Throws `ValidationError` (which th
 
 `src/services/contract/index.ts` re-exports only constants, types, and `validateRawRecordDTO`. Nothing else lives here — no client logic, no formatting. Pure types-and-invariants.
 
-[source: src/services/contract/contract.types.ts:1-53; src/services/contract/contract.constants.ts:11-88; src/services/contract/validate.ts:20-184; src/services/uploader/upload-batch.ts:50-155; src/services/http/error-mapping.ts:40-77]
+[source: src/services/contract/contract.types.ts:1-66; src/services/contract/contract.constants.ts:13-116; src/services/contract/validate.ts:21-199; src/services/uploader/upload-batch.ts:110-232; src/services/http/error-mapping.ts:15-81]

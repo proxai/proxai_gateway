@@ -29,6 +29,7 @@ function fakeProfileContext(profile: ProfileName): ProfileContext {
       sessionStopped: join(configDir, 'SESSION_STOPPED'),
       consent: join(configDir, 'CONSENT_ACCEPTED'),
       updateAvailable: join(configDir, 'UPDATE_AVAILABLE'),
+      rescueLedger: join(configDir, 'rescue-ledger.json'),
     },
     controlSocketPath: join(configDir, 'control.sock'),
     defaultNestBaseUrl: profile === 'dev' ? 'http://localhost:3001' : 'https://nest.example',

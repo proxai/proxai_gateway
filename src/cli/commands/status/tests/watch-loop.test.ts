@@ -253,7 +253,6 @@ test('watch loop registers and unregisters signal/exception hooks', async () => 
     expect(unregistered['SIGHUP']?.length).toBe(1);
     expect(unregistered['uncaughtException']?.length).toBe(1);
 
-    // Verify raw terminal mode was restored (turned off)
     expect(stream.rawModeHistory).toEqual([true, false]);
   } finally {
     process.on = originalOn;
@@ -308,12 +307,9 @@ test('watch loop handles SIGINT by restoring terminal state and triggering signa
       sigintListener();
     }
 
-    // Since we called sigintListener, it should have triggered handleSignal -> cleanup -> removeHooks,
-    // which restores cursor and leaves alt buffer:
     expect(calls.some((c) => c.includes('\x1b[?1049l'))).toBe(true);
     expect(stream.rawModeHistory).toEqual([true, false]);
 
-    // And then process.kill should have been called
     expect(killCalled as unknown).toEqual({ pid: process.pid, signal: 'SIGINT' });
     expect(exitCalledWith as unknown).toBe(null);
 

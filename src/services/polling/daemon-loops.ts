@@ -45,16 +45,48 @@ export async function runDaemonLoops(
     handle.markReady(nowIsoUtc());
     contexts.heartbeat.authFailedSentinelPath = contexts.capture.authFailedSentinelPath;
     await Promise.all([
-      captureLoop(contexts.capture, captureMs, signal, sleep, options.onCaptureComplete),
-      drainLoop(contexts.drain, drainMs, signal, sleep, options.onDrainComplete),
-      heartbeatLoop(contexts.heartbeat, heartbeatMs, signal, sleep, options.onHeartbeatComplete),
-      runAuthRecoveryLoop(
-        {
-          verifyKey: () => contexts.drain.http.verifyKey(),
-          authFailedSentinelPath: contexts.capture.authFailedSentinelPath,
-          ...(contexts.drain.logger !== undefined ? { logger: contexts.drain.logger } : {}),
-        },
-        { sleep, abortSignal: signal, ...options.authRecovery },
+      superviseLoop(
+        'capture',
+        () => captureLoop(contexts.capture, captureMs, signal, sleep, options.onCaptureComplete),
+        contexts.capture.logger,
+        sleep,
+        signal,
+      ),
+      superviseLoop(
+        'drain',
+        () => drainLoop(contexts.drain, drainMs, signal, sleep, options.onDrainComplete),
+        contexts.drain.logger,
+        sleep,
+        signal,
+      ),
+      superviseLoop(
+        'heartbeat',
+        () =>
+          heartbeatLoop(
+            contexts.heartbeat,
+            heartbeatMs,
+            signal,
+            sleep,
+            options.onHeartbeatComplete,
+          ),
+        contexts.heartbeat.logger,
+        sleep,
+        signal,
+      ),
+      superviseLoop(
+        'auth_recovery',
+        () =>
+          runAuthRecoveryLoop(
+            {
+              verifyKey: () => contexts.drain.http.verifyKey(),
+              authFailedSentinelPath: contexts.capture.authFailedSentinelPath,
+              ...(contexts.drain.logger !== undefined ? { logger: contexts.drain.logger } : {}),
+            },
+            { sleep, abortSignal: signal, ...options.authRecovery },
+          ),
+        contexts.drain.logger,
+        sleep,
+        signal,
       ),
     ]);
   } finally {
@@ -85,6 +117,79 @@ async function bootDaemonActors(
   return startDaemonActors(input);
 }
 
+async function superviseLoop(
+  name: string,
+  loopFn: () => Promise<void>,
+  logger: { error: (...args: unknown[]) => void; fatal?: (...args: unknown[]) => void } | undefined,
+  sleep: NonNullable<DaemonLoopOptions['sleep']>,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  let consecutiveCrashes = 0;
+  const maxCrashes = 3;
+  while (signal === undefined || !signal.aborted) {
+    const startTime = Date.now();
+    try {
+      await loopFn();
+      break;
+    } catch (err) {
+      if (signal?.aborted) {
+        break;
+      }
+      const elapsed = Date.now() - startTime;
+      if (elapsed > 10_000) {
+        consecutiveCrashes = 0;
+      }
+      consecutiveCrashes++;
+      logger?.error(
+        {
+          event: `${name}.loop.crashed`,
+          error: (err as Error).message ?? String(err),
+          consecutiveCrashes,
+        },
+        `${name} loop crashed, restarting`,
+      );
+      if (consecutiveCrashes >= maxCrashes) {
+        if (logger?.fatal) {
+          logger.fatal(
+            { event: 'daemon.fatal_crash_limit', loop: name },
+            `${name} loop crashed consecutively ${consecutiveCrashes} times, exiting process`,
+          );
+        } else {
+          logger?.error(
+            { event: 'daemon.fatal_crash_limit', loop: name },
+            `${name} loop crashed consecutively ${consecutiveCrashes} times, exiting process`,
+          );
+        }
+        process.exit(1);
+      }
+      await sleep(1000, signal);
+    }
+  }
+}
+
+async function runWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  eventPrefix: string,
+  logger: { error: (...args: unknown[]) => void } | undefined,
+): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<null>((resolve) => {
+    timer = setTimeout(() => {
+      logger?.error({ event: `${eventPrefix}.cycle.timeout` }, `${eventPrefix} cycle timed out`);
+      resolve(null);
+    }, timeoutMs);
+  });
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    return result;
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 async function captureLoop(
   ctx: CaptureCycleContext,
   intervalMs: number,
@@ -98,8 +203,10 @@ async function captureLoop(
       continue;
     }
     try {
-      const result = await runCaptureCycle(ctx);
-      notify(onComplete, result, ctx.logger, 'capture.cycle.callback_failed');
+      const result = await runWithTimeout(runCaptureCycle(ctx), 90_000, 'capture', ctx.logger);
+      if (result !== null) {
+        notify(onComplete, result, ctx.logger, 'capture.cycle.callback_failed');
+      }
     } catch (err) {
       ctx.logger?.error(
         { event: 'capture.cycle.error', error: (err as Error).message ?? String(err) },
@@ -124,8 +231,10 @@ async function drainLoop(
       continue;
     }
     try {
-      const result = await runDrainCycle(ctx);
-      notify(onComplete, result, ctx.logger, 'drain.cycle.callback_failed');
+      const result = await runWithTimeout(runDrainCycle(ctx), 25_000, 'drain', ctx.logger);
+      if (result !== null) {
+        notify(onComplete, result, ctx.logger, 'drain.cycle.callback_failed');
+      }
     } catch (err) {
       ctx.logger?.error(
         { event: 'drain.cycle.error', error: (err as Error).message ?? String(err) },
@@ -149,8 +258,17 @@ async function heartbeatLoop(
       await sleep(Math.min(intervalMs, PAUSE_RECHECK_MS), signal);
       continue;
     }
-    const result = await runHeartbeatCycle(ctx);
-    notify(onComplete, result, ctx.logger, 'heartbeat.cycle.callback_failed');
+    try {
+      const result = await runWithTimeout(runHeartbeatCycle(ctx), 600_000, 'heartbeat', ctx.logger);
+      if (result !== null) {
+        notify(onComplete, result, ctx.logger, 'heartbeat.cycle.callback_failed');
+      }
+    } catch (err) {
+      ctx.logger?.error(
+        { event: 'heartbeat.cycle.error', error: (err as Error).message ?? String(err) },
+        'heartbeat cycle threw',
+      );
+    }
     if (isAborted(signal)) return;
     await sleep(intervalMs, signal);
   }

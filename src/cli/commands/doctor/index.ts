@@ -23,6 +23,7 @@ import {
   checkA3StoppedByUser,
   checkA4Crashed,
   checkA5Wedged,
+  checkA16RescueCircuitBreakerTripped,
 } from 'cli/commands/doctor/checkers/lifecycle.ts';
 import {
   checkB1InvalidKey,
@@ -133,6 +134,7 @@ const ALL_CHECKERS: readonly Checker[] = [
   checkA3StoppedByUser,
   checkA4Crashed,
   checkA5Wedged,
+  checkA16RescueCircuitBreakerTripped,
   checkA6AbruptDaemonTermination,
   checkA7ZombieDaemon,
   checkA8GracefulTerminationLockup,
@@ -225,7 +227,6 @@ function replaceLegacyPaths(finding: Finding, deps: DoctorCommandDeps): Finding 
       finding.code === 'F14';
 
     let result = text;
-    // Replace most specific paths first
     result = result.replace(/~\/\.proxai\/config\.toml/g, quotePath(deps.configFilePath));
     result = result.replace(/~\/\.proxai\/buffer\.db/g, quotePath(deps.bufferDbPath));
     result = result.replace(
@@ -239,8 +240,6 @@ function replaceLegacyPaths(finding: Finding, deps: DoctorCommandDeps): Finding 
       result = result.replace(/~\/\.proxai/g, quotePath(deps.configDirPath));
     }
 
-    // Additionally check if configDirPath or logDirPath is embedded in the checker message
-    // without quotes and has spaces, then quote it to keep shell command syntax safe.
     const configDir = deps.configDirPath;
     if (configDir.includes(' ')) {
       const quotedConfigDir = `'${configDir}'`;
@@ -319,6 +318,7 @@ export async function runDoctor(
       binaryPath: deps.binaryPath,
       currentVersion: deps.currentVersion,
       profileCtx: prodCtx,
+      readBootId: deps.readBootId,
     };
     const prodSignals = await gatherSignals(prodDeps);
     const prodFindings = runCheckers(prodSignals).map((f) => replaceLegacyPaths(f, prodDeps));

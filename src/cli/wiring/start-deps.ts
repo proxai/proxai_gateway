@@ -5,6 +5,8 @@ import type { ServiceManager } from 'cli/service-manager';
 import type { ServiceUnitRecreateConfig } from 'cli/service-unit/writer.ts';
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 
+import { buildWatchdogServiceContext } from 'cli/wiring/platform.ts';
+
 export interface BuildStartDepsInputs {
   serviceManager: ServiceManager;
   serviceUnitRecreate: ServiceUnitRecreateConfig;
@@ -14,6 +16,11 @@ export interface BuildStartDepsInputs {
 }
 
 export function buildStartDeps(inputs: BuildStartDepsInputs): StartCommandDeps {
+  const watchdogCtx = buildWatchdogServiceContext(
+    inputs.serviceUnitRecreate.platform,
+    inputs.serviceUnitRecreate.programPath,
+    inputs.profileCtx,
+  );
   return {
     output: consoleOutput(),
     configExists: () => Bun.file(inputs.profileCtx.configFilePath).exists(),
@@ -23,5 +30,11 @@ export function buildStartDeps(inputs: BuildStartDepsInputs): StartCommandDeps {
     serviceUnitRecreate: inputs.serviceUnitRecreate,
     runAutoUpgrade: inputs.runAutoUpgrade,
     profileName: inputs.profileCtx.name,
+    ...(watchdogCtx !== null
+      ? {
+          watchdogUnitPaths: watchdogCtx.watchdogUnitPaths,
+          watchdogManager: watchdogCtx.watchdogManager,
+        }
+      : {}),
   };
 }

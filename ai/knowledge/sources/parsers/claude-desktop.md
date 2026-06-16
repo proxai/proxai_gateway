@@ -6,9 +6,10 @@ correlated from `.claude/projects` transcripts in the same session directory.
 
 ## Files watched
 
-- Base dir: `~/Library/Application Support/Claude/local-agent-mode-sessions`
-  (`CLAUDE_DESKTOP_SESSIONS_SUBPATH` joined with `homedir()`). No platform branch
-  — effectively macOS-only (the path only exists where Claude Desktop runs).
+- Base dir: resolved cross-platform by `defaultClaudeDesktopSessionsRoot()`, which joins `claudeDesktopUserDataRoot()` with `local-agent-mode-sessions`.
+  - macOS: `~/Library/Application Support/Claude/local-agent-mode-sessions`
+  - Windows: `%APPDATA%/Claude/local-agent-mode-sessions` (falls back to `~/AppData/Roaming/Claude/local-agent-mode-sessions`)
+  - Linux: `$XDG_CONFIG_HOME/Claude/local-agent-mode-sessions` (falls back to `~/.config/Claude/local-agent-mode-sessions`)
 - Discovery glob (File B, authoritative): `*/*/local_*/audit.jsonl`
   (`CLAUDE_DESKTOP_AUDIT_GLOB_PATTERN`). Pinned depth — never `**/audit.jsonl`.
 - Enrichment glob (File A, side input): `.claude/projects/*/*.jsonl`
@@ -52,7 +53,7 @@ replays the session on open).
 - `watermarkTable: null`
 - `sourceInode`: real inode (fallback cursor key)
 - `agentSchemaVersion`: `claude-desktop/<File A version>` for the first kept
-  record, else `'unknown'`.
+  record, else `'claude-desktop/v2'` (the value of `CLAUDE_DESKTOP_DEFAULT_AGENT_SCHEMA_VERSION`).
 
 Each kept record is **rewritten** before shipping (this differs from claude-code,
 which ships verbatim):
@@ -94,10 +95,18 @@ through its in-process poller (`makeClaudeDesktopSourcePoller` → `source.poll`
 on the main thread. The `inspect` dry-run command, by contrast, scans
 `claude-desktop` inside `handleInspect`.
 
+## Sidecar session resolution (sidecar.ts)
+
+Resolves active Claude Code sidecar session IDs by scanning the `claude-code-sessions` directory inside the Claude Desktop user data root:
+1. Resolved path: `claude-code-sessions` (`CLAUDE_DESKTOP_SIDECAR_DIR`).
+2. Glob pattern: `*/*/local_*.json` (`CLAUDE_DESKTOP_SIDECAR_GLOB_PATTERN`).
+3. `loadDesktopCliSessionIds(platform, env)` reads each matching session JSON file, extracts the `cliSessionId` field, and compiles a set of active sidecar CLI session IDs.
+4. During capture loops, this set of IDs is threaded to the `claude-code` capture workers so that matching Claude Code sessions can be correctly tagged as `'claude-code-desktop'` rather than `'claude-code-cli'`.
+
 ## Error path
 
 On any throw inside `collectClaudeDesktopFile`, the catch block pushes
 `{ sourcePath, reason }` into `result.errors`. Successful captures set the cursor
 with `consecutiveErrors: 0`.
 
-[source: src/sources/claude-desktop/claude-desktop.constants.ts; src/sources/claude-desktop/discover.ts; src/sources/claude-desktop/collect.ts; src/services/polling/poll-claude-desktop.ts; src/services/polling/capture-cycle.ts; src/services/config/sub-agent-flags.ts]
+[source: src/sources/claude-desktop/claude-desktop.constants.ts; src/sources/claude-desktop/discover.ts; src/sources/claude-desktop/collect.ts; src/sources/claude-desktop/sidecar.ts; src/services/polling/poll-claude-desktop.ts; src/services/polling/capture-cycle.ts; src/services/config/sub-agent-flags.ts]

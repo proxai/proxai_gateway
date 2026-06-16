@@ -445,9 +445,7 @@ test('continues past fatal validation errors even when auth failed sentinel path
   const dirAuth = await mkdtemp(join(tmpdir(), 'proxai-drain-val-'));
   const sentinelPath = join(dirAuth, 'AUTH_FAILED');
   try {
-    const ctx = ctxWith(
-      mockFetch(() => emptyResponse(400)), // ValidationError -> fatal, but no sentinel written
-    );
+    const ctx = ctxWith(mockFetch(() => emptyResponse(400)));
     ctx.authFailedSentinelPath = sentinelPath;
 
     const result = await drainBuffer(ctx);

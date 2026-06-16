@@ -7,6 +7,8 @@ import {
   type EnsureServiceUnitDeps,
   type ServiceUnitRecreateConfig,
 } from 'cli/service-unit/writer.ts';
+import { ensureWatchdogUnitExists } from 'cli/service-unit/watchdog-writer.ts';
+import type { WatchdogManager } from 'cli/watchdog-manager/types.ts';
 import { clearSessionStoppedSentinel } from 'services/polling';
 
 export interface StartCommandDeps {
@@ -20,6 +22,13 @@ export interface StartCommandDeps {
   writeServiceUnitFn?: EnsureServiceUnitDeps['writer'];
   runAutoUpgrade?: () => Promise<void>;
   profileName?: string;
+  watchdogUnitPaths?: {
+    timerPath?: string;
+    servicePath?: string;
+    plistPath?: string;
+    xmlPath?: string;
+  };
+  watchdogManager?: WatchdogManager;
 }
 
 export async function runStart(deps: StartCommandDeps): Promise<CommandResult> {
@@ -55,6 +64,15 @@ export async function runStart(deps: StartCommandDeps): Promise<CommandResult> {
       } catch {}
     }
     await deps.serviceManager.ensureRegistered();
+    if (deps.watchdogUnitPaths !== undefined && deps.watchdogManager !== undefined) {
+      await ensureWatchdogUnitExists({
+        platform: process.platform,
+        profileName: deps.profileName === 'dev' ? 'dev' : 'prod',
+        programPath: deps.serviceUnitRecreate?.programPath ?? process.execPath,
+        ...deps.watchdogUnitPaths,
+      });
+      await deps.watchdogManager.install();
+    }
     await deps.serviceManager.start();
     deps.output.success('Daemon started successfully!');
     deps.output.info('');

@@ -12,7 +12,7 @@ Claude Desktop's **Cowork** mode (the sandboxed agent loop inside the desktop GU
 
 | Item | Value |
 | --- | --- |
-| Base directory | `~/Library/Application Support/Claude/local-agent-mode-sessions` (`CLAUDE_DESKTOP_SESSIONS_SUBPATH`) — macOS-only; no platform branch |
+| Base directory | Platform-specific user data root plus `local-agent-mode-sessions` (`CLAUDE_DESKTOP_SESSIONS_DIR`) |
 | Audit glob (File B, authoritative) | `*/*/local_*/audit.jsonl` (`CLAUDE_DESKTOP_AUDIT_GLOB_PATTERN`) |
 | Transcript glob (File A, enrichment) | `.claude/projects/*/*.jsonl` (`CLAUDE_DESKTOP_TRANSCRIPT_GLOB_PATTERN`, scanned relative to the session dir) |
 | Source kind | `jsonl_append` |
@@ -20,10 +20,15 @@ Claude Desktop's **Cowork** mode (the sandboxed agent loop inside the desktop GU
 | Watermark kind | `byte_range` |
 | Watermark table required? | No |
 
+The base directory resolves based on the host operating system:
+- **macOS:** `~/Library/Application Support/Claude/local-agent-mode-sessions`
+- **Windows:** `%APPDATA%\Claude\local-agent-mode-sessions` (falling back to `~/AppData/Roaming/Claude/local-agent-mode-sessions` if `%APPDATA%` is missing)
+- **Linux:** `${XDG_CONFIG_HOME:-~/.config}/Claude/local-agent-mode-sessions`
+
 On-disk shape that the audit glob targets:
 
 ```
-~/Library/Application Support/Claude/local-agent-mode-sessions/
+<Base Directory>/
 └── <a>/
     └── <b>/
         └── local_<id>/
@@ -68,6 +73,18 @@ Unlike Claude Code (which ships lines verbatim), Claude Desktop **mutates** each
 
 Because the emitted shape differs from the raw on-disk line, any change to these transforms is a parser-shape change and requires an `agent_schema_version` bump.
 
+## Sidecar CLI Tracking
+
+Claude Desktop cowork sessions can spin up sidecar CLI processes. The gateway tracks these CLI sessions using metadata files stored under a dedicated directory in the user data root:
+- **Sidecar directory:** `claude-code-sessions` (`CLAUDE_DESKTOP_SIDECAR_DIR`)
+- **Sidecar glob pattern:** `*/*/local_*.json` (`CLAUDE_DESKTOP_SIDECAR_GLOB_PATTERN`)
+
+The `loadDesktopCliSessionIds` function scans this directory for files matching the glob pattern. It parses each JSON file, extracts the `cliSessionId` field, and compiles a set of active desktop CLI session IDs.
+
+This set is passed to the Claude Code collector context as `desktopCliSessionIds`. When processing a Claude Code session, the collector determines the `source_platform` by checking if the session's ID is in the sidecar set:
+- **Matched:** `claude-code-desktop` (meaning the session was run inside Claude Desktop's cowork CLI wrapper)
+- **Unmatched:** `claude-code-cli` (meaning the session was run as a standalone Claude Code CLI command)
+
 ## How the body lands on the wire
 
 | Field | Value |
@@ -83,7 +100,7 @@ When a byte range contains no kept records (e.g. replay-only or tool-only ranges
 ## Per-source quirks
 
 - **Two-file correlation.** `audit.jsonl` is authoritative for dialogue; the `.claude/projects` transcript supplies CLI context. If the transcript is missing or a record doesn't correlate, the record still ships — just without the merged `cwd`/`gitBranch`/`agentVersion` fields.
-- **macOS-only by construction.** The base path lives under `~/Library/Application Support`; `discover.ts` has no Windows/Linux branch, so on other platforms discovery simply finds nothing.
+- **Cross-platform support.** Although Claude Desktop is most commonly used on macOS, the discoverer implements platform-specific path resolution for macOS (`darwin`), Windows (`win32`), and Linux/Unix.
 - **In-process polling, not a worker.** `claude-desktop` is a registered default source but is **not** routed through the capture cycle's Bun-Worker shortcut (only `claude-code`, `cursor`, `codex` are). It runs on the main thread via its in-process poller. The `inspect` dry-run command, however, scans it inside the worker's `handleInspect`. See [4.1 Capture Cycle](../../04-daemon-loops/4.1-capture-cycle.md).
 - **`source_platform` is body-embedded (Phase 1).** It is injected inside the record body, not promoted to a top-level DTO column yet — see [Source Platform Conventions](../../../ai/knowledge/sources/source-platform-conventions.md).
 - **Schema-version detection is degradation-safe.** No correlated version → `agent_schema_version = "unknown"`; nothing in the pipeline blocks on it.
@@ -98,7 +115,7 @@ When a byte range contains no kept records (e.g. replay-only or tool-only ranges
 | File A transcripts as captures | Used only for enrichment; never a capture target. |
 | Files outside the pinned audit glob | `*/*/local_*/audit.jsonl` requires the exact depth; anything else is invisible. |
 | Files older than the mtime threshold (if specified) | mtime filter at discovery time (`minimumMtime`). |
-| Non-macOS hosts | Base path does not exist; discovery returns empty. |
+| Missing user data / session directories | Base path does not exist on the system; discovery returns empty. |
 
 This contrasts with [Claude Code](./claude-code.md), which ships dialogue lines verbatim with no metadata merge, and with [Cursor](./cursor.md), whose body is a trimmed sqlite KV snapshot.
 

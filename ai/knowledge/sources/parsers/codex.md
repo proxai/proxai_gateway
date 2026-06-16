@@ -42,16 +42,16 @@ on disk (rotation artefacts) but are intentionally not read.
   `thread_spawn_edges`. Only `threads` and `thread_spawn_edges` are in the
   allow-list (`CODEX_ALLOWED_STATE_TABLES`).
 
-## Rollout collection (`collectCodexRollout`, collect-rollout.ts:97)
+## Rollout collection (`collectCodexRollout`, collect-rollout.ts:107)
 
 Same JSONL pipeline as claude-code with these differences:
 
-- `isCodexDialogueRecord` (collect-rollout.ts:49) keeps `type === 'session_meta'`,
+- `isCodexDialogueRecord` (collect-rollout.ts:52) keeps `type === 'session_meta'`,
   `type === 'event_msg'` whose `payload.type` is one of
   `task_started | task_complete | turn_aborted | token_count`, and
   `type === 'response_item'` whose `payload.type === 'message'` and
   `payload.role ∈ {user, assistant}`.
-- `trimCodexRecord` (collect-rollout.ts:77) rewrites the `session_meta` payload:
+- `trimCodexRecord` (collect-rollout.ts:80) rewrites the `session_meta` payload:
   `base_instructions` becomes `'<trimmed>'` and `dynamic_tools` becomes `[]` to
   cap line size before redaction.
 - `agentSchemaVersion`: `extractRolloutCliVersion` (rollout-version.ts:7) reads the
@@ -79,7 +79,7 @@ Same JSONL pipeline as claude-code with these differences:
    is computed; the cursor is treated as absent so capture restarts from
    `rowid > 0`.
 5. For each allowed table (`threads`, `thread_spawn_edges`):
-   `collectOneTable` (collect-state-table.ts:37) runs
+   `collectOneTable` (collect-state-table.ts:54) runs
    `SELECT rowid, * FROM "<table>" WHERE rowid > ?` with the prior watermark,
    measures per slice with `splitRowsByCompressedSize`, redacts
    `JSON.stringify(slice)` once per slice (cached), and either inserts each batch
@@ -109,7 +109,7 @@ rollout collector as a fallback when the rollout's own first line lacks the fiel
 
 - Rollout: per-slice `createSliceRedactor` (collect-rollout.ts:35), identical
   pattern to claude-code.
-- State: per-slice `createSliceMeasurer` (collect-state-table.ts:251) wraps
+- State: per-slice `createSliceMeasurer` (collect-state-table.ts:269) wraps
   `JSON.stringify(slice)` → `applyRedaction` → `zstdCompressSync`, cached per
   slice array via `WeakMap`. Splitter uses both the redacted byte length and the
   compressed byte length to find the largest prefix that fits.
@@ -162,4 +162,4 @@ state collectors are no-ops when nothing has changed.
   unconditionally for `session_meta` — these fields are intentionally never
   transmitted.
 
-[source: src/sources/codex/codex.constants.ts:1-40; src/sources/codex/discover.ts:21-173; src/sources/codex/collect-rollout.ts:49-303; src/sources/codex/collect-state.ts:21-141; src/sources/codex/collect-state-table.ts:37-264; src/sources/codex/resolve-state-identity.ts:15-69; src/sources/codex/rollout-version.ts:1-38]
+[source: src/sources/codex/codex.constants.ts:1-40; src/sources/codex/discover.ts:21-174; src/sources/codex/collect-rollout.ts:52-327; src/sources/codex/collect-state.ts:21-142; src/sources/codex/collect-state-table.ts:38-283; src/sources/codex/resolve-state-identity.ts:15-70; src/sources/codex/rollout-version.ts:1-39]

@@ -20,7 +20,7 @@ The first line is always a `session_meta` record carrying CLI/session metadata
 including `payload.cli_version`. Subsequent lines stream events as the turn
 progresses.
 
-### Kept line types (`isCodexDialogueRecord`, collect-rollout.ts:49)
+### Kept line types (`isCodexDialogueRecord`, collect-rollout.ts:52)
 
 | Outer `type`     | Required `payload.type` / extra                    | Why kept                          |
 | ---------------- | -------------------------------------------------- | --------------------------------- |
@@ -31,7 +31,7 @@ progresses.
 Everything else (tool plumbing, intermediate `event_msg` types, `response_item`s
 that are not messages) is dropped.
 
-### `session_meta` trimming (`trimCodexRecord`, collect-rollout.ts:77)
+### `session_meta` trimming (`trimCodexRecord`, collect-rollout.ts:80)
 
 The `session_meta` payload is rewritten before serialization:
 
@@ -124,4 +124,4 @@ at `rowid > 0`.
   (not the snapshot) for a single read-only metadata query. Failure is
   swallowed (empty exclude set, fail-open).
 
-[source: src/sources/codex/codex.constants.ts:9-40; src/sources/codex/collect-rollout.ts:49-95; src/sources/codex/rollout-version.ts:1-38; src/sources/codex/collect-state.ts:123-141; src/sources/codex/collect-state-table.ts:37-90; src/sources/codex/resolve-state-identity.ts:15-69; src/sources/codex/discover.ts:111-158]
+[source: src/sources/codex/codex.constants.ts:9-40; src/sources/codex/collect-rollout.ts:52-105; src/sources/codex/rollout-version.ts:1-39; src/sources/codex/collect-state.ts:123-142; src/sources/codex/collect-state-table.ts:38-283; src/sources/codex/resolve-state-identity.ts:15-70; src/sources/codex/discover.ts:111-173]

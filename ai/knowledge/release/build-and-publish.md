@@ -20,11 +20,10 @@ Used both by CI and `bun run build:<target>` locally. Drives `bun build
 Locally, only `bun run build:darwin-arm64` runs as part of `bun run
 validate` (`package.json:52`). The full matrix only runs in CI.
 
-`scripts/build.ts` knows about `windows-x64` and `windows-arm64`, but the
-CI matrix in `.github/workflows/release.yml:46-56` only includes
-`windows-x64` and (newly) `windows-arm64`. macOS x64 is intentionally
-absent from CI even though `build.ts` supports it — Apple Silicon is the
-shipped macOS target.
+`scripts/build.ts` supports targets like macOS x64, but it is intentionally
+absent from the CI matrix in `.github/workflows/release.yml` — Apple Silicon
+(`darwin-arm64`) is the only shipped macOS target. The CI matrix builds five
+targets: `darwin-arm64`, `linux-arm64`, `linux-x64`, `windows-x64`, and `windows-arm64`.
 
 ## CI matrix (`.github/workflows/release.yml`)
 
@@ -32,21 +31,16 @@ Trigger: `push: tags: ['v*']`. Concurrency group `release-${{ github.ref
 }}` with `cancel-in-progress: false` — a re-pushed tag will queue, not
 abort.
 
-Three jobs:
+Four jobs:
 
 1. **version** — strips the `v` prefix and exports `version` / `tag` as
    outputs. Runs on `ubuntu-latest`.
-2. **build** — matrix of five targets, all on `ubuntu-latest` using Bun's
-   cross-compile (no per-OS runners). Each step: checkout, `setup-bun@v2`
-   pinned to 1.3.14, `setup-node@v4` for npm tooling, restore the
-   `~/.bun/install/cache` keyed on `bun.lock`, `bun install
-   --frozen-lockfile`, `npm version --no-git-tag-version
-   --allow-same-version` to stamp the version into `package.json`, then
-   `bun run build:<target>`. Artifact is uploaded with `if-no-files-found:
-   error`, retention 7 days.
+2. **build** — matrix of five targets: `darwin-arm64` runs on `macos-latest` (native runner), while `linux-arm64`, `linux-x64`, `windows-x64`, and `windows-arm64` run on `ubuntu-latest` (cross-compilation). Each step: checkout, `setup-bun@v2`
+   pinned to 1.3.14, `actions/setup-node@v6` with node version 24, restore the
+   cache using `actions/cache@v5`, `bun install --frozen-lockfile`, `npm version --no-git-tag-version --allow-same-version` to stamp the version into `package.json`, and then `bun run build:<target>`. For macOS builds, it also runs ad-hoc codesign verification. Artifact is uploaded with `if-no-files-found: error`, retention 7 days.
 3. **release** — depends on `build`. Downloads all artifacts, runs the
    asset-renaming `REMAP` (see below), generates `sha256sum > checksums.txt`,
-   then uses `softprops/action-gh-release@v2` with `make_latest: 'true'`
+   then uses `softprops/action-gh-release@v3` with `make_latest: 'true'`
    and `generate_release_notes: true`.
 4. **npm-publish** — depends on `release`. Stamps the version into
    `package.json` *again* (separate job, fresh checkout), runs

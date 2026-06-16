@@ -4,12 +4,12 @@
 
 ## Endpoints
 
-| Method | URL constant | Purpose | Timeout |
+| Method | URL helper / endpoint path | Purpose | Timeout |
 | --- | --- | --- | --- |
-| `GET /ingestion/verify-key` | `NEST_VERIFY_KEY_URL` | Validate the `X-API-Key` header. Used by setup, status, and the uploader's `handleAuthError` disambiguation. | `DEFAULT_TIMEOUT_MS = 30_000` |
-| `POST /v1/host-ids/register` | `NEST_REGISTER_HOST_ID_URL` | Idempotent host-id registration during setup. | 30 s |
-| `GET /v1/watermarks?host_id=…` | `NEST_WATERMARKS_URL` | Pull all server-known cursors. Used to seed a fresh `buffer.db` (see `watermark-sync.ts`). | 30 s |
-| `POST /v1/raw_records` | `NEST_INGEST_URL` | Single-record upload. Body is a full `RawRecordDTO`. | `UPLOAD_TIMEOUT_MS = 60_000` |
+| `GET` | `nestVerifyKeyUrl` / `/ingestion/verify-key` | Validate the `X-API-Key` header. Used by setup, status, and the uploader's `handleAuthError` disambiguation. | `DEFAULT_TIMEOUT_MS = 30_000` |
+| `POST` | `nestRegisterHostIdUrl` / `/v1/host-ids/register` | Idempotent host-id registration during setup. | 30 s |
+| `GET` | `nestWatermarksUrl` / `/v1/watermarks?host_id=…` | Pull all server-known cursors. Used to seed a fresh `buffer.db` (see `watermark-sync.ts`). | 30 s |
+| `POST` | `nestIngestUrl` / `/v1/raw_records` | Single-record upload. Body is a full `RawRecordDTO`. | `UPLOAD_TIMEOUT_MS = 60_000` |
 
 Upload uses 60 s; everything else uses 30 s. Do not collapse them — uploads must tolerate a slower path because the body can be up to 2 MiB compressed.
 
@@ -35,6 +35,7 @@ One instance per daemon — constructed at bootstrap with config + resolved endp
 | `User-Agent` | `gatewayVersion ?? '@proxai/gateway'` | every request |
 | `X-API-Key` | `apiKey` | `withApiKey: true` requests (all four methods) |
 | `Content-Type` | `application/json` | requests with a body (uploads, host-id register) |
+| `X-Client-Timezone` | `Intl.DateTimeFormat().resolvedOptions().timeZone` | raw record upload (`withClientTimezone: true` requests) |
 
 No `Authorization: Bearer` — auth is the custom `X-API-Key` header.
 
@@ -84,4 +85,4 @@ Token-bucket pacing runs **after** backoff — two buckets, `rateBucket` (max ba
 - `fetchWatermarks()` → `{ hostId, userId, watermarks: ServerWatermark[] }` (parses each via `parseServerWatermark`, drops malformed entries silently).
 - `uploadRawRecord(dto)` → `{ captureId, accepted, idempotent }`. Calls `validateRawRecordDTO(dto)` first — local validation failure throws before any network round-trip.
 
-[source: src/services/http/client.ts:28-170; src/services/http/error-mapping.ts:15-78; src/services/http/http.constants.ts:1-23; src/services/http/parse-helpers.ts:3-56; src/services/http/http-context.ts:5-24; src/services/uploader/pacer.ts:58-173]
+[source: src/services/http/client.ts:30-176; src/services/http/error-mapping.ts:15-81; src/services/http/http.constants.ts:1-24; src/services/http/parse-helpers.ts:3-56; src/services/http/http-context.ts:5-24; src/services/uploader/pacer.ts:58-173]

@@ -48,10 +48,6 @@ import {
   type DiscoveredGeminiFile,
 } from 'sources/gemini';
 
-// Why: Bun's worker entrypoint exposes `self` as a `DedicatedWorkerGlobalScope`
-// equivalent at runtime. The shape we use is a narrow subset — message handler
-// + postMessage — so declare those two fields directly instead of pulling the
-// full Web Worker lib.dom type just for one helper.
 declare const self:
   | {
       onmessage: ((event: MessageEvent<WorkerInput>) => void) | null;
@@ -716,10 +712,6 @@ export async function handleCapture(
   }
 }
 
-// Exported so tests can drive the worker message routing directly, independent
-// of which test file's `self` won the once-per-process module evaluation (the
-// listener is registered a single time). Reads `self` at call time, so it works
-// in the real worker and when a test points `globalThis.self` at a mock.
 export async function dispatchWorkerMessage(event: MessageEvent<WorkerInput>): Promise<void> {
   const worker = requireDefined(self);
   const { task, sourceName, options } = event.data;

@@ -138,12 +138,10 @@ test('secureLogStream hooks ready event to set 0o600 permissions', async () => {
   const { secureLogStream } = await import('core/log');
   secureLogStream(stream);
 
-  // Set to 0o777 first
   const { chmodSync } = await import('node:fs');
   chmodSync(testFile, 0o777);
   expect(statSync(testFile).mode & 0o777).toBe(0o777);
 
-  // Emit ready to trigger permissions clamp
   stream.emit('ready');
   expect(statSync(testFile).mode & 0o777).toBe(0o600);
 });
@@ -158,13 +156,17 @@ test('secureLogStream registers error handler to prevent crashing', async () => 
   const { secureLogStream } = await import('core/log');
   secureLogStream(stream);
 
-  // Spy on process.stderr.write
   const originalWrite = process.stderr.write;
   let loggedError = '';
-  process.stderr.write = ((str: string) => {
-    loggedError = str;
+  const mockWrite = (
+    str: string | Uint8Array,
+    _encoding?: string | ((err?: Error) => void),
+    _cb?: (err?: Error) => void,
+  ): boolean => {
+    loggedError = typeof str === 'string' ? str : new TextDecoder().decode(str);
     return true;
-  }) as unknown as typeof process.stderr.write;
+  };
+  process.stderr.write = mockWrite as typeof process.stderr.write;
 
   try {
     expect(() => {

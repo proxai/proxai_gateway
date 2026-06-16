@@ -2,13 +2,13 @@
 
 # Daemon Loops (04)
 
-*Last Updated: 2026-05-27*
+*Last Updated: 2026-06-16*
 
-The three concurrent loops that drive the daemon — capture, drain, heartbeat — plus the sentinels that gate them. They run under one process via `Promise.all` and never share memory; coordination happens through SQLite rows and on-disk sentinel files.
+The four concurrent supervised loops that drive the daemon — capture, drain, heartbeat, and auth_recovery — plus the sentinels that gate them. They run under one process via `Promise.all` and never share memory; coordination happens through SQLite rows and on-disk sentinel files.
 
 ## Docs in this section
 
-1. [4.1 Capture Cycle](./4.1-capture-cycle.md) — 2-minute default, sentinel gates, per-source order, error tracking.
+1. [4.1 Capture Cycle](./4.1-capture-cycle.md) — 2-minute default, sentinel gates, per-source order, error tracking, compile-build dispatch, timeouts.
 2. [4.2 Drain Cycle](./4.2-drain-cycle.md) — 30-second default, 256-batch cap, three-consecutive-retriable break, pacer mechanics, backoff math.
 3. [4.3 Heartbeat Cycle](./4.3-heartbeat-cycle.md) — 1-hour default, GitHub release check, stale-binary policy, brew vs. coordinated dual-daemon in-place upgrade branches.
 4. [4.4 Sentinels](./4.4-sentinels.md) — the five per-profile filesystem flags plus the root-level boot-scoped `DEV_MODE` toggle, what triggers each, what clears each, how they are surfaced.

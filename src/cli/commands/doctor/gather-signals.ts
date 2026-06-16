@@ -11,8 +11,8 @@ import { profileSystemdUnitName } from 'cli/service-unit/dev-labels.ts';
 import { defaultClaudeDesktopSessionsRoot } from 'sources/claude-desktop';
 import { defaultGeminiCliConversationsDir, defaultGeminiIdeConversationsDir } from 'sources/gemini';
 import { loadConfigFromString, type InstallSource } from 'services/config';
-
-/** Seam for tests — swap individual deps without mock.module. */
+import { readRescueLedgerReadOnly } from 'services/rescue/rescue-ledger.ts';
+import { readBootId } from 'core/system/boot-id.ts';
 export const __deps = {
   realpath,
 };
@@ -609,6 +609,13 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     probeSystemdExtended(deps),
   ]);
 
+  const bootId = deps.readBootId !== undefined ? await deps.readBootId() : await readBootId();
+  const ledger = await readRescueLedgerReadOnly(deps.profileCtx.sentinels.rescueLedger, bootId);
+  const rescueSignal = {
+    consecutiveFailures: ledger?.consecutiveFailures ?? 0,
+    lastRescueAt: ledger?.lastRescueAt ?? null,
+  };
+
   const signals: DoctorSignals = {
     configExists,
     configParses,
@@ -679,6 +686,7 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     upgradeExtended,
     windowsExtended,
     systemdExtended,
+    rescue: rescueSignal,
     configDirPath: deps.configDirPath,
     logDirPath: deps.logDirPath,
   };

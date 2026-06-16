@@ -32,8 +32,8 @@ Defaults live in `config.constants.ts`, **not** in a written-out template. `vali
 | --- | --- | --- |
 | `DEFAULT_POLL_INTERVAL_SEC` | `300` | Not actually used by the daemon — capture interval is the hardcoded `CAPTURE_INTERVAL_MS = 120_000` in polling. This field is for the legacy `poll` command. |
 | `MIN_POLL_INTERVAL_SEC` / `MAX_POLL_INTERVAL_SEC` | `60` / `3600` | Range check only. |
-| `DEFAULT_RECEIPT_RETENTION_DAYS` | `30` | |
-| `DEFAULT_FAILED_RETENTION_DAYS` | `30` | |
+| `DEFAULT_RECEIPT_RETENTION_DAYS` | `365` | |
+| `DEFAULT_FAILED_RETENTION_DAYS` | `365` | |
 | `DEFAULT_BUFFER_SOFT_PAUSE_BYTES` | `50 * 1024^3` (50 GiB) | Source memory said `700 MB`; that is wrong. |
 | `DEFAULT_BUFFER_SOFT_RESUME_BYTES` | `45 * 1024^3` (45 GiB) | Hysteresis enforced: `resume < pause` or `ValidationError`. |
 | `DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC` | `5` | `MIN_UPLOAD_MAX_BATCHES_PER_SEC = 0.1`. |

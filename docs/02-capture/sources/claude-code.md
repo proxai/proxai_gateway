@@ -54,6 +54,7 @@ A `user` record's first text block is treated as synthetic when (after trimming 
 | Sub-agent JSONL files | **No** by default — re-enabled via maintainer flag | The sub-agent glob `*/*/subagents/*.jsonl` is gated behind `PROXAI_GATEWAY_CAPTURE_SUB_AGENTS` (global) or `PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_CLAUDE_CODE` (per-source). When enabled, the same `isDialogueRecord` filter applies to those files. See [6.4 Maintainer Debug Flags](../../06-operations/6.4-maintainer-debug-flags.md). |
 | File rotation / deletion | Handled | `(source_path_hash, source_inode)` keys the cursor; a new inode at the same path produces a fresh cursor at `watermark_end = 0`. |
 | Agent schema version | Best-effort | Parses `version` / `message.version` from the kept (redacted) lines; falls back to `unknown` if not found. |
+| Source platform | Dynamic | Set to `claude-code-desktop` if the session correlates with a Claude Desktop sidecar CLI session; otherwise defaults to `claude-code-cli`. |
 
 ## What gets skipped
 
@@ -96,6 +97,12 @@ A captured line is the full, unmodified JSONL record for a `user` or `assistant`
 Sub-agent JSONL lines additionally carry an `agentId` field — the hex from the filename `agent-<hex>.jsonl`. Empirically: parent transcripts have 0% of records with `agentId`; sub-agent transcripts have 100%. The receiver uses this field (not the path) to compose the composite chat id (see below).
 
 The version probe (`extractAgentSchemaVersion`) walks the kept, redacted lines looking for a top-level `version` or `message.version` string and writes it onto every batch as `agent_schema_version`.
+
+## Source Platform and Sidecar Correlation
+
+The gateway resolves the `source_platform` for each captured Claude Code session dynamically:
+- If the session ID matches an active Claude Desktop sidecar CLI session ID (discovered from the `claude-code-sessions` directory under the desktop user data root via `*/*/local_*.json`), the platform is set to `claude-code-desktop`.
+- Otherwise, it defaults to `claude-code-cli` (standalone terminal CLI session).
 
 ## How the body lands on the wire
 

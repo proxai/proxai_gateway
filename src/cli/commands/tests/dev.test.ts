@@ -24,6 +24,7 @@ const mockDevCtx: ProfileContext = {
     sessionStopped: join(tmpdir(), 'proxai-dev-test', 'SESSION_STOPPED'),
     consent: join(tmpdir(), 'proxai-dev-test', 'CONSENT_ACCEPTED'),
     updateAvailable: join(tmpdir(), 'proxai-dev-test', 'UPDATE_AVAILABLE'),
+    rescueLedger: join(tmpdir(), 'proxai-dev-test', 'rescue-ledger.json'),
   },
   controlSocketPath: join(tmpdir(), 'proxai-dev-test', 'control.sock'),
   defaultNestBaseUrl: 'http://localhost:3001',
@@ -49,17 +50,13 @@ function makeDevDeps(overrides: Partial<DevCommandDeps> = {}): DevCommandDeps {
 beforeEach(() => {
   try {
     unlinkSync(mockSentinelPath);
-  } catch {
-    // Sentinel may not exist yet
-  }
+  } catch {}
 });
 
 afterEach(() => {
   try {
     unlinkSync(mockSentinelPath);
-  } catch {
-    // Sentinel may not exist
-  }
+  } catch {}
 });
 
 test('runDev action="on" enables dev mode', async () => {

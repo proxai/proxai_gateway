@@ -1,6 +1,6 @@
 # polling
 
-`src/services/polling/` owns the daemon's three concurrent loops plus the four gate-sentinels (auth-failed, buffer-full, session-stopped, update-available). Capture/drain/heartbeat run under one `Promise.all` and coordinate only via sentinel files and `buffer.db` rows.
+`src/services/polling/` owns the daemon's four concurrent supervised loops (capture, drain, heartbeat, and auth_recovery) plus the four gate-sentinels (auth-failed, buffer-full, session-stopped, update-available). The supervised loops run under `Promise.all` in `runDaemonLoops` and coordinate only via sentinel files and `buffer.db` rows.
 
 ## Loops
 
@@ -8,7 +8,7 @@
 | --- | --- | --- | --- | --- |
 | Capture | `CAPTURE_INTERVAL_MS` | `120_000` (2 min) | `AUTH_FAILED` → `BUFFER_FULL` (first hit short-circuits) | Spawn one worker per source; commit batches/quarantine/cursors in one tx; write `BUFFER_FULL` if pressure exceeds `softPauseBytes`; persist `capture_cycles_total` + `daemon_state.lastSourceCaptures`. |
 | Drain | `DRAIN_INTERVAL_MS` | `30_000` (30 s) | `AUTH_FAILED` only (intentionally NOT `BUFFER_FULL` — drain is what relieves it) | `drainBuffer` walks pending batches via cursor pagination; runs `pruneBuffer`; if pressure < `softResumeBytes`, clear `BUFFER_FULL`; persist `daemon_state` + drain metrics. |
-| Heartbeat | `HEARTBEAT_INTERVAL_MS` | `3_600_000` (1 h) | none (version checks must run even when auth is broken) | `checkStaleBinary` logs a warning past `pauseAfterDays`; throttled version check (default 4 h between checks via `metadata.last_version_check_at`); brew → `UPDATE_AVAILABLE` sentinel, others → `runAutoUpgrade` (in-place replace + `exitProcess`). |
+| Heartbeat | `HEARTBEAT_INTERVAL_MS` | `3_600_000` (1 h) | `AUTH_FAILED` (checks `pausedByAuth` and pauses when `AUTH_FAILED` is set) | `checkStaleBinary` logs a warning past `pauseAfterDays`; throttled version check (default 4 h between checks via `metadata.last_version_check_at`); brew → `UPDATE_AVAILABLE` sentinel, others → `runAutoUpgrade` (in-place replace + `exitProcess`). |
 
 Intervals are constants in `polling.constants.ts` and deliberately **not** in `config.toml`. Override only via `DaemonLoopOptions.{captureIntervalMs,drainIntervalMs,heartbeatIntervalMs}` in tests.
 
@@ -16,13 +16,21 @@ Intervals are constants in `polling.constants.ts` and deliberately **not** in `c
 
 ```ts
 await Promise.all([
-  captureLoop(ctx.capture, captureMs, signal, sleep, onCaptureComplete),
-  drainLoop(ctx.drain, drainMs, signal, sleep, onDrainComplete),
-  heartbeatLoop(ctx.heartbeat, heartbeatMs, signal, sleep, onHeartbeatComplete),
+  superviseLoop('capture', (sig) => captureLoop(ctx.capture, captureMs, sig, sleep, onCaptureComplete), logger),
+  superviseLoop('drain', (sig) => drainLoop(ctx.drain, drainMs, sig, sleep, onDrainComplete), logger),
+  superviseLoop('heartbeat', (sig) => heartbeatLoop(ctx.heartbeat, heartbeatMs, sig, sleep, onHeartbeatComplete), logger),
+  superviseLoop('auth_recovery', (sig) => authRecoveryLoop(ctx.authRecovery, sig, sleep), logger),
 ]);
 ```
 
-Each loop is a `while (!isAborted) { try runCycle catch log; sleep(intervalMs, signal); }`. A thrown error from `runCaptureCycle` / `runDrainCycle` is **caught and logged** by the loop wrapper (`capture.cycle.error`, `drain.cycle.error`) — the loop retries on the next tick. `runHeartbeatCycle` does NOT have a top-level try/catch in the loop because its internal `try` already swallows version-check failures.
+Each of the four loops runs independently and is supervised by `superviseLoop`. If a loop throws an unhandled error or crashes, `superviseLoop` catches the error, logs a `${name}.loop.crashed` error event (with the consecutive crash count), and restarts the loop. If a loop crashes consecutively 3 times, the daemon process exits with code 1 via `daemon.fatal_crash_limit`.
+
+Each cycle is also protected by `runWithTimeout` to avoid hanging indefinitely:
+- Capture cycle: 90s timeout threshold.
+- Drain cycle: 25s timeout threshold.
+- Heartbeat cycle: 600s timeout threshold.
+
+If a cycle hangs beyond its threshold, it logs a cycle timeout event (`*.cycle.timeout`) and allows the loop to continue to the next cycle rather than hanging forever.
 
 Sleep is abortable: `options.sleep ?? abortableSleep` from `core/utils`. The `AbortSignal` short-circuits both the sleep and the next-iteration guard.
 

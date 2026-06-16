@@ -345,3 +345,27 @@ test('outputs profile name when provided', async () => {
   expect(calls.start).toBe(1);
   expect(output.lines.some((l) => l.msg.includes('Profile: custom-profile'))).toBe(true);
 });
+
+test('installs watchdog when watchdogUnitPaths and watchdogManager are provided', async () => {
+  const { sm } = fakeManager();
+  const output = captureOutput();
+  let installCalled = false;
+  const watchdogManager = {
+    install: async () => {
+      installCalled = true;
+    },
+    uninstall: async () => {},
+    isInstalled: async () => false,
+  };
+  const result = await runStart({
+    output,
+    configExists: async () => true,
+    serviceManager: sm,
+    sessionStoppedSentinelPath: sentinelPath,
+    watchdogUnitPaths: { plistPath: join(dir, 'watchdog.plist') },
+    watchdogManager:
+      watchdogManager as unknown as import('cli/watchdog-manager/types.ts').WatchdogManager,
+  });
+  expect(result.exitCode).toBe(0);
+  expect(installCalled).toBe(true);
+});

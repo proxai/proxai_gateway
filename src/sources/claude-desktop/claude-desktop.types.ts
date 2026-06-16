@@ -1,5 +1,5 @@
 import type { Database } from 'bun:sqlite';
-import type { Logger } from 'core/log';
+import type { MinimalLogger } from 'core/log';
 
 export interface DiscoveredClaudeDesktopFile {
   sourcePath: string;
@@ -12,7 +12,7 @@ export interface DiscoveredClaudeDesktopFile {
 export interface ClaudeDesktopCollectorContext {
   buffer: Database;
   maxDecompressedBytes: number;
-  logger?: Logger;
+  logger?: MinimalLogger;
 }
 
 export interface ClaudeDesktopCollectorResult {

@@ -198,7 +198,7 @@ test('renderUploadSection writes all-time, avg, last cycle, last success when po
     now: NOW,
   });
   const joined = lines.join('\n');
-  expect(joined).toContain('All-time');
+  expect(joined).toContain('12-Month');
   expect(joined).toContain('86');
   expect(joined).toContain('batches shipped');
   expect(joined).toContain('Claude Code');
@@ -281,7 +281,7 @@ test('renderUploadSection: all-time data without bysource shows summary line onl
     now: NOW,
   });
   const joined = lines.join('\n');
-  expect(joined).toContain('All-time');
+  expect(joined).toContain('12-Month');
   expect(joined).toContain('batches shipped');
   expect(joined).toContain('compressed');
 });

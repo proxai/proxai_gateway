@@ -155,6 +155,7 @@ test('buildHeartbeatContext: correctly maps all optional and required fields', (
           sessionStopped: '/tmp/stop',
           consent: '/tmp/consent',
           updateAvailable: '/tmp/update',
+          rescueLedger: '/tmp/rescue-ledger.json',
         },
         controlSocketPath: '/tmp/sock',
         defaultNestBaseUrl: 'http://localhost',

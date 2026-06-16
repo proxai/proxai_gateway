@@ -27,11 +27,10 @@ Every parser exposes the same two-call pipeline used by the polling layer:
 | codex rollout| `~/.codex`                                       | `sessions/*/*/*/rollout-*.jsonl`                              | JSONL append |
 | codex state  | `~/.codex`                                       | `state_*.sqlite` (highest-numbered only)                      | sqlite (table snapshot) |
 | cursor       | `~/Library/Application Support/Cursor/User` (macOS); `~/.config/Cursor/User` (linux); `%APPDATA%/Cursor/User` (win32) | `globalStorage/state.vscdb` + `workspaceStorage/*/state.vscdb` | sqlite (KV snapshot) |
-| claude-desktop | `~/Library/Application Support/Claude/local-agent-mode-sessions` (macOS-only; no platform branch) | `*/*/local_*/audit.jsonl` (authoritative) + `.claude/projects/*/*.jsonl` (per-session CLI-metadata side input) | JSONL append |
+| claude-desktop | `defaultClaudeDesktopSessionsRoot()` (branches on platform) | `*/*/local_*/audit.jsonl` (authoritative) + `.claude/projects/*/*.jsonl` (per-session CLI-metadata side input) | JSONL append |
 | gemini       | `~/.gemini/antigravity-cli/conversations` + `~/.gemini/antigravity-ide/conversations` (both roots; via `homedir()`, no platform branch) | `*.db` (Cascade trajectory; both roots) | sqlite (table snapshot) |
 
-The cursor base dir is the only one whose POSIX default branches on `process.platform`;
-claude-desktop has no platform branch and so is macOS-only in practice. All globs are
+Both the cursor and claude-desktop base dirs branch dynamically based on the target OS platform. All globs are
 pinned-depth — `**/*.jsonl` is never used so we never silently start capturing unknown
 content.
 
@@ -43,6 +42,7 @@ Every parser writes the same `NewBatch` interface into the buffer:
 interface NewBatch {
   captureId: string;            // UUIDv7 generated at insert
   sourceApp: SourceApp;         // 'claude-code' | 'codex' | 'cursor' | 'claude-desktop' | 'gemini'
+  sourcePlatform?: string | null; // Resolved platform identifier, e.g. 'claude-code-cli' or 'antigravity-ide'
   sourceKind: SourceKind;       // 'jsonl_append' | 'sqlite_kv_snapshot' | 'sqlite_table_snapshot'
   sourcePath: string;
   sourcePathHash: string;
@@ -73,7 +73,7 @@ base64-encoded.
 | `sourceInode`        | file inode             | file inode             | `null`                 | `null`                 | file inode             | `null`                 |
 | Splitter             | `splitJsonlAtBoundary` | `splitJsonlAtBoundary` | `splitRowsByCompressedSize` | `splitRowsByCompressedSize` | `splitJsonlAtBoundary` | `splitRowsByCompressedSize` |
 | Version source       | embedded `version`     | embedded `payload.cli_version` (first line) | `threads.cli_version` (max-rowid) | `_v` from composer + bubble rows | `agentVersion` correlated from File A transcript | hard-coded constant (no upstream version string) |
-| Version fallback     | `'unknown'`            | `'unknown'`            | `'unknown'`            | `'unknown:unknown'`    | `'unknown'`            | `'antigravity/1.0.0'`  |
+| Version fallback     | `'unknown'`            | `'unknown'`            | `'unknown'`            | `'unknown:unknown'`    | `'claude-desktop/v2'`  | `'antigravity/1.0.0'`  |
 | Initial watermark    | `0`                    | `0`                    | `1` (rowid space)      | `1` (rowid space)      | `0`                    | `-1` (rowid space; reads all) |
 | Quarantine on oversize | throws fatal         | throws fatal           | `recordQuarantine` + advance cursor | `recordQuarantine` + advance cursor | throws fatal | `recordQuarantine` + advance cursor |
 | VACUUM rehash        | n/a                    | n/a                    | yes (`detectVacuum`)   | yes (`detectVacuum`)   | n/a                    | yes (`detectVacuum`)   |

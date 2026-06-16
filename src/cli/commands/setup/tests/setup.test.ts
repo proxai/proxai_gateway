@@ -30,6 +30,7 @@ import {
 import { buildProfileContext } from 'core/io/fs/profile.ts';
 import type { GatewayConfig } from 'services/config';
 import type { ServiceManager } from 'cli/service-manager';
+import type { WatchdogManager } from 'cli/watchdog-manager/types.ts';
 
 const prodBaseUrl = buildProfileContext('prod').defaultNestBaseUrl;
 
@@ -253,8 +254,6 @@ async function writeExistingConfig(
   };
   await writeConfigToFile(config, configPath);
 }
-
-// --- first-time configure (runSetup with no existing config) -----------------
 
 test('writes CONSENT_ACCEPTED sentinel on first-time setup with a timestamp', async () => {
   const control = newControl();
@@ -662,8 +661,6 @@ test('runConfigure clears failed batches and the buffer_full sentinel', async ()
   expect(await sentinel.exists()).toBe(false);
 });
 
-// --- setup new (replace an existing key) -------------------------------------
-
 test('setup new replaces the key when given a new gateway key', async () => {
   await writeExistingConfig();
   const control = newControl({ userId: TEST_USER_ID_OTHER });
@@ -744,8 +741,6 @@ test('setup new on a fresh machine configures normally', async () => {
   expect(config.account.apiKey).toBe(VALID_KEY);
 });
 
-// --- setup (configured) status view ------------------------------------------
-
 test('setup on a configured machine shows the status view with key + last upload', async () => {
   await writeExistingConfig();
   const out = captureOutput();
@@ -815,8 +810,6 @@ test('setup with a key on a configured machine keeps the key and notes it was un
   const config = await loadConfigFromFile(configPath);
   expect(config.account.apiKey).not.toBe(NEW_KEY);
 });
-
-// --- setup reset -------------------------------------------------------------
 
 test('setup reset on an unconfigured machine reports nothing to reset', async () => {
   const out = captureOutput();
@@ -899,4 +892,54 @@ test('setup reset tolerates a null service unit path and missing service manager
   const result = await runSetupReset(d, { yes: true });
   expect(result.exitCode).toBe(0);
   expect(await Bun.file(configPath).exists()).toBe(false);
+});
+
+test('writeServiceUnitIfNeeded and autoStartDaemon watchdog branches', async () => {
+  const { writeServiceUnitIfNeeded, autoStartDaemon } =
+    await import('cli/commands/setup/install-and-start.ts');
+  const out = captureOutput();
+  let watchdogInstalled = false;
+  const watchdogManager: WatchdogManager = {
+    install: async () => {
+      watchdogInstalled = true;
+    },
+    uninstall: async () => {},
+    isInstalled: async () => false,
+  };
+  const d = {
+    ...deps(newControl()),
+    output: out,
+    platform: 'darwin' as const,
+    programPath: '/bin/gateway',
+    serviceUnitPath: join(dir, 'unit.plist'),
+    watchdogUnitPaths: { plistPath: join(dir, 'watchdog.plist') },
+    serviceManager: fakeServiceManager(),
+    watchdogManager,
+    profileCtx: buildProfileContext('prod'),
+  };
+
+  await writeServiceUnitIfNeeded(d);
+  expect(await Bun.file(join(dir, 'watchdog.plist')).exists()).toBe(true);
+
+  const result = await autoStartDaemon(d, { yes: true });
+  expect(result.exitCode).toBe(0);
+  expect(watchdogInstalled).toBe(true);
+});
+
+test('autoStartDaemon formatError falls back to String(err) on non-Error values', async () => {
+  const control = newControl();
+  const sm = fakeServiceManager();
+  sm.start = async () => {
+    throw 'launchd-offline-string';
+  };
+  const out = captureOutput();
+  const d = { ...deps(control), output: out, serviceManager: sm };
+  const result = await runSetup(d, { apiKey: VALID_KEY });
+  expect(result.exitCode).toBe(0);
+  expect(
+    out.lines.some(
+      (l) =>
+        l.level === 'warn' && l.msg.includes('daemon auto-start failed: launchd-offline-string'),
+    ),
+  ).toBe(true);
 });

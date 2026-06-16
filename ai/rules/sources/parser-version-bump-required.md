@@ -17,7 +17,7 @@ filter's accept/reject decision — requires bumping the parser's
 `agentSchemaVersion` flows through every `AgentCallRecord` the parser
 emits and lands in the `agent_schema_version` column of `upload_batches`
 and in the DTO's `agent_schema_version` field
-(`contract.types.ts:46`). The server uses it to partition records for
+(under the `RawRecordDTO` interface in `contract.types.ts`). The server uses it to partition records for
 schema-aware downstream processing. If the shape changes without a
 version bump, downstream consumers cannot distinguish the new shape
 from the old, and historical records become un-replayable.
@@ -50,7 +50,7 @@ where possible:
 
 - `claude-code`: `extractAgentSchemaVersion(redactedFullText)` parses
   `version` / `message.version` from the JSONL itself
-  (`sources/claude-code/collect.ts:273`).
+  (`sources/claude-code/collect.ts:278`).
 - `cursor`: `extractAgentSchemaVersion(kvRows)` reads the version key
   from the sqlite KV pairs (`sources/cursor/collect.ts:140`).
 - `codex`: parsed from the rollout/state file format.

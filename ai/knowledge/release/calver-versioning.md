@@ -15,7 +15,7 @@ A version is `year.month.day[-N]`:
 
 Examples: `2026.5.10`, `2026.5.10-1`, `2026.12.1-3`.
 
-The `Version` record (`scripts/release/versioning.ts:1-6`) is `{ year, month,
+The `Version` record (`scripts/release/versioning.ts:3-8`) is `{ year, month,
 day, suffix: number | null }`. The regex `^(\d+)\.(\d+)\.(\d+)(?:-(\d+))?$`
 gates parsing; padded values like `2026.05.10` are not accepted.
 
@@ -65,12 +65,12 @@ is treated as suffix-0, so it sorts **before** `2026.5.10-1`. This is what
 `pickLatestTag` relies on to find the most recent existing tag before
 computing the next one.
 
-The auto-upgrade path (`services/polling/version-check.ts:84-101`) uses a
-different comparator — `compareVersionStrings` splits on `.` and parses
-ints — because it operates on raw strings from the GitHub API and does not
-need the same `Version` shape. Both comparators agree on the ordering of
-well-formed CalVer tags; the daemon path is just looser about
-non-CalVer-looking strings.
+The auto-upgrade path (`services/polling/version-check.ts`) uses a
+different comparator — `compareGatewayVersions` (from `core/utils/version.ts`)
+splits on `.` and parses ints — because it operates on raw strings from
+the GitHub API and does not need the same `Version` shape. Both comparators
+agree on the ordering of well-formed CalVer tags; the daemon path is just
+looser about non-CalVer-looking strings.
 
 ## Never hand-bump
 

@@ -2,7 +2,7 @@
 
 # Gemini (Antigravity) — capture decisions and product selections
 
-*Last Updated: 2026-06-13*
+*Last Updated: 2026-06-16*
 
 > One artifact per Antigravity conversation: a SQLite "Cascade trajectory" database at `~/.gemini/antigravity-{cli,ide}/conversations/<cascadeId>.db`. Antigravity ships as a **CLI** and an **IDE** that write the identical format under two sibling directories, so the gateway uses **one** `gemini` source and tags each file with `source_platform = antigravity-cli` / `antigravity-ide`. The gateway allow-lists three tables, decodes each `steps` row's protobuf `step_payload` into plaintext, redacts it, and ships it. Gemini Desktop and the old Google Gemini CLI are out of scope.
 
@@ -73,7 +73,7 @@ A conversation `.db` is a Windsurf/Cascade trajectory. Several tables exist; the
 
 ### 1. Snapshot and read
 
-`snapshotSqlite(file.sourcePath)` makes a transactionally consistent temp copy (Antigravity's writer is never blocked), then `openReadOnly` opens it. Before reading, `resolveGeminiIdentity` runs `detectVacuum` against the stored cursor's size / page-count / `max(rowid)`; any of size-decreased / page-count-decreased / rowid-regressed re-keys the source path with a `#gen-N` suffix and a fresh hash, restarting capture at rowid 0.
+`snapshotSqlite(file.sourcePath)` makes a transactionally consistent temp copy (Antigravity's writer is never blocked), then `openReadOnly` opens it. Before reading, `resolveGeminiIdentity` runs `detectVacuum` against the stored cursor's size / page-count / `max(rowid)`; any of size-decreased / page-count-decreased / rowid-regressed re-keys the source path with a `#gen=N` suffix and a fresh hash, restarting capture at rowid 0.
 
 For each allowed table the collector reads new rows with `SELECT rowid AS rid, … FROM "<table>" WHERE rowid > ? ORDER BY rowid ASC` bound to `watermarkEnd - 1`.
 
@@ -110,7 +110,7 @@ The decoded row objects are serialized and run through `applyRedaction(JSON.stri
 
 ### Body shapes per table
 
-- **`steps`** → `{ idx, step_type, status, role, text, tool_name, tool_args_json, iso_timestamp, turn_id, conversation_id }`. `text` and `tool_args_json` are redacted; `role` is `user` / `assistant` / `tool` / `system` / `null`; `conversation_id` is the `cascade_id` from the payload.
+- **`steps`** → `{ idx, step_type, status, role, text, tool_name, tool_args_json, iso_timestamp, turn_id, conversation_id, model, input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens }`. `text` and `tool_args_json` are redacted; `role` is `user` / `assistant` / `tool` / `system` / `null`; `conversation_id` is the `cascade_id` from the payload. `model`, `input_tokens`, `output_tokens`, `cache_read_input_tokens`, and `cache_creation_input_tokens` are populated directly from the decoded step payload.
 - **`trajectory_meta`** → `{ idx, trajectory_id, cascade_id, trajectory_type, source }` (usually 1 row; `cascade_id` is the downstream `chat_id`).
 - **`trajectory_metadata_blob`** → `{ idx, workspace_path, git_remote }` (decoded from the blob; redacted).
 
@@ -143,7 +143,7 @@ The receiver does **no** protobuf work — it `JSON.parse`s the already-decoded,
 - **Stub rows are normal.** ~3% of type-5 and ~20% of type-17 rows lack the `5.4` envelope (null `tool_name`); the row stays addressable by `(cascade_id, idx)`.
 - **Not worker-dispatched.** The capture cycle routes only `claude-code`, `cursor`, and `codex` to Bun Workers; Gemini (like Claude Desktop) polls **in-process**. The `poll-worker.ts` Gemini branch is the **inspect/doctor** path only — it counts `steps` rows and `step_type = 14` prompts.
 - **One `.db` = up to three table cursors**, all sharing the source path hash and differentiated by `watermark_table`.
-- **VACUUM detection runs against the `.db`.** A regression re-keys the source to `#gen-N` and restarts at rowid 0.
+- **VACUUM detection runs against the `.db`.** A regression re-keys the source to `#gen=N` and restarts at rowid 0.
 
 ## Skipped-content reality check
 
@@ -152,7 +152,7 @@ The receiver does **no** protobuf work — it `JSON.parse`s the already-decoded,
 | Are we missing the message transcript? | No. `steps` rows carry user prompts, assistant text, tool calls + args, and system events as decoded plaintext. |
 | Are we missing conversation identity / chat id? | No. `trajectory_meta.cascade_id` (== filename) is the `chat_id`. |
 | Are we missing workspace / git context? | No. `trajectory_metadata_blob` is decoded to `workspace_path` + `git_remote`. |
-| Are we missing the model name and token usage? | **Yes, by design in v1.** They live in `gen_metadata` (not allow-listed); the emitted `model` / usage fields are best-effort `null`. Enabling the `gen_metadata` join is the path to per-turn model + token analytics. |
+| Are we missing the model name and token usage? | **No.** Model name and token metrics (`input_tokens`, `output_tokens`, cache read/creation tokens) are actively decoded directly from the protobuf `step_payload` in the `steps` table (using field paths like `5.9` and `5.11`). The `gen_metadata` table is still skipped, but basic model and token metrics are captured per step in the `steps` batches. |
 | Are we missing sub-agent transcripts? | `invoke_subagent` (step 127) spawns sub-trajectories whose work lives in **separate** `.db` files; those are discovered and captured as their own conversations. The originating step still belongs to the opening turn. |
 | Are we missing tool results? | The human-readable tool **action** is reconstructed from args + summary; the raw RESULT blob is an opaque proprietary codec and is not shipped. |
 | Are we capturing legacy `.pb` files? | No, by design. Superseded by `.db`. |

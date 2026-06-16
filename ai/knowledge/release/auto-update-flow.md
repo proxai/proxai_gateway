@@ -82,7 +82,7 @@ When `devConfigExists()` is false, the heartbeat calls `runAutoUpgrade(deps)` in
    timeoutMs: DOWNLOAD_TIMEOUT_MS = 120_000 })`. Returns `Uint8Array`.
    Empty body → `auto_upgrade.download_failed` (FATAL).
 7. `replaceBinary(binaryPath, bytes, platform)`:
-   - **POSIX**: `Bun.write(binaryPath, bytes)` then `setMode(0o755)`.
+   - **POSIX**: writes bytes to `<binaryPath>.new`, calls `setMode(staged, 0o755)`, then atomically renames the sibling to `<binaryPath>`.
    - **Windows**: writes `<binaryPath>.new` instead — you cannot overwrite
      a running `.exe` on Windows.
 8. Log `auto_upgrade.success` (INFO).

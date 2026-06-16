@@ -8,7 +8,7 @@ How agent session data gets discovered, parsed, sliced, redacted, and packaged i
 
 ## Docs in this section
 
-1. [2.1 Sources](./2.1-sources.md) — the four supported agents, where their session files live, and the shape of each on the wire.
+1. [2.1 Sources](./2.1-sources.md) — the five supported agents, where their session files live, and the shape of each on the wire.
    - Per-source deep-dives in [sources/](./sources/README.md) — captured-vs-skipped namespaces, record types, and product selections for each agent.
 2. [2.2 Parsing & Watermarks](./2.2-parsing-and-watermarks.md) — the cursor row, byte-range vs. rowid-range advancement, VACUUM detection, and restart resumption.
 3. [2.3 Batching & Compression](./2.3-batching-and-compression.md) — what a batch is, the 2 MB / 10 MB size caps, zstd level 3, oversize splitting, and per-batch metadata.

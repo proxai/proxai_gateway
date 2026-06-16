@@ -9,6 +9,7 @@ import {
   checkA3StoppedByUser,
   checkA4Crashed,
   checkA5Wedged,
+  checkA16RescueCircuitBreakerTripped,
 } from 'cli/commands/doctor/checkers/lifecycle.ts';
 import {
   checkB1InvalidKey,
@@ -242,6 +243,10 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
       systemdRateLimitHit: false,
       systemdHomeEncryptedTearing: false,
     },
+    rescue: {
+      consecutiveFailures: 0,
+      lastRescueAt: null,
+    },
     configDirPath: '/Users/test/.proxai',
     logDirPath: '/Users/test/.proxai/log',
   };
@@ -364,6 +369,39 @@ test('A5: stays silent while AUTH_FAILED is set (capture paused by design)', () 
     sentinels: { ...baseSignals().sentinels, authFailed: true },
   });
   expect(checkA5Wedged(signals)).toBeNull();
+});
+
+test('A16: circuit breaker tripped when consecutiveFailures >= 3 and daemon not running', () => {
+  expect(
+    checkA16RescueCircuitBreakerTripped(
+      baseSignals({
+        rescue: { consecutiveFailures: 2, lastRescueAt: null },
+        daemonRunning: false,
+      }),
+    ),
+  ).toBeNull();
+  expect(
+    checkA16RescueCircuitBreakerTripped(
+      baseSignals({
+        rescue: { consecutiveFailures: 3, lastRescueAt: null },
+        daemonRunning: true,
+      }),
+    ),
+  ).toBeNull();
+  const f = requireDefined(
+    checkA16RescueCircuitBreakerTripped(
+      baseSignals({
+        rescue: { consecutiveFailures: 3, lastRescueAt: null },
+        daemonRunning: false,
+      }),
+    ),
+  );
+  expect(f.code).toBe('A16');
+  expect(f.severity).toBe(Severity.critical);
+  expect(f.confidence).toBe(Confidence.confirmed);
+  expect(f.action).toContain('proxai-gateway restart');
+  expect(f.action).toContain('proxai-gateway logs');
+  expect(f.action).not.toContain('proxai-gateway reset');
 });
 
 test('B1: AUTH_FAILED sentinel flags invalid key', () => {

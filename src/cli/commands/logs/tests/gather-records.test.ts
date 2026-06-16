@@ -103,7 +103,6 @@ test('failed frame pulls failed batches and quarantined records with extracted p
   expect(frame.uploaded).toEqual([]);
   expect(frame.failed).toHaveLength(1);
   expect(frame.failed[0]?.lastError).toBe('server returned 500');
-  // The fixture body is not valid zstd, so extraction yields null.
   expect(frame.failed[0]?.userPrompt).toBeNull();
   expect(frame.failed[0]?.assistantResponse).toBeNull();
   expect(frame.quarantined).toHaveLength(1);

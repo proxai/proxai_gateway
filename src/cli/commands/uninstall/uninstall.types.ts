@@ -1,6 +1,7 @@
 import type { OutputSink } from 'cli/cli.types.ts';
 import type { PromptSink } from 'cli/prompts.ts';
 import type { ServiceManager } from 'cli/service-manager';
+import type { WatchdogManager } from 'cli/watchdog-manager/types.ts';
 import type {
   DirectBinaryRemover,
   PackageManagerSweep,
@@ -29,6 +30,24 @@ export interface UninstallCommandDeps {
   currentExecPath?: string;
   isDevMode?: boolean;
   readBootId?: () => Promise<string>;
+  watchdogManager?: WatchdogManager | undefined;
+  watchdogUnitPaths?:
+    | {
+        timerPath?: string | undefined;
+        servicePath?: string | undefined;
+        plistPath?: string | undefined;
+        xmlPath?: string | undefined;
+      }
+    | undefined;
+  devWatchdogManager?: WatchdogManager | undefined;
+  devWatchdogUnitPaths?:
+    | {
+        timerPath?: string | undefined;
+        servicePath?: string | undefined;
+        plistPath?: string | undefined;
+        xmlPath?: string | undefined;
+      }
+    | undefined;
 }
 
 export interface UninstallCommandOptions {

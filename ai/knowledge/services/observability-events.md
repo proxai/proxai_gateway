@@ -10,6 +10,10 @@
 - `auth.invalid` (FATAL): `reason`, `capture_id`. Sentinel written on same event.
 - `vacuum.detected` (varies): `source_path`, `reason` (size_decreased / page_count_decreased / rowid_regressed).
 - `stale_binary.paused` (WARN): `days_since_install`, `pause_after_days`.
+- `${name}.loop.crashed` (ERROR): loop crashes, logs error message and consecutive crash count.
+- `daemon.fatal_crash_limit` (FATAL): loop crashed consecutively 3 times, exiting process.
+- `${eventPrefix}.cycle.timeout` (ERROR): cycle (capture, drain, heartbeat) hung beyond timeout threshold.
+- `rescue.decision` / `rescue.execution` events from the `rescue` command, noting the decision (`none`, `start`, `restart`) and reasons/outcomes.
 - Exit codes: 0 ok, 1 error, 2 validationError, 3 authError, 4 notInstalled, 5 alreadyInstalled, 7 fileUnreadable, 130 userAborted. 6 intentionally skipped.
 - `tail` filter flags compose with AND: `--level`, `--source`, `--since`, `--lines`, `--follow`, `--raw`. Mid-follow midnight rollover handled automatically (position reset to 0).
 - `inspect` command: dry-run, no buffer writes, uses same Bun Workers. Reports saved to `tmp/proxai-gateway/reports/inspect_<timestamp>.md`.

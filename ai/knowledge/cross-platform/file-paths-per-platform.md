@@ -74,7 +74,7 @@ All ~65 former callsites of zero-arg helpers (`configDir()`, `bufferDbPath()`, `
 | `configDir` (dev) | `~/.proxai/proxai-gateway/dev` | `~/.proxai/proxai-gateway/dev` | `%LOCALAPPDATA%\proxai\proxai-gateway\dev` |
 | `logDir` (prod) | `~/Library/Logs/proxai/proxai-gateway/prod` | `~/.local/state/proxai/proxai-gateway/log/prod` | `%LOCALAPPDATA%\proxai\proxai-gateway\Logs\prod` |
 | `logDir` (dev) | `~/Library/Logs/proxai/proxai-gateway/dev` | `~/.local/state/proxai/proxai-gateway/log/dev` | `%LOCALAPPDATA%\proxai\proxai-gateway\Logs\dev` |
-| `controlSocketPath` (POSIX) | `<configDir>/control.sock` | `<configDir>/control.sock` | `\\.\pipe\proxai-gateway-<profile>-control` |
+| `controlSocketPath` (POSIX) | `<configDir>/control.sock` | `<configDir>/control.sock` | `\\.\pipe\proxai-gateway-control-<profile>` |
 
 macOS and Linux share `profileRootDir()` (both use `~/.proxai/...`). Windows is the only platform that splits the user-data root from `%LOCALAPPDATA%`. `logDir` differs on every platform and is further split by profile so prod and dev logs never intermingle.
 
@@ -98,8 +98,11 @@ macOS and Linux share `profileRootDir()` (both use `~/.proxai/...`). Windows is 
 | Platform | Path (prod) | Path (dev) | Encoding |
 | --- | --- | --- | --- |
 | `darwin` | `~/Library/LaunchAgents/co.proxai.gateway.plist` | `~/Library/LaunchAgents/co.proxai.gateway.dev.plist` | UTF-8 plist |
+| `darwin` (watchdog) | `~/Library/LaunchAgents/co.proxai.gateway.watchdog.plist` | `~/Library/LaunchAgents/co.proxai.gateway.dev.watchdog.plist` | UTF-8 plist |
 | `linux` | `~/.config/systemd/user/proxai-gateway.service` | `~/.config/systemd/user/proxai-gateway-dev.service` | UTF-8 systemd unit |
-| `win32` | `<prod-configDir>/scheduled-task.xml` | `<dev-configDir>/scheduled-task.xml` | UTF-16 LE + BOM (mandatory for `schtasks /XML`) |
+| `linux` (watchdog) | `~/.config/systemd/user/proxai-gateway-watchdog.timer` | `~/.config/systemd/user/proxai-gateway-dev-watchdog.timer` | UTF-8 systemd unit |
+| `win32` | `<prod-configDir>/scheduled-task.xml` | `<dev-configDir>/scheduled-task.xml` | UTF-16 LE + BOM (mandatory) |
+| `win32` (watchdog) | `<prod-configDir>/scheduled-task-watchdog.xml` | `<dev-configDir>/scheduled-task-watchdog.xml` | UTF-16 LE + BOM (mandatory) |
 
 macOS and Linux unit files live under the OS service-manager directory. The Windows path deliberately lives under the profile's `configDir` (not `LaunchAgents`/`systemd`) because Windows has no equivalent per-user service-config directory.
 

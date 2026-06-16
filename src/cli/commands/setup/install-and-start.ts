@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 
 import { writeServiceUnit } from 'cli/service-unit/writer.ts';
+import { writeWatchdogServiceUnit } from 'cli/service-unit/watchdog-writer.ts';
 import { GatewayError } from 'core/utils';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
 import type { CommandResult } from 'cli/cli.types.ts';
@@ -17,6 +18,15 @@ export async function writeServiceUnitIfNeeded(deps: SetupCommandDeps): Promise<
   };
   if (deps.windowsUserId !== undefined) writeInput.windowsUserId = deps.windowsUserId;
   await writeServiceUnit(writeInput);
+
+  if (deps.watchdogUnitPaths !== undefined) {
+    await writeWatchdogServiceUnit({
+      platform: deps.platform,
+      profileName: 'prod',
+      programPath: deps.programPath,
+      ...deps.watchdogUnitPaths,
+    });
+  }
 }
 
 export async function autoStartDaemon(
@@ -45,6 +55,9 @@ export async function autoStartDaemon(
     }
     await deps.serviceManager.ensureRegistered();
     await deps.serviceManager.start();
+    if (deps.watchdogManager !== undefined) {
+      await deps.watchdogManager.install();
+    }
     deps.output.success('daemon started');
     deps.output.info('');
     deps.output.info(`  Logs:    ${chalk.cyan('proxai-gateway logs')}`);
@@ -62,5 +75,6 @@ export async function autoStartDaemon(
 
 function formatError(prefix: string, err: unknown): string {
   if (err instanceof GatewayError) return `${prefix}: ${err.message}`;
-  return `${prefix}: ${(err as Error).message ?? String(err)}`;
+  if (err instanceof Error) return `${prefix}: ${err.message}`;
+  return `${prefix}: ${String(err)}`;
 }

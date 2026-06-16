@@ -16,5 +16,5 @@ globs: ["src/**/*.ts", "**/*.ts"]
 - Codex state discovery always picks the highest-numbered `state_*.sqlite` only; never iterate older state files.
 - `isDialogueRecord` (claude-code) takes `parsed: unknown` — do not widen to `any`. If a type guard is needed, narrow explicitly with `typeof`/`in` checks.
 - Per-source `collect` functions must maintain `consecutive_errors` on the cursor: catch-block reads the prior cursor and upserts with `consecutiveErrors: priorErrors + 1`; success path upserts with `consecutiveErrors: 0`.
-- The five `SOURCE_VARIANTS` in `contract.constants.ts` are the canonical enumeration of valid `(sourceApp, sourceKind, bodyFormat, watermarkKind, watermarkTableRequired)` tuples. Never add a source without a matching entry there validated by `validateRawRecordDTO`.
+- The six `SOURCE_VARIANTS` in `contract.constants.ts` are the canonical enumeration of valid `(sourceApp, sourceKind, bodyFormat, watermarkKind, watermarkTableRequired)` tuples. Never add a source without a matching entry there validated by `validateRawRecordDTO`.
 - The `PROXAI_GATEWAY_CAPTURE_SUB_AGENTS*` env-var flags are maintainer-only and must not appear in CLI `--help`, `config.toml`, or README. They are read once at module load (`sub-agent-flags.ts`); a daemon restart is required to change them.

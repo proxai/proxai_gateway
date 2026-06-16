@@ -10,7 +10,7 @@ Captures Claude Code session transcripts from `~/.claude/projects/<project>/<ses
   directory per project.
 - Sub-agent glob: `*/*/subagents/*.jsonl` (`CLAUDE_CODE_SUBAGENT_GLOB_PATTERN`).
   Scanned only when the maintainer-only flag `PROXAI_GATEWAY_CAPTURE_SUB_AGENTS` (or
-  `_CLAUDE_CODE`) is truthy. Default off.
+  `PROXAI_GATEWAY_CAPTURE_SUB_AGENTS_CLAUDE_CODE`) is truthy. Default off.
 - Pinned depth — never `**/*.jsonl`. Two passes are de-duplicated via a `seen` set
   on absolute path.
 
@@ -33,7 +33,7 @@ Per-line JSON objects, one record per line. Records have `type: 'user'`,
 `type: 'assistant'`, or other meta types. Format details live in
 `ai/knowledge/sources/formats/claude-code-format.md`.
 
-## Filtering (`isDialogueRecord`, collect.ts:93)
+## Filtering (`isDialogueRecord`, collect.ts:142)
 
 Only `type === 'user'` and `type === 'assistant'` rows survive, and only when:
 
@@ -49,10 +49,9 @@ Only `type === 'user'` and `type === 'assistant'` rows survive, and only when:
   AND content contains no `tool_use` part.
 
 Everything else (synthetic prompts, tool plumbing, summaries, meta lines) is
-dropped before redaction so it never reaches the wire. `isDialogueRecord` is the
-boundary the sources rule explicitly carves out from the no-`any` rule — its
-parameter is typed `parsed: any` deliberately and is the one tolerated exception in
-the rule cascade.
+dropped before redaction so it never reaches the wire. `isDialogueRecord` accepts
+`parsed: unknown` and narrows it using type guards and checks, staying fully
+compliant with the global typescript type safety rules.
 
 ## Output `NewBatch`
 
@@ -63,7 +62,7 @@ the rule cascade.
 - `watermarkTable: null`
 - `sourceInode`: real inode (used as fallback cursor key)
 - `agentSchemaVersion`: from `parsed.version` or `parsed.message.version` in any
-  kept line (`extractAgentSchemaVersion`, collect.ts:405). Falls back to
+  kept line (`extractAgentSchemaVersion`, collect.ts:421). Falls back to
   `'unknown'`.
 
 The body is `zstd(redact(filtered_jsonl_text))`. Filtered text is the kept lines
@@ -77,12 +76,12 @@ line until it finds either field.
 
 ## Redaction integration
 
-`applyRedaction` runs **per slice** via `createSliceRedactor` (collect.ts:34), which
-caches `{ redactedBytes, compressed }` per slice in a `WeakMap`. The splitter's
-`measureCompressed` callback returns the cached compressed length, so the splitter
-binary-searches over the same redacted+compressed bytes that ultimately ship.
-Redaction is also run once on the full filtered text (collect.ts:272) only to seed
-`extractAgentSchemaVersion`.
+`applyRedaction` runs **per slice** via `createSliceRedactor` (collect.ts:56), which
+  caches `{ redactedBytes, compressed }` per slice in a `WeakMap`. The splitter's
+  `measureCompressed` callback returns the cached compressed length, so the splitter
+  binary-searches over the same redacted+compressed bytes that ultimately ship.
+  Redaction is also run once on the full filtered text (collect.ts:277) only to seed
+  `extractAgentSchemaVersion`.
 
 ## Watermark handling
 
@@ -125,13 +124,12 @@ On any throw inside `collectClaudeCodeFile`, the catch block:
 
 The success path always sets `consecutiveErrors: 0`. This is the canonical "bump
 on failure, clear on success" pattern referenced in
-`.claude/rules/sources/sources.md`.
+`ai/rules/sources/sources.md`.
 
 ## Gotchas
 
-- The `isDialogueRecord(parsed: any)` signature is the one place `any` is kept
-  deliberately. Don't widen to `unknown` without a rewrite — the rule cascade
-  documents this as intentional. (`sources.md` rule.)
+- The `isDialogueRecord` function parameter is typed `parsed: unknown` to respect
+  the global typescript rules. It safely narrow-casts internally via type guards.
 - Synthetic prefix matching uses `text.trimStart().startsWith(prefix)` — leading
   whitespace is tolerated.
 - `physicalEndOffset` in the kept-line tracking is bytes from the start of the
@@ -142,4 +140,4 @@ on failure, clear on success" pattern referenced in
 - Sub-agent flag is read once at module load (`SUB_AGENT_CAPTURE_BY_SOURCE`); a
   daemon restart is required to flip it.
 
-[source: src/sources/claude-code/claude-code.constants.ts:1-13; src/sources/claude-code/discover.ts:14-66; src/sources/claude-code/collect.ts:93-430; src/services/config/sub-agent-flags.ts]
+[source: src/sources/claude-code/claude-code.constants.ts:1-13; src/sources/claude-code/discover.ts:14-67; src/sources/claude-code/collect.ts:56-447; src/services/config/sub-agent-flags.ts:1-35]

@@ -6,9 +6,12 @@
 
 | File | Exports | Reach for when... |
 | --- | --- | --- |
+| `assert.ts` | `requireDefined`, `requireString`, `requireNumber`, `requireRecord`, `isErrnoException`, `errnoCode`, `isRecord` | narrowing unknown values from dynamic or external sources |
 | `backoff.ts` | `exponentialBackoff(opts?)`, `parseRetryAfter(header, now?)` | retry loops, Retry-After header parsing |
+| `cast-bridges.ts` | `asWorkerCtor`, `asMessageEvent`, `asTimerSetter`, `asTimerHandle` | type-safe bridging for testing structures (workers, timers, message events) |
 | `compress.ts` | `zstdCompressSync(data, level=3)`, `zstdDecompressSync(data)` | wire-format encoding (we always use zstd) |
 | `errors.ts` | `GatewayError`, `ValidationError`, `AuthError`, `RateLimitError`, `RetriableError`, `NetworkError`, `FatalError`, `UserAbortedError`, `WatermarkRegressionError`, `OversizedDecompressedSliceError`, `HttpRequestContext` | throwing structured errors anywhere |
+| `fetch-fn.ts` | `asGlobalFetch` | bridging custom HTTP fetch functions to standard interfaces |
 | `format.ts` | `formatLocalTimestamp`, `formatRelative`, `formatTimeWithRelative`, `formatBytes`, `formatDuration`, `formatPercent` | human-readable output (status, tail, inspect) |
 | `hash.ts` | `sha256Hex(input)` | hashing source paths, deriving host-id |
 | `jsonl-split.ts` | `splitJsonlAtBoundary(bytes, options)` | splitting a JSONL byte slice into compressed-size-bounded batches |
@@ -20,6 +23,8 @@
 | `utils.constants.ts` | `DEFAULT_BACKOFF` | backoff defaults: 30 s initial, 1 h max, multiplier 2, jitter 0.2 |
 | `utils.types.ts` | `BackoffOptions`, `ErrorCategory` | typing the above |
 | `uuid.ts` | `generateUuidV7()`, `isUuidV7(value)` | `capture_id` generation (time-sortable) |
+| `version.ts` | `compareGatewayVersions(a, b)` | comparing CalVer version strings correctly (including suffix segments) |
+
 
 ## Error hierarchy
 
@@ -79,4 +84,4 @@ When VACUUM regression is detected on a sqlite source, the watermark key for tha
 - Need to wait but respect abort? `abortableSleep`. Never `setTimeout` directly inside a daemon loop.
 - Need a structured error? Pick the most specific subclass. `GatewayError(category, msg)` is the fallback when nothing fits.
 
-[source: src/core/utils/index.ts:1; src/core/utils/backoff.ts:4,14; src/core/utils/compress.ts:1; src/core/utils/errors.ts:10,28,34,40,48,56,62,68,75,99; src/core/utils/format.ts:27,56,91,105,120; src/core/utils/hash.ts:1; src/core/utils/jsonl-split.ts:9,53; src/core/utils/package-info.ts:1; src/core/utils/rowid-split.ts:8,55; src/core/utils/source-path.ts:3,11,15; src/core/utils/strip-marker-block.ts:12; src/core/utils/time.ts:1,5,12,16; src/core/utils/utils.constants.ts:3; src/core/utils/utils.types.ts:1; src/core/utils/uuid.ts:3,7]
+[source: src/core/utils/index.ts:1; src/core/utils/assert.ts:1,8,15,22,34,38,42; src/core/utils/backoff.ts:4,14; src/core/utils/cast-bridges.ts:1,6,11,16; src/core/utils/compress.ts:1; src/core/utils/errors.ts:10,28,34,40,48,56,62,68,75,99; src/core/utils/fetch-fn.ts:3; src/core/utils/format.ts:27,56,85,91,108,122,137; src/core/utils/hash.ts:1; src/core/utils/jsonl-split.ts:9,52; src/core/utils/package-info.ts:1; src/core/utils/rowid-split.ts:8,55; src/core/utils/source-path.ts:3,13,17; src/core/utils/strip-marker-block.ts:12; src/core/utils/time.ts:1,5,12,16; src/core/utils/utils.constants.ts:3; src/core/utils/utils.types.ts:1; src/core/utils/uuid.ts:3,7; src/core/utils/version.ts:14]

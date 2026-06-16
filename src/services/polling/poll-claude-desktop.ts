@@ -2,7 +2,6 @@ import {
   collectClaudeDesktopFile,
   defaultClaudeDesktopSessionsRoot,
   discoverClaudeDesktopFiles,
-  type ClaudeDesktopCollectorContext,
   type DiscoveredClaudeDesktopFile,
 } from 'sources/claude-desktop';
 import type {
@@ -53,11 +52,7 @@ async function pollClaudeDesktop(
   async function processNext(index: number): Promise<void> {
     const file = files[index];
     if (file === undefined) return;
-    const collectResult = await collectClaudeDesktopFile(
-      file,
-      // Bridge incompatible Logger types via a single commented as unknown cast
-      ctx as unknown as ClaudeDesktopCollectorContext,
-    );
+    const collectResult = await collectClaudeDesktopFile(file, ctx);
     filesProcessed++;
     capturedBatches += collectResult.capturedBatches;
     capturedBytes += collectResult.capturedBytes;

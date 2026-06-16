@@ -29,15 +29,6 @@ function aborted(signal: AbortSignal | undefined): boolean {
   return signal !== undefined && signal.aborted;
 }
 
-/**
- * Self-healing AUTH_FAILED recovery loop. While the sentinel is present, it
- * re-verifies the gateway key on exponential backoff (1s, 2s, 4s, …). On the
- * first success it clears AUTH_FAILED so capture/drain auto-resume; after
- * `maxRetries` consecutive failures it marks the sentinel exhausted and stops
- * retrying until the sentinel is cleared externally (`setup new` / `dev setup`)
- * or the daemon restarts. Retry progress is persisted into the sentinel so the
- * status and doctor commands can surface the current trial number.
- */
 export async function runAuthRecoveryLoop(
   ctx: AuthRecoveryContext,
   options: AuthRecoveryOptions = {},

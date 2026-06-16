@@ -2,7 +2,11 @@ import type { CommandResult } from 'cli/cli.types.ts';
 import { runSetup } from 'cli/commands/setup';
 import type { SetupCommandDeps, SetupCommandOptions } from 'cli/commands/setup';
 import { buildDevServiceManager, buildDevServiceUnitPath } from 'cli/wiring/dev-deps.ts';
-import { buildPlatformServiceContext, resolveWindowsUserId } from 'cli/wiring/platform.ts';
+import {
+  buildPlatformServiceContext,
+  resolveWindowsUserId,
+  buildWatchdogServiceContext,
+} from 'cli/wiring/platform.ts';
 import { resolveProfilePaths } from 'cli/wiring/resolve-profile-paths.ts';
 import { consoleOutput } from 'cli/output.ts';
 import { inquirerPrompts } from 'cli/prompts.ts';
@@ -57,6 +61,7 @@ export async function buildSetupDeps(inputs: BuildSetupDepsInputs): Promise<Setu
   const out = consoleOutput();
   const { profileCtx } = inputs;
   const { bufferDbPath, logDir } = await resolveProfilePaths(profileCtx);
+  const watchdogCtx = buildWatchdogServiceContext(inputs.platform, inputs.programPath, profileCtx);
   const base: SetupCommandDeps = {
     output: out,
     prompts: inquirerPrompts(),
@@ -98,6 +103,12 @@ export async function buildSetupDeps(inputs: BuildSetupDepsInputs): Promise<Setu
       }
     },
     platform: inputs.platform,
+    ...(watchdogCtx !== null
+      ? {
+          watchdogUnitPaths: watchdogCtx.watchdogUnitPaths,
+          watchdogManager: watchdogCtx.watchdogManager,
+        }
+      : {}),
   };
   if (inputs.serviceManager !== null) {
     base.serviceManager = inputs.serviceManager;
