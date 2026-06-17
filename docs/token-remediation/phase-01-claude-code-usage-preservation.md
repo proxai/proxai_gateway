@@ -35,6 +35,14 @@ per-step sum). `aggregateUsage` already SUMS; this phase only makes that sum COM
 from dropping the tool_use-bearing calls. There is NO "final context size" alternative — that is a different
 metric we are not using. Do not re-open this.
 
+**Column normalization (decided 2026-06-17 — see ROADMAP "Column normalization"):** store `inputTokens` =
+**fresh input** = `input_tokens + cache_creation_input_tokens` (summed per call across the turn), and set
+`cacheCreationInputTokens` = **null** (folded in). Anthropic's cache-creation tokens are full-rate fresh input;
+folding them makes `inputTokens` mean the same "fresh input" as Gemini/Codex and stops Claude's input looking
+abnormally low (median 21 → ~18.4k). Keeping the column populated AND inside input would double-count (F3 shape).
+No $ is computed today, so losing the explicit write-count is safe; if needed later, stash raw
+`{input_tokens, cache_creation_input_tokens}` in `agent_metadata` — do not un-fold.
+
 ## Change spec
 ### proxai_gateway
 - Split display-filtering from telemetry. Either (i) upload ALL session lines, or (ii) add an
@@ -47,6 +55,10 @@ metric we are not using. Do not re-open this.
 - `src/agent-gateway/parsers/claude-code/claude-code.utils.ts:400-414` — ensure aggregateUsage now sums over the
   full set of usage-bearing records (including the previously-dropped ones); confirm no double-count if the
   gateway now sends both a visible flag and the record.
+- **Fold cache-creation into input:** set `inputTokens` (per call) = `input_tokens + cache_creation_input_tokens`
+  and emit `cacheCreationInputTokens = null`. Apply where the per-call usage is mapped into the scalar spine
+  (`src/agent-gateway/parse/build-scalar-spine.ts:162` writes `cacheCreationInputTokens` today). Verify NOTHING
+  downstream still adds a separate creation term (it's now inside input).
 - `.../services/claude-code-finalize-turn.service.ts:99` — unchanged call, but verify the turn boundary still
   groups the now-larger record set correctly.
 
@@ -62,6 +74,8 @@ metric we are not using. Do not re-open this.
 - [ ] nest aggregateUsage sums the full loop; a multi-tool-call turn's stored input/output/cache > the old
       text-only sum, by the dropped calls' usage.
 - [ ] No regression for text-only turns; no double-count.
+- [ ] `inputTokens` = `input_tokens + cache_creation_input_tokens` (fresh input); `cacheCreationInputTokens` emitted
+      as null; a test asserts the fold and asserts no path sums a separate creation term.
 - [ ] Tests above added and green.
 
 ## Merge checklist

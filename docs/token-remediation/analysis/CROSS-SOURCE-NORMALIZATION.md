@@ -45,8 +45,13 @@ calculation error. The fix is to compare **provider-normalized** categories:
 - Models named: Claude (opus-4-7, opus-4-8, fable-5), Codex (gpt-5.5), Gemini `#1132 = gemini-3.1-pro-preview`
   (per `~/.gemini/settings.json`; minor ids `#1016/#1035/#1050` not named in local data — opaque enums).
 
-## Verdict + plan addition
-The proposed-plan extraction is **correct** (validated independently). The new requirement this surfaced: any
-**cross-agent dashboard must compare NORMALIZED categories** (`fresh_input`, `cache_read`, `output`), never raw
-`input_tokens` — otherwise users see the same false 20× gap. Added to Phase 10. ($-accurate comparison would
-additionally weight `cache_read`/`cache_creation` by their discounted/premium rates; this doc is token-count, not $.)
+## Verdict + plan decision (2026-06-17)
+The proposed-plan extraction is **correct** (validated independently). Decision taken: normalize at the
+**storage layer**, not just display — `inputTokens` is stored as **fresh input** (= non-cached + cache_creation)
+for every agent, and `cacheCreationInputTokens` is stored **null** (Claude's value folded in; Gemini/Codex never
+had one). See ROADMAP "Column normalization" + Phase 1 (fold + null) + Phase 10 (compare columns as-is). This
+makes `inputTokens` directly comparable across agents (Claude 370M ≈ Gemini 354M), removes Claude's
+abnormally-low look (median 21 → ~18.4k), and eliminates the `cacheCreation` double-count surface entirely.
+Trade-off accepted: loses the explicit cache-WRITE count (only matters for $-cost precision at Anthropic's ~1.25×
+write rate; no $ computed today). If $ is added later, stash raw `{input_tokens, cache_creation_input_tokens}` in
+`agent_metadata` — do NOT un-fold the column.

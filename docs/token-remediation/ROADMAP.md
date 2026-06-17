@@ -109,6 +109,29 @@ turn** (input / output / cache_read / cache_creation each summed). This is what 
 - **Gemini:** SUM per step (already correct — distinct calls, no re-emit). Phase 3 only nulls the phantom
   `cacheCreation`; input/output/cacheRead are untouched.
 
+### Column normalization — `inputTokens` = FRESH INPUT (decided 2026-06-17)
+
+The four stored columns mean the SAME thing for every agent, so cross-agent comparison on `inputTokens` works
+directly (no per-consumer normalization, no abnormally-low Claude numbers, no double-count surface):
+
+| Column | Definition (all agents) | Claude Code | Gemini | Codex |
+|---|---|---|---|---|
+| `inputTokens` | **fresh input** = full-rate tokens NOT served from cache | `input_tokens + cache_creation_input_tokens` | `5.9.2` | `input_tokens − cached_input_tokens` |
+| `cacheReadInputTokens` | cache reads (discounted) | `cache_read_input_tokens` | `5.9.5` | `cached_input_tokens` |
+| `cacheCreationInputTokens` | **NULL for all agents** (folded into `inputTokens`) | folded → null | n/a (phantom, nulled in P3) | n/a (OpenAI has none) |
+| `outputTokens` | output incl. reasoning | `output_tokens` | `5.9.3` | `output_tokens` |
+
+- Total input = `inputTokens + cacheReadInputTokens`. Grand total = `+ outputTokens`. No `cacheCreation` term →
+  no double-count anywhere.
+- **Why fold instead of keep separate:** Anthropic's `cache_creation` tokens ARE fresh input (processed at full
+  rate, just also written to cache). Only Anthropic reports them; Gemini/OpenAI don't. Keeping the column
+  populated AND inside `inputTokens` would double-count (the F3 phantom shape). Folding + nulling the column
+  makes every provider consistent and `inputTokens` directly comparable (Claude 370M ≈ Gemini 354M; median
+  21 → ~18.4k — see `analysis/CROSS-SOURCE-NORMALIZATION.md`).
+- **Trade-off (accepted):** loses Claude's explicit cache-WRITE count as a distinct field. Only matters for
+  $-cost precision (Anthropic writes bill ~1.25×); NO $ is computed today. If $ is added later, stash the raw
+  `{input_tokens, cache_creation_input_tokens}` in `agent_metadata` for provenance — do NOT un-fold the column.
+
 ## Decisions LOCKED (2026-06-17 — do not re-open)
 
 1. **Reasoning-token field (Phase 3b): SKIP.** Phase 3 ships the null-the-phantom fix only; `outputTokens` stays
