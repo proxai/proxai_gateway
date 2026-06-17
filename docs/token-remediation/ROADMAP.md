@@ -36,7 +36,7 @@ This folder is the **execution tracker** for the token-counting fixes, plus a pr
 4. Phases are **isolated**: when a phase is merged on all its listed repos, the concern it names is eliminated.
    Do phases in order unless the orchestrator says a later one is unblocked to run in parallel.
 
-**Status legend:** ⬜ NOT STARTED · 🔵 IN PROGRESS · 🟣 AWAITING ORCHESTRATOR CHECK · ✅ DONE · ⏸️ DEFERRED
+**Status legend:** ⬜ NOT STARTED · 🔵 IN PROGRESS · 🟣 AWAITING ORCHESTRATOR CHECK · 🟢 VERIFIED (implemented + reviewed; stacked on the integration branch, NOT merged to prod) · ✅ DONE (merged to prod) · ⏸️ DEFERRED
 
 ---
 
@@ -44,7 +44,7 @@ This folder is the **execution tracker** for the token-counting fixes, plus a pr
 
 | # | Phase | Sev | Repos | Depends on | Status |
 |---|---|---|---|---|---|
-| 1 | Claude Code usage preservation (F1) | 🔴 | gateway + nest | — | ⬜ |
+| 1 | Claude Code usage preservation (F1) | 🔴 | gateway + nest | — | 🟢 VERIFIED |
 | 2 | Codex over-count fix (F2) | 🔴 | nest | — | ⬜ |
 | 3 | Gemini phantom cache_creation (F3) | 🔴 | gateway (+nest opt) | — | ⬜ |
 | 4 | Upsert shrink-guard (overwrite corruption) | 🔴 | nest | — | ⬜ |

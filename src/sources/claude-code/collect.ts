@@ -104,7 +104,12 @@ interface ClaudeRecord {
   type?: unknown;
   isMeta?: unknown;
   isApiErrorMessage?: unknown;
-  message?: { content?: ClaudeContent; text?: unknown; model?: unknown };
+  message?: {
+    content?: ClaudeContent;
+    text?: unknown;
+    model?: unknown;
+    usage?: unknown;
+  };
   content?: ClaudeContent;
   text?: unknown;
 }
@@ -184,6 +189,40 @@ export function isDialogueRecord(parsed: unknown): boolean {
   return !hasToolUse;
 }
 
+/**
+ * Telemetry-preservation predicate (split out from the display filter).
+ *
+ * `isDialogueRecord` is a DISPLAY filter: it drops every assistant record that
+ * carries a `tool_use` block, which also discards that record's per-call
+ * `usage`. In an agentic loop those intermediate tool-calling API calls are
+ * separately billed by Anthropic and carry the bulk of the turn's cache/output
+ * tokens, so dropping them makes the backend's `aggregateUsage` sum only the
+ * final text record. This predicate keeps the telemetry: it returns true for a
+ * real (non-meta, non-synthetic, non-api-error) assistant record that carries a
+ * `usage` block. The upload filter ORs the two predicates, so each line is
+ * evaluated once and kept at most once — display filtering and telemetry
+ * preservation are separate concerns by design.
+ */
+export function isUsageBearingAssistantRecord(parsed: unknown): boolean {
+  if (parsed === null || typeof parsed !== 'object') {
+    return false;
+  }
+  const record = parsed as ClaudeRecord;
+  if (record.type !== 'assistant') {
+    return false;
+  }
+  if (record.isMeta === true) {
+    return false;
+  }
+  // Synthetic-model and api-error records are not real billable model calls —
+  // keep them dropped, exactly as the display filter does.
+  if (record.message?.model === '<synthetic>' || record.isApiErrorMessage === true) {
+    return false;
+  }
+  const usage = record.message?.usage;
+  return usage !== null && typeof usage === 'object';
+}
+
 export async function collectClaudeCodeFile(
   file: DiscoveredClaudeCodeFile,
   context: ClaudeCodeCollectorContext,
@@ -251,7 +290,7 @@ export async function collectClaudeCodeFile(
       if (line.trim().length === 0) continue;
       try {
         const parsed = JSON.parse(line);
-        if (isDialogueRecord(parsed)) {
+        if (isDialogueRecord(parsed) || isUsageBearingAssistantRecord(parsed)) {
           kept.push({
             text: line,
             physicalEndOffset: lineEndOffset,

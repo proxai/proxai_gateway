@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import { isDialogueRecord } from 'sources/claude-code';
+import { isDialogueRecord, isUsageBearingAssistantRecord } from 'sources/claude-code';
 
 test('isDialogueRecord: drops isMeta user records', () => {
   expect(
@@ -60,4 +60,54 @@ test('isDialogueRecord: keeps assistant text even with non-text items in the arr
       },
     }),
   ).toBe(true);
+});
+
+test('isUsageBearingAssistantRecord: keeps tool_use assistant records carrying usage', () => {
+  expect(
+    isUsageBearingAssistantRecord({
+      type: 'assistant',
+      message: {
+        content: [{ type: 'tool_use', id: 't', name: 'Read' }],
+        usage: { input_tokens: 3, output_tokens: 4 },
+      },
+    }),
+  ).toBe(true);
+});
+
+test('isUsageBearingAssistantRecord: drops assistant records with no usage block', () => {
+  expect(
+    isUsageBearingAssistantRecord({
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', id: 't', name: 'Read' }] },
+    }),
+  ).toBe(false);
+});
+
+test('isUsageBearingAssistantRecord: drops synthetic, api-error, and meta records even with usage', () => {
+  expect(
+    isUsageBearingAssistantRecord({
+      type: 'assistant',
+      message: { model: '<synthetic>', usage: { input_tokens: 1 } },
+    }),
+  ).toBe(false);
+  expect(
+    isUsageBearingAssistantRecord({
+      type: 'assistant',
+      isApiErrorMessage: true,
+      message: { usage: { input_tokens: 1 } },
+    }),
+  ).toBe(false);
+  expect(
+    isUsageBearingAssistantRecord({
+      type: 'assistant',
+      isMeta: true,
+      message: { usage: { input_tokens: 1 } },
+    }),
+  ).toBe(false);
+});
+
+test('isUsageBearingAssistantRecord: drops non-assistant and non-object inputs', () => {
+  expect(isUsageBearingAssistantRecord({ type: 'user', message: { usage: {} } })).toBe(false);
+  expect(isUsageBearingAssistantRecord(null)).toBe(false);
+  expect(isUsageBearingAssistantRecord('x')).toBe(false);
 });

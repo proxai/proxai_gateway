@@ -1,6 +1,6 @@
 # Phase 1 — Claude Code usage preservation (F1)
 
-- **Status:** ⬜ NOT STARTED
+- **Status:** 🟢 VERIFIED — implemented + independently reviewed; stacked on the integration branch, NOT merged to prod (see `implementation/phase-01-review.md`). Branches: gateway `token-remediation`@`cc43168`, nest `token-remediation`@`809cb66b`.
 - **Severity:** 🔴 critical · **Effort:** L
 - **Repos:** proxai_gateway + proxai_nest
 - **Depends on:** none · **Blocks:** Phase 7 (Desktop inherits this fix), Phase 11 (no historical backfill — see below)

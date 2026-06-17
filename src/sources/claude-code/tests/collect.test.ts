@@ -872,3 +872,25 @@ test('pauses an excluded subagent transcript (top-level cwd is honored)', async 
   });
   expect(cursor?.watermarkEnd ?? 0).toBe(0);
 });
+
+test('uploads usage-bearing tool_use assistant records so the full agentic loop reaches the backend', async () => {
+  // user prompt -> intermediate tool_use call (its OWN usage) -> final text.
+  const content = [
+    '{"type":"user","promptId":"p1","message":{"role":"user","content":"read foo"},"uuid":"u1","sessionId":"s1","version":"2.1.122"}',
+    '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_xyz","name":"Read","input":{"file_path":"foo.txt"}}],"stop_reason":"tool_use","usage":{"input_tokens":3,"output_tokens":4,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"uuid":"u2","sessionId":"s1","version":"2.1.122"}',
+    '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"stop_reason":"end_turn","usage":{"input_tokens":5,"output_tokens":6,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"uuid":"u3","sessionId":"s1","version":"2.1.122"}',
+    '',
+  ].join('\n');
+  const file = await makeFile(content);
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const batch = nextPendingBatch(buffer);
+  expect(batch).not.toBeNull();
+  const body = DECODER.decode(zstdDecompressSync(requireDefined(batch).body));
+  // The intermediate tool_use call and its per-call usage survive to the body.
+  expect(body).toContain('"toolu_xyz"');
+  expect(body).toContain('"input_tokens":3');
+  expect(body).toContain('"output_tokens":4');
+  // The final text record is present too (regression guard for normal records).
+  expect(body).toContain('"input_tokens":5');
+});
+});
