@@ -11,6 +11,7 @@ import {
   checkA5Wedged,
   checkA16RescueCircuitBreakerTripped,
 } from 'cli/commands/doctor/checkers/lifecycle.ts';
+import { MAX_CONSECUTIVE_FAILURES } from 'services/rescue/rescue-decision.ts';
 import {
   checkB1InvalidKey,
   checkB2AuthUnconfirmedLoop,
@@ -338,6 +339,14 @@ test('A4: crash requires config + registered + not-running + NO sessionStopped',
       }),
     ),
   ).toBeNull();
+  expect(
+    checkA4Crashed(
+      baseSignals({
+        daemonRunning: false,
+        rescue: { consecutiveFailures: MAX_CONSECUTIVE_FAILURES, lastRescueAt: null },
+      }),
+    ),
+  ).toBeNull();
   const f = requireDefined(
     checkA4Crashed(
       baseSignals({
@@ -371,11 +380,11 @@ test('A5: stays silent while AUTH_FAILED is set (capture paused by design)', () 
   expect(checkA5Wedged(signals)).toBeNull();
 });
 
-test('A16: circuit breaker tripped when consecutiveFailures >= 3 and daemon not running', () => {
+test('A16: circuit breaker tripped when consecutiveFailures >= MAX_CONSECUTIVE_FAILURES and daemon not running', () => {
   expect(
     checkA16RescueCircuitBreakerTripped(
       baseSignals({
-        rescue: { consecutiveFailures: 2, lastRescueAt: null },
+        rescue: { consecutiveFailures: MAX_CONSECUTIVE_FAILURES - 1, lastRescueAt: null },
         daemonRunning: false,
       }),
     ),
@@ -383,7 +392,7 @@ test('A16: circuit breaker tripped when consecutiveFailures >= 3 and daemon not 
   expect(
     checkA16RescueCircuitBreakerTripped(
       baseSignals({
-        rescue: { consecutiveFailures: 3, lastRescueAt: null },
+        rescue: { consecutiveFailures: MAX_CONSECUTIVE_FAILURES, lastRescueAt: null },
         daemonRunning: true,
       }),
     ),
@@ -391,7 +400,7 @@ test('A16: circuit breaker tripped when consecutiveFailures >= 3 and daemon not 
   const f = requireDefined(
     checkA16RescueCircuitBreakerTripped(
       baseSignals({
-        rescue: { consecutiveFailures: 3, lastRescueAt: null },
+        rescue: { consecutiveFailures: MAX_CONSECUTIVE_FAILURES, lastRescueAt: null },
         daemonRunning: false,
       }),
     ),

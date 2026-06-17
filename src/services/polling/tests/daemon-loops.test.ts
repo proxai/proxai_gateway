@@ -7,7 +7,8 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { openInMemoryBufferDb } from 'services/buffer';
+import { openInMemoryBufferDb, insertBatch } from 'services/buffer';
+import { newBatch } from 'services/buffer/tests/fixtures.ts';
 import { HttpClient } from 'services/http';
 import { runDaemonLoops } from 'services/polling';
 import type {
@@ -646,4 +647,249 @@ test('heartbeat loop cycle error logs error event and continues', async () => {
 
   const errorEntry = entries.find((e) => e.msg.includes('heartbeat cycle threw'));
   expect(errorEntry).toBeDefined();
+});
+
+test('capture loop re-entrancy guard: skips if prior run is still in flight', async () => {
+  const origSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = ((cb: () => void, ms: number) => {
+    if (ms === 90000) {
+      return origSetTimeout(cb, 1);
+    }
+    return origSetTimeout(cb, ms);
+  }) as unknown as typeof globalThis.setTimeout;
+
+  try {
+    const ctrl = new AbortController();
+    const ctxs = makeContexts();
+    const entries: { level: string; msg: string }[] = [];
+    const logger = makeFakeLogger(entries);
+    ctxs.capture.logger = logger;
+
+    let resolveCycle: ((res: import('services/polling').SourcePollerResult) => void) | null = null;
+    let cycleCallCount = 0;
+
+    ctxs.capture.sources = [
+      {
+        name: 'delayed',
+        poll: async () => {
+          cycleCallCount++;
+          return new Promise((resolve) => {
+            resolveCycle = resolve;
+          });
+        },
+      },
+    ];
+
+    let captureTicks = 0;
+    const promise = runDaemonLoops(ctxs, {
+      abortSignal: ctrl.signal,
+      captureIntervalMs: 1,
+      drainIntervalMs: 10000,
+      heartbeatIntervalMs: 10000,
+      sleep: async (ms, signal) => {
+        if (ms === 1) {
+          captureTicks++;
+          if (captureTicks === 1) {
+            await new Promise((r) => setTimeout(r, 10));
+          } else if (captureTicks === 2) {
+            if (resolveCycle) {
+              resolveCycle({
+                filesProcessed: 0,
+                capturedBatches: 0,
+                capturedBytes: 0,
+                errors: [],
+              });
+            }
+            ctrl.abort();
+          }
+        } else {
+          if (signal?.aborted) return;
+          await new Promise<void>((resolve) => {
+            let active = true;
+            const safeResolve = () => {
+              if (active) {
+                active = false;
+                resolve();
+              }
+            };
+            const t = setTimeout(safeResolve, ms);
+            signal?.addEventListener('abort', () => {
+              clearTimeout(t);
+              safeResolve();
+            });
+          });
+        }
+      },
+    });
+
+    await promise;
+
+    expect(cycleCallCount).toBe(1);
+    const skippedLog = entries.find((e) => e.msg.includes('capture.cycle.skipped_in_flight'));
+    expect(skippedLog).toBeDefined();
+  } finally {
+    globalThis.setTimeout = origSetTimeout;
+  }
+});
+
+test('drain loop re-entrancy guard: skips if prior run is still in flight', async () => {
+  const origSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = ((cb: () => void, ms: number) => {
+    if (ms === 25000) {
+      return origSetTimeout(cb, 1);
+    }
+    return origSetTimeout(cb, ms);
+  }) as unknown as typeof globalThis.setTimeout;
+
+  try {
+    const ctrl = new AbortController();
+    const ctxs = makeContexts();
+    const entries: { level: string; msg: string }[] = [];
+    const logger = makeFakeLogger(entries);
+    ctxs.drain.logger = logger;
+
+    let resolveFetch: ((res: Response) => void) | null = null;
+    ctxs.drain.http = new HttpClient({
+      apiKey: 'pxg_test',
+      hostId: 'h_test',
+      endpoints: {
+        ingest: 'https://api.example.com/v1/raw_records',
+        verifyKey: 'https://api.example.com/ingestion/verify-key',
+        watermarks: 'https://api.example.com/v1/watermarks',
+        registerHostId: 'https://api.example.com/v1/host-ids/register',
+      },
+      fetch: async () => {
+        return new Promise((resolve) => {
+          resolveFetch = resolve;
+        });
+      },
+    });
+
+    insertBatch(ctxs.drain.buffer, newBatch());
+
+    let drainTicks = 0;
+    const promise = runDaemonLoops(ctxs, {
+      abortSignal: ctrl.signal,
+      captureIntervalMs: 10000,
+      drainIntervalMs: 1,
+      heartbeatIntervalMs: 10000,
+      sleep: async (ms, signal) => {
+        if (ms === 1) {
+          drainTicks++;
+          if (drainTicks === 1) {
+            await new Promise((r) => setTimeout(r, 10));
+          } else if (drainTicks === 2) {
+            if (resolveFetch) {
+              resolveFetch(
+                new Response(JSON.stringify({ accepted: true }), {
+                  status: 200,
+                  headers: { 'Content-Type': 'application/json' },
+                }),
+              );
+            }
+            ctrl.abort();
+          }
+        } else {
+          if (signal?.aborted) return;
+          await new Promise<void>((resolve) => {
+            let active = true;
+            const safeResolve = () => {
+              if (active) {
+                active = false;
+                resolve();
+              }
+            };
+            const t = setTimeout(safeResolve, ms);
+            signal?.addEventListener('abort', () => {
+              clearTimeout(t);
+              safeResolve();
+            });
+          });
+        }
+      },
+    });
+
+    await promise;
+
+    const skippedLog = entries.find((e) => e.msg.includes('drain.cycle.skipped_in_flight'));
+    expect(skippedLog).toBeDefined();
+  } finally {
+    globalThis.setTimeout = origSetTimeout;
+  }
+});
+
+test('heartbeat loop re-entrancy guard: skips if prior run is still in flight', async () => {
+  const origSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = ((cb: () => void, ms: number) => {
+    if (ms === 600000) {
+      return origSetTimeout(cb, 1);
+    }
+    return origSetTimeout(cb, ms);
+  }) as unknown as typeof globalThis.setTimeout;
+
+  try {
+    const ctrl = new AbortController();
+    const ctxs = makeContexts();
+    const entries: { level: string; msg: string }[] = [];
+    const logger = makeFakeLogger(entries);
+    ctxs.heartbeat.logger = logger;
+
+    ctxs.heartbeat.binaryPath = '/bin/gateway';
+    ctxs.heartbeat.currentVersion = '1.0.0';
+    let resolveFetch: ((res: Response) => void) | null = null;
+    ctxs.heartbeat.versionCheckFetch = async () => {
+      return new Promise((resolve) => {
+        resolveFetch = resolve;
+      });
+    };
+
+    let heartbeatTicks = 0;
+    const promise = runDaemonLoops(ctxs, {
+      abortSignal: ctrl.signal,
+      captureIntervalMs: 10000,
+      drainIntervalMs: 10000,
+      heartbeatIntervalMs: 1,
+      sleep: async (ms, signal) => {
+        if (ms === 1) {
+          heartbeatTicks++;
+          if (heartbeatTicks === 1) {
+            await new Promise((r) => setTimeout(r, 10));
+          } else if (heartbeatTicks === 2) {
+            if (resolveFetch) {
+              resolveFetch(
+                new Response(JSON.stringify({ tag_name: 'v1.0.0' }), {
+                  status: 200,
+                  headers: { 'Content-Type': 'application/json' },
+                }),
+              );
+            }
+            ctrl.abort();
+          }
+        } else {
+          if (signal?.aborted) return;
+          await new Promise<void>((resolve) => {
+            let active = true;
+            const safeResolve = () => {
+              if (active) {
+                active = false;
+                resolve();
+              }
+            };
+            const t = setTimeout(safeResolve, ms);
+            signal?.addEventListener('abort', () => {
+              clearTimeout(t);
+              safeResolve();
+            });
+          });
+        }
+      },
+    });
+
+    await promise;
+
+    const skippedLog = entries.find((e) => e.msg.includes('heartbeat.cycle.skipped_in_flight'));
+    expect(skippedLog).toBeDefined();
+  } finally {
+    globalThis.setTimeout = origSetTimeout;
+  }
 });

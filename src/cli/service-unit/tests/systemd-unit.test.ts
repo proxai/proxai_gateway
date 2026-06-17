@@ -10,7 +10,8 @@ test('emits a [Service] block with ExecStart', () => {
   expect(unit).toContain('Restart=always');
   expect(unit).toContain('RestartSec=5s');
   expect(unit).toContain('OOMScoreAdjust=-100');
-  expect(unit).toContain('StartLimitIntervalSec=0');
+  expect(unit).toContain('StartLimitIntervalSec=300');
+  expect(unit).toContain('StartLimitBurst=5');
 });
 
 test('overrides description when provided', () => {

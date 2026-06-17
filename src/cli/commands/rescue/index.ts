@@ -94,6 +94,7 @@ export async function runRescue(input: RescueCommandInput): Promise<CommandResul
         lastRescueAt: null,
         consecutiveFailures: 0,
         attempts: [],
+        lastObservedHeartbeatAt: null,
       };
     }
 
@@ -102,23 +103,42 @@ export async function runRescue(input: RescueCommandInput): Promise<CommandResul
         const unitName = profileSystemdUnitName(profileName);
         await runCommand(spawn, ['systemctl', '--user', 'reset-failed', unitName]);
       }
-      await serviceManager.start();
-      markRescueFailed(activeLedger);
+      if (activeLedger.lastRescueAt !== null) {
+        markRescueFailed(activeLedger);
+      }
       recordRescueAttempt(activeLedger, new Date().toISOString(), 'start');
-      await writeRescueLedger(profileCtx.sentinels.rescueLedger, activeLedger);
+      await serviceManager.start();
     } else if (decision.kind === 'restart') {
       if (platform === 'linux') {
         const unitName = profileSystemdUnitName(profileName);
         await runCommand(spawn, ['systemctl', '--user', 'reset-failed', unitName]);
       }
-      await serviceManager.restart();
-      markRescueFailed(activeLedger);
+      if (activeLedger.lastRescueAt !== null) {
+        markRescueFailed(activeLedger);
+      }
       recordRescueAttempt(activeLedger, new Date().toISOString(), 'restart');
-      await writeRescueLedger(profileCtx.sentinels.rescueLedger, activeLedger);
+      await serviceManager.restart();
     } else if (decision.kind === 'none' && decision.reason === 'healthy') {
       markDaemonHealthy(activeLedger);
-      await writeRescueLedger(profileCtx.sentinels.rescueLedger, activeLedger);
     }
+
+    let currentHeartbeat: string | null = null;
+    if (hb.captureLastCycleAt !== null && hb.drainLastCycleAt !== null) {
+      const capMs = Date.parse(hb.captureLastCycleAt);
+      const drMs = Date.parse(hb.drainLastCycleAt);
+      if (Number.isFinite(capMs) && Number.isFinite(drMs)) {
+        currentHeartbeat = capMs >= drMs ? hb.captureLastCycleAt : hb.drainLastCycleAt;
+      } else if (Number.isFinite(capMs)) {
+        currentHeartbeat = hb.captureLastCycleAt;
+      } else if (Number.isFinite(drMs)) {
+        currentHeartbeat = hb.drainLastCycleAt;
+      }
+    } else {
+      currentHeartbeat = hb.captureLastCycleAt ?? hb.drainLastCycleAt;
+    }
+
+    activeLedger.lastObservedHeartbeatAt = currentHeartbeat;
+    await writeRescueLedger(profileCtx.sentinels.rescueLedger, activeLedger);
   } catch (err: unknown) {
     try {
       const logger = await createLogger({ logDir: profileCtx.logDir });

@@ -19,7 +19,8 @@ export function buildSystemdUnit(input: SystemdUnitInput): string {
   return `[Unit]
 Description=${desc}
 After=network-online.target
-StartLimitIntervalSec=0
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple

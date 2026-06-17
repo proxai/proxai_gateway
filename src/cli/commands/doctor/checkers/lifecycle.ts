@@ -1,5 +1,6 @@
 import { Confidence, Severity } from 'cli/commands/doctor/doctor.types.ts';
 import type { DoctorSignals, Finding } from 'cli/commands/doctor/doctor.types.ts';
+import { MAX_CONSECUTIVE_FAILURES } from 'services/rescue/rescue-decision.ts';
 
 const STALE_CYCLE_MULTIPLIER = 2;
 const CAPTURE_INTERVAL_MS = 120_000;
@@ -49,6 +50,7 @@ export function checkA4Crashed(signals: DoctorSignals): Finding | null {
   if (!signals.serviceUnitRegistered) return null;
   if (signals.daemonRunning) return null;
   if (signals.sentinels.sessionStopped) return null;
+  if (signals.rescue.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) return null;
   return {
     code: 'A4',
     severity: Severity.critical,
@@ -80,13 +82,12 @@ export function checkA5Wedged(signals: DoctorSignals): Finding | null {
 }
 
 export function checkA16RescueCircuitBreakerTripped(signals: DoctorSignals): Finding | null {
-  if (signals.rescue.consecutiveFailures >= 3 && !signals.daemonRunning) {
+  if (signals.rescue.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES && !signals.daemonRunning) {
     return {
       code: 'A16',
       severity: Severity.critical,
       confidence: Confidence.confirmed,
-      cause:
-        'The rescue circuit breaker was tripped because the daemon failed to start 3 or more times consecutively.',
+      cause: `The rescue circuit breaker was tripped because the daemon failed to start ${MAX_CONSECUTIVE_FAILURES.toString()} or more times consecutively.`,
       action:
         'Inspect the daemon logs to find why it keeps failing to start, then run "proxai-gateway logs" and "proxai-gateway restart". Once the daemon stays up, auto-recovery resumes automatically.',
     };
