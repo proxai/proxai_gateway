@@ -46,6 +46,7 @@ export async function buildStatusContext(inputs: BuildStatusContextInputs): Prom
       updateAvailableSentinelPath: profileCtx.sentinels.updateAvailable,
       devModeSentinelPath: join(profileRootDir(), 'DEV_MODE'),
       binaryPath: STATUS_BINARY_PATH,
+      platform: process.platform,
     };
     return { deps, options, cleanup: () => {} };
   }
@@ -74,6 +75,7 @@ export async function buildStatusContext(inputs: BuildStatusContextInputs): Prom
     currentVersion: PACKAGE_VERSION,
     binaryPath: STATUS_BINARY_PATH,
     loadConfig: (path) => loadConfigFromFile(path ?? profileCtx.configFilePath),
+    platform: process.platform,
   };
   if (inputs.serviceManager !== null) {
     deps.serviceManager = inputs.serviceManager;

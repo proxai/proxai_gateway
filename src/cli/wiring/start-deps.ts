@@ -30,6 +30,7 @@ export function buildStartDeps(inputs: BuildStartDepsInputs): StartCommandDeps {
     serviceUnitRecreate: inputs.serviceUnitRecreate,
     runAutoUpgrade: inputs.runAutoUpgrade,
     profileName: inputs.profileCtx.name,
+    platform: inputs.serviceUnitRecreate.platform,
     ...(watchdogCtx !== null
       ? {
           watchdogUnitPaths: watchdogCtx.watchdogUnitPaths,

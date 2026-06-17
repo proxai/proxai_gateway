@@ -22,6 +22,7 @@ export interface StartCommandDeps {
   writeServiceUnitFn?: EnsureServiceUnitDeps['writer'];
   runAutoUpgrade?: () => Promise<void>;
   profileName?: string;
+  platform?: NodeJS.Platform;
   watchdogUnitPaths?: {
     timerPath?: string;
     servicePath?: string;
@@ -66,7 +67,7 @@ export async function runStart(deps: StartCommandDeps): Promise<CommandResult> {
     await deps.serviceManager.ensureRegistered();
     if (deps.watchdogUnitPaths !== undefined && deps.watchdogManager !== undefined) {
       await ensureWatchdogUnitExists({
-        platform: process.platform,
+        platform: deps.platform ?? process.platform,
         profileName: deps.profileName === 'dev' ? 'dev' : 'prod',
         programPath: deps.serviceUnitRecreate?.programPath ?? process.execPath,
         ...deps.watchdogUnitPaths,
