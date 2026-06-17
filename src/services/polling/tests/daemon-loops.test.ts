@@ -893,3 +893,48 @@ test('heartbeat loop re-entrancy guard: skips if prior run is still in flight', 
     globalThis.setTimeout = origSetTimeout;
   }
 });
+
+test('daemon loops log daemon.resumed on sleep overrun', async () => {
+  const origNow = Date.now;
+  try {
+    const ctrl = new AbortController();
+    const ctxs = makeContexts();
+    const entries: Array<{ level: string; msg: string; event?: string }> = [];
+    const logger = makeFakeLogger(entries);
+    ctxs.capture.logger = logger;
+    ctxs.drain.logger = logger;
+    ctxs.heartbeat.logger = logger;
+
+    ctxs.heartbeat.binaryPath = '/bin/gateway';
+    ctxs.heartbeat.currentVersion = '1.0.0';
+
+    let heartbeatCount = 0;
+    let fakeNow = Date.now();
+    Date.now = () => fakeNow;
+
+    const promise = runDaemonLoops(ctxs, {
+      abortSignal: ctrl.signal,
+      captureIntervalMs: 1,
+      drainIntervalMs: 1,
+      heartbeatIntervalMs: 1,
+      onHeartbeatComplete: () => {
+        heartbeatCount++;
+      },
+      sleep: async (ms, signal) => {
+        if (signal?.aborted) return;
+        fakeNow += ms + 200_000;
+        if (heartbeatCount >= 2) {
+          ctrl.abort();
+        }
+        await new Promise((r) => setTimeout(r, 1));
+      },
+    });
+
+    await promise;
+
+    const resumedLogs = entries.filter((e) => e.msg.includes('daemon.resumed'));
+    expect(resumedLogs.length).toBeGreaterThanOrEqual(1);
+  } finally {
+    Date.now = origNow;
+  }
+});

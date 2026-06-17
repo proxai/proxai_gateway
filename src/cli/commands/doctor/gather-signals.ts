@@ -13,9 +13,23 @@ import { defaultGeminiCliConversationsDir, defaultGeminiIdeConversationsDir } fr
 import { loadConfigFromString, type InstallSource } from 'services/config';
 import { readRescueLedgerReadOnly } from 'services/rescue/rescue-ledger.ts';
 import { readBootId } from 'core/system/boot-id.ts';
+import { buildWatchdogServiceContext } from 'cli/wiring/platform.ts';
+
 export const __deps = {
   realpath,
 };
+
+async function probeWatchdog(deps: DoctorCommandDeps): Promise<boolean> {
+  try {
+    const context = buildWatchdogServiceContext(deps.platform, deps.binaryPath, deps.profileCtx);
+    if (context === null) {
+      return false;
+    }
+    return await context.watchdogManager.isInstalled();
+  } catch {
+    return false;
+  }
+}
 
 async function probeWritable(dirPath: string): Promise<boolean> {
   try {
@@ -542,6 +556,7 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     networkResult,
     diskFreeBytes,
     installSource,
+    watchdogInstalled,
   ] = await Promise.all([
     Bun.file(deps.configFilePath).exists(),
     readSentinelFlag(deps.authFailedSentinelPath),
@@ -563,6 +578,7 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     probeNestReachable(deps.nestVerifyKeyUrl),
     probeDiskFreeBytes(deps.configDirPath, deps.platform),
     probeInstallSource(deps.binaryPath, deps.platform),
+    probeWatchdog(deps),
   ]);
 
   let configParses = false;
@@ -637,6 +653,7 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
       drainLastCycleAt: dbData.daemonState.drainLastCycleAt,
       lastConsecutiveRetriableBreak: dbData.daemonState.lastConsecutiveRetriableBreak,
       lastUploadError: dbData.daemonState.lastUploadError,
+      lastResumedAt: dbData.daemonState.lastResumedAt,
     },
     binary: {
       version: deps.currentVersion,
@@ -687,6 +704,9 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     windowsExtended,
     systemdExtended,
     rescue: rescueSignal,
+    watchdog: {
+      installed: watchdogInstalled,
+    },
     configDirPath: deps.configDirPath,
     logDirPath: deps.logDirPath,
   };

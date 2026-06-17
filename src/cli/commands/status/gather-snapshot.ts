@@ -2,7 +2,9 @@ import type { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { readDevModeSentinel } from 'core/io/fs/dev-mode-sentinel.ts';
 import { readBootId } from 'core/system/boot-id.ts';
-import { profileRootDir } from 'core/io/fs/profile.ts';
+import { profileRootDir, buildProfileContext } from 'core/io/fs/profile.ts';
+import { buildWatchdogServiceContext } from 'cli/wiring/platform.ts';
+import { readRescueLedgerReadOnly } from 'services/rescue/rescue-ledger.ts';
 import type { ProfileName } from 'core/io/fs/profile.types.ts';
 
 import {
@@ -161,6 +163,30 @@ export async function gatherStatusSnapshot(
     deps.readBootId ?? readBootId,
   );
 
+  let watchdogInstalled = false;
+  try {
+    const platform = process.platform;
+    const binaryPath = deps.binaryPath ?? process.execPath;
+    const profileCtx = buildProfileContext(profileName);
+    const watchdogCtx = buildWatchdogServiceContext(platform, binaryPath, profileCtx);
+    if (watchdogCtx !== null) {
+      watchdogInstalled = await watchdogCtx.watchdogManager.isInstalled();
+    }
+  } catch {}
+
+  const bootId = deps.readBootId !== undefined ? await deps.readBootId() : await readBootId();
+  const profileCtx = buildProfileContext(profileName);
+  const ledger = await readRescueLedgerReadOnly(profileCtx.sentinels.rescueLedger, bootId);
+  const rescue = ledger
+    ? {
+        consecutiveFailures: ledger.consecutiveFailures,
+        lastRescueAt: ledger.lastRescueAt,
+        circuitBroken: ledger.consecutiveFailures >= 3,
+      }
+    : null;
+
+  const lastResumedAt = getMetadata(buffer, METADATA_KEYS.lastResumedAt);
+
   return {
     profileName,
     health,
@@ -215,5 +241,8 @@ export async function gatherStatusSnapshot(
       totalRecordsSent: totalBatchesShipped,
       conversationsCaptured,
     },
+    watchdogInstalled,
+    rescue,
+    lastResumedAt,
   };
 }

@@ -105,6 +105,9 @@ const mockSnapshot: StatusSnapshot = {
   cfg: mockCfg,
   now: new Date('2026-05-25T12:00:00Z'),
   history: null,
+  watchdogInstalled: false,
+  rescue: null,
+  lastResumedAt: null,
 };
 
 const baseInputs: RenderInputs = {
@@ -684,4 +687,90 @@ test('renderHealthSection: terse dev gave-up label when exhausted', () => {
     isLocalBuild: false,
   }).join('\n');
   expect(out).toContain('gave up 16/16');
+});
+
+test('renderHealthSection: shows watchdog installed/missing', () => {
+  const s1 = {
+    ...mockSnapshot,
+    watchdogInstalled: true,
+  };
+  const out1 = renderHealthSection({
+    s: s1,
+    currentVersion: '2026.5.25',
+    inferredAlive: true,
+    isDevLike: false,
+    isLocalBuild: false,
+  }).join('\n');
+  expect(out1).toContain('installed');
+  expect(out1).toContain('auto-recovery on');
+
+  const s2 = {
+    ...mockSnapshot,
+    watchdogInstalled: false,
+  };
+  const out2 = renderHealthSection({
+    s: s2,
+    currentVersion: '2026.5.25',
+    inferredAlive: true,
+    isDevLike: false,
+    isLocalBuild: false,
+  }).join('\n');
+  expect(out2).toContain('not installed');
+  expect(out2).toContain('auto-recovery OFF');
+});
+
+test('renderHealthSection: shows auto-recovery when ledger is active', () => {
+  const s = {
+    ...mockSnapshot,
+    rescue: {
+      consecutiveFailures: 2,
+      lastRescueAt: new Date(mockSnapshot.now.getTime() - 60000).toISOString(),
+      circuitBroken: false,
+    },
+  };
+  const out = renderHealthSection({
+    s,
+    currentVersion: '2026.5.25',
+    inferredAlive: true,
+    isDevLike: false,
+    isLocalBuild: false,
+  }).join('\n');
+  expect(out).toContain('last restart');
+  expect(out).toContain('2 consecutive failures');
+});
+
+test('renderHealthSection: shows auto-recovery when circuit-broken', () => {
+  const s = {
+    ...mockSnapshot,
+    rescue: {
+      consecutiveFailures: 3,
+      lastRescueAt: new Date(mockSnapshot.now.getTime() - 60000).toISOString(),
+      circuitBroken: true,
+    },
+  };
+  const out = renderHealthSection({
+    s,
+    currentVersion: '2026.5.25',
+    inferredAlive: true,
+    isDevLike: false,
+    isLocalBuild: false,
+  }).join('\n');
+  expect(out).toContain('circuit breaker tripped');
+  expect(out).toContain('needs attention');
+});
+
+test('renderHealthSection: shows resumed status when recent', () => {
+  const s = {
+    ...mockSnapshot,
+    lastResumedAt: new Date(mockSnapshot.now.getTime() - 60000).toISOString(),
+  };
+  const out = renderHealthSection({
+    s,
+    currentVersion: '2026.5.25',
+    inferredAlive: true,
+    isDevLike: false,
+    isLocalBuild: false,
+  }).join('\n');
+  expect(out).toContain('Resumed');
+  expect(out).toContain('from sleep');
 });

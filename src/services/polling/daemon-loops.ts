@@ -1,6 +1,7 @@
 import { dirname, join } from 'node:path';
 import { abortableSleep, nowIsoUtc } from 'core/utils';
 import { startDaemonActors } from 'services/state-machines/daemon-actors';
+import { setMetadata, METADATA_KEYS } from 'services/buffer';
 import type { DaemonActorsHandle } from 'services/state-machines/daemon-actors';
 import { runCaptureCycle } from 'services/polling/capture-cycle.ts';
 import { runDrainCycle } from 'services/polling/drain-cycle.ts';
@@ -234,7 +235,16 @@ async function captureLoop(
       }
     }
     if (isAborted(signal)) return;
+    const beforeSleep = Date.now();
     await sleep(intervalMs, signal);
+    const afterSleep = Date.now();
+    const actualElapsed = afterSleep - beforeSleep;
+    if (actualElapsed > intervalMs + 120_000) {
+      ctx.logger?.info({ event: 'daemon.resumed' }, 'daemon resumed from sleep');
+      try {
+        setMetadata(ctx.buffer, METADATA_KEYS.lastResumedAt, new Date().toISOString());
+      } catch {}
+    }
   }
 }
 
@@ -282,7 +292,16 @@ async function drainLoop(
       }
     }
     if (isAborted(signal)) return;
+    const beforeSleep = Date.now();
     await sleep(intervalMs, signal);
+    const afterSleep = Date.now();
+    const actualElapsed = afterSleep - beforeSleep;
+    if (actualElapsed > intervalMs + 120_000) {
+      ctx.logger?.info({ event: 'daemon.resumed' }, 'daemon resumed from sleep');
+      try {
+        setMetadata(ctx.buffer, METADATA_KEYS.lastResumedAt, new Date().toISOString());
+      } catch {}
+    }
   }
 }
 
@@ -330,7 +349,16 @@ async function heartbeatLoop(
       }
     }
     if (isAborted(signal)) return;
+    const beforeSleep = Date.now();
     await sleep(intervalMs, signal);
+    const afterSleep = Date.now();
+    const actualElapsed = afterSleep - beforeSleep;
+    if (actualElapsed > intervalMs + 120_000) {
+      ctx.logger?.info({ event: 'daemon.resumed' }, 'daemon resumed from sleep');
+      try {
+        setMetadata(ctx.buffer, METADATA_KEYS.lastResumedAt, new Date().toISOString());
+      } catch {}
+    }
   }
 }
 

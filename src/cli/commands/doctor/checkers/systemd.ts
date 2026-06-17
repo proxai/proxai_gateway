@@ -27,7 +27,7 @@ export function checkA14SystemdRateLimitHit(signals: DoctorSignals): Finding | n
     cause:
       'The service manager has rate-limited this daemon (start-limit-hit) due to repeated startup failures.',
     action:
-      'Reset the failure count and retry: "systemctl --user reset-failed proxai-gateway.service".',
+      'Reset the failure count and retry: "systemctl --user reset-failed proxai-gateway.service". Note that the watchdog will attempt paced recovery (reset-failed + start, capped at once per hour), and if it ultimately gives up, finding A16 will be shown.',
   };
 }
 

@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-17T01:19:02.251Z",
-  "sourceHash": "a7c9015c0fc8de5c8494baefbcadf0cb",
+  "generatedAt": "2026-06-17T02:09:45.609Z",
+  "sourceHash": "81d7e59057bad9e8019bc43d8af367f0",
   "files": [
     {
       "path": "CLAUDE.md",
@@ -1057,19 +1057,19 @@
     },
     {
       "path": ".claude/knowledge/services/state-machines.md",
-      "hash": "bdc4d8847e01bd61"
+      "hash": "0383c238f77c3759"
     },
     {
       "path": ".cursor/knowledge/services/state-machines.md",
-      "hash": "bdc4d8847e01bd61"
+      "hash": "0383c238f77c3759"
     },
     {
       "path": ".codex/knowledge/services/state-machines.md",
-      "hash": "bdc4d8847e01bd61"
+      "hash": "0383c238f77c3759"
     },
     {
       "path": ".agents/knowledge/services/state-machines.md",
-      "hash": "bdc4d8847e01bd61"
+      "hash": "0383c238f77c3759"
     },
     {
       "path": ".claude/knowledge/services/uninstall.md",

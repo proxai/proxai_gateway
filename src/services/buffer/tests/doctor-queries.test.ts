@@ -154,7 +154,14 @@ test('queryDoctorDaemonState returns nulls when daemon_state and metadata are ab
     drainLastCycleAt: null,
     lastConsecutiveRetriableBreak: null,
     lastUploadError: null,
+    lastResumedAt: null,
   });
+});
+
+test('queryDoctorDaemonState reads lastResumedAt metadata', () => {
+  setMetadata(db, 'last_resumed_at', '2026-05-28T10:07:00.000Z');
+  const state = queryDoctorDaemonState(db);
+  expect(state.lastResumedAt).toBe('2026-05-28T10:07:00.000Z');
 });
 
 test('queryDoctorDaemonState reads cycle metadata and a true retriable break', () => {

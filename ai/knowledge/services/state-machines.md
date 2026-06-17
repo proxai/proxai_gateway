@@ -96,4 +96,8 @@ runtime authority for I/O, gating, and persistence. The cycle machines
 *describe* the transitions they make as they go. There is no parallel
 imperative-only path left for any cycle.
 
+## Sleep / Resume & State Machines
+
+System sleep/resume is transparent to the in-process event loop. The OS freezes and resumes the process, and the XState actors continue from their in-memory state with no re-initialization. The `daemon-root` machine models the process lifecycle (`boot → running → draining_for_shutdown → exited`), which sleep does not alter. In addition, machine snapshots are flushed but never restored in production. The watchdog and the rescue command operate entirely outside the state machine layer, reading sentinels and `buffer.db` directly. Therefore, sleep and resume events (such as `daemon.resumed`) are logged and persisted as `buffer.db` metadata, and are intentionally not modeled in the state machines.
+
 [source: src/services/state-machines/*, scripts/export-diagrams/*, src/cli/commands/replay/*]

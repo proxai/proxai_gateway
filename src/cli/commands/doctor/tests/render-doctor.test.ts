@@ -46,6 +46,7 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
       drainLastCycleAt: null,
       lastConsecutiveRetriableBreak: null,
       lastUploadError: null,
+      lastResumedAt: null,
     },
     binary: {
       version: '2026.5.28',
@@ -151,6 +152,9 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
       consecutiveFailures: 0,
       lastRescueAt: null,
     },
+    watchdog: {
+      installed: true,
+    },
     configDirPath: '/Users/test/.proxai',
     logDirPath: '/Users/test/.proxai/log',
   };
@@ -232,6 +236,7 @@ test('signals appendix renders populated optional values and regression loops', 
       drainLastCycleAt: '2026-05-28T00:00:30.000Z',
       lastConsecutiveRetriableBreak: true,
       lastUploadError: null,
+      lastResumedAt: null,
     },
     binary: {
       version: '2026.5.28',
@@ -334,6 +339,7 @@ test('signals appendix renders last upload error when present', () => {
       drainLastCycleAt: null,
       lastConsecutiveRetriableBreak: null,
       lastUploadError: 'failed to establish secure connection',
+      lastResumedAt: null,
     },
   });
   const out = stripAnsi(renderDoctorOutput([], signals));
@@ -376,6 +382,7 @@ test('generateDoctorHtml renders populated signals and a single-severity summary
       drainLastCycleAt: '2026-05-28T00:00:30.000Z',
       lastConsecutiveRetriableBreak: true,
       lastUploadError: 'connection reset',
+      lastResumedAt: null,
     },
     binary: {
       version: '2026.5.28',
