@@ -100,6 +100,10 @@ export function getCursorWithFallback(db: Database, key: CursorKey): CursorState
   return getCursor(db, { ...key, sourceInode: NO_INODE_SENTINEL });
 }
 
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
 export function getHighestGenerationPath(
   db: Database,
   sourceApp: SourceApp,
@@ -110,8 +114,8 @@ export function getHighestGenerationPath(
     .query<
       { source_path: string },
       [string, string, string]
-    >(`SELECT DISTINCT source_path FROM ${BUFFER_TABLES.cursors} WHERE source_app = ? AND (source_path = ? OR source_path LIKE ?)`)
-    .all(sourceApp, base, `${base}#gen=%`);
+    >(`SELECT DISTINCT source_path FROM ${BUFFER_TABLES.cursors} WHERE source_app = ? AND (source_path = ? OR source_path LIKE ? ESCAPE '\\')`)
+    .all(sourceApp, base, `${escapeLikePattern(base)}#gen=%`);
   let maxGen = 0;
   let resultPath = base;
   for (const row of rows) {

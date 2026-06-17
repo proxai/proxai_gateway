@@ -402,3 +402,45 @@ test('getHighestGenerationPath returns the highest existing generation path', ()
   const result = getHighestGenerationPath(db, 'claude-code', '/some/path');
   expect(result).toBe('/some/path#gen=3');
 });
+
+test('getHighestGenerationPath escapes underscore literal in base path', () => {
+  setCursor(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'hash_intended',
+    sourcePath: '/p/a_b.sqlite#gen=1',
+    sourceInode: null,
+    watermarkTable: 'table1',
+    watermarkEnd: 10,
+  });
+  setCursor(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'hash_sibling',
+    sourcePath: '/p/aXb.sqlite#gen=2',
+    sourceInode: null,
+    watermarkTable: 'table1',
+    watermarkEnd: 20,
+  });
+  const result = getHighestGenerationPath(db, 'claude-code', '/p/a_b.sqlite');
+  expect(result).toBe('/p/a_b.sqlite#gen=1');
+});
+
+test('getHighestGenerationPath escapes percent literal in base path', () => {
+  setCursor(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'hash_intended',
+    sourcePath: '/p/a%b.sqlite#gen=1',
+    sourceInode: null,
+    watermarkTable: 'table1',
+    watermarkEnd: 10,
+  });
+  setCursor(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'hash_sibling',
+    sourcePath: '/p/aZZZb.sqlite#gen=3',
+    sourceInode: null,
+    watermarkTable: 'table1',
+    watermarkEnd: 20,
+  });
+  const result = getHighestGenerationPath(db, 'claude-code', '/p/a%b.sqlite');
+  expect(result).toBe('/p/a%b.sqlite#gen=1');
+});
