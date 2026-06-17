@@ -182,7 +182,7 @@ async function buildFrame(
     };
   }
 
-  const snapshot = await gatherStatusSnapshot(deps, deps.buffer);
+  const snapshot = await gatherStatusSnapshot(deps, deps.buffer, profileName);
   const daemonInferredAlive = inferDaemonAlive(
     snapshot.drainLastCycleAt,
     snapshot.captureLastCycleAt,

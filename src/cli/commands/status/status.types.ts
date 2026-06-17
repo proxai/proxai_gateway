@@ -31,6 +31,7 @@ export interface StatusCommandDeps {
   currentVersion?: string;
   binaryPath?: string;
   now?: () => Date;
+  platform?: NodeJS.Platform;
 }
 
 import type { ReadableInputStream } from 'cli/commands/status/key-handler.types.ts';

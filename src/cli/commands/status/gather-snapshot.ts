@@ -167,7 +167,7 @@ export async function gatherStatusSnapshot(
   const profileCtx = buildProfileContext(profileName);
   let watchdogInstalled = false;
   try {
-    const platform = process.platform;
+    const platform = deps.platform ?? process.platform;
     const binaryPath = deps.binaryPath ?? process.execPath;
     const watchdogCtx = buildWatchdogServiceContext(platform, binaryPath, profileCtx);
     if (watchdogCtx !== null) {
