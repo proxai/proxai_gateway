@@ -142,6 +142,7 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
   cycleMachine.send({ type: 'GATE_CLEAR' });
 
   const desktopCliSessionIds = await resolveDesktopCliSessionIds(ctx);
+  const excludedProjects = await resolveExcludedProjects(ctx);
 
   const sourceResults: Record<string, SourcePollerResult> = {};
   const promises = ctx.sources.map(async (source) => {
@@ -157,7 +158,13 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
 
     let result: SourcePollerResult;
     if (isDefaultSource) {
-      result = await pollSourceInWorker(source, ctx, pollActor, desktopCliSessionIds);
+      result = await pollSourceInWorker(
+        source,
+        ctx,
+        pollActor,
+        desktopCliSessionIds,
+        excludedProjects,
+      );
     } else {
       const sourceCtx: SourcePollerContext = {
         buffer: ctx.buffer,
@@ -167,6 +174,9 @@ export async function runCaptureCycle(ctx: CaptureCycleContext): Promise<Capture
       if (sourceLog !== undefined) sourceCtx.logger = sourceLog;
       if (ctx.minimumMtimeOverride !== undefined) {
         sourceCtx.minimumMtimeOverride = ctx.minimumMtimeOverride;
+      }
+      if (excludedProjects !== undefined) {
+        sourceCtx.excludedProjects = excludedProjects;
       }
       result = await source.poll(sourceCtx);
     }
@@ -266,6 +276,21 @@ async function resolveDesktopCliSessionIds(
     ctx.logger?.warn(
       { event: 'capture.desktop_sidecar_failed', error: (err as Error).message ?? String(err) },
       'failed to load desktop cli session ids; treating all claude-code sessions as cli',
+    );
+    return undefined;
+  }
+}
+
+async function resolveExcludedProjects(
+  ctx: CaptureCycleContext,
+): Promise<readonly string[] | undefined> {
+  if (ctx.loadExcludedProjects === undefined) return undefined;
+  try {
+    return await ctx.loadExcludedProjects();
+  } catch (err) {
+    ctx.logger?.warn(
+      { event: 'capture.exclusions_load_failed', error: (err as Error).message ?? String(err) },
+      'failed to load excluded projects; treating none as excluded',
     );
     return undefined;
   }
@@ -420,6 +445,7 @@ async function pollSourceInWorker(
   ctx: CaptureCycleContext,
   pollActor: Actor<SourcePollMachine> | null,
   desktopCliSessionIds: ReadonlySet<string> | undefined,
+  excludedProjects: readonly string[] | undefined,
 ): Promise<SourcePollerResult> {
   try {
     const cursorRows = ctx.buffer
@@ -439,9 +465,23 @@ async function pollSourceInWorker(
 
     const isCompiled = __deps.isCompiledBinary();
     if (isCompiled) {
-      return runInProcessWorker(source, ctx, priorCursors, pollActor, desktopCliSessionIds);
+      return runInProcessWorker(
+        source,
+        ctx,
+        priorCursors,
+        pollActor,
+        desktopCliSessionIds,
+        excludedProjects,
+      );
     }
-    return runThreadedWorker(source, ctx, priorCursors, pollActor, desktopCliSessionIds);
+    return runThreadedWorker(
+      source,
+      ctx,
+      priorCursors,
+      pollActor,
+      desktopCliSessionIds,
+      excludedProjects,
+    );
   } catch (e) {
     return {
       filesProcessed: 0,
@@ -465,6 +505,7 @@ async function runInProcessWorker(
   priorCursors: PriorCursors,
   pollActor: Actor<SourcePollMachine> | null,
   desktopCliSessionIds: ReadonlySet<string> | undefined,
+  excludedProjects: readonly string[] | undefined,
 ): Promise<SourcePollerResult> {
   const sourceApp = assertSourceApp(source.name);
   const workerActor = createActor(workerMachine, {
@@ -485,6 +526,9 @@ async function runInProcessWorker(
   }
   if (source.name === 'claude-code' && desktopCliSessionIds !== undefined) {
     optionsObj.desktopCliSessionIds = desktopCliSessionIds;
+  }
+  if (excludedProjects !== undefined) {
+    optionsObj.excludedProjects = excludedProjects;
   }
   const capture = await __deps.handleCapture(source.name, optionsObj);
   if (!capture) {
@@ -507,6 +551,7 @@ function runThreadedWorker(
   priorCursors: PriorCursors,
   pollActor: Actor<SourcePollMachine> | null,
   desktopCliSessionIds: ReadonlySet<string> | undefined,
+  excludedProjects: readonly string[] | undefined,
 ): Promise<SourcePollerResult> {
   return new Promise<SourcePollerResult>((resolve) => {
     try {
@@ -587,6 +632,9 @@ function runThreadedWorker(
       }
       if (source.name === 'claude-code' && desktopCliSessionIds !== undefined) {
         optionsObj.desktopCliSessionIds = desktopCliSessionIds;
+      }
+      if (excludedProjects !== undefined) {
+        optionsObj.excludedProjects = excludedProjects;
       }
 
       const workerInput: WorkerInput = {
