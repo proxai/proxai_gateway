@@ -40,4 +40,5 @@ export interface RunCommandDeps {
   readBootId?: () => Promise<string>;
   coordinatedUpgradeDeps?: CoordinatedUpgradeDeps;
   loadDesktopCliSessionIds?: () => Promise<ReadonlySet<string>>;
+  loadExcludedProjects?: () => Promise<readonly string[]>;
 }

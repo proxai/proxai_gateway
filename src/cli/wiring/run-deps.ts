@@ -5,6 +5,7 @@ import type { ProfileContext } from 'core/io/fs/profile.types.ts';
 import { GATEWAY_USER_AGENT, PACKAGE_VERSION } from 'core/utils';
 import type { GatewayConfig } from 'services/config';
 import { loadDesktopCliSessionIds } from 'sources/claude-desktop';
+import { loadExcludedProjects } from 'services/exclusion';
 
 export interface BuildRunDepsInputs {
   config: GatewayConfig;
@@ -35,6 +36,7 @@ export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
     devMode: inputs.profileCtx.isDev,
     exitProcess: inputs.exitProcess,
     loadDesktopCliSessionIds: () => loadDesktopCliSessionIds(platform, env),
+    loadExcludedProjects: () => loadExcludedProjects(inputs.profileCtx.configDir),
   };
   if (inputs.xstateInspect !== undefined) {
     deps.xstateInspect = inputs.xstateInspect;

@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -83,6 +84,25 @@ afterEach(async () => {
   if (profileRoot !== undefined) {
     await rmRecursive(profileRoot);
     profileRoot = undefined;
+  }
+});
+
+test('buildRunDeps: binds loadExcludedProjects reading the profile config dir', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'proxai-run-deps-exclude-'));
+  try {
+    await writeFile(join(dir, 'excluded-projects'), '/Users/me/secret\n');
+    const ctrl = new AbortController();
+    const deps = buildRunDeps({
+      config: cfg,
+      abortSignal: ctrl.signal,
+      binaryPath: '/bin/p',
+      exitProcess: () => {},
+      profileCtx: { ...prodCtx, configDir: dir },
+    });
+    expect(typeof deps.loadExcludedProjects).toBe('function');
+    expect(await deps.loadExcludedProjects?.()).toEqual(['/Users/me/secret']);
+  } finally {
+    await rmRecursive(dir);
   }
 });
 
