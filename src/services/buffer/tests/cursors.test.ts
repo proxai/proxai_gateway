@@ -6,6 +6,7 @@ import {
   countCursors,
   getCursor,
   getCursorWithFallback,
+  getHighestGenerationPath,
   hasAnyCursor,
   openInMemoryBufferDb,
   setCursor,
@@ -358,4 +359,46 @@ test('getCursorWithFallback returns null when exact key missing and inode is nul
     watermarkTable: null,
   });
   expect(result).toBeNull();
+});
+
+test('getHighestGenerationPath returns the base path if no cursors exist', () => {
+  const result = getHighestGenerationPath(db, 'claude-code', '/some/path');
+  expect(result).toBe('/some/path');
+});
+
+test('getHighestGenerationPath returns the highest existing generation path', () => {
+  setCursor(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'hash1',
+    sourcePath: '/some/path',
+    sourceInode: null,
+    watermarkTable: 'table1',
+    watermarkEnd: 10,
+  });
+  setCursor(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'hash2',
+    sourcePath: '/some/path#gen=1',
+    sourceInode: null,
+    watermarkTable: 'table1',
+    watermarkEnd: 20,
+  });
+  setCursor(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'hash3',
+    sourcePath: '/some/path#gen=3',
+    sourceInode: null,
+    watermarkTable: 'table1',
+    watermarkEnd: 30,
+  });
+  setCursor(db, {
+    sourceApp: 'claude-code',
+    sourcePathHash: 'hash4',
+    sourcePath: '/some/path#gen=2',
+    sourceInode: null,
+    watermarkTable: 'table1',
+    watermarkEnd: 25,
+  });
+  const result = getHighestGenerationPath(db, 'claude-code', '/some/path');
+  expect(result).toBe('/some/path#gen=3');
 });

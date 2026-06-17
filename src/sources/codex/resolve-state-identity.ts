@@ -2,7 +2,7 @@ import type { Database } from 'bun:sqlite';
 
 import { maxRowid, tableExists } from 'core/io/sqlite';
 import { nextGenerationSuffix, sha256Hex } from 'core/utils';
-import { detectVacuum, getCursorWithFallback } from 'services/buffer';
+import { detectVacuum, getCursorWithFallback, getHighestGenerationPath } from 'services/buffer';
 import { CODEX_ALLOWED_STATE_TABLES, CODEX_SOURCE_APP } from 'sources/codex/codex.constants.ts';
 import type { CodexCollectorContext, DiscoveredCodexStateFile } from 'sources/codex/codex.types.ts';
 
@@ -19,13 +19,19 @@ export function resolveSourceIdentity(
   currentSizeBytes: number,
   currentPageCount: number,
 ): SourceIdentity {
+  let currentPath = file.sourcePath;
+  try {
+    currentPath = getHighestGenerationPath(context.buffer, CODEX_SOURCE_APP, file.sourcePath);
+  } catch {}
+  const currentPathHash = sha256Hex(currentPath);
+
   for (const table of CODEX_ALLOWED_STATE_TABLES) {
     if (!tableExists(db, table)) continue;
     let cursor;
     try {
       cursor = getCursorWithFallback(context.buffer, {
         sourceApp: CODEX_SOURCE_APP,
-        sourcePathHash: file.sourcePathHash,
+        sourcePathHash: currentPathHash,
         sourceInode: null,
         watermarkTable: table,
       });
@@ -42,13 +48,13 @@ export function resolveSourceIdentity(
       currentMaxRowid: maxRowid(db, table),
     });
     if (detection.vacuumed) {
-      const newPath = nextGenerationSuffix(file.sourcePath);
+      const newPath = nextGenerationSuffix(currentPath);
       context.logger?.warn(
         {
           event: 'vacuum.detected',
           source_app: CODEX_SOURCE_APP,
           reason: detection.reason,
-          old_path: file.sourcePath,
+          old_path: currentPath,
           new_path: newPath,
           triggering_table: table,
         },
@@ -62,8 +68,8 @@ export function resolveSourceIdentity(
     }
   }
   return {
-    sourcePath: file.sourcePath,
-    sourcePathHash: file.sourcePathHash,
+    sourcePath: currentPath,
+    sourcePathHash: currentPathHash,
     rotated: false,
   };
 }

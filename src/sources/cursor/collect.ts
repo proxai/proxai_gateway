@@ -1,7 +1,13 @@
 import { statFile } from 'core/io/fs';
 import { maxRowid, openReadOnly, pageCount, snapshotSqlite, tableExists } from 'core/io/sqlite';
 import { nextGenerationSuffix, requireDefined, sha256Hex } from 'core/utils';
-import { detectVacuum, getCursor, getCursorWithFallback, setCursor } from 'services/buffer';
+import {
+  detectVacuum,
+  getCursor,
+  getCursorWithFallback,
+  getHighestGenerationPath,
+  setCursor,
+} from 'services/buffer';
 import { SUB_AGENT_CAPTURE_BY_SOURCE } from 'services/config/sub-agent-flags';
 import {
   CURSOR_DISK_KV_TABLE,
@@ -71,7 +77,14 @@ export async function collectCursorFile(
       }
 
       let effectiveSourcePath = file.sourcePath;
-      let effectiveSourcePathHash = file.sourcePathHash;
+      try {
+        effectiveSourcePath = getHighestGenerationPath(
+          context.buffer,
+          CURSOR_SOURCE_APP,
+          file.sourcePath,
+        );
+      } catch {}
+      let effectiveSourcePathHash = sha256Hex(effectiveSourcePath);
       let priorCursor = getCursorWithFallback(context.buffer, {
         sourceApp: CURSOR_SOURCE_APP,
         sourcePathHash: effectiveSourcePathHash,
@@ -123,6 +136,18 @@ export async function collectCursorFile(
             sourceInode: null,
             watermarkTable: null,
             watermarkEnd: priorCursor.watermarkEnd,
+            lastSeenSizeBytes: currentSizeBytes,
+            lastSeenPageCount: currentPageCount,
+            consecutiveErrors: 0,
+          });
+        } else if (effectiveSourcePath !== file.sourcePath) {
+          setCursor(context.buffer, {
+            sourceApp: CURSOR_SOURCE_APP,
+            sourcePathHash: effectiveSourcePathHash,
+            sourcePath: effectiveSourcePath,
+            sourceInode: null,
+            watermarkTable: null,
+            watermarkEnd: 0,
             lastSeenSizeBytes: currentSizeBytes,
             lastSeenPageCount: currentPageCount,
             consecutiveErrors: 0,

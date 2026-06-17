@@ -26,11 +26,7 @@ import {
   CODEX_STATE_BODY_FORMAT,
   CODEX_STATE_SOURCE_KIND,
 } from 'sources/codex/codex.constants.ts';
-import type {
-  CodexCollectorContext,
-  CodexCollectorResult,
-  DiscoveredCodexStateFile,
-} from 'sources/codex/codex.types.ts';
+import type { CodexCollectorContext, CodexCollectorResult } from 'sources/codex/codex.types.ts';
 import type { SourceIdentity } from 'sources/codex/resolve-state-identity.ts';
 
 type CodexRow = Record<string, unknown> & { rowid: number };
@@ -53,7 +49,6 @@ interface SliceMeasurement {
 
 export function collectOneTable(
   db: Database,
-  file: DiscoveredCodexStateFile,
   context: CodexCollectorContext,
   table: CodexTable,
   agentSchemaVersion: string,
@@ -68,7 +63,7 @@ export function collectOneTable(
     ? null
     : getCursorWithFallback(context.buffer, {
         sourceApp: CODEX_SOURCE_APP,
-        sourcePathHash: file.sourcePathHash,
+        sourcePathHash: identity.sourcePathHash,
         sourceInode: null,
         watermarkTable: table,
       });
@@ -90,6 +85,18 @@ export function collectOneTable(
         sourceInode: null,
         watermarkTable: table,
         watermarkEnd: priorCursor.watermarkEnd,
+        lastSeenSizeBytes: currentSizeBytes,
+        lastSeenPageCount: currentPageCount,
+        consecutiveErrors: 0,
+      });
+    } else if (identity.rotated) {
+      setCursor(context.buffer, {
+        sourceApp: CODEX_SOURCE_APP,
+        sourcePathHash: identity.sourcePathHash,
+        sourcePath: identity.sourcePath,
+        sourceInode: null,
+        watermarkTable: table,
+        watermarkEnd: 0,
         lastSeenSizeBytes: currentSizeBytes,
         lastSeenPageCount: currentPageCount,
         consecutiveErrors: 0,

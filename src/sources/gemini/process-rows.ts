@@ -69,7 +69,7 @@ export function collectOneGeminiTable(
     ? null
     : getCursorWithFallback(context.buffer, {
         sourceApp: GEMINI_SOURCE_APP,
-        sourcePathHash: file.sourcePathHash,
+        sourcePathHash: identity.sourcePathHash,
         sourceInode: null,
         watermarkTable: table,
       });
@@ -85,6 +85,18 @@ export function collectOneGeminiTable(
         sourceInode: null,
         watermarkTable: table,
         watermarkEnd: priorCursor.watermarkEnd,
+        lastSeenSizeBytes: currentSizeBytes,
+        lastSeenPageCount: currentPageCount,
+        consecutiveErrors: 0,
+      });
+    } else if (identity.rotated) {
+      setCursor(context.buffer, {
+        sourceApp: GEMINI_SOURCE_APP,
+        sourcePathHash: identity.sourcePathHash,
+        sourcePath: identity.sourcePath,
+        sourceInode: null,
+        watermarkTable: table,
+        watermarkEnd: 0,
         lastSeenSizeBytes: currentSizeBytes,
         lastSeenPageCount: currentPageCount,
         consecutiveErrors: 0,
