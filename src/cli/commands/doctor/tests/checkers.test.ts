@@ -10,6 +10,7 @@ import {
   checkA4Crashed,
   checkA5Wedged,
   checkA16RescueCircuitBreakerTripped,
+  checkA17WatchdogMissing,
 } from 'cli/commands/doctor/checkers/lifecycle.ts';
 import { MAX_CONSECUTIVE_FAILURES } from 'services/rescue/rescue-decision.ts';
 import {
@@ -143,6 +144,7 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
       drainLastCycleAt: new Date().toISOString(),
       lastConsecutiveRetriableBreak: false,
       lastUploadError: null,
+      lastResumedAt: null,
     },
     binary: {
       version: '2026.5.28',
@@ -247,6 +249,9 @@ function baseSignals(overrides: Partial<DoctorSignals> = {}): DoctorSignals {
     rescue: {
       consecutiveFailures: 0,
       lastRescueAt: null,
+    },
+    watchdog: {
+      installed: true,
     },
     configDirPath: '/Users/test/.proxai',
     logDirPath: '/Users/test/.proxai/log',
@@ -2008,4 +2013,138 @@ test('G10: compression spikes', () => {
     ),
   );
   expect(f.code).toBe('G10');
+});
+
+test('checkA17WatchdogMissing fires if watchdog is not installed', () => {
+  expect(
+    checkA17WatchdogMissing(
+      baseSignals({
+        watchdog: { installed: true },
+      }),
+    ),
+  ).toBeNull();
+
+  expect(
+    checkA17WatchdogMissing(
+      baseSignals({
+        configExists: false,
+        watchdog: { installed: false },
+      }),
+    ),
+  ).toBeNull();
+
+  expect(
+    checkA17WatchdogMissing(
+      baseSignals({
+        serviceUnitRegistered: false,
+        watchdog: { installed: false },
+      }),
+    ),
+  ).toBeNull();
+
+  const f = requireDefined(
+    checkA17WatchdogMissing(
+      baseSignals({
+        watchdog: { installed: false },
+      }),
+    ),
+  );
+  expect(f.code).toBe('A17');
+  expect(f.severity).toBe(Severity.warning);
+  expect(f.cause).toContain('watchdog is not installed');
+});
+
+test('checkA5Wedged is sleep-aware', () => {
+  const stale = new Date(Date.now() - 3_600_000).toISOString();
+
+  const wedged = requireDefined(
+    checkA5Wedged(
+      baseSignals({
+        daemonState: {
+          ...baseSignals().daemonState,
+          captureLastCycleAt: stale,
+          lastResumedAt: null,
+        },
+      }),
+    ),
+  );
+  expect(wedged.code).toBe('A5');
+
+  expect(
+    checkA5Wedged(
+      baseSignals({
+        daemonState: {
+          ...baseSignals().daemonState,
+          captureLastCycleAt: stale,
+          lastResumedAt: new Date().toISOString(),
+        },
+      }),
+    ),
+  ).toBeNull();
+
+  expect(
+    checkA5Wedged(
+      baseSignals({
+        daemonState: {
+          ...baseSignals().daemonState,
+          captureLastCycleAt: stale,
+          lastResumedAt: 'invalid-date',
+        },
+      }),
+    ),
+  ).not.toBeNull();
+
+  expect(
+    checkA5Wedged(
+      baseSignals({
+        daemonState: {
+          ...baseSignals().daemonState,
+          captureLastCycleAt: stale,
+          lastResumedAt: new Date(Date.now() - 600_000).toISOString(),
+        },
+      }),
+    ),
+  ).not.toBeNull();
+});
+
+test('checkC3DrainWedged is sleep-aware', () => {
+  const stale = new Date(Date.now() - 3_600_000).toISOString();
+  expect(
+    checkC3DrainWedged(
+      baseSignals({
+        buffer: { ...baseSignals().buffer, pendingCount: 1 },
+        daemonState: {
+          ...baseSignals().daemonState,
+          drainLastCycleAt: stale,
+          lastResumedAt: new Date().toISOString(),
+        },
+      }),
+    ),
+  ).toBeNull();
+
+  expect(
+    checkC3DrainWedged(
+      baseSignals({
+        buffer: { ...baseSignals().buffer, pendingCount: 1 },
+        daemonState: {
+          ...baseSignals().daemonState,
+          drainLastCycleAt: stale,
+          lastResumedAt: 'invalid-date',
+        },
+      }),
+    ),
+  ).not.toBeNull();
+
+  expect(
+    checkC3DrainWedged(
+      baseSignals({
+        buffer: { ...baseSignals().buffer, pendingCount: 1 },
+        daemonState: {
+          ...baseSignals().daemonState,
+          drainLastCycleAt: stale,
+          lastResumedAt: new Date(Date.now() - 600_000).toISOString(),
+        },
+      }),
+    ),
+  ).not.toBeNull();
 });

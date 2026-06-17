@@ -263,6 +263,50 @@ export function renderHealthSection(input: {
     rowText('Auto-upgrade', renderAutoUpgradeLine(s, input.currentVersion, installSource)),
   );
   lines.push(rowText('Binary age', renderBinaryAgeLine(s)));
+
+  const watchdogVal = s.watchdogInstalled
+    ? chalk.green('● installed')
+    : chalk.red('○ not installed');
+  const watchdogComment = s.watchdogInstalled
+    ? 'auto-recovery on'
+    : chalk.yellow('auto-recovery OFF');
+  lines.push(rowText('Watchdog', watchdogVal, watchdogComment));
+
+  if (s.rescue !== null && (s.rescue.consecutiveFailures > 0 || s.rescue.lastRescueAt !== null)) {
+    if (s.rescue.circuitBroken) {
+      lines.push(
+        rowText(
+          'Auto-recovery',
+          chalk.red('circuit breaker tripped'),
+          chalk.red('needs attention'),
+        ),
+      );
+    } else {
+      const rel = s.rescue.lastRescueAt
+        ? formatRelative(s.rescue.lastRescueAt, { now: s.now })
+        : 'never';
+      lines.push(
+        rowText(
+          'Auto-recovery',
+          `last restart ${rel}`,
+          `${s.rescue.consecutiveFailures.toString()} consecutive failures`,
+        ),
+      );
+    }
+  }
+
+  if (s.lastResumedAt !== null) {
+    const resumedMs = Date.parse(s.lastResumedAt);
+    if (Number.isFinite(resumedMs)) {
+      const diff = s.now.getTime() - resumedMs;
+      if (diff >= 0 && diff < 3_600_000) {
+        lines.push(
+          rowText('Resumed', formatRelative(s.lastResumedAt, { now: s.now }), 'from sleep'),
+        );
+      }
+    }
+  }
+
   lines.push(rowText('Ingestion Key', maskApiKey(s.cfg?.account.apiKey)));
   if (input.isDevLike && s.runtime.pid !== null) {
     lines.push(rowText('PID', chalk.dim(s.runtime.pid.toString())));

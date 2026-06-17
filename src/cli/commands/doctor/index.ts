@@ -24,6 +24,7 @@ import {
   checkA4Crashed,
   checkA5Wedged,
   checkA16RescueCircuitBreakerTripped,
+  checkA17WatchdogMissing,
 } from 'cli/commands/doctor/checkers/lifecycle.ts';
 import {
   checkB1InvalidKey,
@@ -135,6 +136,7 @@ const ALL_CHECKERS: readonly Checker[] = [
   checkA4Crashed,
   checkA5Wedged,
   checkA16RescueCircuitBreakerTripped,
+  checkA17WatchdogMissing,
   checkA6AbruptDaemonTermination,
   checkA7ZombieDaemon,
   checkA8GracefulTerminationLockup,

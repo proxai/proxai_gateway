@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { decideRescue } from 'services/rescue/rescue-decision.ts';
+import { decideRescue, RESUME_GAP_THRESHOLD_MS } from 'services/rescue/rescue-decision.ts';
 import { readHeartbeat } from 'services/rescue/heartbeat-read.ts';
 import {
   readRescueLedger,
@@ -73,6 +73,18 @@ export async function runRescue(input: RescueCommandInput): Promise<CommandResul
 
     const ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
 
+    const now = new Date();
+    let likelyResumed = false;
+    if (ledger !== null && ledger.lastWatchdogRunAt !== null) {
+      const lastRunMs = Date.parse(ledger.lastWatchdogRunAt);
+      if (Number.isFinite(lastRunMs)) {
+        const gapMs = now.getTime() - lastRunMs;
+        if (gapMs > RESUME_GAP_THRESHOLD_MS) {
+          likelyResumed = true;
+        }
+      }
+    }
+
     const decision = decideRescue({
       configExists,
       serviceUnitRegistered: isRegistered,
@@ -84,7 +96,8 @@ export async function runRescue(input: RescueCommandInput): Promise<CommandResul
       sessionStoppedThisBoot,
       upgradeInProgress,
       ledger,
-      now: new Date(),
+      now,
+      likelyResumed,
     });
 
     let activeLedger = ledger;
@@ -94,7 +107,9 @@ export async function runRescue(input: RescueCommandInput): Promise<CommandResul
         lastRescueAt: null,
         consecutiveFailures: 0,
         attempts: [],
-        lastObservedHeartbeatAt: null,
+        lastObservedCaptureAt: null,
+        lastObservedDrainAt: null,
+        lastWatchdogRunAt: null,
       };
     }
 
@@ -122,22 +137,9 @@ export async function runRescue(input: RescueCommandInput): Promise<CommandResul
       markDaemonHealthy(activeLedger);
     }
 
-    let currentHeartbeat: string | null = null;
-    if (hb.captureLastCycleAt !== null && hb.drainLastCycleAt !== null) {
-      const capMs = Date.parse(hb.captureLastCycleAt);
-      const drMs = Date.parse(hb.drainLastCycleAt);
-      if (Number.isFinite(capMs) && Number.isFinite(drMs)) {
-        currentHeartbeat = capMs >= drMs ? hb.captureLastCycleAt : hb.drainLastCycleAt;
-      } else if (Number.isFinite(capMs)) {
-        currentHeartbeat = hb.captureLastCycleAt;
-      } else if (Number.isFinite(drMs)) {
-        currentHeartbeat = hb.drainLastCycleAt;
-      }
-    } else {
-      currentHeartbeat = hb.captureLastCycleAt ?? hb.drainLastCycleAt;
-    }
-
-    activeLedger.lastObservedHeartbeatAt = currentHeartbeat;
+    activeLedger.lastWatchdogRunAt = now.toISOString();
+    activeLedger.lastObservedCaptureAt = hb.captureLastCycleAt;
+    activeLedger.lastObservedDrainAt = hb.drainLastCycleAt;
     await writeRescueLedger(profileCtx.sentinels.rescueLedger, activeLedger);
   } catch (err: unknown) {
     try {

@@ -36,7 +36,9 @@ test('rescue ledger CRUD and bootId mismatch handling', async () => {
       lastRescueAt: '2026-06-16T12:00:00.000Z',
       consecutiveFailures: 1,
       attempts: [{ at: '2026-06-16T12:00:00.000Z', action: 'start' }],
-      lastObservedHeartbeatAt: null,
+      lastObservedCaptureAt: null,
+      lastObservedDrainAt: null,
+      lastWatchdogRunAt: null,
     };
 
     await writeRescueLedger(ledgerPath, initial);
@@ -70,7 +72,9 @@ test('rescue ledger helpers', () => {
     lastRescueAt: null,
     consecutiveFailures: 0,
     attempts: [],
-    lastObservedHeartbeatAt: null,
+    lastObservedCaptureAt: null,
+    lastObservedDrainAt: null,
+    lastWatchdogRunAt: null,
   };
 
   recordRescueAttempt(ledger, '2026-06-16T12:00:00.000Z', 'start');
@@ -104,6 +108,7 @@ test('decideRescue transitions', () => {
     upgradeInProgress: false,
     ledger: null,
     now: new Date('2026-06-16T12:05:00.000Z'),
+    likelyResumed: false,
   };
 
   expect(decideRescue({ ...baseInput, configExists: false })).toEqual({
@@ -131,7 +136,9 @@ test('decideRescue transitions', () => {
     lastRescueAt: null,
     consecutiveFailures: 3,
     attempts: [],
-    lastObservedHeartbeatAt: null,
+    lastObservedCaptureAt: null,
+    lastObservedDrainAt: null,
+    lastWatchdogRunAt: null,
   };
   expect(decideRescue({ ...baseInput, ledger: brokenLedger })).toEqual({
     kind: 'none',
@@ -143,7 +150,9 @@ test('decideRescue transitions', () => {
     lastRescueAt: '2026-06-16T12:03:00.000Z',
     consecutiveFailures: 0,
     attempts: [],
-    lastObservedHeartbeatAt: null,
+    lastObservedCaptureAt: null,
+    lastObservedDrainAt: null,
+    lastWatchdogRunAt: null,
   };
   expect(decideRescue({ ...baseInput, ledger: cappedLedger })).toEqual({
     kind: 'none',
@@ -200,7 +209,9 @@ test('decideRescue transitions', () => {
         lastRescueAt: null,
         consecutiveFailures: 0,
         attempts: [],
-        lastObservedHeartbeatAt: '2026-06-16T11:30:00.000Z',
+        lastObservedCaptureAt: '2026-06-16T11:30:00.000Z',
+        lastObservedDrainAt: '2026-06-16T11:30:00.000Z',
+        lastWatchdogRunAt: null,
       },
     }),
   ).toEqual({
@@ -212,7 +223,9 @@ test('decideRescue transitions', () => {
     lastRescueAt: '2026-06-16T10:00:00.000Z',
     consecutiveFailures: 0,
     attempts: [],
-    lastObservedHeartbeatAt: null,
+    lastObservedCaptureAt: null,
+    lastObservedDrainAt: null,
+    lastWatchdogRunAt: null,
   };
   expect(
     decideRescue({
@@ -231,7 +244,9 @@ test('decideRescue transitions', () => {
     lastRescueAt: 'invalid-date',
     consecutiveFailures: 0,
     attempts: [],
-    lastObservedHeartbeatAt: null,
+    lastObservedCaptureAt: null,
+    lastObservedDrainAt: null,
+    lastWatchdogRunAt: null,
   };
   expect(
     decideRescue({
@@ -309,7 +324,9 @@ test('decideRescue transitions', () => {
     lastRescueAt: '2026-06-16T12:10:00.000Z',
     consecutiveFailures: 0,
     attempts: [],
-    lastObservedHeartbeatAt: null,
+    lastObservedCaptureAt: null,
+    lastObservedDrainAt: null,
+    lastWatchdogRunAt: null,
   };
   expect(
     decideRescue({
@@ -464,7 +481,9 @@ test('readRescueLedgerReadOnly behaviour', async () => {
       lastRescueAt: '2026-06-16T12:00:00.000Z',
       consecutiveFailures: 2,
       attempts: [],
-      lastObservedHeartbeatAt: null,
+      lastObservedCaptureAt: null,
+      lastObservedDrainAt: null,
+      lastWatchdogRunAt: null,
     };
     await writeRescueLedger(ledgerPath, initial);
 
@@ -505,6 +524,7 @@ test('decideRescue wedge confirmation logic (R5)', () => {
     upgradeInProgress: false,
     ledger: null,
     now: new Date('2026-06-16T12:40:00.000Z'),
+    likelyResumed: false,
   };
 
   const ledgerNull: RescueLedger = {
@@ -512,7 +532,9 @@ test('decideRescue wedge confirmation logic (R5)', () => {
     lastRescueAt: null,
     consecutiveFailures: 0,
     attempts: [],
-    lastObservedHeartbeatAt: null,
+    lastObservedCaptureAt: null,
+    lastObservedDrainAt: null,
+    lastWatchdogRunAt: null,
   };
   expect(decideRescue({ ...baseInput, ledger: ledgerNull })).toEqual({
     kind: 'none',
@@ -524,7 +546,9 @@ test('decideRescue wedge confirmation logic (R5)', () => {
     lastRescueAt: null,
     consecutiveFailures: 0,
     attempts: [],
-    lastObservedHeartbeatAt: '2026-06-16T11:50:00.000Z',
+    lastObservedCaptureAt: '2026-06-16T11:50:00.000Z',
+    lastObservedDrainAt: '2026-06-16T11:50:00.000Z',
+    lastWatchdogRunAt: null,
   };
   expect(decideRescue({ ...baseInput, ledger: ledgerAdvanced })).toEqual({
     kind: 'none',
@@ -536,7 +560,9 @@ test('decideRescue wedge confirmation logic (R5)', () => {
     lastRescueAt: null,
     consecutiveFailures: 0,
     attempts: [],
-    lastObservedHeartbeatAt: '2026-06-16T12:00:00.000Z',
+    lastObservedCaptureAt: '2026-06-16T12:00:00.000Z',
+    lastObservedDrainAt: '2026-06-16T12:00:00.000Z',
+    lastWatchdogRunAt: null,
   };
   expect(decideRescue({ ...baseInput, ledger: ledgerUnchanged })).toEqual({
     kind: 'restart',
@@ -550,7 +576,9 @@ test('decideRescue wedge confirmation logic (R5)', () => {
     lastRescueAt: null,
     consecutiveFailures: 0,
     attempts: [],
-    lastObservedHeartbeatAt: '2026-06-16T12:00:00.000Z',
+    lastObservedCaptureAt: '2026-06-16T12:00:00.000Z',
+    lastObservedDrainAt: '2026-06-16T12:00:00.000Z',
+    lastWatchdogRunAt: null,
   };
   const sleepCheck2 = decideRescue({
     ...baseInput,
@@ -560,4 +588,30 @@ test('decideRescue wedge confirmation logic (R5)', () => {
     now: new Date('2026-06-16T12:55:00.000Z'),
   });
   expect(sleepCheck2).toEqual({ kind: 'none', reason: 'healthy' });
+
+  expect(
+    decideRescue({
+      ...baseInput,
+      likelyResumed: true,
+      ledger: ledgerUnchanged,
+    }),
+  ).toEqual({ kind: 'none', reason: 'healthy' });
+
+  const ledgerOneWedged: RescueLedger = {
+    bootId: 'boot-1',
+    lastRescueAt: null,
+    consecutiveFailures: 0,
+    attempts: [],
+    lastObservedCaptureAt: '2026-06-16T12:00:00.000Z',
+    lastObservedDrainAt: '2026-06-16T11:50:00.000Z',
+    lastWatchdogRunAt: null,
+  };
+  expect(
+    decideRescue({
+      ...baseInput,
+      captureLastCycleAt: '2026-06-16T12:00:00.000Z',
+      drainLastCycleAt: '2026-06-16T12:00:00.000Z',
+      ledger: ledgerOneWedged,
+    }),
+  ).toEqual({ kind: 'restart' });
 });

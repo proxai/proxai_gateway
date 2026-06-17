@@ -5,6 +5,8 @@ const WEDGE_STALE_MS = 1_800_000;
 const RESCUE_RATE_CAP_MS = 3_600_000;
 export const MAX_CONSECUTIVE_FAILURES = 3;
 
+export const RESUME_GAP_THRESHOLD_MS = 1_800_000;
+
 export interface RescueDecisionInput {
   configExists: boolean;
   serviceUnitRegistered: boolean;
@@ -17,6 +19,7 @@ export interface RescueDecisionInput {
   upgradeInProgress: boolean;
   ledger: RescueLedger | null;
   now: Date;
+  likelyResumed: boolean;
 }
 
 export type RescueDecisionReason =
@@ -91,18 +94,44 @@ export function decideRescue(input: RescueDecisionInput): RescueDecisionResult {
     return { kind: 'none', reason: 'paused' };
   }
 
-  if (lastHeartbeatMs === null) {
+  if (input.likelyResumed) {
     return { kind: 'none', reason: 'healthy' };
   }
-  const age = input.now.getTime() - lastHeartbeatMs;
-  if (age > WEDGE_STALE_MS) {
-    if (input.ledger !== null && input.ledger.lastObservedHeartbeatAt !== null) {
-      const prevMs = Date.parse(input.ledger.lastObservedHeartbeatAt);
-      if (Number.isFinite(prevMs) && lastHeartbeatMs === prevMs) {
-        return { kind: 'restart' };
+
+  let captureWedged = false;
+  if (
+    input.captureLastCycleAt !== null &&
+    input.ledger !== null &&
+    input.ledger.lastObservedCaptureAt !== null
+  ) {
+    const capMs = Date.parse(input.captureLastCycleAt);
+    const prevCapMs = Date.parse(input.ledger.lastObservedCaptureAt);
+    if (Number.isFinite(capMs) && Number.isFinite(prevCapMs) && capMs === prevCapMs) {
+      const age = input.now.getTime() - capMs;
+      if (age > WEDGE_STALE_MS) {
+        captureWedged = true;
       }
     }
-    return { kind: 'none', reason: 'healthy' };
+  }
+
+  let drainWedged = false;
+  if (
+    input.drainLastCycleAt !== null &&
+    input.ledger !== null &&
+    input.ledger.lastObservedDrainAt !== null
+  ) {
+    const drMs = Date.parse(input.drainLastCycleAt);
+    const prevDrMs = Date.parse(input.ledger.lastObservedDrainAt);
+    if (Number.isFinite(drMs) && Number.isFinite(prevDrMs) && drMs === prevDrMs) {
+      const age = input.now.getTime() - drMs;
+      if (age > WEDGE_STALE_MS) {
+        drainWedged = true;
+      }
+    }
+  }
+
+  if (captureWedged || drainWedged) {
+    return { kind: 'restart' };
   }
 
   return { kind: 'none', reason: 'healthy' };

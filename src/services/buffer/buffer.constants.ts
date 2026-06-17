@@ -41,6 +41,7 @@ export const METADATA_KEYS = {
   drainLastCycleDurationMs: 'drain_last_cycle_duration_ms',
   drainTotalBatchesShipped: 'drain_total_batches_shipped',
   drainTotalBytesShipped: 'drain_total_bytes_shipped',
+  lastResumedAt: 'last_resumed_at',
 } as const;
 
 export function uploadBatchesShippedKey(sourceApp: string): string {

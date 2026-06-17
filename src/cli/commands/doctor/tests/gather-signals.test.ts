@@ -10,6 +10,22 @@ import type { Stats } from 'node:fs';
 
 let rootOwnedStatDir: string | null = null;
 let shouldHomedirThrow = false;
+let mockWatchdogContext: unknown = undefined;
+
+mock.module('cli/wiring/platform.ts', () => {
+  return {
+    buildWatchdogServiceContext: (): unknown => {
+      if (mockWatchdogContext !== undefined) {
+        return mockWatchdogContext;
+      }
+      return {
+        watchdogManager: {
+          isInstalled: () => Promise.resolve(true),
+        },
+      };
+    },
+  };
+});
 
 mock.module('node:os', () => {
   const actual: typeof import('node:os') = import.meta.require('node:os');
@@ -710,5 +726,31 @@ test('linux: systemdHomeEncryptedTearing catch block is covered when homedir thr
     expect(signals.systemdExtended.systemdHomeEncryptedTearing).toBe(false);
   } finally {
     shouldHomedirThrow = false;
+  }
+});
+
+test('probeWatchdog handles null watchdog context', async () => {
+  mockWatchdogContext = null;
+  try {
+    const signals = await gatherSignals(makeDeps());
+    expect(signals.watchdog.installed).toBe(false);
+  } finally {
+    mockWatchdogContext = undefined;
+  }
+});
+
+test('probeWatchdog handles throwing isInstalled', async () => {
+  mockWatchdogContext = {
+    watchdogManager: {
+      isInstalled: (): never => {
+        throw new Error('mock isInstalled error');
+      },
+    },
+  };
+  try {
+    const signals = await gatherSignals(makeDeps());
+    expect(signals.watchdog.installed).toBe(false);
+  } finally {
+    mockWatchdogContext = undefined;
   }
 });

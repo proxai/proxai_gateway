@@ -10,6 +10,7 @@ import {
 import { buildProfileContext } from 'core/io/fs/profile.ts';
 import { readBootId } from 'core/system/boot-id.ts';
 import { EXIT_CODE } from 'cli/cli.constants.ts';
+import { requireDefined } from 'core/utils';
 
 let mockDecisionKind: 'none' | 'start' | 'restart' | 'paused' = 'none';
 let originalBootId: string | undefined;
@@ -159,7 +160,9 @@ test('runRescue clears consecutiveFailures on none/healthy decision', async () =
       lastRescueAt: null,
       consecutiveFailures: 2,
       attempts: [],
-      lastObservedHeartbeatAt: null,
+      lastObservedCaptureAt: null,
+      lastObservedDrainAt: null,
+      lastWatchdogRunAt: null,
     });
 
     const { spawn } = mockSpawn(() => ({ exitCode: 0 }));
@@ -371,7 +374,7 @@ test('runRescue consecutive failures logic: increments only if prior attempt exi
   }
 });
 
-test('runRescue computes currentHeartbeat correctly from capture and drain heartbeats', async () => {
+test('runRescue persists capture and drain heartbeats in rescue ledger', async () => {
   const original = process.env['PROXAI_TEST_PROFILE_ROOT'];
   const root = join('/tmp', 'proxai-rescue-cmd-test-hb-cover');
   process.env['PROXAI_TEST_PROFILE_ROOT'] = root;
@@ -394,7 +397,8 @@ test('runRescue computes currentHeartbeat correctly from capture and drain heart
     });
     let bootId = await readBootId();
     let ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
-    expect(ledger?.lastObservedHeartbeatAt).toBe('2026-06-16T12:00:00.000Z');
+    expect(ledger?.lastObservedCaptureAt).toBe('2026-06-16T12:00:00.000Z');
+    expect(ledger?.lastObservedDrainAt).toBe('2026-06-16T11:00:00.000Z');
 
     mockHeartbeat = {
       captureLastCycleAt: '2026-06-16T11:00:00.000Z',
@@ -408,39 +412,92 @@ test('runRescue computes currentHeartbeat correctly from capture and drain heart
       skipExit: true,
     });
     ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
-    expect(ledger?.lastObservedHeartbeatAt).toBe('2026-06-16T12:00:00.000Z');
-
-    mockHeartbeat = {
-      captureLastCycleAt: 'invalid-date',
-      drainLastCycleAt: '2026-06-16T12:00:00.000Z',
-    };
-    await runRescue({
-      profileName: 'prod',
-      programPath: '/bin/gateway',
-      platform: 'linux',
-      spawn,
-      skipExit: true,
-    });
-    ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
-    expect(ledger?.lastObservedHeartbeatAt).toBe('2026-06-16T12:00:00.000Z');
-
-    mockHeartbeat = {
-      captureLastCycleAt: '2026-06-16T12:00:00.000Z',
-      drainLastCycleAt: 'invalid-date',
-    };
-    await runRescue({
-      profileName: 'prod',
-      programPath: '/bin/gateway',
-      platform: 'linux',
-      spawn,
-      skipExit: true,
-    });
-    ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
-    expect(ledger?.lastObservedHeartbeatAt).toBe('2026-06-16T12:00:00.000Z');
+    expect(ledger?.lastObservedCaptureAt).toBe('2026-06-16T11:00:00.000Z');
+    expect(ledger?.lastObservedDrainAt).toBe('2026-06-16T12:00:00.000Z');
 
     await clearRescueLedger(profileCtx.sentinels.rescueLedger);
   } finally {
     mockHeartbeat = { captureLastCycleAt: null, drainLastCycleAt: null };
+    if (original === undefined) {
+      delete process.env['PROXAI_TEST_PROFILE_ROOT'];
+    } else {
+      process.env['PROXAI_TEST_PROFILE_ROOT'] = original;
+    }
+  }
+});
+
+test('runRescue handles null ledger or invalid watchdog run time', async () => {
+  const original = process.env['PROXAI_TEST_PROFILE_ROOT'];
+  const root = join('/tmp', 'proxai-rescue-cmd-test-null-ledger');
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = root;
+
+  try {
+    const profileCtx = buildProfileContext('prod');
+    await clearRescueLedger(profileCtx.sentinels.rescueLedger);
+    const { spawn } = mockSpawn(() => ({ exitCode: 0 }));
+
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+    const bootId = await readBootId();
+    let ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
+    const activeLedger = requireDefined(ledger);
+    expect(activeLedger.lastWatchdogRunAt).not.toBeNull();
+
+    activeLedger.lastWatchdogRunAt = null;
+    await writeRescueLedger(profileCtx.sentinels.rescueLedger, activeLedger);
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+
+    ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
+    const ledger2 = requireDefined(ledger);
+    ledger2.lastWatchdogRunAt = 'invalid-date';
+    await writeRescueLedger(profileCtx.sentinels.rescueLedger, ledger2);
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+
+    ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
+    const ledger3 = requireDefined(ledger);
+    ledger3.lastWatchdogRunAt = new Date().toISOString();
+    await writeRescueLedger(profileCtx.sentinels.rescueLedger, ledger3);
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+
+    ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
+    const ledger4 = requireDefined(ledger);
+    const longAgo = new Date(Date.now() - 2 * 1800000).toISOString();
+    ledger4.lastWatchdogRunAt = longAgo;
+    await writeRescueLedger(profileCtx.sentinels.rescueLedger, ledger4);
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+
+    ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
+    expect(ledger).not.toBeNull();
+  } finally {
     if (original === undefined) {
       delete process.env['PROXAI_TEST_PROFILE_ROOT'];
     } else {

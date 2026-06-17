@@ -36,6 +36,14 @@ export function checkC3DrainWedged(signals: DoctorSignals): Finding | null {
   if (signals.sentinels.bufferFull) return null;
   if (signals.network.nestReachable === false) return null;
 
+  const lastResumedAt = signals.daemonState.lastResumedAt;
+  if (lastResumedAt !== null) {
+    const resumedMs = Date.parse(lastResumedAt);
+    if (Number.isFinite(resumedMs) && Date.now() - resumedMs < 300_000) {
+      return null;
+    }
+  }
+
   const drainAt = signals.daemonState.drainLastCycleAt;
   if (drainAt === null) return null;
   const ms = Date.parse(drainAt);

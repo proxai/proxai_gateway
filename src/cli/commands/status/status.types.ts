@@ -109,6 +109,13 @@ export interface StatusJsonOutput {
     };
     autoUpgrade: { lastCheckAt: string | null; latestKnownVersion: string | null };
     binaryAge: { installedAt: string | null; days: number | null };
+    watchdogInstalled: boolean;
+    rescue: {
+      consecutiveFailures: number;
+      lastRescueAt: string | null;
+      circuitBroken: boolean;
+    } | null;
+    lastResumedAt: string | null;
   };
   history: {
     totalBytesCaptured: number;
@@ -173,4 +180,11 @@ export interface StatusSnapshot {
     totalRecordsSent: number;
     conversationsCaptured: Record<SourceApp, number>;
   } | null;
+  watchdogInstalled: boolean;
+  rescue: {
+    consecutiveFailures: number;
+    lastRescueAt: string | null;
+    circuitBroken: boolean;
+  } | null;
+  lastResumedAt: string | null;
 }

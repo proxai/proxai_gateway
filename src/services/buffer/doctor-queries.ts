@@ -22,6 +22,7 @@ export interface DoctorDaemonState {
   readonly drainLastCycleAt: string | null;
   readonly lastConsecutiveRetriableBreak: boolean | null;
   readonly lastUploadError: string | null;
+  readonly lastResumedAt: string | null;
 }
 
 export interface DoctorRecentEvents {
@@ -78,6 +79,8 @@ const DAEMON_STATE_SQL = `
 const CAPTURE_LAST_CYCLE_SQL = `SELECT value FROM ${BUFFER_TABLES.metadata} WHERE key = 'capture_last_cycle_at' LIMIT 1`;
 
 const DRAIN_LAST_CYCLE_SQL = `SELECT value FROM ${BUFFER_TABLES.metadata} WHERE key = 'drain_last_cycle_at' LIMIT 1`;
+
+const LAST_RESUMED_SQL = `SELECT value FROM ${BUFFER_TABLES.metadata} WHERE key = 'last_resumed_at' LIMIT 1`;
 
 const FAILED_BATCH_ERRORS_SQL = `
   SELECT ${BATCH_COLS.lastError} AS last_error
@@ -185,6 +188,12 @@ export function queryDoctorDaemonState(db: Database): DoctorDaemonState {
   const drainRow = db.query<MetaValueRow, []>(DRAIN_LAST_CYCLE_SQL).get();
   const drainLastCycleAt = drainRow?.value ?? null;
 
+  let lastResumedAt: string | null = null;
+  try {
+    const resumedRow = db.query<MetaValueRow, []>(LAST_RESUMED_SQL).get();
+    lastResumedAt = resumedRow?.value ?? null;
+  } catch {}
+
   let lastConsecutiveRetriableBreak: boolean | null = null;
   if (stateRow !== null && stateRow.last_consecutive_retriable_break !== null) {
     lastConsecutiveRetriableBreak = stateRow.last_consecutive_retriable_break !== 0;
@@ -195,6 +204,7 @@ export function queryDoctorDaemonState(db: Database): DoctorDaemonState {
     drainLastCycleAt,
     lastConsecutiveRetriableBreak,
     lastUploadError: stateRow?.last_upload_error ?? null,
+    lastResumedAt,
   };
 }
 
@@ -324,6 +334,7 @@ const EMPTY_DAEMON_STATE: DoctorDaemonState = {
   drainLastCycleAt: null,
   lastConsecutiveRetriableBreak: null,
   lastUploadError: null,
+  lastResumedAt: null,
 };
 
 const EMPTY_RECENT_EVENTS: DoctorRecentEvents = {

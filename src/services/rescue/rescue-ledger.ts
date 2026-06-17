@@ -5,7 +5,9 @@ export interface RescueLedger {
   lastRescueAt: string | null;
   consecutiveFailures: number;
   attempts: Array<{ at: string; action: 'start' | 'restart' }>;
-  lastObservedHeartbeatAt: string | null;
+  lastObservedCaptureAt: string | null;
+  lastObservedDrainAt: string | null;
+  lastWatchdogRunAt: string | null;
 }
 
 export async function readRescueLedger(
@@ -23,17 +25,21 @@ export async function readRescueLedger(
     const consecutiveFailures =
       typeof parsed['consecutiveFailures'] === 'number' ? parsed['consecutiveFailures'] : 0;
     const attempts = Array.isArray(parsed['attempts']) ? parsed['attempts'] : [];
-    const lastObservedHeartbeatAt =
-      typeof parsed['lastObservedHeartbeatAt'] === 'string'
-        ? parsed['lastObservedHeartbeatAt']
-        : null;
+    const lastObservedCaptureAt =
+      typeof parsed['lastObservedCaptureAt'] === 'string' ? parsed['lastObservedCaptureAt'] : null;
+    const lastObservedDrainAt =
+      typeof parsed['lastObservedDrainAt'] === 'string' ? parsed['lastObservedDrainAt'] : null;
+    const lastWatchdogRunAt =
+      typeof parsed['lastWatchdogRunAt'] === 'string' ? parsed['lastWatchdogRunAt'] : null;
 
     const ledger: RescueLedger = {
       bootId,
       lastRescueAt,
       consecutiveFailures,
       attempts: attempts as Array<{ at: string; action: 'start' | 'restart' }>,
-      lastObservedHeartbeatAt,
+      lastObservedCaptureAt,
+      lastObservedDrainAt,
+      lastWatchdogRunAt,
     };
 
     if (bootId !== currentBootId) {
@@ -41,7 +47,9 @@ export async function readRescueLedger(
       ledger.consecutiveFailures = 0;
       ledger.attempts = [];
       ledger.lastRescueAt = null;
-      ledger.lastObservedHeartbeatAt = null;
+      ledger.lastObservedCaptureAt = null;
+      ledger.lastObservedDrainAt = null;
+      ledger.lastWatchdogRunAt = null;
       await writeRescueLedger(path, ledger);
     }
     return ledger;
@@ -67,24 +75,30 @@ export async function readRescueLedgerReadOnly(
         lastRescueAt: null,
         consecutiveFailures: 0,
         attempts: [],
-        lastObservedHeartbeatAt: null,
+        lastObservedCaptureAt: null,
+        lastObservedDrainAt: null,
+        lastWatchdogRunAt: null,
       };
     }
     const lastRescueAt = typeof parsed['lastRescueAt'] === 'string' ? parsed['lastRescueAt'] : null;
     const consecutiveFailures =
       typeof parsed['consecutiveFailures'] === 'number' ? parsed['consecutiveFailures'] : 0;
     const attempts = Array.isArray(parsed['attempts']) ? parsed['attempts'] : [];
-    const lastObservedHeartbeatAt =
-      typeof parsed['lastObservedHeartbeatAt'] === 'string'
-        ? parsed['lastObservedHeartbeatAt']
-        : null;
+    const lastObservedCaptureAt =
+      typeof parsed['lastObservedCaptureAt'] === 'string' ? parsed['lastObservedCaptureAt'] : null;
+    const lastObservedDrainAt =
+      typeof parsed['lastObservedDrainAt'] === 'string' ? parsed['lastObservedDrainAt'] : null;
+    const lastWatchdogRunAt =
+      typeof parsed['lastWatchdogRunAt'] === 'string' ? parsed['lastWatchdogRunAt'] : null;
 
     return {
       bootId,
       lastRescueAt,
       consecutiveFailures,
       attempts: attempts as Array<{ at: string; action: 'start' | 'restart' }>,
-      lastObservedHeartbeatAt,
+      lastObservedCaptureAt,
+      lastObservedDrainAt,
+      lastWatchdogRunAt,
     };
   } catch {
     return null;
@@ -113,6 +127,7 @@ export function recordRescueAttempt(
 
 export function markDaemonHealthy(ledger: RescueLedger): void {
   ledger.consecutiveFailures = 0;
+  ledger.lastRescueAt = null;
 }
 
 export function markRescueFailed(ledger: RescueLedger): void {

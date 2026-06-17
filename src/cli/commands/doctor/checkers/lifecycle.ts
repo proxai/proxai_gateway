@@ -64,6 +64,13 @@ export function checkA4Crashed(signals: DoctorSignals): Finding | null {
 export function checkA5Wedged(signals: DoctorSignals): Finding | null {
   if (!signals.daemonRunning) return null;
   if (signals.sentinels.authFailed) return null;
+  const lastResumedAt = signals.daemonState.lastResumedAt;
+  if (lastResumedAt !== null) {
+    const resumedMs = Date.parse(lastResumedAt);
+    if (Number.isFinite(resumedMs) && Date.now() - resumedMs < 300_000) {
+      return null;
+    }
+  }
   const lastCycleAt = signals.daemonState.captureLastCycleAt;
   if (lastCycleAt === null) return null;
   const ms = Date.parse(lastCycleAt);
@@ -75,9 +82,9 @@ export function checkA5Wedged(signals: DoctorSignals): Finding | null {
     code: 'A5',
     severity: Severity.warning,
     confidence: Confidence.likely,
-    cause: `The gateway background daemon is active but has stalled; no sessions have been captured in the last ${minutesAgo} minutes.`,
+    cause: `The gateway background daemon is active but has stalled; no sessions have been captured in the last ${minutesAgo} minutes. If this condition persists, the auto-recovery watchdog will restart the daemon automatically.`,
     action:
-      'Restart the background daemon to clear the stall and resume capture: "proxai-gateway restart"',
+      'No action is required if the auto-recovery watchdog is running. Alternatively, you can restart the daemon immediately to clear the stall: "proxai-gateway restart"',
   };
 }
 
@@ -93,4 +100,18 @@ export function checkA16RescueCircuitBreakerTripped(signals: DoctorSignals): Fin
     };
   }
   return null;
+}
+
+export function checkA17WatchdogMissing(signals: DoctorSignals): Finding | null {
+  if (!signals.configExists) return null;
+  if (!signals.serviceUnitRegistered) return null;
+  if (signals.watchdog.installed) return null;
+  return {
+    code: 'A17',
+    severity: Severity.warning,
+    confidence: Confidence.confirmed,
+    cause:
+      'The auto-recovery watchdog is not installed, so if the daemon stops it will not be automatically restarted.',
+    action: 'Run "proxai-gateway start" to reinstall the watchdog.',
+  };
 }

@@ -59,6 +59,7 @@ export type FindingCode =
   | 'A14'
   | 'A15'
   | 'A16'
+  | 'A17'
   | 'B1'
   | 'B2'
   | 'B3'
@@ -154,6 +155,7 @@ export interface DoctorSignals {
     readonly drainLastCycleAt: string | null;
     readonly lastConsecutiveRetriableBreak: boolean | null;
     readonly lastUploadError: string | null;
+    readonly lastResumedAt: string | null;
   };
   readonly binary: {
     readonly version: string;
@@ -265,6 +267,9 @@ export interface DoctorSignals {
   readonly rescue: {
     readonly consecutiveFailures: number;
     readonly lastRescueAt: string | null;
+  };
+  readonly watchdog: {
+    readonly installed: boolean;
   };
   readonly configDirPath: string;
   readonly logDirPath: string;

@@ -81,6 +81,9 @@ export function buildEmptyStatusJson(): StatusJsonOutput {
       daemon: { isRunning: false, pid: null, startedAt: null, inferredAlive: false },
       autoUpgrade: { lastCheckAt: null, latestKnownVersion: null },
       binaryAge: { installedAt: null, days: null },
+      watchdogInstalled: false,
+      rescue: null,
+      lastResumedAt: null,
     },
     history: null,
   };
@@ -168,6 +171,9 @@ export function buildStatusJson(snapshot: StatusSnapshot): StatusJsonOutput {
         installedAt,
         days: installedAt === null ? null : daysSince(installedAt, snapshot.now),
       },
+      watchdogInstalled: snapshot.watchdogInstalled,
+      rescue: snapshot.rescue,
+      lastResumedAt: snapshot.lastResumedAt,
     },
     history: snapshot.history,
   };
