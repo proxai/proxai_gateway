@@ -26,6 +26,12 @@ Cursor reads "not captured."
 - Update the KPI subtitle to state it includes cache-read tokens (value is a 3-column input+output+cacheRead sum).
 - Render Cursor token cells null-aware: show "not captured" (or em-dash) instead of `0` when the underlying
   values are null, so genuine-zero is distinguishable from no-data.
+- **Cross-agent comparison must use NORMALIZED categories** (see `analysis/CROSS-SOURCE-NORMALIZATION.md`): never
+  compare agents on raw `input_tokens` — Anthropic's `input_tokens` is the uncached tail only (cache writes go to
+  `cache_creation`), while Gemini/OpenAI have no `cache_creation` field and put the full first-call prompt in
+  input. Compare on `fresh_input` (= non-cached + cache_creation), `cache_read`, and `output` so an
+  apples-to-apples view doesn't show a false ~20× gap (the independent local audit confirmed Claude vs Gemini
+  fresh_input is ~1.04×, not 20×).
 
 ## Tests (verifier checks these)
 - Component test: KPI subtitle text reflects cache-read inclusion.

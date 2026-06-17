@@ -1,0 +1,173 @@
+/**
+ * FOUR-SOURCE independent local token audit — Claude Code, Codex, Gemini (Antigravity), Cursor.
+ * From scratch (own protobuf reader); implements the PROPOSED-PLAN (corrected) semantics, NOT the gateway.
+ * Read-only. Run: bun run docs/token-remediation/verification-scripts/four_source_token_audit.ts
+ *
+ * Provider-normalized categories make the cross-source comparison apples-to-apples:
+ *   non_cached  : fresh input NOT read from cache and NOT (Anthropic) written to cache
+ *   cache_create: tokens WRITTEN to cache  (ANTHROPIC-ONLY field; Gemini/OpenAI = 0, they don't report it)
+ *   cache_read  : tokens READ from cache
+ *   output      : completion tokens (INCLUDES reasoning/thinking)
+ *   reasoning   : reasoning/thinking subset of output (separable for Codex + Gemini; folded-in for Anthropic)
+ * Derived: total_input = non_cached+cache_create+cache_read ; fresh_input = non_cached+cache_create
+ *          total_incl_cache = total_input+output ; total_excl_cacheRead = fresh_input+output
+ */
+import { Database } from 'bun:sqlite';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+
+interface Tok { nonCached: number; cacheRead: number; cacheCreate: number; output: number; reasoning: number }
+const zero = (): Tok => ({ nonCached: 0, cacheRead: 0, cacheCreate: 0, output: 0, reasoning: 0 });
+function add(a: Tok, b: Tok) { a.nonCached += b.nonCached; a.cacheRead += b.cacheRead; a.cacheCreate += b.cacheCreate; a.output += b.output; a.reasoning += b.reasoning; }
+function median(xs: number[]): number { if (!xs.length) return 0; const s = [...xs].sort((p, q) => p - q); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); }
+const fmt = (n: number) => Math.round(n).toLocaleString();
+
+// ---------- protobuf wire reader (public spec; from scratch) ----------
+type PbE = { wire: number; varint?: bigint; bytes?: Uint8Array };
+function parsePb(buf: Uint8Array): Map<number, PbE[]> {
+  const o = new Map<number, PbE[]>(); let p = 0;
+  while (p < buf.length) {
+    let t = 0n, s = 0n; while (p < buf.length) { const b = buf[p++]; t |= BigInt(b & 0x7f) << s; if (!(b & 0x80)) break; s += 7n; }
+    const f = Number(t >> 3n), w = Number(t & 7n); if (f <= 0) break; let e: PbE;
+    if (w === 0) { let v = 0n, s2 = 0n; while (p < buf.length) { const b = buf[p++]; v |= BigInt(b & 0x7f) << s2; if (!(b & 0x80)) break; s2 += 7n; } e = { wire: w, varint: v }; }
+    else if (w === 2) { let l = 0n, s2 = 0n; while (p < buf.length) { const b = buf[p++]; l |= BigInt(b & 0x7f) << s2; if (!(b & 0x80)) break; s2 += 7n; } const n = Number(l); e = { wire: w, bytes: buf.subarray(p, p + n) }; p += n; }
+    else if (w === 1) { p += 8; e = { wire: w }; } else if (w === 5) { p += 4; e = { wire: w }; } else break;
+    if (!o.has(f)) o.set(f, []); (o.get(f) as PbE[]).push(e);
+  }
+  return o;
+}
+function pathVar(root: Map<number, PbE[]>, path: number[]): number | null {
+  let t: Map<number, PbE[]> | null = root;
+  for (let i = 0; i < path.length - 1; i++) { const e = t.get(path[i])?.[0]; t = e?.bytes ? parsePb(e.bytes) : null; if (!t) return null; }
+  const e = t.get(path[path.length - 1])?.[0]; return e?.varint !== undefined ? Number(e.varint) : null;
+}
+
+interface SrcResult { source: string; scope: string; queries: number; calls: number; total: Tok; turns: Tok[]; perModel: Map<string, { t: Tok; calls: number }>; note: string }
+function bumpModel(m: Map<string, { t: Tok; calls: number }>, name: string, t: Tok) { if (!m.has(name)) m.set(name, { t: zero(), calls: 0 }); const e = m.get(name)!; add(e.t, t); e.calls++; }
+
+// ============================ CLAUDE CODE ============================
+function isRealPrompt(m: { role?: string; content?: unknown }): boolean {
+  if (!m || m.role !== 'user') return false; const c = m.content;
+  if (typeof c === 'string') return c.trim().length > 0;
+  if (Array.isArray(c)) return c.some((x) => (typeof x === 'string' && x.trim()) || (x && typeof x === 'object' && (x as { type?: string }).type === 'text' && ((x as { text?: string }).text ?? '').trim()));
+  return false;
+}
+function auditClaude(): SrcResult | null {
+  const base = join(homedir(), '.claude', 'projects'); let projects: string[];
+  try { projects = readdirSync(base); } catch { return null; }
+  const total = zero(); const perModel = new Map<string, { t: Tok; calls: number }>(); const turns: Tok[] = [];
+  let queries = 0, calls = 0, files = 0; const seenA = new Set<string>(), seenP = new Set<string>();
+  for (const proj of projects) {
+    const pdir = join(base, proj); let entries: string[];
+    try { if (!statSync(pdir).isDirectory()) continue; entries = readdirSync(pdir).filter((f) => f.endsWith('.jsonl')); } catch { continue; }
+    for (const f of entries) {
+      let text: string; try { text = readFileSync(join(pdir, f), 'utf8'); } catch { continue; } files++; let cur: Tok | null = null;
+      for (const line of text.split('\n')) {
+        if (!line.trim()) continue; let rec: { type?: string; uuid?: string; isSidechain?: boolean; message?: { role?: string; model?: string; content?: unknown; usage?: Record<string, number> } };
+        try { rec = JSON.parse(line); } catch { continue; }
+        const msg = rec.message;
+        if (rec.type === 'user' && isRealPrompt(msg ?? {}) && !rec.isSidechain) { const id = rec.uuid ?? ''; if (id && seenP.has(id)) continue; if (id) seenP.add(id); if (cur) turns.push(cur); cur = zero(); queries++; continue; }
+        if (rec.type === 'assistant' && msg?.usage) {
+          const id = rec.uuid ?? ''; if (id && seenA.has(id)) continue; if (id) seenA.add(id); const u = msg.usage;
+          const t: Tok = { nonCached: u.input_tokens ?? 0, cacheRead: u.cache_read_input_tokens ?? 0, cacheCreate: u.cache_creation_input_tokens ?? 0, output: u.output_tokens ?? 0, reasoning: 0 };
+          add(total, t); if (cur) add(cur, t); calls++; bumpModel(perModel, msg.model ?? 'unknown', t);
+        }
+      }
+      if (cur) turns.push(cur);
+    }
+  }
+  return { source: 'Claude Code', scope: `${files} files`, queries, calls, total, turns, perModel, note: 'reasoning folded into output (Anthropic reports no separate thinking-token field)' };
+}
+
+// ============================ GEMINI ============================
+const GEM_MODEL: Record<string, string> = { '1132': 'gemini-3.1-pro-preview' }; // from ~/.gemini/settings.json (default); dominant id
+function auditGemini(): SrcResult | null {
+  const dir = join(homedir(), '.gemini', 'antigravity-cli', 'conversations'); let files: string[];
+  try { files = readdirSync(dir).filter((f) => f.endsWith('.db')); } catch { return null; }
+  const total = zero(); const perModel = new Map<string, { t: Tok; calls: number }>(); const turns: Tok[] = [];
+  let queries = 0, calls = 0, dbs = 0, skipped = 0, idHold = 0, idChk = 0;
+  for (const file of files) {
+    let db: Database; try { db = new Database(join(dir, file), { readonly: true }); } catch { skipped++; continue; }
+    try {
+      const rows = db.query('SELECT step_type st, step_payload p FROM "steps" ORDER BY rowid ASC').all() as { st: number | null; p: Uint8Array | null }[]; dbs++; let cur: Tok | null = null;
+      for (const r of rows) {
+        if (r.st === 14) { if (cur) turns.push(cur); cur = zero(); queries++; continue; }
+        if ((r.st === 15 || r.st === 23) && r.p) {
+          const tree = parsePb(r.p instanceof Uint8Array ? r.p : new Uint8Array(r.p));
+          const nc = pathVar(tree, [5, 9, 2]) ?? 0, out = pathVar(tree, [5, 9, 3]) ?? 0, cr = pathVar(tree, [5, 9, 5]) ?? 0, th = pathVar(tree, [5, 9, 9]) ?? 0, vis = pathVar(tree, [5, 9, 10]) ?? 0;
+          if (nc === 0 && out === 0 && cr === 0) continue; if (out > 0) { idChk++; if (out === vis + th) idHold++; }
+          const t: Tok = { nonCached: nc, cacheRead: cr, cacheCreate: 0, output: out, reasoning: th };
+          add(total, t); if (cur) add(cur, t); calls++;
+          const mid = String(pathVar(tree, [5, 9, 1]) ?? '?'); bumpModel(perModel, GEM_MODEL[mid] ?? `gemini (id#${mid})`, t);
+        }
+      }
+      if (cur) turns.push(cur);
+    } catch { skipped++; } finally { try { db.close(); } catch { /* ignore */ } }
+  }
+  return { source: 'Gemini (Antigravity)', scope: `${dbs} DBs (${skipped} locked)`, queries, calls, total, turns, perModel, note: `cache_create=0 (Gemini has no cache-write token field); proto identity 5.9.3==5.9.9+5.9.10 held ${idHold}/${idChk}` };
+}
+
+// ============================ CODEX ============================
+function auditCodex(): SrcResult | null {
+  const base = join(homedir(), '.codex', 'sessions'); const files: string[] = [];
+  const walk = (d: string) => { let es: string[]; try { es = readdirSync(d); } catch { return; } for (const e of es) { const fp = join(d, e); let st; try { st = statSync(fp); } catch { continue; } if (st.isDirectory()) walk(fp); else if (e.endsWith('.jsonl')) files.push(fp); } };
+  walk(base); if (!files.length) return null;
+  const total = zero(); const perModel = new Map<string, { t: Tok; calls: number }>(); const turns: Tok[] = [];
+  let queries = 0, sessions = 0;
+  for (const f of files) {
+    let text: string; try { text = readFileSync(f, 'utf8'); } catch { continue; } sessions++;
+    let model = 'unknown'; const mm = text.match(/"model"\s*:\s*"((?:gpt|o[0-9]|codex|claude|gemini)[^"]*)"/i); if (mm) model = mm[1];
+    // cumulative-total method (plan-correct): session total = final total_token_usage; per-turn = diff at task boundaries
+    let lastTotal: { input_tokens: number; cached_input_tokens: number; output_tokens: number; reasoning_output_tokens: number } | null = null;
+    let prevTurnTotalIn = 0, prevTurnTotalOut = 0, prevTurnCached = 0, prevTurnReason = 0;
+    for (const line of text.split('\n')) {
+      if (!line.trim()) continue; let rec: { payload?: { type?: string; info?: { total_token_usage?: Record<string, number> } } };
+      try { rec = JSON.parse(line); } catch { continue; }
+      if (line.includes('"task_started"')) { queries++; continue; }
+      const info = rec.payload?.type === 'token_count' ? rec.payload.info : undefined;
+      if (info?.total_token_usage) lastTotal = info.total_token_usage as typeof lastTotal;
+    }
+    if (lastTotal) {
+      const t: Tok = { nonCached: (lastTotal.input_tokens ?? 0) - (lastTotal.cached_input_tokens ?? 0), cacheRead: lastTotal.cached_input_tokens ?? 0, cacheCreate: 0, output: lastTotal.output_tokens ?? 0, reasoning: lastTotal.reasoning_output_tokens ?? 0 };
+      add(total, t); turns.push(t); bumpModel(perModel, model, t);
+    }
+    void prevTurnTotalIn; void prevTurnTotalOut; void prevTurnCached; void prevTurnReason;
+  }
+  return { source: 'Codex', scope: `${sessions} sessions (retention-pruned)`, queries: queries || sessions, calls: sessions, total, turns, perModel, note: 'session totals from cumulative total_token_usage (re-emit-safe); input_tokens INCLUDES cached; cache_create=0 (OpenAI reports none)' };
+}
+
+// ============================ CURSOR ============================
+function auditCursor(): SrcResult | null {
+  const dbp = join(homedir(), 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage', 'state.vscdb');
+  let db: Database; try { db = new Database(dbp, { readonly: true }); } catch { return { source: 'Cursor', scope: 'DB locked', queries: 0, calls: 0, total: zero(), turns: [], perModel: new Map(), note: 'DB locked this run; Cursor stores NO per-turn billed tokens locally (tokenCount={0,0})' }; }
+  const total = zero(); const perModel = new Map<string, { t: Tok; calls: number }>(); let bubbles = 0, composers = 0, ctxSum = 0, ctxN = 0;
+  try {
+    const brow = db.query("SELECT COUNT(*) c FROM cursorDiskKV WHERE key LIKE 'bubbleId:%'").get() as { c: number }; bubbles = brow.c;
+    const crows = db.query("SELECT value v FROM cursorDiskKV WHERE key LIKE 'composerData:%'").all() as { v: string | Uint8Array }[];
+    for (const r of crows) { composers++; let o: { modelConfig?: { modelName?: string }; contextTokensUsed?: number }; try { o = JSON.parse(typeof r.v === 'string' ? r.v : new TextDecoder().decode(r.v)); } catch { continue; } const mn = o.modelConfig?.modelName ?? 'unknown'; bumpModel(perModel, mn, zero()); if (typeof o.contextTokensUsed === 'number' && o.contextTokensUsed > 0) { ctxSum += o.contextTokensUsed; ctxN++; } }
+  } catch { /* ignore */ } finally { try { db.close(); } catch { /* ignore */ } }
+  return { source: 'Cursor', scope: `${composers} convos, ${fmt(bubbles)} bubbles`, queries: bubbles, calls: bubbles, total, turns: [], perModel, note: `NO billed tokens locally (tokenCount={0,0}). Context-size gauge only: ${ctxN} convos, avg contextTokensUsed ${fmt(ctxN ? ctxSum / ctxN : 0)} (a gauge, NOT billed flow)` };
+}
+
+// ============================ REPORT ============================
+function derived(t: Tok) { const totalInput = t.nonCached + t.cacheCreate + t.cacheRead; const freshInput = t.nonCached + t.cacheCreate; return { totalInput, freshInput, totalInclCache: totalInput + t.output, totalExclCacheRead: freshInput + t.output }; }
+function perQ(turns: Tok[]) { const n = turns.length || 1; const sum = zero(); for (const t of turns) add(sum, t); const tot = turns.map((t) => derived(t).totalInclCache); const fr = turns.map((t) => derived(t).freshInput); return { n: turns.length, meanFresh: (sum.nonCached + sum.cacheCreate) / n, medFresh: median(fr), meanCacheRead: sum.cacheRead / n, meanOut: sum.output / n, medOut: median(turns.map((t) => t.output)), meanTotal: tot.reduce((a, b) => a + b, 0) / n, medTotal: median(tot) }; }
+
+const results = [auditClaude(), auditCodex(), auditGemini(), auditCursor()].filter(Boolean) as SrcResult[];
+
+console.log('================= COUNTS =================');
+for (const r of results) console.log(`  ${r.source.padEnd(20)} | ${r.scope} | queries ${fmt(r.queries)} | billed calls ${fmt(r.calls)}`);
+
+console.log('\n================= TOTALS (provider-normalized) =================');
+console.log('  source              | non_cached | cache_create | cache_read | output | (reasoning) | fresh_input | TOTAL incl cache | TOTAL excl cacheRead');
+for (const r of results) { const d = derived(r.total); console.log(`  ${r.source.padEnd(20)}| ${fmt(r.total.nonCached)} | ${fmt(r.total.cacheCreate)} | ${fmt(r.total.cacheRead)} | ${fmt(r.total.output)} | ${fmt(r.total.reasoning)} | ${fmt(d.freshInput)} | ${fmt(d.totalInclCache)} | ${fmt(d.totalExclCacheRead)}`); }
+
+console.log('\n================= PER-QUERY (mean / median) =================');
+for (const r of results) { if (!r.turns.length) { console.log(`  ${r.source}: ${r.note}`); continue; } const q = perQ(r.turns); console.log(`  ${r.source} (${fmt(q.n)} turns):`); console.log(`     fresh_input  mean ${fmt(q.meanFresh)} | median ${fmt(q.medFresh)}`); console.log(`     cache_read   mean ${fmt(q.meanCacheRead)}`); console.log(`     output       mean ${fmt(q.meanOut)} | median ${fmt(q.medOut)}`); console.log(`     TOTAL incl   mean ${fmt(q.meanTotal)} | median ${fmt(q.medTotal)}`); }
+
+console.log('\n================= PER-MODEL (totals + avg/call) =================');
+for (const r of results) { console.log(`  --- ${r.source} ---`); const models = [...r.perModel.entries()].sort((a, b) => (b[1].t.nonCached + b[1].t.cacheRead + b[1].t.cacheCreate + b[1].t.output) - (a[1].t.nonCached + a[1].t.cacheRead + a[1].t.cacheCreate + a[1].t.output)); for (const [name, e] of models) { const d = derived(e.t); console.log(`     ${name}: ${fmt(e.calls)} calls | fresh ${fmt(d.freshInput)} read ${fmt(e.t.cacheRead)} out ${fmt(e.t.output)} | TOTAL ${fmt(d.totalInclCache)} | avg/call ${fmt(d.totalInclCache / (e.calls || 1))}`); } }
+
+console.log('\n================= NOTES =================');
+for (const r of results) console.log(`  ${r.source}: ${r.note}`);

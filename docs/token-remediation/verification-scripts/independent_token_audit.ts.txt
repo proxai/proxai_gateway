@@ -1,0 +1,195 @@
+/**
+ * INDEPENDENT, from-scratch token audit of LOCAL data — Claude Code + Gemini (Antigravity).
+ * Implements the PROPOSED-PLAN (corrected) billing semantics, NOT the current gateway pipeline.
+ * Own protobuf reader (no gateway imports). Read-only. Run: bun run /tmp/token_independent_audit.ts
+ */
+import { Database } from 'bun:sqlite';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+
+interface Tok { input: number; cacheRead: number; cacheCreate: number; output: number }
+const zero = (): Tok => ({ input: 0, cacheRead: 0, cacheCreate: 0, output: 0 });
+function add(a: Tok, b: Tok) { a.input += b.input; a.cacheRead += b.cacheRead; a.cacheCreate += b.cacheCreate; a.output += b.output; }
+function median(xs: number[]): number { if (!xs.length) return 0; const s = [...xs].sort((p, q) => p - q); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); }
+const fmt = (n: number) => Math.round(n).toLocaleString();
+
+// ---------- minimal protobuf wire reader (public spec; written from scratch) ----------
+type PbEntry = { wire: number; varint?: bigint; bytes?: Uint8Array };
+function parsePb(buf: Uint8Array): Map<number, PbEntry[]> {
+  const out = new Map<number, PbEntry[]>();
+  let pos = 0;
+  while (pos < buf.length) {
+    let tag = 0n, shift = 0n;
+    while (pos < buf.length) { const b = buf[pos++]; tag |= BigInt(b & 0x7f) << shift; if (!(b & 0x80)) break; shift += 7n; }
+    const field = Number(tag >> 3n), wire = Number(tag & 7n);
+    if (field <= 0) break;
+    let entry: PbEntry;
+    if (wire === 0) { let v = 0n, s = 0n; while (pos < buf.length) { const b = buf[pos++]; v |= BigInt(b & 0x7f) << s; if (!(b & 0x80)) break; s += 7n; } entry = { wire, varint: v }; }
+    else if (wire === 2) { let len = 0n, s = 0n; while (pos < buf.length) { const b = buf[pos++]; len |= BigInt(b & 0x7f) << s; if (!(b & 0x80)) break; s += 7n; } const n = Number(len); entry = { wire, bytes: buf.subarray(pos, pos + n) }; pos += n; }
+    else if (wire === 1) { pos += 8; entry = { wire }; }
+    else if (wire === 5) { pos += 4; entry = { wire }; }
+    else break;
+    if (!out.has(field)) out.set(field, []);
+    (out.get(field) as PbEntry[]).push(entry);
+  }
+  return out;
+}
+function pMsg(t: Map<number, PbEntry[]>, f: number): Map<number, PbEntry[]> | null { const e = t.get(f)?.[0]; return e?.bytes ? parsePb(e.bytes) : null; }
+function pVar(t: Map<number, PbEntry[]>, f: number): number | null { const e = t.get(f)?.[0]; return e?.varint !== undefined ? Number(e.varint) : null; }
+function pathVar(root: Map<number, PbEntry[]>, path: number[]): number | null { let t: Map<number, PbEntry[]> | null = root; for (let i = 0; i < path.length - 1; i++) { t = pMsg(t, path[i]); if (!t) return null; } return pVar(t, path[path.length - 1]); }
+
+// ============================ GEMINI (Antigravity) ============================
+// Local sqlite; per assistant step decode usageMetadata (top field 5 -> 9 -> {2,3,5,9,10}).
+// Plan semantics: input=5.9.2 (non-cached), cacheRead=5.9.5, output=5.9.3 (=5.9.9+5.9.10, incl thoughts),
+// cacheCreate=0 (the 5.9.10 "cache_creation" is a phantom copy of visible output -> excluded).
+function auditGemini() {
+  const dir = join(homedir(), '.gemini', 'antigravity-cli', 'conversations');
+  let files: string[] = [];
+  try { files = readdirSync(dir).filter((f) => f.endsWith('.db')); } catch { return null; }
+  const total = zero();
+  const perModelTotal = new Map<string, Tok>(); const perModelCalls = new Map<string, number>();
+  const turnTotals: Tok[] = []; let queries = 0; let assistantCalls = 0; let dbs = 0; let skipped = 0;
+  let identityHolds = 0, identityChecked = 0;
+  for (const file of files) {
+    let db: Database;
+    try { db = new Database(join(dir, file), { readonly: true }); } catch { skipped++; continue; }
+    try {
+      const rows = db.query('SELECT step_type AS st, step_payload AS p FROM "steps" ORDER BY rowid ASC').all() as { st: number | null; p: Uint8Array | null }[];
+      dbs++;
+      let cur: Tok | null = null;
+      for (const r of rows) {
+        if (r.st === 14) { if (cur) turnTotals.push(cur); cur = zero(); queries++; continue; }
+        if ((r.st === 15 || r.st === 23) && r.p) {
+          const tree = parsePb(r.p instanceof Uint8Array ? r.p : new Uint8Array(r.p));
+          const a = pathVar(tree, [5, 9, 2]) ?? 0;  // non-cached input
+          const out = pathVar(tree, [5, 9, 3]) ?? 0; // total output (visible+thoughts)
+          const cr = pathVar(tree, [5, 9, 5]) ?? 0;  // cache read
+          const vis = pathVar(tree, [5, 9, 10]) ?? 0; const th = pathVar(tree, [5, 9, 9]) ?? 0;
+          if (a === 0 && out === 0 && cr === 0) continue; // not a usage step
+          if (out > 0) { identityChecked++; if (out === vis + th) identityHolds++; }
+          const t: Tok = { input: a, cacheRead: cr, cacheCreate: 0, output: out };
+          add(total, t); if (cur) add(cur, t); assistantCalls++;
+          const mid = `gemini:model#${pathVar(tree, [5, 9, 1]) ?? 'unknown'}`;
+          if (!perModelTotal.has(mid)) { perModelTotal.set(mid, zero()); perModelCalls.set(mid, 0); }
+          add(perModelTotal.get(mid) as Tok, t); perModelCalls.set(mid, (perModelCalls.get(mid) as number) + 1);
+        }
+      }
+      if (cur) turnTotals.push(cur);
+    } catch { skipped++; } finally { try { db.close(); } catch { /* ignore */ } }
+  }
+  return { source: 'Gemini (Antigravity)', dbs, skipped, queries, assistantCalls, total, turnTotals, perModelTotal, perModelCalls, identityHolds, identityChecked };
+}
+
+// ============================ CLAUDE CODE ============================
+// ~/.claude/projects/<munged>/<session>.jsonl. Plan semantics: SUM per-call usage across EVERY assistant
+// record (incl tool_use ones). input_tokens=non-cached, +cache_read, +cache_creation, output_tokens (incl thinking).
+// Dedup by record uuid (guards against resumed-session replay). Count main-thread real user prompts as queries.
+function isRealPrompt(m: { role?: string; content?: unknown }): boolean {
+  if (!m || m.role !== 'user') return false;
+  const c = m.content;
+  if (typeof c === 'string') return c.trim().length > 0;
+  if (Array.isArray(c)) return c.some((x) => (typeof x === 'string' && x.trim()) || (x && typeof x === 'object' && (x as { type?: string }).type === 'text' && ((x as { text?: string }).text ?? '').trim()));
+  return false;
+}
+function auditClaude() {
+  const base = join(homedir(), '.claude', 'projects');
+  let projects: string[] = [];
+  try { projects = readdirSync(base); } catch { return null; }
+  const total = zero();
+  const perModelTotal = new Map<string, Tok>(); const perModelCalls = new Map<string, number>();
+  const turnTotals: Tok[] = []; let queries = 0; let assistantCalls = 0; let files = 0;
+  const seenAsst = new Set<string>(); const seenPrompt = new Set<string>();
+  for (const proj of projects) {
+    const pdir = join(base, proj);
+    let entries: string[] = [];
+    try { if (!statSync(pdir).isDirectory()) continue; entries = readdirSync(pdir).filter((f) => f.endsWith('.jsonl')); } catch { continue; }
+    for (const f of entries) {
+      let text: string;
+      try { text = readFileSync(join(pdir, f), 'utf8'); } catch { continue; }
+      files++;
+      let cur: Tok | null = null;
+      for (const line of text.split('\n')) {
+        if (!line.trim()) continue;
+        let rec: { type?: string; uuid?: string; isSidechain?: boolean; message?: { role?: string; model?: string; content?: unknown; usage?: Record<string, number> } };
+        try { rec = JSON.parse(line); } catch { continue; }
+        const msg = rec.message;
+        if (rec.type === 'user' && isRealPrompt(msg ?? {}) && !rec.isSidechain) {
+          const id = rec.uuid ?? '';
+          if (id && seenPrompt.has(id)) continue;
+          if (id) seenPrompt.add(id);
+          if (cur) turnTotals.push(cur); cur = zero(); queries++;
+          continue;
+        }
+        if (rec.type === 'assistant' && msg?.usage) {
+          const id = rec.uuid ?? '';
+          if (id && seenAsst.has(id)) continue;
+          if (id) seenAsst.add(id);
+          const u = msg.usage;
+          const t: Tok = { input: u.input_tokens ?? 0, cacheRead: u.cache_read_input_tokens ?? 0, cacheCreate: u.cache_creation_input_tokens ?? 0, output: u.output_tokens ?? 0 };
+          add(total, t); if (cur) add(cur, t); assistantCalls++;
+          const mid = msg.model ?? 'unknown';
+          if (!perModelTotal.has(mid)) { perModelTotal.set(mid, zero()); perModelCalls.set(mid, 0); }
+          add(perModelTotal.get(mid) as Tok, t); perModelCalls.set(mid, (perModelCalls.get(mid) as number) + 1);
+        }
+      }
+      if (cur) turnTotals.push(cur);
+    }
+  }
+  return { source: 'Claude Code', files, queries, assistantCalls, total, turnTotals, perModelTotal, perModelCalls };
+}
+
+// ============================ REPORT ============================
+function totalsBlock(label: string, t: Tok) {
+  const totalInputInclCache = t.input + t.cacheRead + t.cacheCreate;
+  const totalInclCache = totalInputInclCache + t.output;
+  const totalExclCache = t.input + t.output;
+  console.log(`  [${label}]`);
+  console.log(`    input (non-cached new): ${fmt(t.input)}`);
+  console.log(`    cache_read:             ${fmt(t.cacheRead)}`);
+  console.log(`    cache_creation:         ${fmt(t.cacheCreate)}`);
+  console.log(`    output (incl thinking): ${fmt(t.output)}`);
+  console.log(`    => total INPUT incl cache:  ${fmt(totalInputInclCache)}`);
+  console.log(`    => TOTAL incl cache:        ${fmt(totalInclCache)}`);
+  console.log(`    => TOTAL excl cache (in+out non-cached): ${fmt(totalExclCache)}`);
+}
+function perQuery(turnTotals: Tok[]) {
+  const n = turnTotals.length || 1;
+  const sum = zero(); for (const t of turnTotals) add(sum, t);
+  const meanTot = turnTotals.map((t) => t.input + t.cacheRead + t.cacheCreate + t.output);
+  const meanIn = turnTotals.map((t) => t.input); const meanOut = turnTotals.map((t) => t.output); const meanCR = turnTotals.map((t) => t.cacheRead);
+  return {
+    n: turnTotals.length,
+    meanInput: sum.input / n, meanCacheRead: sum.cacheRead / n, meanCacheCreate: sum.cacheCreate / n, meanOutput: sum.output / n,
+    meanTotalInclCache: meanTot.reduce((a, b) => a + b, 0) / n,
+    medTotalInclCache: median(meanTot), medInput: median(meanIn), medOutput: median(meanOut), medCacheRead: median(meanCR),
+  };
+}
+
+const gem = auditGemini();
+const cc = auditClaude();
+
+console.log('================= COUNTS =================');
+if (cc) console.log(`Claude Code: ${cc.files} session files | ${fmt(cc.queries)} queries (user prompts) | ${fmt(cc.assistantCalls)} assistant calls (usage-bearing)`);
+if (gem) console.log(`Gemini:      ${gem.dbs} conversation DBs read (${gem.skipped} skipped/locked) | ${fmt(gem.queries)} queries (user steps) | ${fmt(gem.assistantCalls)} assistant calls`);
+if (gem) console.log(`Gemini proto self-check: 5.9.3 == 5.9.9+5.9.10 held in ${gem.identityHolds}/${gem.identityChecked} steps`);
+
+console.log('\n================= TOTALS (all queries) =================');
+if (cc) totalsBlock('Claude Code', cc.total);
+if (gem) totalsBlock('Gemini', gem.total);
+
+console.log('\n================= PER-QUERY =================');
+if (cc) { const q = perQuery(cc.turnTotals); console.log(`  [Claude Code] over ${fmt(q.n)} turns:`); console.log(`    mean: input ${fmt(q.meanInput)} | cacheRead ${fmt(q.meanCacheRead)} | cacheCreate ${fmt(q.meanCacheCreate)} | output ${fmt(q.meanOutput)} | TOTAL incl cache ${fmt(q.meanTotalInclCache)}`); console.log(`    median: input ${fmt(q.medInput)} | cacheRead ${fmt(q.medCacheRead)} | output ${fmt(q.medOutput)} | TOTAL incl cache ${fmt(q.medTotalInclCache)}`); }
+if (gem) { const q = perQuery(gem.turnTotals); console.log(`  [Gemini] over ${fmt(q.n)} turns:`); console.log(`    mean: input ${fmt(q.meanInput)} | cacheRead ${fmt(q.meanCacheRead)} | cacheCreate ${fmt(q.meanCacheCreate)} | output ${fmt(q.meanOutput)} | TOTAL incl cache ${fmt(q.meanTotalInclCache)}`); console.log(`    median: input ${fmt(q.medInput)} | cacheRead ${fmt(q.medCacheRead)} | output ${fmt(q.medOutput)} | TOTAL incl cache ${fmt(q.medTotalInclCache)}`); }
+
+console.log('\n================= PER-MODEL (totals + per-call avg) =================');
+for (const r of [cc, gem]) {
+  if (!r) continue;
+  console.log(`  --- ${r.source} ---`);
+  const models = [...r.perModelTotal.entries()].sort((a, b) => (b[1].input + b[1].cacheRead + b[1].cacheCreate + b[1].output) - (a[1].input + a[1].cacheRead + a[1].cacheCreate + a[1].output));
+  for (const [mid, t] of models) {
+    const calls = r.perModelCalls.get(mid) as number;
+    const tot = t.input + t.cacheRead + t.cacheCreate + t.output;
+    console.log(`    ${mid}: ${fmt(calls)} calls | in ${fmt(t.input)} read ${fmt(t.cacheRead)} create ${fmt(t.cacheCreate)} out ${fmt(t.output)} | TOTAL ${fmt(tot)} | avg/call ${fmt(tot / (calls || 1))}`);
+  }
+}

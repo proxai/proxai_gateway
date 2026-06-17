@@ -1,0 +1,22 @@
+import { Database } from 'bun:sqlite';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+type E = { wire:number; varint?:bigint; bytes?:Uint8Array };
+function parse(buf:Uint8Array):Map<number,E[]>{const o=new Map<number,E[]>();let p=0;while(p<buf.length){let t=0n,s=0n;while(p<buf.length){const b=buf[p++];t|=BigInt(b&0x7f)<<s;if(!(b&0x80))break;s+=7n;}const f=Number(t>>3n),w=Number(t&7n);if(f<=0)break;let e:E;if(w===0){let v=0n,s2=0n;while(p<buf.length){const b=buf[p++];v|=BigInt(b&0x7f)<<s2;if(!(b&0x80))break;s2+=7n;}e={wire:w,varint:v};}else if(w===2){let l=0n,s2=0n;while(p<buf.length){const b=buf[p++];l|=BigInt(b&0x7f)<<s2;if(!(b&0x80))break;s2+=7n;}const n=Number(l);e={wire:w,bytes:buf.subarray(p,p+n)};p+=n;}else if(w===1){p+=8;e={wire:w};}else if(w===5){p+=4;e={wire:w};}else break;if(!o.has(f))o.set(f,[]);(o.get(f) as E[]).push(e);}return o;}
+const RE=/gemini|flash|gemini-|pro|claude|gpt|sonnet|opus|exp|preview|thinking|^models\//i;
+const found=new Map<string,Set<string>>(); // modelId -> set of candidate name strings
+function walk(t:Map<number,E[]>, depth:number, sink:string[]){ if(depth>6) return; for(const [,arr] of t) for(const e of arr){ if(e.bytes){ // try utf8
+  try{const s=new TextDecoder('utf-8',{fatal:true}).decode(e.bytes); if(s.length>=3&&s.length<80&&RE.test(s)&&!/[\x00-\x08\x0e-\x1f]/.test(s)) sink.push(s);}catch{} const sub=parse(e.bytes); if(sub.size>0) walk(sub,depth+1,sink);} } }
+function pathVar(root:Map<number,E[]>,path:number[]):number|null{let t:Map<number,E[]>|null=root;for(let i=0;i<path.length-1;i++){const e=t.get(path[i])?.[0];t=e?.bytes?parse(e.bytes):null;if(!t)return null;}const e=t.get(path[path.length-1])?.[0];return e?.varint!==undefined?Number(e.varint):null;}
+const dir=join(homedir(),'.gemini','antigravity-cli','conversations');
+const files=readdirSync(dir).filter(f=>f.endsWith('.db'));
+let scanned=0;
+for(const f of files){ if(scanned>120) break; let db; try{db=new Database(join(dir,f),{readonly:true});}catch{continue;} try{
+  const rows=db.query('SELECT step_type st, step_payload p FROM "steps" WHERE step_type IN (15,23) LIMIT 40').all() as {st:number;p:Uint8Array|null}[];
+  for(const r of rows){ if(!r.p)continue; const tree=parse(r.p instanceof Uint8Array?r.p:new Uint8Array(r.p)); const id=String(pathVar(tree,[5,9,1])??'?'); const sink:string[]=[]; walk(tree,0,sink); if(sink.length){ if(!found.has(id))found.set(id,new Set()); for(const s of sink) found.get(id)!.add(s);} }
+  scanned++;
+}catch{}finally{try{db.close();}catch{}} }
+console.log('modelId -> candidate name strings found in proto:');
+for(const [id,set] of found) console.log(`  #${id}: ${[...set].slice(0,8).join(' | ')}`);
+if(found.size===0) console.log('  (no model-name strings found in step protos — model is stored only as the numeric 5.9.1 enum id)');
