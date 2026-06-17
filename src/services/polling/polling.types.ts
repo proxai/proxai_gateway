@@ -15,6 +15,7 @@ export interface SourcePollerContext {
   logger?: MinimalLogger;
 
   minimumMtimeOverride?: Date | null;
+  excludedProjects?: readonly string[];
 }
 
 export interface SourcePollerError {

@@ -605,6 +605,7 @@ export async function handleCapture(
       gatewayVersion: options.gatewayVersion,
       maxDecompressedBytes: options.maxDecompressedBytes,
       minimumMtimeOverride: null,
+      ...(options.excludedProjects !== undefined && { excludedProjects: options.excludedProjects }),
     };
     const outcome = await poller(ctx);
 

@@ -57,6 +57,9 @@ async function pollClaudeCode(
   if (desktopCliSessionIds !== undefined) {
     collectorCtx.desktopCliSessionIds = desktopCliSessionIds;
   }
+  if (ctx.excludedProjects !== undefined) {
+    collectorCtx.excludedProjects = ctx.excludedProjects;
+  }
 
   for (const file of files) {
     const collectResult = await collectClaudeCodeFile(file, collectorCtx);

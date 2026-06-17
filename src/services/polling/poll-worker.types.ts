@@ -16,6 +16,7 @@ export interface WorkerInput {
     maxDecompressedBytes: number;
     captureSubAgents: boolean;
     desktopCliSessionIds?: ReadonlySet<string>;
+    excludedProjects?: readonly string[];
     priorCursors?: Array<{
       sourcePathHash: string;
       sourcePath: string;
