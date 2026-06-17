@@ -30,7 +30,7 @@ Each cycle is also protected by `runWithTimeout` to avoid hanging indefinitely:
 - Drain cycle: 25s timeout threshold.
 - Heartbeat cycle: 600s timeout threshold.
 
-If a cycle hangs beyond its threshold, it logs a cycle timeout event (`*.cycle.timeout`) and allows the loop to continue to the next cycle rather than hanging forever.
+If a cycle hangs beyond its threshold, it logs a cycle timeout event (`*.cycle.timeout`) and allows the loop to continue. To prevent concurrent runs of the same loop (duplicate telemetry), a loop tracks its in-flight cycle promise. If the prior promise has not settled yet when the next tick fires, it skips starting a new cycle and logs a skipped event (`*.cycle.skipped_in_flight`).
 
 Sleep is abortable: `options.sleep ?? abortableSleep` from `core/utils`. The `AbortSignal` short-circuits both the sleep and the next-iteration guard.
 
