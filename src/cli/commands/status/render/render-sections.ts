@@ -405,7 +405,7 @@ function renderBinaryAgeLine(s: StatusSnapshot): string {
 
 export function renderLastUploadsSection(s: StatusSnapshot): string[] {
   if (s.lastUploads.length === 0) return [];
-  const lines: string[] = [sectionDivider('Last Uploads (last 12 months)')];
+  const lines: string[] = [sectionDivider('Last Uploads')];
 
   const capturedLabel = formatBytes(s.capturedBytes);
   const uploadedLabel = `${s.counts.delivered.toString()} uploaded`;

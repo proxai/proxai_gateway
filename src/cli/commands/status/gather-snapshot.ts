@@ -5,6 +5,7 @@ import { readBootId } from 'core/system/boot-id.ts';
 import { profileRootDir, buildProfileContext } from 'core/io/fs/profile.ts';
 import { buildWatchdogServiceContext } from 'cli/wiring/platform.ts';
 import { readRescueLedgerReadOnly } from 'services/rescue/rescue-ledger.ts';
+import { MAX_CONSECUTIVE_FAILURES } from 'services/rescue/rescue-decision.ts';
 import type { ProfileName } from 'core/io/fs/profile.types.ts';
 
 import {
@@ -163,11 +164,11 @@ export async function gatherStatusSnapshot(
     deps.readBootId ?? readBootId,
   );
 
+  const profileCtx = buildProfileContext(profileName);
   let watchdogInstalled = false;
   try {
     const platform = process.platform;
     const binaryPath = deps.binaryPath ?? process.execPath;
-    const profileCtx = buildProfileContext(profileName);
     const watchdogCtx = buildWatchdogServiceContext(platform, binaryPath, profileCtx);
     if (watchdogCtx !== null) {
       watchdogInstalled = await watchdogCtx.watchdogManager.isInstalled();
@@ -175,13 +176,12 @@ export async function gatherStatusSnapshot(
   } catch {}
 
   const bootId = deps.readBootId !== undefined ? await deps.readBootId() : await readBootId();
-  const profileCtx = buildProfileContext(profileName);
   const ledger = await readRescueLedgerReadOnly(profileCtx.sentinels.rescueLedger, bootId);
   const rescue = ledger
     ? {
         consecutiveFailures: ledger.consecutiveFailures,
         lastRescueAt: ledger.lastRescueAt,
-        circuitBroken: ledger.consecutiveFailures >= 3,
+        circuitBroken: ledger.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES,
       }
     : null;
 
