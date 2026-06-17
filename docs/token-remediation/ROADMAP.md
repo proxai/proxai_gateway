@@ -109,28 +109,33 @@ turn** (input / output / cache_read / cache_creation each summed). This is what 
 - **Gemini:** SUM per step (already correct — distinct calls, no re-emit). Phase 3 only nulls the phantom
   `cacheCreation`; input/output/cacheRead are untouched.
 
-### Column normalization — `inputTokens` = FRESH INPUT (decided 2026-06-17)
+### Column normalization — `inputTokens` = FRESH INPUT; raw cache-write KEPT (decided 2026-06-17)
 
-The four stored columns mean the SAME thing for every agent, so cross-agent comparison on `inputTokens` works
-directly (no per-consumer normalization, no abnormally-low Claude numbers, no double-count surface):
+`inputTokens` carries the comparable "fresh input" for every agent, AND the authentic Anthropic cache-write count
+is preserved in its own column (no data lost). The overlap is handled by SUBTRACTION (operator decision), not by
+nulling the column.
 
-| Column | Definition (all agents) | Claude Code | Gemini | Codex |
+| Column | Definition | Claude Code | Gemini | Codex |
 |---|---|---|---|---|
-| `inputTokens` | **fresh input** = full-rate tokens NOT served from cache | `input_tokens + cache_creation_input_tokens` | `5.9.2` | `input_tokens − cached_input_tokens` |
-| `cacheReadInputTokens` | cache reads (discounted) | `cache_read_input_tokens` | `5.9.5` | `cached_input_tokens` |
-| `cacheCreationInputTokens` | **NULL for all agents** (folded into `inputTokens`) | folded → null | n/a (phantom, nulled in P3) | n/a (OpenAI has none) |
+| `inputTokens` | **fresh input** = full-rate tokens NOT served from cache (INCLUDES any written to cache) | `input_tokens + cache_creation_input_tokens` | `5.9.2` | `input_tokens − cached_input_tokens` |
+| `cacheReadInputTokens` | cache reads (discounted; **DISJOINT** from inputTokens) | `cache_read_input_tokens` | `5.9.5` | `cached_input_tokens` |
+| `cacheCreationInputTokens` | raw cache-WRITE tokens — **kept for provenance; a SUBSET of `inputTokens`, NON-additive**; null where the provider reports none | `cache_creation_input_tokens` (kept) | null (phantom removed in P3) | null (OpenAI reports none) |
 | `outputTokens` | output incl. reasoning | `output_tokens` | `5.9.3` | `output_tokens` |
 
-- Total input = `inputTokens + cacheReadInputTokens`. Grand total = `+ outputTokens`. No `cacheCreation` term →
-  no double-count anywhere.
-- **Why fold instead of keep separate:** Anthropic's `cache_creation` tokens ARE fresh input (processed at full
-  rate, just also written to cache). Only Anthropic reports them; Gemini/OpenAI don't. Keeping the column
-  populated AND inside `inputTokens` would double-count (the F3 phantom shape). Folding + nulling the column
-  makes every provider consistent and `inputTokens` directly comparable (Claude 370M ≈ Gemini 354M; median
-  21 → ~18.4k — see `analysis/CROSS-SOURCE-NORMALIZATION.md`).
-- **Trade-off (accepted):** loses Claude's explicit cache-WRITE count as a distinct field. Only matters for
-  $-cost precision (Anthropic writes bill ~1.25×); NO $ is computed today. If $ is added later, stash the raw
-  `{input_tokens, cache_creation_input_tokens}` in `agent_metadata` for provenance — do NOT un-fold the column.
+**Calculation rules — the `cacheCreation` overlap is handled by subtraction, NOT addition:**
+- raw non-cached input (the API's bare `input_tokens` tail) = `inputTokens − cacheCreationInputTokens`.
+- total input = `inputTokens + cacheReadInputTokens`. **NEVER add `cacheCreationInputTokens` to a total** — it is
+  already inside `inputTokens` (adding it is the F3 double-count shape).
+- grand total = `inputTokens + cacheReadInputTokens + outputTokens`.
+- **Invariant (add a test):** `0 ≤ cacheCreationInputTokens ≤ inputTokens` for Claude; `cacheCreationInputTokens
+  = null` for Gemini/Codex.
+
+**Why this shape:** `inputTokens` is uniform "fresh input" → directly comparable, never abnormally low (Claude
+370M ≈ Gemini 354M; median 21 → ~18.4k). The authentic cache-write count is preserved for future reference /
+$-cost (writes bill ~1.25× at Anthropic; no $ computed today). Compatibility: the existing web "Token Usage" KPI
+is `input+output+cacheRead` — it already EXCLUDES `cacheCreation`, so it is correct as-is under this scheme; the
+downstream per-column `COALESCE(SUM)`s are display-only. The discipline cost: `cacheCreation` is a non-additive
+subset — any NEW grand-total must follow the rules above (see `analysis/CROSS-SOURCE-NORMALIZATION.md`).
 
 ## Decisions LOCKED (2026-06-17 — do not re-open)
 

@@ -27,12 +27,14 @@ Cursor reads "not captured."
 - Render Cursor token cells null-aware: show "not captured" (or em-dash) instead of `0` when the underlying
   values are null, so genuine-zero is distinguishable from no-data.
 - **Cross-agent comparison now works directly on `inputTokens`** because Phase 1's column normalization makes
-  `inputTokens` = fresh input for every agent (Claude folds `cache_creation` into it; `cacheCreation` is null
-  everywhere) — see ROADMAP "Column normalization" + `analysis/CROSS-SOURCE-NORMALIZATION.md`. So the dashboard
-  compares `inputTokens` / `cacheReadInputTokens` / `outputTokens` as-is; do NOT special-case providers and do
-  NOT add a separate `cacheCreation` term (it's null / folded). This is the storage-level fix for the false ~20×
-  gap (Claude vs Gemini fresh_input is ~1.04×, not 20×); the only display work left here is the KPI subtitle +
-  Cursor null rendering above.
+  `inputTokens` = fresh input for every agent (Claude folds `cache_creation` INTO it; `cacheCreation` is kept as
+  a non-additive SUBSET for Claude, null for Gemini/Codex) — see ROADMAP "Column normalization" +
+  `analysis/CROSS-SOURCE-NORMALIZATION.md`. So the dashboard compares `inputTokens` / `cacheReadInputTokens` /
+  `outputTokens` as-is; do NOT special-case providers and **do NOT add `cacheCreationInputTokens` into any total
+  or KPI** (it's already inside `inputTokens`). The existing "Token Usage" KPI (`input+output+cacheRead`) already
+  excludes it → correct. If `cacheCreation` is ever shown, label it "of which cache-write" (a breakdown of input),
+  never as an additive line. This is the storage-level fix for the false ~20× gap (Claude vs Gemini fresh_input
+  is ~1.04×, not 20×).
 
 ## Tests (verifier checks these)
 - Component test: KPI subtitle text reflects cache-read inclusion.

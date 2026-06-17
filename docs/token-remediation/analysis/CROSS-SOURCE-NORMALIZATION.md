@@ -45,13 +45,15 @@ calculation error. The fix is to compare **provider-normalized** categories:
 - Models named: Claude (opus-4-7, opus-4-8, fable-5), Codex (gpt-5.5), Gemini `#1132 = gemini-3.1-pro-preview`
   (per `~/.gemini/settings.json`; minor ids `#1016/#1035/#1050` not named in local data — opaque enums).
 
-## Verdict + plan decision (2026-06-17)
+## Verdict + plan decision (2026-06-17, refined)
 The proposed-plan extraction is **correct** (validated independently). Decision taken: normalize at the
-**storage layer**, not just display — `inputTokens` is stored as **fresh input** (= non-cached + cache_creation)
-for every agent, and `cacheCreationInputTokens` is stored **null** (Claude's value folded in; Gemini/Codex never
-had one). See ROADMAP "Column normalization" + Phase 1 (fold + null) + Phase 10 (compare columns as-is). This
-makes `inputTokens` directly comparable across agents (Claude 370M ≈ Gemini 354M), removes Claude's
-abnormally-low look (median 21 → ~18.4k), and eliminates the `cacheCreation` double-count surface entirely.
-Trade-off accepted: loses the explicit cache-WRITE count (only matters for $-cost precision at Anthropic's ~1.25×
-write rate; no $ computed today). If $ is added later, stash raw `{input_tokens, cache_creation_input_tokens}` in
-`agent_metadata` — do NOT un-fold the column.
+**storage layer** — `inputTokens` is stored as **fresh input** (= non-cached + cache_creation) for every agent —
+AND the authentic Anthropic cache-write count is **KEPT** in `cacheCreationInputTokens` (no data lost). The
+overlap is handled by **subtraction**, not by nulling: `cacheCreationInputTokens` is a **non-additive SUBSET of
+`inputTokens`**. Rules: raw non-cached = `inputTokens − cacheCreationInputTokens`; total =
+`inputTokens + cacheReadInputTokens (+ outputTokens)` — never add `cacheCreation`. Invariant
+`0 ≤ cacheCreationInputTokens ≤ inputTokens` (Claude), null (Gemini/Codex). See ROADMAP "Column normalization"
++ Phase 1 + Phase 10. Result: `inputTokens` directly comparable (Claude 370M ≈ Gemini 354M; median 21 → ~18.4k);
+no abnormally-low Claude; authentic write-count preserved for future $-cost (writes bill ~1.25×). The existing
+web KPI (`input+output+cacheRead`) already excludes `cacheCreation`, so it's correct as-is; only NEW grand-totals
+must follow the no-add rule.

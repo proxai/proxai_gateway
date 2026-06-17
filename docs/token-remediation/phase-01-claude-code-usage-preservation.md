@@ -36,12 +36,13 @@ from dropping the tool_use-bearing calls. There is NO "final context size" alter
 metric we are not using. Do not re-open this.
 
 **Column normalization (decided 2026-06-17 — see ROADMAP "Column normalization"):** store `inputTokens` =
-**fresh input** = `input_tokens + cache_creation_input_tokens` (summed per call across the turn), and set
-`cacheCreationInputTokens` = **null** (folded in). Anthropic's cache-creation tokens are full-rate fresh input;
-folding them makes `inputTokens` mean the same "fresh input" as Gemini/Codex and stops Claude's input looking
-abnormally low (median 21 → ~18.4k). Keeping the column populated AND inside input would double-count (F3 shape).
-No $ is computed today, so losing the explicit write-count is safe; if needed later, stash raw
-`{input_tokens, cache_creation_input_tokens}` in `agent_metadata` — do not un-fold.
+**fresh input** = `input_tokens + cache_creation_input_tokens` (summed per call across the turn), and **KEEP**
+`cacheCreationInputTokens` = the raw `cache_creation_input_tokens` value (authentic data preserved, not nulled).
+`cacheCreationInputTokens` is therefore a **SUBSET of `inputTokens` (non-additive)** — recover the bare API tail
+via `inputTokens − cacheCreationInputTokens`, and NEVER add `cacheCreationInputTokens` into a total (it's already
+inside `inputTokens`; adding it is the F3 double-count shape). This makes `inputTokens` the same comparable
+"fresh input" as Gemini/Codex (stops Claude looking abnormally low: median 21 → ~18.4k) while keeping the
+authentic Anthropic cache-write count for future reference / $-cost.
 
 ## Change spec
 ### proxai_gateway
@@ -55,10 +56,12 @@ No $ is computed today, so losing the explicit write-count is safe; if needed la
 - `src/agent-gateway/parsers/claude-code/claude-code.utils.ts:400-414` — ensure aggregateUsage now sums over the
   full set of usage-bearing records (including the previously-dropped ones); confirm no double-count if the
   gateway now sends both a visible flag and the record.
-- **Fold cache-creation into input:** set `inputTokens` (per call) = `input_tokens + cache_creation_input_tokens`
-  and emit `cacheCreationInputTokens = null`. Apply where the per-call usage is mapped into the scalar spine
-  (`src/agent-gateway/parse/build-scalar-spine.ts:162` writes `cacheCreationInputTokens` today). Verify NOTHING
-  downstream still adds a separate creation term (it's now inside input).
+- **Fold cache-creation into input (keep the raw column):** set `inputTokens` (per call) =
+  `input_tokens + cache_creation_input_tokens`, and KEEP `cacheCreationInputTokens` = the raw
+  `cache_creation_input_tokens` (do NOT null it). Apply where the per-call usage maps into the scalar spine
+  (`src/agent-gateway/parse/build-scalar-spine.ts:162`). Then audit every total-computing path to ensure it uses
+  `inputTokens + cacheReadInputTokens (+ outputTokens)` and does NOT add `cacheCreationInputTokens` (now a subset
+  of inputTokens). The existing web KPI already excludes it (`input+output+cacheRead`) → correct as-is.
 - `.../services/claude-code-finalize-turn.service.ts:99` — unchanged call, but verify the turn boundary still
   groups the now-larger record set correctly.
 
@@ -74,8 +77,9 @@ No $ is computed today, so losing the explicit write-count is safe; if needed la
 - [ ] nest aggregateUsage sums the full loop; a multi-tool-call turn's stored input/output/cache > the old
       text-only sum, by the dropped calls' usage.
 - [ ] No regression for text-only turns; no double-count.
-- [ ] `inputTokens` = `input_tokens + cache_creation_input_tokens` (fresh input); `cacheCreationInputTokens` emitted
-      as null; a test asserts the fold and asserts no path sums a separate creation term.
+- [ ] `inputTokens` = `input_tokens + cache_creation_input_tokens` (fresh input); `cacheCreationInputTokens` KEPT
+      as the raw value (subset of inputTokens, not nulled); a test asserts the fold, the invariant
+      `0 ≤ cacheCreationInputTokens ≤ inputTokens`, and that no total-computing path adds `cacheCreationInputTokens`.
 - [ ] Tests above added and green.
 
 ## Merge checklist
