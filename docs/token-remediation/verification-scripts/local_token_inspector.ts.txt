@@ -1,0 +1,371 @@
+import { Database } from 'bun:sqlite';
+import * as fs from 'fs';
+import * as path from 'path';
+import { decodeStep } from '/Users/onurseckinsenoglu/repos/proxai/proxai_gateway/src/sources/gemini/step-decode';
+
+// Helper to format large numbers
+function fmt(num: number | null | undefined): string {
+  if (num === null || num === undefined) return 'N/A';
+  return num.toLocaleString();
+}
+
+async function inspectGemini() {
+  console.log('\n======================================================================');
+  console.log('🔍 Gemin / Antigravity CLI Local DB Inspection');
+  console.log('======================================================================');
+  const dbPath =
+    '/Users/onurseckinsenoglu/.gemini/antigravity-cli/conversations/cfcd59f0-61db-41cc-abcc-e92226040185.db';
+  if (!fs.existsSync(dbPath)) {
+    console.log(`Database not found at ${dbPath}`);
+    return;
+  }
+  console.log(`Reading from: ${dbPath}`);
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    // Let's get the last 5 assistant steps that contain token usage
+    const rows = db
+      .query(
+        `
+      SELECT rowid AS rid, idx, step_type, status, step_payload 
+      FROM "steps" 
+      ORDER BY rowid DESC
+    `,
+      )
+      .all() as any[];
+
+    console.log(`Total rows in local steps table: ${rows.length}`);
+
+    // We will group steps into turns by turnId (or turn_group)
+    const turns: Record<string, { userPrompt: string; steps: any[] }> = {};
+    for (const r of rows) {
+      const payload = r.step_payload instanceof Uint8Array ? r.step_payload : new Uint8Array();
+      const decoded = decodeStep(r.step_type ?? 0, payload);
+
+      const turnId = decoded.ids.turnGroup ?? `step-${r.rid}`;
+      if (!turns[turnId]) {
+        turns[turnId] = { userPrompt: '', steps: [] };
+      }
+      turns[turnId].steps.push({ r, decoded });
+    }
+
+    // Now find user prompts for each turn
+    for (const [_turnId, t] of Object.entries(turns)) {
+      const userStep = t.steps.find((s) => s.decoded.role === 'user');
+      if (userStep && userStep.decoded.text) {
+        t.userPrompt = userStep.decoded.text;
+      } else {
+        // Look in steps for user text if not marked explicitly
+        t.userPrompt =
+          t.steps.find((s) => s.decoded.stepType === 4)?.decoded.text ??
+          'No user prompt text found';
+      }
+    }
+
+    const turnList = Object.entries(turns)
+      .map(([turnId, t]) => ({ turnId, ...t }))
+      .slice(0, 5); // Take the latest 5 turns
+
+    console.log(`Latest 5 turns parsed from local sqlite:`);
+    for (const [idx, t] of turnList.entries()) {
+      console.log(`\nTurn #${idx + 1} (Turn ID: ${t.turnId})`);
+      console.log(`  User Prompt: "${t.userPrompt.substring(0, 100).replace(/\n/g, ' ')}..."`);
+
+      // Calculate token sum across assistant/tool steps in this turn
+      let sumNetInput = 0;
+      let sumCacheRead = 0;
+      let sumCacheCreate = 0;
+      let sumOutput = 0;
+      let assistantCallsCount = 0;
+
+      for (const step of t.steps) {
+        const d = step.decoded;
+        if (d.role === 'assistant') {
+          assistantCallsCount++;
+          // Net input = promptTokens - cachedTokens (in native model representation)
+          // Wait, gateway's decodeStep outputs d.inputTokens as promptTokens + cachedTokens.
+          // Let's print the actual promptTokens and cachedTokens
+          const rawPrompt =
+            d.inputTokens !== null ? d.inputTokens - (d.cacheReadInputTokens ?? 0) : 0;
+          const rawCached = d.cacheReadInputTokens ?? 0;
+          const rawCacheCreate = d.cacheCreationInputTokens ?? 0;
+          const rawOutput = d.outputTokens ?? 0;
+
+          sumNetInput += rawPrompt;
+          sumCacheRead += rawCached;
+          sumCacheCreate += rawCacheCreate;
+          sumOutput += rawOutput;
+
+          console.log(`    -> Call #${assistantCallsCount}: Model: ${d.model}`);
+          console.log(`       Billed Net Input:   ${fmt(rawPrompt)}`);
+          console.log(`       Cache Read (Hit):   ${fmt(rawCached)}`);
+          console.log(`       Cache Created:      ${fmt(rawCacheCreate)}`);
+          console.log(`       Output:             ${fmt(rawOutput)}`);
+        }
+      }
+      console.log(
+        `  Turn Totals (Billed/Net Input): ${fmt(sumNetInput)} | Cache Read: ${fmt(sumCacheRead)} | Cache Created: ${fmt(sumCacheCreate)} | Output: ${fmt(sumOutput)}`,
+      );
+    }
+  } catch (err) {
+    console.error('Error reading Gemini DB:', err);
+  } finally {
+    db.close();
+  }
+}
+
+async function inspectClaudeCode() {
+  console.log('\n======================================================================');
+  console.log('🔍 Claude Code Local Session Inspection');
+  console.log('======================================================================');
+  const projectDir =
+    '/Users/onurseckinsenoglu/.claude/projects/-Users-onurseckinsenoglu-repos-proxai-proxai-gateway';
+  if (!fs.existsSync(projectDir)) {
+    console.log(`Claude Code project directory not found at ${projectDir}`);
+    return;
+  }
+
+  // Find latest .jsonl session file
+  const files = fs
+    .readdirSync(projectDir)
+    .filter((f) => f.endsWith('.jsonl'))
+    .map((f) => {
+      const fp = path.join(projectDir, f);
+      return { name: f, path: fp, mtime: fs.statSync(fp).mtimeMs };
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+
+  if (files.length === 0) {
+    console.log('No Claude Code session files found.');
+    return;
+  }
+
+  const latestFile = files[0];
+  console.log(
+    `Latest session file: ${latestFile.name} (modified: ${new Date(latestFile.mtime).toISOString()})`,
+  );
+
+  const content = fs.readFileSync(latestFile.path, 'utf8');
+  const lines = content.split('\n').filter(Boolean);
+
+  const turns: any[] = [];
+  let currentPrompt = '';
+
+  for (const line of lines) {
+    try {
+      const obj = JSON.parse(line);
+      if (obj.type === 'user' && obj.message?.content) {
+        currentPrompt =
+          obj.message.content
+            .map((c: any) => c.text)
+            .filter(Boolean)
+            .join('\n') || currentPrompt;
+      } else if (obj.type === 'assistant' && obj.message?.usage) {
+        turns.push({ prompt: currentPrompt, usage: obj.message.usage });
+      }
+    } catch {}
+  }
+
+  console.log(`Parsed ${turns.length} turns in Claude Code session.`);
+
+  const latestTurns = turns.slice(-5).reverse();
+  for (const [idx, t] of latestTurns.entries()) {
+    console.log(`\nInteraction #${idx + 1}`);
+    console.log(`  User Prompt: "${t.prompt.substring(0, 100).replace(/\n/g, ' ')}..."`);
+
+    const u = t.usage;
+    console.log(`  Usage:`);
+    console.log(`    Net Input (Billed):  ${fmt(u.input_tokens)}`);
+    console.log(`    Cache Read (Hit):    ${fmt(u.cache_read_input_tokens)}`);
+    console.log(`    Cache Created:       ${fmt(u.cache_creation_input_tokens)}`);
+    console.log(`    Output:              ${fmt(u.output_tokens)}`);
+  }
+}
+
+async function inspectCodex() {
+  console.log('\n======================================================================');
+  console.log('🔍 Codex Local Session Inspection');
+  console.log('======================================================================');
+  const sessionsDir = '/Users/onurseckinsenoglu/.codex/sessions/';
+  if (!fs.existsSync(sessionsDir)) {
+    console.log(`Codex sessions directory not found at ${sessionsDir}`);
+    return;
+  }
+
+  // Find all rollout files
+  const files: { path: string; mtime: number }[] = [];
+  function recurse(dir: string) {
+    for (const f of fs.readdirSync(dir)) {
+      const fp = path.join(dir, f);
+      const stat = fs.statSync(fp);
+      if (stat.isDirectory()) {
+        recurse(fp);
+      } else if (f.endsWith('.jsonl')) {
+        files.push({ path: fp, mtime: stat.mtimeMs });
+      }
+    }
+  }
+  recurse(sessionsDir);
+  files.sort((a, b) => b.mtime - a.mtime);
+
+  if (files.length === 0) {
+    console.log('No Codex session files found.');
+    return;
+  }
+
+  const latestFile = files[0];
+  console.log(
+    `Latest session file: ${path.basename(latestFile.path)} (modified: ${new Date(latestFile.mtime).toISOString()})`,
+  );
+
+  const content = fs.readFileSync(latestFile.path, 'utf8');
+  const lines = content.split('\n').filter(Boolean);
+
+  const turns: any[] = [];
+  let currentPrompt = '';
+
+  for (const line of lines) {
+    try {
+      const obj = JSON.parse(line);
+      if (obj.type === 'response_item' && obj.payload?.role === 'user') {
+        currentPrompt = obj.payload.content?.[0]?.text ?? 'No user text';
+      } else if (obj.type === 'event_msg' && obj.payload?.type === 'token_count') {
+        const usage = obj.payload.info?.last_token_usage;
+        turns.push({ prompt: currentPrompt, usage });
+      }
+    } catch {}
+  }
+
+  console.log(`Found ${turns.length} turns in Codex session.`);
+  const latestTurns = turns.slice(-5).reverse();
+  for (const [idx, t] of latestTurns.entries()) {
+    console.log(`\nTurn #${idx + 1}`);
+    console.log(`  User Prompt: "${t.prompt.substring(0, 100).replace(/\n/g, ' ')}..."`);
+    if (t.usage) {
+      // Net Input = input_tokens - cached_input_tokens
+      const totalInput = t.usage.input_tokens ?? 0;
+      const cachedInput = t.usage.cached_input_tokens ?? 0;
+      const netInput = totalInput - cachedInput;
+      console.log(`  Usage:`);
+      console.log(`    Total Input:         ${fmt(totalInput)}`);
+      console.log(`    Cache Read (Hit):    ${fmt(cachedInput)}`);
+      console.log(`    Net Input (Billed):  ${fmt(netInput)}`);
+      console.log(`    Output:              ${fmt(t.usage.output_tokens)}`);
+      console.log(`    Reasoning Output:    ${fmt(t.usage.reasoning_output_tokens)}`);
+    } else {
+      console.log('  Usage: N/A');
+    }
+  }
+}
+
+async function inspectCursor() {
+  console.log('\n======================================================================');
+  console.log('🔍 Cursor Local DB & Telemetry Structure Inspection');
+  console.log('======================================================================');
+  const dbPath =
+    '/Users/onurseckinsenoglu/Library/Application Support/Cursor/User/globalStorage/state.vscdb';
+  if (!fs.existsSync(dbPath)) {
+    console.log(`Cursor database not found at ${dbPath}`);
+    return;
+  }
+  console.log(`Reading global state.vscdb: ${dbPath}`);
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    // 1. Let's look at the structure of cursorDiskKV
+    const tableInfo = db.query('PRAGMA table_info(cursorDiskKV)').all();
+    console.log('Table structure of cursorDiskKV:', tableInfo);
+
+    // 2. Fetch the last 5 bubbles (which represent turns/messages)
+    const bubbleRows = db
+      .query(
+        `
+      SELECT key, value 
+      FROM cursorDiskKV 
+      WHERE key LIKE 'bubbleId:%' 
+      LIMIT 10
+    `,
+      )
+      .all() as any[];
+
+    console.log(`Found ${bubbleRows.length} bubbleId key samples.`);
+    if (bubbleRows.length > 0) {
+      console.log('Sample Bubble Schema:');
+      const valObj = JSON.parse(bubbleRows[0].value);
+      console.log(JSON.stringify(valObj, null, 2).substring(0, 1500));
+    }
+
+    // 3. Fetch the last 5 composers (which represent chat sessions)
+    const composerRows = db
+      .query(
+        `
+      SELECT key, value 
+      FROM cursorDiskKV 
+      WHERE key LIKE 'composerData:%'
+    `,
+      )
+      .all() as any[];
+
+    console.log(`Found ${composerRows.length} composerData keys.`);
+
+    // Sort composers by last saved or updated if possible, or just print keys and parse contents
+    // Let's parse all and look for latest ones
+    const parsedComposers: any[] = [];
+    for (const r of composerRows) {
+      try {
+        const val = JSON.parse(r.value);
+        if (val && typeof val === 'object') {
+          parsedComposers.push({ key: r.key, val });
+        }
+      } catch {}
+    }
+
+    // Sort by lastSavedAt or updatedAt inside the value if they exist
+    parsedComposers.sort((a, b) => {
+      const timeA = a.val.lastSavedAt ?? a.val.updatedAt ?? 0;
+      const timeB = b.val.lastSavedAt ?? b.val.updatedAt ?? 0;
+      return timeB - timeA;
+    });
+
+    const latestComposers = parsedComposers.slice(0, 5);
+    for (const [idx, c] of latestComposers.entries()) {
+      console.log(`\nComposer #${idx + 1} (Key: ${c.key})`);
+      const text = c.val.name ?? c.val.text ?? c.val.title ?? 'Untitled Composer';
+      console.log(`  Title/Name: ${text}`);
+      console.log(`  Keys inside value:`, Object.keys(c.val));
+
+      // Let's specifically inspect fields like usageData, tokenCount, usage, promptTokenBreakdown
+      console.log(`  Token fields check:`);
+      console.log(`    c.val.usageData:`, c.val.usageData);
+      console.log(`    c.val.tokenCount:`, c.val.tokenCount);
+      console.log(`    c.val.promptTokenBreakdown:`, c.val.promptTokenBreakdown);
+
+      // If there are bubbles/conversations inside the composer, check them
+      const conversation = c.val.conversation ?? [];
+      console.log(`  Conversation bubbles count: ${conversation.length}`);
+      if (conversation.length > 0) {
+        console.log('  Latest bubble in composer:');
+        const lastBubble = conversation[conversation.length - 1];
+        console.log(`    Bubble keys:`, Object.keys(lastBubble));
+        console.log(`    Bubble type/role:`, lastBubble.type ?? lastBubble.role);
+        console.log(
+          `    Bubble text (first 100 chars): "${(lastBubble.text ?? '').substring(0, 100).replace(/\n/g, ' ')}..."`,
+        );
+        console.log(`    Bubble tokenCount:`, lastBubble.tokenCount ?? lastBubble.usage ?? 'None');
+      }
+    }
+  } catch (err) {
+    console.error('Error reading Cursor DB:', err);
+  } finally {
+    db.close();
+  }
+}
+
+async function run() {
+  await inspectGemini();
+  await inspectClaudeCode();
+  await inspectCodex();
+  await inspectCursor();
+}
+
+run().catch(console.error);

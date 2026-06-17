@@ -1,0 +1,37 @@
+import { PrismaClient } from '@prisma/client';
+import { makeReadOnlyClient } from '../clone-proxai-devs/lib/readonly-prod';
+
+async function main() {
+  const url = process.env.POSTGRES_URL_READ_ONLY_PROD;
+  if (!url) {
+    console.error('Error: POSTGRES_URL_READ_ONLY_PROD is not defined.');
+    process.exit(1);
+  }
+
+  const rawPrisma = new PrismaClient({
+    datasources: { db: { url } },
+  });
+  const prisma = makeReadOnlyClient(rawPrisma);
+
+  try {
+    const records = await prisma.agentCallRecord.findMany({
+      where: { turnId: { startsWith: 'a2d94b75' } },
+    });
+    console.log(
+      'Found records by prefix:',
+      records.map((r) => ({
+        id: r.id,
+        turnId: r.turnId,
+        inputTokens: r.inputTokens,
+        cacheReadInputTokens: r.cacheReadInputTokens,
+        outputTokens: r.outputTokens,
+      })),
+    );
+  } catch (e) {
+    console.error(e);
+  } finally {
+    await rawPrisma.$disconnect();
+  }
+}
+
+main().catch(console.error);

@@ -1,0 +1,205 @@
+/**
+ * READ-ONLY local-proto probe: CONFIRMATION 1 decider — what is proto 5.9.10?
+ *
+ * The 5.9 usageMetadata envelope has NO total field, so the close-the-arithmetic test
+ * must hunt for the total ANYWHERE in the step proto. This flattens the entire step
+ * message (all paths/depths) and, per step, searches for a field whose value equals
+ * each candidate composition of the known token components:
+ *
+ *   a = 5.9.2  (prompt, non-cached)      d = 5.9.9   (unmapped, token-like)
+ *   b = 5.9.5  (cached / cache-read)     e = 5.9.10  (gateway calls this cache_creation)
+ *   c = 5.9.3  (gateway calls this output / candidates)
+ *   promptFull = a + b
+ *
+ * If the total field T == promptFull + c + (thoughts), then whichever of d/e is in that
+ * sum is GENERATION-SIDE (thoughts), NOT cache-creation (cache-creation is a subset of
+ * the prompt and would already be inside promptFull, never added on top).
+ *
+ * Also reports: (i) e-vs-output and e-vs-prompt correlation; (ii) the "cache HIT yet
+ * cache-creation>0" anomaly count (impossible if e were genuine cache-creation).
+ *
+ * Run: bun run "scripts/Gemini stats/confirm_gemini_total_field.ts"
+ */
+import { Database } from 'bun:sqlite';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import {
+  scanProto,
+  getPath,
+} from '/Users/onurseckinsenoglu/repos/proxai/proxai_gateway/src/sources/gemini/proto-scan';
+import type { FieldTree } from '/Users/onurseckinsenoglu/repos/proxai/proxai_gateway/src/sources/gemini/proto-scan';
+
+interface SqliteRawRow {
+  rid: number;
+  step_type: number | null;
+  step_payload: Uint8Array | null;
+}
+
+const CONV_DIR = join(homedir(), '.gemini', 'antigravity-cli', 'conversations');
+const STEP_BUDGET = 8_000;
+
+interface Leaf {
+  path: string;
+  val: number;
+}
+
+function flatten(tree: FieldTree, prefix: string, out: Leaf[]): void {
+  for (const [field, vals] of tree) {
+    for (const v of vals) {
+      const path = prefix ? `${prefix}.${field}` : `${field}`;
+      if (v.varint !== undefined) out.push({ path, val: Number(v.varint) });
+      if (v.msg !== undefined) flatten(v.msg, path, out);
+    }
+  }
+}
+
+function fnum(tree: FieldTree, path: string): number {
+  const v = getPath(tree, path)?.varint;
+  return v === undefined ? 0 : Number(v);
+}
+
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((p, q) => p - q);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+function main(): void {
+  const files = readdirSync(CONV_DIR)
+    .filter((f) => f.endsWith('.db'))
+    .sort();
+
+  // formula label -> path -> match count
+  const formulaPathHits = new Map<string, Map<string, number>>();
+  const formulas: Array<{
+    label: string;
+    sum: (a: number, b: number, c: number, d: number, e: number) => number;
+  }> = [
+    {
+      label: 'promptFull + c                 (NO 9, NO 10 — cache_creation world)',
+      sum: (a, b, c) => a + b + c,
+    },
+    { label: 'promptFull + c + d(5.9.9)       (9 = thoughts)', sum: (a, b, c, d) => a + b + c + d },
+    {
+      label: 'promptFull + c + e(5.9.10)      (10 = thoughts)',
+      sum: (a, b, c, _d, e) => a + b + c + e,
+    },
+    {
+      label: 'promptFull + c + d + e          (9 AND 10 added)',
+      sum: (a, b, c, d, e) => a + b + c + d + e,
+    },
+    {
+      label: 'promptFull + d + e              (c not in total)',
+      sum: (a, b, _c, d, e) => a + b + d + e,
+    },
+  ];
+  for (const f of formulas) formulaPathHits.set(f.label, new Map());
+
+  let decisive = 0;
+  const eOverOutput: number[] = [];
+  const eOverPrompt: number[] = [];
+  const dOverOutput: number[] = [];
+  let cacheHitWithCreation = 0;
+  let cacheHitRows = 0;
+  let budget = STEP_BUDGET;
+
+  for (const file of files) {
+    if (budget <= 0) break;
+    const db = new Database(join(CONV_DIR, file), { readonly: true });
+    try {
+      const rows = db
+        .query(
+          'SELECT rowid AS rid, step_type, step_payload FROM "steps" WHERE step_type IN (15,23) ORDER BY rowid ASC',
+        )
+        .all() as SqliteRawRow[];
+      for (const r of rows) {
+        if (budget <= 0) break;
+        if (!r.step_payload) continue;
+        const payload =
+          r.step_payload instanceof Uint8Array ? r.step_payload : new Uint8Array(r.step_payload);
+        const tree = scanProto(payload);
+        const a = fnum(tree, '5.9.2');
+        const c = fnum(tree, '5.9.3');
+        const b = fnum(tree, '5.9.5');
+        const d = fnum(tree, '5.9.9');
+        const e = fnum(tree, '5.9.10');
+        if (a === 0 && b === 0 && c === 0) continue; // no usage envelope
+        budget -= 1;
+
+        const promptFull = a + b;
+        if (b > 0) {
+          cacheHitRows += 1;
+          if (e > 0) cacheHitWithCreation += 1;
+        }
+        if (c > 0) {
+          eOverOutput.push(e / c);
+          dOverOutput.push(d / c);
+        }
+        if (promptFull > 0) eOverPrompt.push(e / promptFull);
+
+        // flatten full proto, search for the candidate totals (skip trivially-small sums to avoid coincidence)
+        const leaves: Leaf[] = [];
+        flatten(tree, '', leaves);
+        decisive += 1;
+        for (const f of formulas) {
+          const target = f.sum(a, b, c, d, e);
+          if (target < 50) continue; // avoid coincidental small matches
+          const bucket = formulaPathHits.get(f.label) as Map<string, number>;
+          for (const leaf of leaves) {
+            // don't let a component field count as "the total" of itself
+            if (
+              leaf.path === '5.9.2' ||
+              leaf.path === '5.9.3' ||
+              leaf.path === '5.9.5' ||
+              leaf.path === '5.9.9' ||
+              leaf.path === '5.9.10'
+            )
+              continue;
+            if (leaf.val === target) bucket.set(leaf.path, (bucket.get(leaf.path) ?? 0) + 1);
+          }
+        }
+      }
+    } finally {
+      db.close();
+    }
+  }
+
+  console.log(`steps analyzed: ${decisive.toLocaleString()}`);
+  console.log('\n================ TOTAL-FIELD HUNT ================');
+  console.log(
+    'For each candidate composition, the proto paths whose value == that sum, and how often:',
+  );
+  for (const f of formulas) {
+    const bucket = formulaPathHits.get(f.label) as Map<string, number>;
+    const ranked = [...bucket.entries()].sort((p, q) => q[1] - p[1]).slice(0, 4);
+    console.log(`\n  [${f.label}]`);
+    if (ranked.length === 0) {
+      console.log('     (no proto field consistently equals this sum)');
+    } else {
+      for (const [path, count] of ranked) {
+        const pct = ((count / decisive) * 100).toFixed(1);
+        console.log(`     path ${path}: matches in ${count.toLocaleString()} steps (${pct}%)`);
+      }
+    }
+  }
+
+  console.log('\n================ CORRELATION / ANOMALY BACKSTOPS ================');
+  console.log(
+    `median ratio 5.9.10 / output(5.9.3):    ${median(eOverOutput).toFixed(3)}   (stable & ~const ⇒ generation-side / thoughts)`,
+  );
+  console.log(
+    `median ratio 5.9.10 / promptFull(2+5):  ${median(eOverPrompt).toFixed(5)}  (tiny/erratic ⇒ NOT a prompt subset ⇒ NOT cache-creation)`,
+  );
+  console.log(`median ratio 5.9.9  / output(5.9.3):    ${median(dOverOutput).toFixed(3)}`);
+  console.log(
+    `\ncache-HIT rows (5.9.5>0): ${cacheHitRows.toLocaleString()}; of those with 5.9.10>0 simultaneously: ${cacheHitWithCreation.toLocaleString()}` +
+      ` (${cacheHitRows ? ((cacheHitWithCreation / cacheHitRows) * 100).toFixed(1) : '0'}%)`,
+  );
+  console.log(
+    '  (If 5.9.10 were genuine cache-CREATION, it should be ~0 on a cache HIT — you do not re-create an already-cached prefix. High % ⇒ 5.9.10 is NOT cache-creation.)',
+  );
+}
+
+main();

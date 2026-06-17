@@ -1,0 +1,16 @@
+import * as fs from 'fs';
+
+const path =
+  '/Users/onurseckinsenoglu/.claude/projects/-Users-onurseckinsenoglu-repos-proxai-proxai-gateway/bf1f6a01-0ba3-41ae-9a54-59d07bf25cb2.jsonl';
+const content = fs.readFileSync(path, 'utf8');
+const lines = content.split('\n').filter(Boolean);
+
+let count = 0;
+for (const line of lines) {
+  const obj = JSON.parse(line);
+  if (obj.type === 'user') {
+    console.log(`User message #${++count}:`);
+    console.log(JSON.stringify(obj, null, 2));
+    if (count >= 2) break;
+  }
+}

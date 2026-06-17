@@ -1,0 +1,166 @@
+/**
+ * READ-ONLY prod probe to settle two questions:
+ *
+ *  Q1 (linchpin): Is gateway proto field 5.9.2 ("promptTokens") the NON-CACHED
+ *      prompt portion (interpretation A) or Gemini's full promptTokenCount which
+ *      already includes cached (interpretation B)?
+ *
+ *      Because gateway sets input_tokens = 5.9.2 + 5.9.5 and cache_read = 5.9.5,
+ *      and nest's max(0, input - cacheRead) never clamps (input >= cacheRead by
+ *      construction), DB.inputTokens = Σ(5.9.2) and DB.cacheReadInputTokens =
+ *      Σ(5.9.5). Under interpretation B, 5.9.2 >= 5.9.5 per step, so
+ *      Σ(5.9.2) >= Σ(5.9.5) ALWAYS. Therefore ANY AgentCallRecord with
+ *      inputTokens < cacheReadInputTokens PROVES interpretation A (fix correct).
+ *
+ *  Q2 (root cause): how much does each agent actually use caching? Drives the
+ *      "74M Gemini vs 3.7M Claude Code" comparison — Claude Code's stored
+ *      inputTokens is non-cached and CC caches aggressively, so its cache-read
+ *      fraction should be high; if Gemini's is low, the subtraction "fix" barely
+ *      changes the magnitude and the 74M is genuine fresh input, not a bucketing
+ *      artifact.
+ *
+ * Uses POSTGRES_URL_READ_ONLY_PROD via the makeReadOnlyClient proxy (writes throw).
+ * Run: bun run "scripts/Gemini stats/verify_token_semantics.ts"
+ */
+import { PrismaClient } from '@prisma/client';
+import { makeReadOnlyClient } from '../clone-proxai-devs/lib/readonly-prod';
+
+const AGENTS = ['gemini', 'CLAUDE_CODE', 'CODEX', 'CURSOR', 'CLAUDE_DESKTOP'];
+const SAMPLE_CAP = 60_000;
+
+interface TokenTuple {
+  inputTokens: number | null;
+  cacheReadInputTokens: number | null;
+  cacheCreationInputTokens: number | null;
+  outputTokens: number | null;
+}
+
+function pct(parts: number, whole: number): string {
+  if (whole === 0) return 'n/a';
+  return `${((parts / whole) * 100).toFixed(1)}%`;
+}
+
+function median(nums: number[]): number {
+  if (nums.length === 0) return 0;
+  const sorted = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? Math.round((sorted[mid - 1] + sorted[mid]) / 2) : sorted[mid];
+}
+
+async function main(): Promise<void> {
+  const url = process.env.POSTGRES_URL_READ_ONLY_PROD;
+  if (!url) {
+    console.error('POSTGRES_URL_READ_ONLY_PROD is not set.');
+    process.exit(1);
+  }
+  const rawPrisma = new PrismaClient({ datasources: { db: { url } } });
+  const prisma = makeReadOnlyClient(rawPrisma);
+
+  try {
+    for (const agent of AGENTS) {
+      console.log(`\n================ agent: ${agent} ================`);
+
+      const total = await prisma.agentCallRecord.count({ where: { agent } });
+      const withInput = await prisma.agentCallRecord.count({
+        where: { agent, inputTokens: { not: null } },
+      });
+
+      const sums = await prisma.agentCallRecord.aggregate({
+        where: { agent },
+        _sum: {
+          inputTokens: true,
+          cacheReadInputTokens: true,
+          cacheCreationInputTokens: true,
+          outputTokens: true,
+        },
+      });
+
+      const sumInput = sums._sum.inputTokens ?? 0;
+      const sumCacheRead = sums._sum.cacheReadInputTokens ?? 0;
+      const sumCacheCreate = sums._sum.cacheCreationInputTokens ?? 0;
+      const sumOutput = sums._sum.outputTokens ?? 0;
+
+      console.log(`rows total:                 ${total.toLocaleString()}`);
+      console.log(`rows with input_tokens:     ${withInput.toLocaleString()}`);
+      console.log(`Σ inputTokens (stored):     ${sumInput.toLocaleString()}`);
+      console.log(`Σ cacheReadInputTokens:     ${sumCacheRead.toLocaleString()}`);
+      console.log(`Σ cacheCreationInputTokens: ${sumCacheCreate.toLocaleString()}`);
+      console.log(`Σ outputTokens:             ${sumOutput.toLocaleString()}`);
+      console.log(`Σ total prompt (input+read):${(sumInput + sumCacheRead).toLocaleString()}`);
+      console.log(
+        `cache-read fraction of total prompt: ${pct(sumCacheRead, sumInput + sumCacheRead)}  ` +
+          `(higher = more caching; CC should be high, Gemini tells us the truth)`,
+      );
+
+      // Decisive sample: pull token tuples (bounded), compute per-row signals.
+      const sample = (await prisma.agentCallRecord.findMany({
+        where: { agent, inputTokens: { not: null } },
+        select: {
+          inputTokens: true,
+          cacheReadInputTokens: true,
+          cacheCreationInputTokens: true,
+          outputTokens: true,
+        },
+        orderBy: { capturedAtUtc: 'desc' },
+        take: SAMPLE_CAP,
+      })) as TokenTuple[];
+
+      let inputLtCacheRead = 0;
+      let cachedRows = 0;
+      let cacheCreateRows = 0;
+      const inputs: number[] = [];
+      const examples: TokenTuple[] = [];
+      for (const r of sample) {
+        const inp = r.inputTokens ?? 0;
+        const cr = r.cacheReadInputTokens ?? 0;
+        const cc = r.cacheCreationInputTokens ?? 0;
+        inputs.push(inp);
+        if (cr > 0) cachedRows++;
+        if (cc > 0) cacheCreateRows++;
+        if (inp < cr) {
+          inputLtCacheRead++;
+          if (examples.length < 5) examples.push(r);
+        }
+      }
+
+      console.log(
+        `\n  sample size:                ${sample.length.toLocaleString()} (most recent, cap ${SAMPLE_CAP.toLocaleString()})`,
+      );
+      console.log(
+        `  rows w/ cacheRead > 0:      ${cachedRows.toLocaleString()} (${pct(cachedRows, sample.length)})`,
+      );
+      console.log(
+        `  rows w/ cacheCreation > 0:  ${cacheCreateRows.toLocaleString()} (${pct(cacheCreateRows, sample.length)})`,
+      );
+      console.log(`  median inputTokens:         ${median(inputs).toLocaleString()}`);
+      console.log(
+        `  >>> rows with inputTokens < cacheReadInputTokens: ${inputLtCacheRead.toLocaleString()} <<<`,
+      );
+      if (agent === 'gemini') {
+        if (inputLtCacheRead > 0) {
+          console.log(
+            `  ==> PROVES interpretation A: proto 5.9.2 is NON-CACHED. The nest subtraction is semantically correct.`,
+          );
+          for (const e of examples) {
+            console.log(
+              `      e.g. input=${e.inputTokens} cacheRead=${e.cacheReadInputTokens} cacheCreate=${e.cacheCreationInputTokens} output=${e.outputTokens}`,
+            );
+          }
+        } else {
+          console.log(
+            `  ==> No input<cacheRead found in sample. Inconclusive between B (double-count bug) and A-with-light-caching.`,
+          );
+          console.log(
+            `      Lean on cache-read fraction above + the gateway test fixture + external Gemini docs to decide.`,
+          );
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Probe failed:', e);
+  } finally {
+    await rawPrisma.$disconnect();
+  }
+}
+
+main().catch(console.error);

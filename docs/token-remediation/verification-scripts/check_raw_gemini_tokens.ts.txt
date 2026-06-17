@@ -1,0 +1,167 @@
+import { PrismaClient } from '@prisma/client';
+import { makeReadOnlyClient } from '../clone-proxai-devs/lib/readonly-prod';
+import { parseGeminiBody } from '../../src/agent-gateway/parsers/gemini/gemini.utils';
+import { decompressWithTimeout } from '../../src/agent-gateway/parsers/_base/decompress-with-timeout';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+
+async function fetchS3Body(s3: S3Client, bucket: string, s3Key: string): Promise<Buffer> {
+  const response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: s3Key }));
+  if (!response.Body) throw new Error('No body');
+  const bytes = await response.Body.transformToByteArray();
+  return Buffer.from(bytes);
+}
+
+async function main() {
+  const url = process.env.POSTGRES_URL_READ_ONLY_PROD;
+  if (!url) {
+    console.error('Error: POSTGRES_URL_READ_ONLY_PROD is not defined.');
+    process.exit(1);
+  }
+
+  const accessKeyId = process.env.GATEWAY_BUCKET_ACCESS_KEY_ID_PRODUCTION;
+  const secretAccessKey = process.env.GATEWAY_BUCKET_SECRET_ACCESS_KEY_PRODUCTION;
+  const endpoint = process.env.GATEWAY_BUCKET_ENDPOINT_PRODUCTION;
+  const region = process.env.GATEWAY_BUCKET_REGION_PRODUCTION ?? 'us-east-1';
+  const bucket = process.env.GATEWAY_BUCKET_NAME_PRODUCTION;
+
+  if (!bucket || !endpoint) {
+    console.error('Error: Production S3 configuration environment variables are missing.');
+    process.exit(1);
+  }
+
+  const s3 = new S3Client({
+    endpoint,
+    region,
+    credentials: accessKeyId ? { accessKeyId, secretAccessKey: secretAccessKey ?? '' } : undefined,
+    forcePathStyle: false, // Tigris doesn't require force path style
+  });
+
+  const rawPrisma = new PrismaClient({
+    datasources: { db: { url } },
+  });
+  const prisma = makeReadOnlyClient(rawPrisma);
+
+  try {
+    const user = await prisma.user.findFirst({
+      where: { email: 'onur@proxai.co' },
+    });
+    if (!user) {
+      console.error('User not found');
+      return;
+    }
+
+    // Fetch the last 5 Gemini call records
+    const records = await prisma.agentCallRecord.findMany({
+      where: { userId: user.id, agent: 'gemini' },
+      orderBy: { capturedAtUtc: 'desc' },
+      take: 5,
+    });
+
+    console.log(`Analyzing last ${records.length} Gemini records using DB + S3:\n`);
+
+    for (const r of records) {
+      console.log(`==================================================`);
+      console.log(`Record ID:  ${r.id}`);
+      console.log(`Turn ID:    ${r.turnId}`);
+      console.log(`Captured:   ${r.capturedAtUtc?.toISOString()}`);
+      console.log(`DB Columns:`);
+      console.log(`  inputTokens (Col):            ${r.inputTokens}`);
+      console.log(`  cacheReadInputTokens (Col):   ${r.cacheReadInputTokens}`);
+      console.log(`  cacheCreationInputTokens:     ${r.cacheCreationInputTokens}`);
+      console.log(`  outputTokens (Col):           ${r.outputTokens}`);
+
+      // Let's find the raw captures for this chat and turn
+      const captures = await prisma.agentRawCapture.findMany({
+        where: {
+          id: {
+            in: [r.firstCaptureId, r.lastCaptureId].filter(Boolean) as string[],
+          },
+        },
+      });
+
+      console.log(`Raw Captures found: ${captures.length}`);
+
+      let sumRawInput = 0;
+      let sumRawCacheRead = 0;
+      let sumRawCacheCreate = 0;
+      let sumRawOutput = 0;
+      let foundStepsCount = 0;
+
+      for (const cap of captures) {
+        let rawBody: Buffer;
+        try {
+          rawBody = await fetchS3Body(s3, bucket, cap.s3Key);
+        } catch (err) {
+          console.error(`Failed to fetch capture ${cap.id} from S3:`, err);
+          continue;
+        }
+
+        let decompressed: Buffer;
+        try {
+          decompressed = await decompressWithTimeout(rawBody);
+        } catch (err) {
+          console.error(`Failed to decompress capture ${cap.id}:`, err);
+          continue;
+        }
+        const text = decompressed.toString('utf8');
+        const rows = parseGeminiBody(text);
+
+        const steps = rows.filter((row) => row.kind === 'step' && row.role !== 'user');
+
+        if (steps.length > 0) {
+          foundStepsCount += steps.length;
+          for (const step of steps) {
+            if (step.kind === 'step') {
+              console.log(
+                `  -> Step idx ${step.idx} (${step.role}), turnId: "${step.turnId}", conversationId: "${step.conversationId}":`,
+              );
+              console.log(`     raw input_tokens:            ${step.input_tokens}`);
+              console.log(`     raw cache_read_input_tokens:   ${step.cache_read_input_tokens}`);
+              console.log(
+                `     raw cache_create_input_tokens: ${step.cache_creation_input_tokens}`,
+              );
+              console.log(`     raw output_tokens:           ${step.output_tokens}`);
+
+              const rawInput = step.input_tokens ?? 0;
+              const rawCacheRead = step.cache_read_input_tokens ?? 0;
+              const rawCacheCreate = step.cache_creation_input_tokens ?? 0;
+              const rawOutput = step.output_tokens ?? 0;
+
+              sumRawInput += rawInput;
+              sumRawCacheRead += rawCacheRead;
+              sumRawCacheCreate += rawCacheCreate;
+              sumRawOutput += rawOutput;
+            }
+          }
+        }
+      }
+
+      console.log(`\nAggregated Raw Values (from S3 json):`);
+      console.log(`  Sum Raw input_tokens:             ${sumRawInput}`);
+      console.log(`  Sum Raw cache_read_input_tokens:  ${sumRawCacheRead}`);
+      console.log(`  Sum Raw cache_create_input_tokens:${sumRawCacheCreate}`);
+      console.log(`  Sum Raw output_tokens:            ${sumRawOutput}`);
+
+      const calculatedNetInput = sumRawInput - sumRawCacheRead;
+      console.log(`\nCalculated Net Input (Raw Input - Raw Cache Read): ${calculatedNetInput}`);
+      console.log(`Mismatch Checks:`);
+      console.log(
+        `  Input tokens match?  ${calculatedNetInput === r.inputTokens ? 'YES ✅' : 'NO ❌'}`,
+      );
+      console.log(
+        `  Cache Read match?    ${sumRawCacheRead === r.cacheReadInputTokens ? 'YES ✅' : 'NO ❌'}`,
+      );
+      console.log(
+        `  Cache Create match?  ${sumRawCacheCreate === r.cacheCreationInputTokens ? 'YES ✅' : 'NO ❌'}`,
+      );
+      console.log(`  Output tokens match? ${sumRawOutput === r.outputTokens ? 'YES ✅' : 'NO ❌'}`);
+      console.log(`==================================================\n`);
+    }
+  } catch (e) {
+    console.error(e);
+  } finally {
+    await rawPrisma.$disconnect();
+  }
+}
+
+main().catch(console.error);

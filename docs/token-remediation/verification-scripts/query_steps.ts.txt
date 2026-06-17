@@ -1,0 +1,61 @@
+import { Database } from 'bun:sqlite';
+import { decodeStep } from '/Users/onurseckinsenoglu/repos/proxai/proxai_gateway/src/sources/gemini/step-decode';
+
+interface SqliteStepRow {
+  rid: number;
+  idx: number | null;
+  step_type: number | null;
+  status: number | null;
+  step_payload: Uint8Array | null;
+}
+
+async function main() {
+  const dbPath =
+    '/Users/onurseckinsenoglu/.gemini/antigravity-cli/conversations/cfcd59f0-61db-41cc-abcc-e92226040185.db';
+  console.log(`Opening SQLite DB: ${dbPath}`);
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const rows = db
+      .query(
+        `
+      SELECT rowid AS rid, idx, step_type, status, step_payload 
+      FROM "steps" 
+      ORDER BY rowid ASC
+    `,
+      )
+      .all() as SqliteStepRow[];
+
+    console.log(`Found ${rows.length} steps in database.`);
+    console.log(
+      `\nRowID | Idx | Type | Role | Model | TurnID | InTokens | OutTokens | CacheRead | CacheCreate`,
+    );
+    console.log(
+      `------------------------------------------------------------------------------------------------`,
+    );
+
+    for (const r of rows) {
+      const payload = r.step_payload instanceof Uint8Array ? r.step_payload : new Uint8Array();
+      const step = decodeStep(r.step_type ?? 0, payload);
+
+      console.log(
+        `${r.rid.toString().padEnd(5)} | ` +
+          `${(r.idx ?? '').toString().padEnd(3)} | ` +
+          `${(r.step_type ?? '').toString().padEnd(4)} | ` +
+          `${(step.role ?? 'null').padEnd(9)} | ` +
+          `${(step.model ?? 'null').substring(0, 15).padEnd(15)} | ` +
+          `${(step.ids.turnGroup ?? 'null').substring(0, 8).padEnd(8)} | ` +
+          `${(step.inputTokens ?? 'null').toString().padEnd(8)} | ` +
+          `${(step.outputTokens ?? 'null').toString().padEnd(9)} | ` +
+          `${(step.cacheReadInputTokens ?? 'null').toString().padEnd(9)} | ` +
+          `${(step.cacheCreationInputTokens ?? 'null').toString()}`,
+      );
+    }
+  } catch (err) {
+    console.error('Error querying SQLite DB:', err);
+  } finally {
+    db.close();
+  }
+}
+
+main().catch(console.error);

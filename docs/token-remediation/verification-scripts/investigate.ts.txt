@@ -1,0 +1,116 @@
+import { PrismaClient } from '@prisma/client';
+import { makeReadOnlyClient } from '../clone-proxai-devs/lib/readonly-prod';
+
+interface MessageContent {
+  type: string;
+  text?: string | null;
+  tool_content?: {
+    name?: string | null;
+    kind?: string | null;
+  } | null;
+}
+
+async function main() {
+  const url = process.env.POSTGRES_URL_READ_ONLY_PROD;
+  if (!url) {
+    console.error('Error: POSTGRES_URL_READ_ONLY_PROD environment variable is not defined.');
+    process.exit(1);
+  }
+
+  const rawPrisma = new PrismaClient({
+    datasources: {
+      db: { url },
+    },
+  });
+  const prisma = makeReadOnlyClient(rawPrisma);
+
+  try {
+    const user = await prisma.user.findFirst({
+      where: { email: 'onur@proxai.co' },
+    });
+
+    if (!user) {
+      console.error('User not found: onur@proxai.co');
+      return;
+    }
+
+    console.log(`Found User ID: ${user.id} for email onur@proxai.co`);
+
+    const records = await prisma.agentCallRecord.findMany({
+      where: {
+        userId: user.id,
+        agent: 'gemini',
+      },
+      orderBy: {
+        capturedAtUtc: 'desc',
+      },
+      take: 10,
+    });
+
+    console.log(`\n--- Last 10 Gemini Call Records ---`);
+    for (const r of records) {
+      console.log(`Record ID: ${r.id}`);
+      console.log(`Chat ID:   ${r.chatId}`);
+      console.log(`Turn ID:   ${r.turnId}`);
+      console.log(`Date:      ${r.capturedAtUtc?.toISOString()}`);
+      console.log(`Input Tokens (Total): ${r.inputTokens}`);
+      console.log(`Output Tokens:        ${r.outputTokens}`);
+      console.log(`Cache Read Tokens:    ${r.cacheReadInputTokens ?? 'N/A'}`);
+      console.log(`Cache Create Tokens:  ${r.cacheCreationInputTokens ?? 'N/A'}`);
+      console.log(`User Prompt:          ${r.userInputText?.substring(0, 80)}...`);
+      console.log(`Final Response:       ${r.finalText?.substring(0, 80)}...`);
+
+      const content = r.resultContent as unknown as MessageContent[] | null;
+      if (Array.isArray(content)) {
+        console.log(`Steps in Turn:        ${content.length}`);
+        content.forEach((step, idx) => {
+          if (step && typeof step === 'object') {
+            console.log(
+              `  Step ${idx + 1}: type=${step.type}, text=${typeof step.text === 'string' ? step.text.substring(0, 50) : 'null'}`,
+            );
+            if (step.tool_content) {
+              const tool = step.tool_content;
+              console.log(`    Tool: name=${tool.name}, kind=${tool.kind}`);
+            }
+          }
+        });
+      }
+      console.log('------------------------------------');
+    }
+
+    const geminiStats = await prisma.agentCallRecord.aggregate({
+      where: { userId: user.id, agent: 'gemini' },
+      _avg: { inputTokens: true, outputTokens: true },
+      _count: true,
+    });
+
+    const cursorStats = await prisma.agentCallRecord.aggregate({
+      where: { userId: user.id, agent: 'CURSOR' },
+      _avg: { inputTokens: true, outputTokens: true },
+      _count: true,
+    });
+
+    const claudeStats = await prisma.agentCallRecord.aggregate({
+      where: { userId: user.id, agent: 'CLAUDE_CODE' },
+      _avg: { inputTokens: true, outputTokens: true },
+      _count: true,
+    });
+
+    console.log(`\n=== Comparison Averages for onur@proxai.co ===`);
+    console.log(
+      `Gemini      - Count: ${geminiStats._count}, Avg Input: ${geminiStats._avg.inputTokens?.toFixed(1)}, Avg Output: ${geminiStats._avg.outputTokens?.toFixed(1)}`,
+    );
+    console.log(
+      `Cursor      - Count: ${cursorStats._count}, Avg Input: ${cursorStats._avg.inputTokens?.toFixed(1)}, Avg Output: ${cursorStats._avg.outputTokens?.toFixed(1)}`,
+    );
+    console.log(
+      `Claude Code - Count: ${claudeStats._count}, Avg Input: ${claudeStats._avg.inputTokens?.toFixed(1)}, Avg Output: ${claudeStats._avg.outputTokens?.toFixed(1)}`,
+    );
+  } catch (e) {
+    console.error('Error during query:', e);
+  } finally {
+    await rawPrisma.$disconnect();
+  }
+}
+
+main().catch(console.error);

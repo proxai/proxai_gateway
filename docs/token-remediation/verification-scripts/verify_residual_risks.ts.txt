@@ -1,0 +1,96 @@
+/**
+ * READ-ONLY prod checks for two residual findings from the verification workflow:
+ *  R1: cache_creation (proto 5.9.10) is likely thoughtsTokenCount (thinking), not cache-creation.
+ *      Signal: cacheCreation present on ~all rows AND a meaningful fraction of output (thoughts pattern),
+ *      vs sparse one-time spikes (true cache-creation pattern).
+ *  R2: idle-flush prevalence (flush_reason='idle_timeout') sizes how often the mid-turn-drop path fires.
+ *
+ * Read-only via POSTGRES_URL_READ_ONLY_PROD + makeReadOnlyClient.
+ * Run: bun run "scripts/Gemini stats/verify_residual_risks.ts"
+ */
+import { PrismaClient } from '@prisma/client';
+import { makeReadOnlyClient } from '../clone-proxai-devs/lib/readonly-prod';
+
+async function main(): Promise<void> {
+  const url = process.env.POSTGRES_URL_READ_ONLY_PROD;
+  if (!url) {
+    console.error('POSTGRES_URL_READ_ONLY_PROD is not set.');
+    process.exit(1);
+  }
+  const rawPrisma = new PrismaClient({ datasources: { db: { url } } });
+  const prisma = makeReadOnlyClient(rawPrisma);
+
+  try {
+    // R1 — cache_creation vs output relationship for gemini.
+    console.log('=== R1: Gemini cache_creation (5.9.10) shape vs output ===');
+    const gemSums = await prisma.agentCallRecord.aggregate({
+      where: { agent: 'gemini' },
+      _sum: { cacheCreationInputTokens: true, outputTokens: true, inputTokens: true },
+    });
+    const cc = gemSums._sum.cacheCreationInputTokens ?? 0;
+    const out = gemSums._sum.outputTokens ?? 0;
+    console.log(`  Σ cacheCreation = ${cc.toLocaleString()}`);
+    console.log(`  Σ output        = ${out.toLocaleString()}`);
+    console.log(
+      `  cacheCreation / output = ${out ? ((cc / out) * 100).toFixed(1) : 'n/a'}%  ` +
+        `(high & steady ⇒ thinking-tokens; tiny & spiky ⇒ real cache-creation)`,
+    );
+    const gemRows = await prisma.agentCallRecord.findMany({
+      where: { agent: 'gemini', outputTokens: { not: null } },
+      select: { cacheCreationInputTokens: true, outputTokens: true },
+      orderBy: { capturedAtUtc: 'desc' },
+      take: 40000,
+    });
+    let ccPresent = 0;
+    let ccGtOutput = 0;
+    let ccZeroOutPos = 0;
+    for (const r of gemRows) {
+      const c = r.cacheCreationInputTokens ?? 0;
+      const o = r.outputTokens ?? 0;
+      if (c > 0) ccPresent++;
+      if (c > o) ccGtOutput++;
+      if (c === 0 && o > 0) ccZeroOutPos++;
+    }
+    console.log(`  sample rows (output not null): ${gemRows.length.toLocaleString()}`);
+    console.log(
+      `  rows w/ cacheCreation>0:       ${ccPresent.toLocaleString()} (${((ccPresent / gemRows.length) * 100).toFixed(1)}%)`,
+    );
+    console.log(
+      `  rows w/ cacheCreation>output:  ${ccGtOutput.toLocaleString()} (would be abnormal for thoughts)`,
+    );
+    console.log(
+      `  rows w/ output>0 but cc==0:    ${ccZeroOutPos.toLocaleString()} (thoughts can legitimately be 0 on non-thinking turns)`,
+    );
+
+    // R2 — idle-flush prevalence by flush_reason × status (gemini).
+    console.log('\n=== R2: Gemini flush_reason × status (idle-flush mid-turn drop path) ===');
+    const grouped = await prisma.agentCallRecord.groupBy({
+      by: ['flushReason', 'status'],
+      where: { agent: 'gemini' },
+      _count: { _all: true },
+    });
+    for (const g of grouped.sort((a, b) => (b._count._all ?? 0) - (a._count._all ?? 0))) {
+      console.log(
+        `  flush_reason=${String(g.flushReason)} status=${String(g.status)} -> ${g._count._all}`,
+      );
+    }
+
+    // Also for codex/claude-code, idle context for comparison.
+    console.log('\n=== flush_reason totals across agents ===');
+    for (const agent of ['gemini', 'CODEX', 'CLAUDE_CODE']) {
+      const g = await prisma.agentCallRecord.groupBy({
+        by: ['flushReason'],
+        where: { agent },
+        _count: { _all: true },
+      });
+      const parts = g.map((x) => `${String(x.flushReason)}:${x._count._all}`).join('  ');
+      console.log(`  ${agent}: ${parts}`);
+    }
+  } catch (e) {
+    console.error('Probe failed:', e);
+  } finally {
+    await rawPrisma.$disconnect();
+  }
+}
+
+main().catch(console.error);

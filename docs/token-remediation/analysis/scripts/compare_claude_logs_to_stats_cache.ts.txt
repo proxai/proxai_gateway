@@ -1,0 +1,161 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
+interface StatsCache {
+  modelUsage?: Record<
+    string,
+    {
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadInputTokens: number;
+      cacheCreationInputTokens: number;
+    }
+  >;
+}
+
+interface UsageBlock {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+}
+
+interface ClaudeRecord {
+  model?: string;
+  requestId?: string;
+  message?: {
+    model?: string;
+    id?: string;
+    usage?: UsageBlock;
+  };
+}
+
+function getFiles(dir: string, ext: string): string[] {
+  let results: string[] = [];
+  if (!fs.existsSync(dir)) return results;
+  const list = fs.readdirSync(dir);
+  list.forEach((file) => {
+    const filePath = path.join(dir, file);
+    const stat = fs.statSync(filePath);
+    if (stat && stat.isDirectory()) {
+      results = results.concat(getFiles(filePath, ext));
+    } else if (file.endsWith(ext)) {
+      results.push(filePath);
+    }
+  });
+  return results;
+}
+
+function loadStatsCache(): StatsCache {
+  const filePath = '/Users/onurseckinsenoglu/.claude/stats-cache.json';
+  if (!fs.existsSync(filePath)) {
+    console.error('Stats cache not found!');
+    return {};
+  }
+  return JSON.parse(fs.readFileSync(filePath, 'utf8')) as StatsCache;
+}
+
+async function main() {
+  const stats = loadStatsCache();
+  const projectsDir = '/Users/onurseckinsenoglu/.claude/projects/';
+  const files = getFiles(projectsDir, '.jsonl');
+
+  console.log(`Found ${files.length} project JSONL files.`);
+
+  const computedUsage: Record<
+    string,
+    {
+      inputTokens: number;
+      outputTokens: number;
+      cacheRead: number;
+      cacheWrite: number;
+      callsCount: number;
+    }
+  > = {};
+
+  for (const file of files) {
+    try {
+      const content = fs.readFileSync(file, 'utf8');
+      const lines = content.split('\n');
+
+      // Keep track of the latest usage block for each unique request ID in this session
+      const reqUsages = new Map<string, { model: string; usage: UsageBlock }>();
+
+      for (const line of lines) {
+        if (line.trim().length === 0) continue;
+        const parsed = JSON.parse(line) as ClaudeRecord;
+        const usage = parsed.message?.usage;
+        const model = parsed.message?.model || parsed.model;
+        const reqId = parsed.requestId || parsed.message?.id;
+
+        if (usage && model && model !== '<synthetic>' && reqId) {
+          // Overwrite with the latest usage block (or the one with the maximum output tokens)
+          const existing = reqUsages.get(reqId);
+          if (!existing || (usage.output_tokens ?? 0) > (existing.usage.output_tokens ?? 0)) {
+            reqUsages.set(reqId, { model, usage });
+          }
+        }
+      }
+
+      // Accumulate the final usage blocks for this session
+      for (const { model, usage } of reqUsages.values()) {
+        if (!computedUsage[model]) {
+          computedUsage[model] = {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            callsCount: 0,
+          };
+        }
+
+        const modelStats = computedUsage[model];
+        modelStats.callsCount++;
+        modelStats.inputTokens += usage.input_tokens ?? 0;
+        modelStats.outputTokens += usage.output_tokens ?? 0;
+        modelStats.cacheRead += usage.cache_read_input_tokens ?? 0;
+        modelStats.cacheWrite += usage.cache_creation_input_tokens ?? 0;
+      }
+    } catch (err) {
+      // Ignore
+    }
+  }
+
+  console.log('\n--- 📊 COMPARISON TABLE ---');
+  console.log(
+    'Model Name | Token Type | Expected (stats-cache.json) | Computed (Correct Deduplicated) | Diff',
+  );
+  console.log(
+    '-----------------------------------------------------------------------------------------',
+  );
+
+  if (stats.modelUsage) {
+    for (const [model, expected] of Object.entries(stats.modelUsage)) {
+      const computed = computedUsage[model] || {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        callsCount: 0,
+      };
+
+      const printRow = (type: string, expVal: number, compVal: number) => {
+        const diff = compVal - expVal;
+        const diffStr = diff === 0 ? 'MATCH' : diff > 0 ? `+${diff}` : `${diff}`;
+        console.log(
+          `${model.padEnd(28)} | ${type.padEnd(12)} | ${expVal.toLocaleString().padStart(12)} | ${compVal.toLocaleString().padStart(12)} | ${diffStr}`,
+        );
+      };
+
+      printRow('Input', expected.inputTokens, computed.inputTokens);
+      printRow('Output', expected.outputTokens, computed.outputTokens);
+      printRow('Cache Read', expected.cacheReadInputTokens, computed.cacheRead);
+      printRow('Cache Write', expected.cacheCreationInputTokens, computed.cacheWrite);
+      console.log(
+        '-----------------------------------------------------------------------------------------',
+      );
+    }
+  }
+}
+
+main().catch(console.error);

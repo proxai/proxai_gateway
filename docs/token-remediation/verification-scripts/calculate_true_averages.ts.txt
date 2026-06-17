@@ -1,0 +1,114 @@
+import { PrismaClient } from '@prisma/client';
+import { makeReadOnlyClient } from '../clone-proxai-devs/lib/readonly-prod';
+
+async function main() {
+  const url = process.env.POSTGRES_URL_READ_ONLY_PROD;
+  if (!url) {
+    console.error('Error: POSTGRES_URL_READ_ONLY_PROD environment variable is not defined.');
+    process.exit(1);
+  }
+
+  const rawPrisma = new PrismaClient({
+    datasources: {
+      db: { url },
+    },
+  });
+  const prisma = makeReadOnlyClient(rawPrisma);
+
+  try {
+    const user = await prisma.user.findFirst({
+      where: { email: 'onur@proxai.co' },
+    });
+
+    if (!user) {
+      console.error('User not found: onur@proxai.co');
+      return;
+    }
+
+    console.log(`Found User ID: ${user.id} for email onur@proxai.co`);
+
+    const agents = ['gemini', 'CLAUDE_CODE', 'CODEX'];
+
+    console.log(`\n=== Detailed Token Averages for onur@proxai.co ===`);
+
+    for (const agent of agents) {
+      const records = await prisma.agentCallRecord.findMany({
+        where: {
+          userId: user.id,
+          agent,
+        },
+        select: {
+          inputTokens: true,
+          cacheReadInputTokens: true,
+          cacheCreationInputTokens: true,
+          outputTokens: true,
+        },
+      });
+
+      const count = records.length;
+      if (count === 0) {
+        console.log(`${agent.padEnd(12)} - No records found`);
+        continue;
+      }
+
+      let sumInput = 0;
+      let sumCacheRead = 0;
+      let sumCacheCreate = 0;
+      let sumOutput = 0;
+      let sumTrueInput = 0;
+
+      let validInputCount = 0;
+      let validCacheReadCount = 0;
+      let validCacheCreateCount = 0;
+      let validOutputCount = 0;
+
+      for (const r of records) {
+        if (r.inputTokens !== null) {
+          sumInput += r.inputTokens;
+          validInputCount++;
+        }
+        if (r.cacheReadInputTokens !== null) {
+          sumCacheRead += r.cacheReadInputTokens;
+          validCacheReadCount++;
+        }
+        if (r.cacheCreationInputTokens !== null) {
+          sumCacheCreate += r.cacheCreationInputTokens;
+          validCacheCreateCount++;
+        }
+        if (r.outputTokens !== null) {
+          sumOutput += r.outputTokens;
+          validOutputCount++;
+        }
+
+        // True Input calculation
+        // For Claude Code: DB inputTokens is only non-cached. So True Input = inputTokens + cacheRead
+        // For Gemini/Codex: DB inputTokens is total. So True Input = inputTokens
+        if (agent === 'CLAUDE_CODE') {
+          sumTrueInput += (r.inputTokens ?? 0) + (r.cacheReadInputTokens ?? 0);
+        } else {
+          sumTrueInput += r.inputTokens ?? 0;
+        }
+      }
+
+      const avgInput = validInputCount > 0 ? sumInput / validInputCount : 0;
+      const avgCacheRead = validCacheReadCount > 0 ? sumCacheRead / validCacheReadCount : 0;
+      const avgCacheCreate = validCacheCreateCount > 0 ? sumCacheCreate / validCacheCreateCount : 0;
+      const avgOutput = validOutputCount > 0 ? sumOutput / validOutputCount : 0;
+      const avgTrueInput = sumTrueInput / count;
+
+      console.log(`${agent.padEnd(12)} - Count: ${count}`);
+      console.log(`  Avg DB inputTokens (Col):      ${avgInput.toFixed(1)}`);
+      console.log(`  Avg DB cacheReadInputTokens:   ${avgCacheRead.toFixed(1)}`);
+      console.log(`  Avg DB cacheCreateInputTokens: ${avgCacheCreate.toFixed(1)}`);
+      console.log(`  Avg DB outputTokens:           ${avgOutput.toFixed(1)}`);
+      console.log(`  Calculated True Avg Input:     ${avgTrueInput.toFixed(1)}`);
+      console.log(`  --------------------------------------------`);
+    }
+  } catch (e) {
+    console.error('Error:', e);
+  } finally {
+    await rawPrisma.$disconnect();
+  }
+}
+
+main().catch(console.error);

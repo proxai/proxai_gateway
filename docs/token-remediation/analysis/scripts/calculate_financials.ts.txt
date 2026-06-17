@@ -1,0 +1,368 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import { Database } from 'bun:sqlite';
+import { decodeStep } from '../../../../src/sources/gemini/step-decode';
+import { isDialogueRecord } from '../../../../src/sources/claude-code/collect';
+
+function getFiles(dir: string, ext: string): string[] {
+  let results: string[] = [];
+  if (!fs.existsSync(dir)) return results;
+  const list = fs.readdirSync(dir);
+  list.forEach((file) => {
+    const filePath = path.join(dir, file);
+    const stat = fs.statSync(filePath);
+    if (stat && stat.isDirectory()) {
+      results = results.concat(getFiles(filePath, ext));
+    } else if (file.endsWith(ext)) {
+      results.push(filePath);
+    }
+  });
+  return results;
+}
+
+// 1. CLAUDE CODE PRICING & CALCULATION (standard Claude Code jsonl sessions)
+const CLAUDE_PRICING: Record<
+  string,
+  { input: number; output: number; cacheWrite: number; cacheRead: number }
+> = {
+  opus: { input: 5.0, output: 25.0, cacheWrite: 6.25, cacheRead: 0.5 }, // Opus 4.7, 4.8
+  sonnet: { input: 3.0, output: 15.0, cacheWrite: 3.75, cacheRead: 0.3 }, // Sonnet 3.5, 4.5, 4.6
+  fable: { input: 10.0, output: 50.0, cacheWrite: 12.5, cacheRead: 1.0 }, // Fable 5 (premium-tier)
+  haiku: { input: 1.0, output: 5.0, cacheWrite: 1.25, cacheRead: 0.1 }, // Haiku 4.5
+};
+
+function getClaudeModelConfig(model: string) {
+  const m = model.toLowerCase();
+  if (m.includes('opus')) return CLAUDE_PRICING.opus;
+  if (m.includes('sonnet')) return CLAUEX_PRICING?.sonnet || CLAUDE_PRICING.sonnet;
+  if (m.includes('fable')) return CLAUDE_PRICING.fable;
+  if (m.includes('haiku')) return CLAUDE_PRICING.haiku;
+  return CLAUDE_PRICING.sonnet; // Fallback
+}
+
+interface ClaudeRecord {
+  model?: string;
+  message?: {
+    model?: string;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
+  };
+}
+
+async function calculateClaudeCodeFinancials() {
+  const claudeDir = '/Users/onurseckinsenoglu/.claude/projects/';
+  const files = getFiles(claudeDir, '.jsonl');
+
+  const modelStats: Record<
+    string,
+    {
+      rawCalls: number;
+      keptCalls: number;
+      rawInput: number;
+      keptInput: number;
+      rawOutput: number;
+      keptOutput: number;
+      rawCacheRead: number;
+      keptCacheRead: number;
+      rawCacheCreate: number;
+      keptCacheCreate: number;
+      rawCost: number;
+      keptCost: number;
+    }
+  > = {};
+
+  for (const file of files) {
+    try {
+      const content = fs.readFileSync(file, 'utf8');
+      const lines = content.split('\n');
+      for (const line of lines) {
+        if (line.trim().length === 0) continue;
+        const parsed = JSON.parse(line) as ClaudeRecord;
+        const usage = parsed.message?.usage;
+        const model = parsed.message?.model || parsed.model;
+        if (!model || model === '<synthetic>') continue;
+
+        if (!modelStats[model]) {
+          modelStats[model] = {
+            rawCalls: 0,
+            keptCalls: 0,
+            rawInput: 0,
+            keptInput: 0,
+            rawOutput: 0,
+            keptOutput: 0,
+            rawCacheRead: 0,
+            keptCacheRead: 0,
+            rawCacheCreate: 0,
+            keptCacheCreate: 0,
+            rawCost: 0,
+            keptCost: 0,
+          };
+        }
+
+        const stats = modelStats[model];
+        const prices = getClaudeModelConfig(model);
+
+        if (usage) {
+          stats.rawCalls++;
+          const input = usage.input_tokens ?? 0;
+          const output = usage.output_tokens ?? 0;
+          const read = usage.cache_read_input_tokens ?? 0;
+          const write = usage.cache_creation_input_tokens ?? 0;
+
+          stats.rawInput += input;
+          stats.rawOutput += output;
+          stats.rawCacheRead += read;
+          stats.rawCacheCreate += write;
+
+          const callCost =
+            (input * prices.input +
+              output * prices.output +
+              write * prices.cacheWrite +
+              read * prices.cacheRead) /
+            1000000;
+          stats.rawCost += callCost;
+
+          // isDialogueRecord checks if this turn is kept in the final DB
+          if (isDialogueRecord(parsed)) {
+            stats.keptCalls++;
+            stats.keptInput += input;
+            stats.keptOutput += output;
+            stats.keptCacheRead += read;
+            stats.keptCacheCreate += write;
+            stats.keptCost += callCost;
+          }
+        }
+      }
+    } catch {}
+  }
+  return modelStats;
+}
+
+// 2. GEMINI (ANTIGRAVITY) PRICING & CALCULATION
+// Model mappings:
+// '1132' -> Gemini 3.5 Flash
+// '1016' -> Gemini 3.1 Pro
+// '1050' -> Gemini 3.5 Flash (as verified by print_1050_metadata.ts)
+// '1035' -> Cloud Sonnet 4.6 (routed via Vertex AI under the hood of Antigravity CLI)
+const GEMINI_PRICING: Record<
+  string,
+  { input: number; output: number; cacheWrite: number; cacheRead: number; storage: number }
+> = {
+  '1132': { input: 1.5, output: 9.0, cacheWrite: 1.5, cacheRead: 0.15, storage: 0.02 }, // Gemini 3.5 Flash
+  '1050': { input: 1.5, output: 9.0, cacheWrite: 1.5, cacheRead: 0.15, storage: 0.02 }, // Gemini 3.5 Flash
+  '1016': { input: 2.0, output: 12.0, cacheWrite: 2.0, cacheRead: 0.5, storage: 0.05 }, // Gemini 3.1 Pro
+  '1035': { input: 3.0, output: 15.0, cacheWrite: 3.75, cacheRead: 0.3, storage: 0.0 }, // Cloud Sonnet 4.6 (Vertex AI)
+};
+
+function getGeminiPricing(modelId: string) {
+  return GEMINI_PRICING[modelId] || GEMINI_PRICING['1016']; // Default to Pro
+}
+
+interface StepRow {
+  step_type: number;
+  step_payload: Uint8Array;
+}
+
+async function calculateGeminiFinancials() {
+  const geminiDir = '/Users/onurseckinsenoglu/.gemini/antigravity-cli/conversations/';
+  const files = getFiles(geminiDir, '.db');
+
+  const modelStats: Record<
+    string,
+    {
+      calls: number;
+      steps: number;
+      input: number;
+      output: number;
+      cacheRead: number;
+      cacheCreate: number;
+      cost: number;
+    }
+  > = {};
+
+  for (const file of files) {
+    let db: Database | null = null;
+    try {
+      db = new Database(file);
+      const rows = db
+        .query('SELECT step_type, step_payload FROM "steps"')
+        .all() as unknown as StepRow[];
+      for (const row of rows) {
+        const payload =
+          row.step_payload instanceof Uint8Array ? row.step_payload : new Uint8Array();
+        try {
+          const decoded = decodeStep(row.step_type, payload);
+          const hasUsage = decoded.inputTokens !== null || decoded.outputTokens !== null;
+          if (hasUsage) {
+            const model = decoded.model || 'unknown';
+            if (!modelStats[model]) {
+              modelStats[model] = {
+                calls: 0,
+                steps: 0,
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheCreate: 0,
+                cost: 0,
+              };
+            }
+            const stats = modelStats[model];
+            stats.steps++;
+            stats.calls++;
+
+            const read = decoded.cacheReadInputTokens ?? 0;
+            const totalIn = decoded.inputTokens ?? 0;
+            const nonCached = Math.max(0, totalIn - read);
+            const write = decoded.cacheCreationInputTokens ?? 0;
+            const output = decoded.outputTokens ?? 0;
+
+            stats.input += nonCached;
+            stats.output += output;
+            stats.cacheRead += read;
+            stats.cacheCreate += write;
+
+            const prices = getGeminiPricing(model);
+            const callCost =
+              (nonCached * prices.input +
+                output * prices.output +
+                write * prices.cacheWrite +
+                read * prices.cacheRead +
+                write * prices.storage) /
+              1000000;
+            stats.cost += callCost;
+          }
+        } catch {}
+      }
+    } catch {
+    } finally {
+      if (db) db.close();
+    }
+  }
+  return modelStats;
+}
+
+// 3. CODEX PRICING & CALCULATION
+const CODEX_PRICING: Record<string, { input: number; output: number; cacheRead: number }> = {
+  'gpt-5.5': { input: 5.0, output: 30.0, cacheRead: 0.5 },
+  'gpt-5.4': { input: 2.5, output: 15.0, cacheRead: 0.25 },
+  'gpt-4.1-mini': { input: 0.75, output: 4.5, cacheRead: 0.075 },
+  'gpt-4o': { input: 2.5, output: 10.0, cacheRead: 1.25 },
+  'gpt-4': { input: 30.0, output: 60.0, cacheRead: 15.0 },
+  'gpt-3.5-turbo': { input: 0.5, output: 1.5, cacheRead: 0.25 },
+};
+
+function getCodexPricing(model: string) {
+  const m = model.toLowerCase();
+  if (m.includes('gpt-5.5')) return CODEX_PRICING['gpt-5.5'];
+  if (m.includes('gpt-5.4')) return CODEX_PRICING['gpt-5.4'];
+  if (m.includes('gpt-4.1') || m.includes('mini')) return CODEX_PRICING['gpt-4.1-mini'];
+  if (m.includes('gpt-4o')) return CODEX_PRICING['gpt-4o'];
+  if (m.includes('gpt-4')) return CODEX_PRICING['gpt-4'];
+  return CODEX_PRICING['gpt-3.5-turbo'];
+}
+
+interface CodexRecord {
+  type?: string;
+  payload?: {
+    model?: string;
+    type?: string;
+    info?: {
+      model?: string;
+      last_token_usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+        cached_input_tokens?: number;
+        reasoning_output_tokens?: number;
+      };
+    };
+  };
+}
+
+async function calculateCodexFinancials() {
+  const codexDir = '/Users/onurseckinsenoglu/.codex/sessions/';
+  const files = getFiles(codexDir, '.jsonl');
+
+  const modelStats: Record<
+    string,
+    {
+      calls: number;
+      input: number;
+      output: number;
+      cacheRead: number;
+      reasoning: number;
+      cost: number;
+    }
+  > = {};
+
+  for (const file of files) {
+    try {
+      const content = fs.readFileSync(file, 'utf8');
+      const lines = content.split('\n');
+      let currentModel = 'gpt-5.5'; // default fallback
+      for (const line of lines) {
+        if (line.trim().length === 0) continue;
+        const parsed = JSON.parse(line) as CodexRecord;
+        if (parsed.type === 'turn_context' && parsed.payload?.model) {
+          currentModel = parsed.payload.model;
+        }
+        if (
+          parsed.type === 'event_msg' &&
+          parsed.payload?.type === 'token_count' &&
+          parsed.payload?.info?.last_token_usage
+        ) {
+          const model = currentModel;
+          if (!modelStats[model]) {
+            modelStats[model] = {
+              calls: 0,
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              reasoning: 0,
+              cost: 0,
+            };
+          }
+          const stats = modelStats[model];
+          stats.calls++;
+
+          const usage = parsed.payload.info.last_token_usage;
+          const read = usage.cached_input_tokens ?? 0;
+          const totalIn = usage.input_tokens ?? 0;
+          const nonCached = Math.max(0, totalIn - read);
+          const output = usage.output_tokens ?? 0;
+          const reasoning = usage.reasoning_output_tokens ?? 0;
+
+          stats.input += nonCached;
+          stats.output += output;
+          stats.cacheRead += read;
+          stats.reasoning += reasoning;
+
+          const prices = getCodexPricing(model);
+          const callCost =
+            (nonCached * prices.input + output * prices.output + read * prices.cacheRead) / 1000000;
+          stats.cost += callCost;
+        }
+      }
+    } catch {}
+  }
+  return modelStats;
+}
+
+async function main() {
+  console.log('Calculating Claude Code Financials...');
+  const claude = await calculateClaudeCodeFinancials();
+  console.log('Claude Financials:', JSON.stringify(claude, null, 2));
+
+  console.log('\nCalculating Gemini Financials...');
+  const gemini = await calculateGeminiFinancials();
+  console.log('Gemini Financials:', JSON.stringify(gemini, null, 2));
+
+  console.log('\nCalculating Codex Financials...');
+  const codex = await calculateCodexFinancials();
+  console.log('Codex Financials:', JSON.stringify(codex, null, 2));
+}
+
+main().catch(console.error);

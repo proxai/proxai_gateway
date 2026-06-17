@@ -1,0 +1,54 @@
+import { Database } from 'bun:sqlite';
+import {
+  scanProto,
+  pNum,
+} from '/Users/onurseckinsenoglu/repos/proxai/proxai_gateway/src/sources/gemini/proto-scan';
+
+interface SqliteRawRow {
+  rid: number;
+  step_type: number | null;
+  step_payload: Uint8Array | null;
+}
+
+async function main() {
+  const dbPath =
+    '/Users/onurseckinsenoglu/.gemini/antigravity-cli/conversations/cfcd59f0-61db-41cc-abcc-e92226040185.db';
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const rows = db
+      .query(
+        `
+      SELECT rowid AS rid, step_type, step_payload 
+      FROM "steps" 
+      WHERE step_type = 15
+      LIMIT 5
+    `,
+      )
+      .all() as SqliteRawRow[];
+
+    console.log(`Raw Proto Scan for 5 assistant steps:`);
+    for (const r of rows) {
+      const payload = r.step_payload instanceof Uint8Array ? r.step_payload : new Uint8Array();
+      const tree = scanProto(payload);
+      const promptTokens = pNum(tree, '5.9.2');
+      const cachedTokens = pNum(tree, '5.9.5');
+      const outputTokens = pNum(tree, '5.9.3');
+      const cacheCreationTokens = pNum(tree, '5.9.10');
+
+      console.log(`Row ${r.rid}:`);
+      console.log(`  Raw promptTokens (5.9.2): ${promptTokens}`);
+      console.log(`  Raw cachedTokens (5.9.5): ${cachedTokens}`);
+      console.log(`  Raw outputTokens (5.9.3): ${outputTokens}`);
+      console.log(`  Raw cacheCreation (5.9.10): ${cacheCreationTokens}`);
+      console.log(
+        `  Sum inputTokens: ${promptTokens !== null ? promptTokens + (cachedTokens ?? 0) : null}`,
+      );
+    }
+  } catch (err) {
+    console.error(err);
+  } finally {
+    db.close();
+  }
+}
+
+main().catch(console.error);

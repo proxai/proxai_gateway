@@ -1,0 +1,308 @@
+/**
+ * DB Recalculation and Alignment Script
+ *
+ * NOTE: This script is intended to be run from the root of the 'proxai_nest' workspace
+ * (where @prisma/client is initialized).
+ *
+ * Commands to run:
+ *   bun run .tmp/recalculate_db_tokens.ts         (Dry run)
+ *   bun run .tmp/recalculate_db_tokens.ts --write (Apply fixes to PostgreSQL)
+ */
+
+import * as fs from 'fs';
+import * as path from 'path';
+import { PrismaClient } from '@prisma/client';
+
+interface UsageBlock {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_creation?: {
+    ephemeral_5m_input_tokens?: number;
+    ephemeral_1h_input_tokens?: number;
+  };
+  service_tier?: string;
+}
+
+interface ClaudeCodeMessage {
+  role?: 'user' | 'assistant';
+  model?: string;
+  id?: string;
+  usage?: UsageBlock;
+}
+
+interface ClaudeCodeRecord {
+  type: string;
+  uuid: string;
+  promptId?: string;
+  sessionId: string;
+  agentId?: string;
+  requestId?: string;
+  message?: ClaudeCodeMessage;
+}
+
+interface AggregatedUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+function getFiles(dir: string, ext: string): string[] {
+  let results: string[] = [];
+  if (!fs.existsSync(dir)) return results;
+  const list = fs.readdirSync(dir);
+  list.forEach((file) => {
+    const filePath = path.join(dir, file);
+    const stat = fs.statSync(filePath);
+    if (stat && stat.isDirectory()) {
+      results = results.concat(getFiles(filePath, ext));
+    } else if (file.endsWith(ext)) {
+      results.push(filePath);
+    }
+  });
+  return results;
+}
+
+function aggregateUsage(records: ClaudeCodeRecord[]): {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+} {
+  let input = 0;
+  let output = 0;
+  let cacheCreate = 0;
+  let cacheRead = 0;
+
+  const reqUsages = new Map<string, UsageBlock>();
+
+  for (const r of records) {
+    if (r.type !== 'assistant') continue;
+    const u = r.message?.usage;
+    if (!u) continue;
+
+    const reqId = r.requestId || r.message?.id;
+    if (reqId) {
+      const existing = reqUsages.get(reqId);
+      if (!existing || (u.output_tokens ?? 0) > (existing.output_tokens ?? 0)) {
+        reqUsages.set(reqId, u);
+      }
+    } else {
+      input += u.input_tokens ?? 0;
+      output += u.output_tokens ?? 0;
+      cacheCreate += u.cache_creation_input_tokens ?? 0;
+      cacheRead += u.cache_read_input_tokens ?? 0;
+    }
+  }
+
+  for (const u of reqUsages.values()) {
+    input += u.input_tokens ?? 0;
+    output += u.output_tokens ?? 0;
+    cacheCreate += u.cache_creation_input_tokens ?? 0;
+    cacheRead += u.cache_read_input_tokens ?? 0;
+  }
+
+  return {
+    input_tokens: input,
+    output_tokens: output,
+    cache_creation_input_tokens: cacheCreate,
+    cache_read_input_tokens: cacheRead,
+  };
+}
+
+async function main() {
+  const prisma = new PrismaClient();
+  const projectsDir = '/Users/onurseckinsenoglu/.claude/projects/';
+  const files = getFiles(projectsDir, '.jsonl');
+
+  console.log(`Scanning ${files.length} JSONL log files...`);
+
+  // Map: `${chatId}:${turnId}` -> AggregatedUsage
+  const correctTurnUsages = new Map<string, AggregatedUsage>();
+
+  for (const file of files) {
+    try {
+      const content = fs.readFileSync(file, 'utf8');
+      const lines = content.split('\n');
+
+      let openPromptId: string | null = null;
+      // Map to hold records grouped by turnId (promptId)
+      const turnRecordsMap = new Map<string, ClaudeCodeRecord[]>();
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.length === 0) continue;
+        const parsed = JSON.parse(trimmed) as ClaudeCodeRecord;
+
+        if (parsed.promptId) {
+          openPromptId = parsed.promptId;
+        }
+
+        const turnId = parsed.promptId || openPromptId;
+        if (turnId) {
+          let recs = turnRecordsMap.get(turnId);
+          if (!recs) {
+            recs = [];
+            turnRecordsMap.set(turnId, recs);
+          }
+          recs.push(parsed);
+        }
+      }
+
+      // Group and aggregate
+      for (const [turnId, records] of turnRecordsMap.entries()) {
+        if (records.length === 0) continue;
+        const firstRec = records[0];
+        const chatId = firstRec.agentId
+          ? `${firstRec.sessionId}:${firstRec.agentId}`
+          : firstRec.sessionId;
+
+        const aggregated = aggregateUsage(records);
+        const key = `${chatId}:${turnId}`;
+        correctTurnUsages.set(key, {
+          inputTokens: aggregated.input_tokens,
+          outputTokens: aggregated.output_tokens,
+          cacheRead: aggregated.cache_read_input_tokens,
+          cacheWrite: aggregated.cache_creation_input_tokens,
+        });
+      }
+    } catch {
+      // Ignore parse errors on individual files
+    }
+  }
+
+  console.log(`Computed correct usage for ${correctTurnUsages.size} turns.`);
+
+  // Query database records
+  const dbRecords = await prisma.agentCallRecord.findMany({
+    where: {
+      agent: 'CLAUDE_CODE',
+    },
+    select: {
+      id: true,
+      chatId: true,
+      turnId: true,
+      inputTokens: true,
+      outputTokens: true,
+      cacheReadInputTokens: true,
+      cacheCreationInputTokens: true,
+    },
+  });
+
+  console.log(`Found ${dbRecords.length} CLAUDE_CODE AgentCallRecords in database.`);
+
+  let matchCount = 0;
+  let updateCandidateCount = 0;
+
+  const originalTotals = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
+  const newTotals = { input: 0, output: 0, cacheRead: 0, cacheCreate: 0 };
+
+  const recordsToUpdate: Array<{
+    id: string;
+    before: AggregatedUsage;
+    after: AggregatedUsage;
+  }> = [];
+
+  for (const record of dbRecords) {
+    const key = `${record.chatId}:${record.turnId}`;
+    const correctUsage = correctTurnUsages.get(key);
+
+    const beforeUsage: AggregatedUsage = {
+      inputTokens: record.inputTokens ?? 0,
+      outputTokens: record.outputTokens ?? 0,
+      cacheRead: record.cacheReadInputTokens ?? 0,
+      cacheWrite: record.cacheCreationInputTokens ?? 0,
+    };
+
+    originalTotals.input += beforeUsage.inputTokens;
+    originalTotals.output += beforeUsage.outputTokens;
+    originalTotals.cacheRead += beforeUsage.cacheRead;
+    originalTotals.cacheCreate += beforeUsage.cacheWrite;
+
+    if (correctUsage) {
+      matchCount++;
+      const needsUpdate =
+        beforeUsage.inputTokens !== correctUsage.inputTokens ||
+        beforeUsage.outputTokens !== correctUsage.outputTokens ||
+        beforeUsage.cacheRead !== correctUsage.cacheRead ||
+        beforeUsage.cacheWrite !== correctUsage.cacheWrite;
+
+      if (needsUpdate) {
+        updateCandidateCount++;
+        recordsToUpdate.push({
+          id: record.id,
+          before: beforeUsage,
+          after: correctUsage,
+        });
+      }
+
+      newTotals.input += correctUsage.inputTokens;
+      newTotals.output += correctUsage.outputTokens;
+      newTotals.cacheRead += correctUsage.cacheRead;
+      newTotals.cacheCreate += correctUsage.cacheWrite;
+    } else {
+      // Keep original values if we don't have the log file on disk (due to pruning)
+      newTotals.input += beforeUsage.inputTokens;
+      newTotals.output += beforeUsage.outputTokens;
+      newTotals.cacheRead += beforeUsage.cacheRead;
+      newTotals.cacheCreate += beforeUsage.cacheWrite;
+    }
+  }
+
+  console.log(`\nMatched turns: ${matchCount} / ${dbRecords.length}`);
+  console.log(`Turns needing update (mismatched usage): ${updateCandidateCount}`);
+
+  console.log('\n--- 📊 DB TOTALS BEFORE vs AFTER PROPOSED UPDATE ---');
+  console.log('Token Type  | Before Update   | After Update    | Diff');
+  console.log('------------------------------------------------------------------');
+
+  const printRow = (label: string, before: number, after: number) => {
+    const diff = after - before;
+    const diffStr = diff === 0 ? 'MATCH' : diff > 0 ? `+${diff}` : `${diff}`;
+    console.log(
+      `${label.padEnd(11)} | ${before.toLocaleString().padStart(15)} | ${after.toLocaleString().padStart(15)} | ${diffStr.padStart(15)}`,
+    );
+  };
+
+  printRow('Input', originalTotals.input, newTotals.input);
+  printRow('Output', originalTotals.output, newTotals.output);
+  printRow('Cache Read', originalTotals.cacheRead, newTotals.cacheRead);
+  printRow('Cache Write', originalTotals.cacheCreate, newTotals.cacheCreate);
+
+  const shouldWrite = process.argv.includes('--write');
+
+  if (shouldWrite && recordsToUpdate.length > 0) {
+    console.log(`\nWriting updates to database for ${recordsToUpdate.length} records...`);
+    let updatedCount = 0;
+    for (const item of recordsToUpdate) {
+      await prisma.agentCallRecord.update({
+        where: { id: item.id },
+        data: {
+          inputTokens: item.after.inputTokens,
+          outputTokens: item.after.outputTokens,
+          cacheReadInputTokens: item.after.cacheRead,
+          cacheCreationInputTokens: item.after.cacheWrite,
+        },
+      });
+      updatedCount++;
+      if (updatedCount % 50 === 0) {
+        console.log(`Updated ${updatedCount}/${recordsToUpdate.length} records...`);
+      }
+    }
+    console.log(`Successfully updated ${updatedCount} records in the database!`);
+  } else if (recordsToUpdate.length > 0) {
+    console.log(
+      '\n💡 To apply these changes to the database, run: bun run .tmp/recalculate_db_tokens.ts --write',
+    );
+  } else {
+    console.log('\nEverything matches perfectly. No updates needed.');
+  }
+
+  await prisma.$disconnect();
+}
+
+main().catch((err: unknown) => {
+  console.error(err);
+});

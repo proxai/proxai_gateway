@@ -1,0 +1,86 @@
+import { PrismaClient } from '@prisma/client';
+import { makeReadOnlyClient } from '../clone-proxai-devs/lib/readonly-prod';
+
+async function main() {
+  const url = process.env.POSTGRES_URL_READ_ONLY_PROD;
+  if (!url) {
+    console.error('Error: POSTGRES_URL_READ_ONLY_PROD is not defined.');
+    process.exit(1);
+  }
+
+  const rawPrisma = new PrismaClient({
+    datasources: { db: { url } },
+  });
+  const prisma = makeReadOnlyClient(rawPrisma);
+
+  try {
+    const user = await prisma.user.findFirst({
+      where: { email: 'onur@proxai.co' },
+    });
+    if (!user) return;
+
+    const records = await prisma.agentCallRecord.findMany({
+      where: { userId: user.id, agent: 'gemini' },
+      select: {
+        capturedAtUtc: true,
+        inputTokens: true,
+        cacheReadInputTokens: true,
+        outputTokens: true,
+      },
+      orderBy: { capturedAtUtc: 'asc' },
+    });
+
+    console.log('Total Gemini records:', records.length);
+
+    // Group records by week (or month)
+    const groups: Record<
+      string,
+      {
+        count: number;
+        sumInput: number;
+        sumCacheRead: number;
+        nullCacheReadCount: number;
+      }
+    > = {};
+    for (const r of records) {
+      if (!r.capturedAtUtc) continue;
+      const dateStr = r.capturedAtUtc.toISOString().slice(0, 7); // yyyy-MM
+      if (!groups[dateStr]) {
+        groups[dateStr] = {
+          count: 0,
+          sumInput: 0,
+          sumCacheRead: 0,
+          nullCacheReadCount: 0,
+        };
+      }
+      const g = groups[dateStr];
+      g.count++;
+      g.sumInput += r.inputTokens ?? 0;
+      g.sumCacheRead += r.cacheReadInputTokens ?? 0;
+      if (r.cacheReadInputTokens === null) {
+        g.nullCacheReadCount++;
+      }
+    }
+
+    console.log('\nMonthly Breakdown of Gemini records:');
+    console.log('Month   | Count | Avg Input (Col) | Avg Cache Read | Null Cache Read Count');
+    console.log('-------------------------------------------------------------------------');
+    for (const [month, g] of Object.entries(groups)) {
+      const avgInput = g.sumInput / g.count;
+      const avgCacheRead = g.sumCacheRead / (g.count - g.nullCacheReadCount || 1);
+      console.log(
+        `${month} | ` +
+          `${g.count.toString().padEnd(5)} | ` +
+          `${avgInput.toFixed(1).padEnd(15)} | ` +
+          `${avgCacheRead.toFixed(1).padEnd(14)} | ` +
+          `${g.nullCacheReadCount}`,
+      );
+    }
+  } catch (e) {
+    console.error(e);
+  } finally {
+    await rawPrisma.$disconnect();
+  }
+}
+
+main().catch(console.error);

@@ -1,0 +1,132 @@
+# Token Remediation — Implementation Roadmap (orchestrator surface)
+
+**Owner of this doc:** the "orchestrator" Claude chat (tracking only — never implements).
+**Created:** 2026-06-17 · **Basis:** `../planning/token-issues/VERIFICATION_FINDINGS.md` + `../planning/token-issues/IMPLEMENTATION_PLAN.md` (both verified across 2 adversarial rounds).
+
+This folder is the **execution tracker** for the token-counting fixes, plus a preserved copy of the analysis.
+
+## Folder contents & provenance
+- `ROADMAP.md` + `phase-NN-*.md` — the execution plan (what to build, in what order, is it done).
+- `analysis/` — the full detection/verification record, **copied here from the gitignored `docs/planning/token-issues/`**
+  (that folder is `.gitignore`d at `.gitignore:38`, so it is NOT tracked and would be lost on a local wipe).
+  Includes `VERIFICATION_FINDINGS.md`, `IMPLEMENTATION_PLAN.md`, `CURSOR_TOKEN_COLLECTION.md`, the original
+  small-model `*_analysis.md` inputs, and their scripts. **This tracked copy is the durable source of truth** —
+  if `analysis/` and `docs/planning/token-issues/` ever drift, this one is canonical.
+- `verification-scripts/` — every token-analysis script (moved out of `proxai_nest/scripts/Gemini stats/` so Nest
+  stays clean). The rigorous reproducible proofs are `verify_token_semantics.ts` (Gemini input = non-cached, the
+  148-row proof), `confirm_gemini_proto_semantics.ts` (per-request dedup non-issue), `confirm_gemini_total_field.ts`
+  (the F3 `5.9.3 == 5.9.9 + 5.9.10` identity + ratio/cache-hit backstops), and `verify_residual_risks.ts`. The
+  rest are exploratory/small-model originals kept for provenance. NOTE: they read LOCAL data (paths like
+  `~/.gemini/antigravity-cli/conversations/*.db` and `POSTGRES_URL_READ_ONLY_PROD`); they are reference, not
+  part of the build. **Stored as `*.ts.txt`** (frozen reference — the gateway lints + source-restricts real
+  `.ts`; rename back to `.ts` to run). This also keeps the small model's `analysis/scripts/recalculate_db_tokens.ts.txt`
+  (a prod-WRITE script flagged DO-NOT-RUN in `analysis/VERIFICATION_FINDINGS.md`) non-runnable as committed.
+
+---
+
+## How this works (the process)
+
+1. Each numbered phase below has its own self-contained doc (`phase-NN-*.md`). It is the ONLY doc the
+   implementer + verifier pair needs for that phase.
+2. For each phase, the operator opens two chats: a **small-model implementer** and an **Opus 4.8 verifier**.
+   They implement the change across the listed repos, the verifier confirms the **Acceptance criteria** are
+   100% met, then both PRs (gateway + nest, and web where listed) are merged.
+3. The operator returns to the **orchestrator chat** and says "Phase N done." The orchestrator runs the
+   phase's **Orchestrator quick-check**, confirms, flips the status here to ✅ DONE, and points to the next phase.
+4. Phases are **isolated**: when a phase is merged on all its listed repos, the concern it names is eliminated.
+   Do phases in order unless the orchestrator says a later one is unblocked to run in parallel.
+
+**Status legend:** ⬜ NOT STARTED · 🔵 IN PROGRESS · 🟣 AWAITING ORCHESTRATOR CHECK · ✅ DONE · ⏸️ DEFERRED
+
+---
+
+## Status board (the orchestrator maintains this)
+
+| # | Phase | Sev | Repos | Depends on | Status |
+|---|---|---|---|---|---|
+| 1 | Claude Code usage preservation (F1) | 🔴 | gateway + nest | — | ⬜ |
+| 2 | Codex over-count fix (F2) | 🔴 | nest | — | ⬜ |
+| 3 | Gemini phantom cache_creation (F3) | 🔴 | gateway (+nest opt) | — | ⬜ |
+| 4 | Upsert shrink-guard (overwrite corruption) | 🔴 | nest | — | ⬜ |
+| 5 | Claude Code idle-flush orphan-drop | 🔴 | nest | 4 (recommended) | ⬜ |
+| 6 | Codex re-attach parser guard | 🟠 | nest | 4 | ⬜ |
+| 7 | Claude Desktop version resolution | 🟠 | nest + gateway | 1, 4, 5 | ⬜ |
+| 8 | Cursor local-only collection | 🟠 | nest + gateway | — | ⏸️ DEFERRED |
+| 9 | deterministicRecordId fallback hardening | 🟢 | nest | — | ⬜ |
+| 10 | Web KPI label + Cursor null display | 🟢 | web | 3 | ⬜ |
+| 11 | Production data backfill / re-parse (ALL history) | 🟠 | ops script | 2, 3, 5, 7 | ⬜ |
+
+**Active phases:** 1, 2, 3, 4, 5, 6, 7, 9, 10, 11 (10 phases). **Phase 8 (Cursor) is DEFERRED** — Cursor stays
+all-null for now; revisit as a separate feature later (its doc is parked, not deleted).
+
+Phases 1–7 are the **detections** (token-correctness). 8 is a **feature-add**. 9–10 are **hardening/display**.
+11 is the **historical-data refresh** that runs after the critical code phases land.
+
+---
+
+## Pre-flight findings (resolved by the orchestrator; baked into the phase specs)
+
+- **Single shared parse watermark.** `agent_parse_states.last_processed_watermark` is advanced by ONE gated
+  UPSERT (`proxai_nest/src/agent-gateway/parse/services/parse-process-chat.service.ts:355-399`), and the
+  idle-flush processor routes through the same `parse-process-chat` path → **idle-flush advances the same
+  watermark the main parser reads.** Implication: the F4 *same-ACR overwrite for Claude Code* is very unlikely
+  to fire (the pre-flush USER record is never re-read); the **silent orphan-drop (Phase 5) is the dominant CC
+  idle-flush loss.** The upsert shrink-guard (Phase 4) remains warranted for the **Codex `task_started`
+  re-attach** case (it arrives in NEW post-flush captures) and as defense-in-depth. Phases 4/5 each re-confirm
+  in-phase.
+- **Gemini `cacheCreationInputTokens` has no analytics reader.** It is only written
+  (`build-scalar-spine.ts:162`, `parse-batch-upsert.service.ts:466`); no aggregate folds it into a total. So
+  Phase 3 (zeroing it for Gemini) is safe with no downstream double-count to chase.
+
+---
+
+## Backfillability of historical data (drives Phase 11)
+
+| Finding | Historical prod data | Recoverable by re-parse? |
+|---|---|---|
+| F1 (CC dialogue-filter drop) | dropped at the gateway BEFORE S3 upload | ❌ **NO** — the bytes never reached S3; only future captures are fixed |
+| F2 (Codex over-count) | full `token_count` events ARE in S3 | ✅ yes — re-parse recomputes correctly |
+| F3 (Gemini cacheCreation) | composer/step data in S3 | ✅ yes — re-parse (or a targeted null) |
+| F4 orphan-drop (CC idle) | continuation records ARE in S3 (drop is in nest, post-upload) | ✅ yes — re-parse |
+| Codex re-attach | in S3 | ✅ yes — re-parse |
+| Claude Desktop | captures in S3, currently UNSUPPORTED_VERSION | ✅ yes — re-parse once Phase 7 lands |
+
+Phase 11 re-parses existing S3 captures through the fixed pipeline (upsert REPLACE semantics correct the ACRs).
+**The one permanent gap is F1's historical Claude Code under-count** — that data is gone; set expectations.
+
+---
+
+## Token semantics — SETTLED (no decision needed; do not re-open)
+
+The analysis already decided the canonical, billing-accurate semantics, uniform across all agents:
+**a turn's stored tokens = the SUM of the independently-billed `usage` of every distinct model API call in that
+turn** (input / output / cache_read / cache_creation each summed). This is what the provider bills. There is NO
+"final context size" alternative in use. Per-agent, this is recovered as:
+- **Claude Code:** SUM per-call `usage` (Anthropic bills per request, not cumulative). Phase 1 just makes the
+  existing sum COMPLETE by stopping the gateway from dropping tool_use calls.
+- **Codex:** SUM of distinct calls via the cumulative-total diff `total_token_usage(end) − total_token_usage(start)`
+  (Phase 2), which excludes re-emitted/rate-limit frames. (`output_tokens` already includes reasoning.)
+- **Gemini:** SUM per step (already correct — distinct calls, no re-emit). Phase 3 only nulls the phantom
+  `cacheCreation`; input/output/cacheRead are untouched.
+
+## Decisions LOCKED (2026-06-17 — do not re-open)
+
+1. **Reasoning-token field (Phase 3b): SKIP.** Phase 3 ships the null-the-phantom fix only; `outputTokens` stays
+   the combined (visible+thoughts) total, which is correct. No new schema column. Gemini `5.9.9` and Codex
+   `reasoning_output_tokens` remain dropped. (Revisit only as a future standalone feature if ever wanted.)
+2. **Backfill scope (Phase 11): ALL history.** Re-parse every S3 capture for the affected agents
+   (gemini, CODEX, CLAUDE_CODE, CLAUDE_DESKTOP). Dry-run + batched. Note the permanent gap: F1 Claude Code
+   dialogue-filter history is NOT recoverable (dropped pre-upload).
+3. **Cursor (Phase 8): DEFERRED.** Not in the active set. Cursor stays all-null; the only Cursor-related work
+   that remains active is the honest "not captured" display in Phase 10. Revisit collection later.
+4. **Branch strategy: STACKED INTEGRATION BRANCH.** One long-lived integration branch off `main`; each phase
+   builds on the prior, in roadmap order. Phase 7 (Desktop) naturally sits on top of Phases 1/4/5. The whole
+   integration branch merges to prod once all active phases are complete + verified.
+
+## Merge model (per operator, 2026-06-17)
+
+Nothing merges to **prod** until all 11 phases are complete — so the prod-exposure risk behind the Phase 7
+sequencing gate is moot (Desktop can't expose under-counting in prod before the F1/F4/F5 fixes are also live).
+The only residual is **code build-order**: Phase 7's branch must be built on top of Phase 1/4/5's code to be
+correct and testable (Desktop reuses the Claude Code parser), and Phase 11 (backfill) runs against prod only
+after the big merge. The orchestrator tracks build-order, not prod-safety gating.

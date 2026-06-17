@@ -1,0 +1,311 @@
+/**
+ * READ-ONLY local-proto confirmation for two Gemini (Antigravity) token questions.
+ *
+ * WHY LOCAL, NOT PROD: the gateway decodes the Antigravity protobuf into normalized
+ * rows and JSON.stringifies THOSE before upload (proxai_gateway process-rows.ts:394),
+ * dropping every 5.9 sibling field except the four it maps. So the full 5.9
+ * usageMetadata envelope survives ONLY client-side, in
+ * ~/.gemini/antigravity-cli/conversations/*.db. The proto schema is universal across
+ * users, so decoding the local corpus is representative of every Gemini capture.
+ *
+ * CONFIRMATION 1 — is proto 5.9.10 genuine cache-creation, or mislabeled thoughts?
+ *   Dump every varint subfield of the 5.9 envelope; find the "total" field T and test:
+ *     promptFull = 5.9.2 (non-cached) + 5.9.5 (cached)
+ *     H_thoughts:      T == promptFull + 5.9.3 (output) + 5.9.10  -> 5.9.10 is generation-side
+ *     H_cachecreation: T == promptFull + 5.9.3                    -> 5.9.10 already inside prompt
+ *   Whichever closes on ~100% of steps decides it.
+ *
+ * CONFIRMATION 2 — per-request dedup / re-emission over-count vector.
+ *   Group assistant steps by turnGroup (5.12). Are requestIds (5.9.11) distinct per
+ *   usage-bearing step (=> one usage row per model call, nest summing is correct) or
+ *   repeated with identical token tuples (=> re-emission, summing double-counts)?
+ *
+ * Run: bun run "scripts/Gemini stats/confirm_gemini_proto_semantics.ts"
+ */
+import { Database } from 'bun:sqlite';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import {
+  scanProto,
+  getPath,
+  pStr,
+} from '/Users/onurseckinsenoglu/repos/proxai/proxai_gateway/src/sources/gemini/proto-scan';
+import type { FieldTree } from '/Users/onurseckinsenoglu/repos/proxai/proxai_gateway/src/sources/gemini/proto-scan';
+
+interface SqliteRawRow {
+  rid: number;
+  idx: number | null;
+  step_type: number | null;
+  step_payload: Uint8Array | null;
+}
+
+const CONV_DIR = join(homedir(), '.gemini', 'antigravity-cli', 'conversations');
+const ASSISTANT_STEP_TYPES = new Set([15, 23]);
+const STEP_BUDGET = 40_000; // cap total decoded steps for speed
+
+/** Every varint-typed subfield of the 5.9 usageMetadata envelope, field# -> value. */
+function usageVarintFields(tree: FieldTree): Map<number, number> {
+  const out = new Map<number, number>();
+  const usage = getPath(tree, '5.9')?.msg;
+  if (!usage) return out;
+  for (const [field, vals] of usage) {
+    const v = vals[0];
+    if (v?.varint !== undefined) out.set(field, Number(v.varint));
+  }
+  return out;
+}
+
+interface StepUsage {
+  db: string;
+  rid: number;
+  stepType: number;
+  fields: Map<number, number>;
+  prompt: number; // 5.9.2 non-cached
+  cached: number; // 5.9.5 cache-read
+  output: number; // 5.9.3 candidates
+  suspect: number; // 5.9.10 cache-creation? / thoughts?
+  turnGroup: string | null; // 5.12
+  requestId: string | null; // 5.9.11
+}
+
+function main(): void {
+  const files = readdirSync(CONV_DIR)
+    .filter((f) => f.endsWith('.db'))
+    .sort();
+
+  const steps: StepUsage[] = [];
+  // schema discovery: how often each 5.9 subfield number appears
+  const fieldPresence = new Map<number, number>();
+  // total-field tally: per candidate field#, how many steps match each hypothesis
+  const thoughtsMatch = new Map<number, number>();
+  const ccMatch = new Map<number, number>();
+  let decisiveSteps = 0; // steps where suspect>0 so the two hypotheses differ
+
+  let budgetLeft = STEP_BUDGET;
+  let dbsScanned = 0;
+
+  for (const file of files) {
+    if (budgetLeft <= 0) break;
+    const db = new Database(join(CONV_DIR, file), { readonly: true });
+    try {
+      const rows = db
+        .query(
+          'SELECT rowid AS rid, idx, step_type, step_payload FROM "steps" WHERE step_type IN (15,23) ORDER BY rowid ASC',
+        )
+        .all() as SqliteRawRow[];
+      if (rows.length === 0) continue;
+      dbsScanned += 1;
+      for (const r of rows) {
+        if (budgetLeft <= 0) break;
+        if (!r.step_payload || !ASSISTANT_STEP_TYPES.has(r.step_type ?? -1)) continue;
+        const payload =
+          r.step_payload instanceof Uint8Array ? r.step_payload : new Uint8Array(r.step_payload);
+        const tree = scanProto(payload);
+        const fields = usageVarintFields(tree);
+        if (fields.size === 0) continue; // not a usage-bearing assistant step
+        budgetLeft -= 1;
+
+        for (const fnum of fields.keys()) {
+          fieldPresence.set(fnum, (fieldPresence.get(fnum) ?? 0) + 1);
+        }
+
+        const prompt = fields.get(2) ?? 0;
+        const output = fields.get(3) ?? 0;
+        const cached = fields.get(5) ?? 0;
+        const suspect = fields.get(10) ?? 0;
+        const promptFull = prompt + cached;
+        const hThoughts = promptFull + output + suspect;
+        const hCacheCreation = promptFull + output;
+
+        if (suspect > 0) {
+          decisiveSteps += 1;
+          for (const [fnum, val] of fields) {
+            if (fnum === 2 || fnum === 3 || fnum === 5 || fnum === 10) continue;
+            if (val === hThoughts) thoughtsMatch.set(fnum, (thoughtsMatch.get(fnum) ?? 0) + 1);
+            if (val === hCacheCreation) ccMatch.set(fnum, (ccMatch.get(fnum) ?? 0) + 1);
+          }
+        }
+
+        steps.push({
+          db: file,
+          rid: r.rid,
+          stepType: r.step_type ?? -1,
+          fields,
+          prompt,
+          cached,
+          output,
+          suspect,
+          turnGroup: pStr(tree, '5.12') ?? null,
+          requestId: pStr(tree, '5.9.11') ?? null,
+        });
+      }
+    } finally {
+      db.close();
+    }
+  }
+
+  // ---------- report ----------
+  console.log('================ SAMPLE ================');
+  console.log(`DBs with usage steps scanned: ${dbsScanned}`);
+  console.log(`usage-bearing assistant steps decoded: ${steps.length.toLocaleString()}`);
+  console.log(`steps where 5.9.10 > 0 (decisive for H test): ${decisiveSteps.toLocaleString()}`);
+
+  console.log('\n================ 5.9 ENVELOPE SCHEMA (varint subfields) ================');
+  const presenceSorted = [...fieldPresence.entries()].sort((a, b) => a[0] - b[0]);
+  for (const [fnum, count] of presenceSorted) {
+    const label =
+      fnum === 1
+        ? 'model'
+        : fnum === 2
+          ? 'promptTokens (non-cached)'
+          : fnum === 3
+            ? 'output (candidates)'
+            : fnum === 5
+              ? 'cached (cache-read)'
+              : fnum === 10
+                ? 'SUSPECT (cache_creation? / thoughts?)'
+                : '???';
+    console.log(`  5.9.${fnum}: present in ${count.toLocaleString()} steps   ${label}`);
+  }
+
+  console.log('\n================ FIRST 6 FULL ENVELOPE DUMPS ================');
+  for (const s of steps.slice(0, 6)) {
+    const dump = [...s.fields.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([f, v]) => `5.9.${f}=${v}`)
+      .join('  ');
+    const promptFull = s.prompt + s.cached;
+    console.log(
+      `  [${s.db.slice(0, 8)} rid${s.rid}] ${dump}\n     promptFull(2+5)=${promptFull} output(3)=${s.output} suspect(10)=${s.suspect}` +
+        ` | H_thoughts=${promptFull + s.output + s.suspect}  H_cachecreation=${promptFull + s.output}`,
+    );
+  }
+
+  console.log('\n================ CONFIRMATION 1: total-field arithmetic closure ================');
+  console.log(`(decisive steps with suspect>0: ${decisiveSteps.toLocaleString()})`);
+  console.log('Per candidate 5.9 field#: how many decisive steps equal each hypothesis total:');
+  const candidates = new Set<number>([...thoughtsMatch.keys(), ...ccMatch.keys()]);
+  const candSorted = [...candidates].sort((a, b) => a - b);
+  if (candSorted.length === 0) {
+    console.log(
+      '  (no candidate total field found — no 5.9 subfield equals either hypothesis sum)',
+    );
+  }
+  for (const fnum of candSorted) {
+    const t = thoughtsMatch.get(fnum) ?? 0;
+    const c = ccMatch.get(fnum) ?? 0;
+    const tPct = decisiveSteps ? ((t / decisiveSteps) * 100).toFixed(1) : '0';
+    const cPct = decisiveSteps ? ((c / decisiveSteps) * 100).toFixed(1) : '0';
+    console.log(
+      `  5.9.${fnum}: == H_thoughts in ${t.toLocaleString()} (${tPct}%) | == H_cachecreation in ${c.toLocaleString()} (${cPct}%)`,
+    );
+  }
+  // verdict
+  let bestField = -1;
+  let bestThoughts = 0;
+  for (const fnum of candSorted) {
+    const t = thoughtsMatch.get(fnum) ?? 0;
+    if (t > bestThoughts) {
+      bestThoughts = t;
+      bestField = fnum;
+    }
+  }
+  if (bestField >= 0 && decisiveSteps > 0) {
+    const tPct = (bestThoughts / decisiveSteps) * 100;
+    const c = ccMatch.get(bestField) ?? 0;
+    const cPct = (c / decisiveSteps) * 100;
+    console.log(
+      `\n  VERDICT: total field appears to be 5.9.${bestField}.` +
+        ` H_thoughts closure ${tPct.toFixed(1)}% vs H_cachecreation ${cPct.toFixed(1)}%.`,
+    );
+    if (tPct > 95) {
+      console.log(
+        `  => total = promptFull + output + 5.9.10  ==> 5.9.10 is ADDED on top (generation-side) ==> THOUGHTS, mislabeled as cache_creation.`,
+      );
+    } else if (cPct > 95) {
+      console.log(
+        `  => total = promptFull + output (5.9.10 NOT added) ==> 5.9.10 is a subset inside prompt ==> genuine CACHE-CREATION.`,
+      );
+    } else {
+      console.log('  => INCONCLUSIVE — neither hypothesis closes cleanly; inspect dumps above.');
+    }
+  }
+
+  console.log(
+    '\n================ CONFIRMATION 2: requestId / turnGroup cardinality ================',
+  );
+  const withReq = steps.filter((s) => s.requestId !== null);
+  const distinctReq = new Set(withReq.map((s) => s.requestId));
+  console.log(
+    `steps with requestId (5.9.11) present: ${withReq.length.toLocaleString()} / ${steps.length.toLocaleString()}`,
+  );
+  console.log(`distinct requestIds: ${distinctReq.size.toLocaleString()}`);
+  // requestIds carried by >1 usage-bearing step
+  const reqToSteps = new Map<string, StepUsage[]>();
+  for (const s of withReq) {
+    const arr = reqToSteps.get(s.requestId as string) ?? [];
+    arr.push(s);
+    reqToSteps.set(s.requestId as string, arr);
+  }
+  let reqWithMultiUsage = 0;
+  let reqWithMultiIdenticalUsage = 0;
+  const multiExamples: string[] = [];
+  for (const [req, arr] of reqToSteps) {
+    const usageBearing = arr.filter(
+      (s) => s.prompt > 0 || s.output > 0 || s.cached > 0 || s.suspect > 0,
+    );
+    if (usageBearing.length > 1) {
+      reqWithMultiUsage += 1;
+      const sig = (s: StepUsage): string => `${s.prompt}/${s.cached}/${s.output}/${s.suspect}`;
+      const sigs = new Set(usageBearing.map(sig));
+      if (sigs.size === 1) {
+        reqWithMultiIdenticalUsage += 1;
+        if (multiExamples.length < 5) {
+          multiExamples.push(
+            `  req=${req.slice(0, 12)} ${usageBearing.length} steps all = ${sig(usageBearing[0])}`,
+          );
+        }
+      }
+    }
+  }
+  console.log(
+    `requestIds carried by >1 usage-bearing step: ${reqWithMultiUsage.toLocaleString()}` +
+      ` (of which all-identical-tuple = ${reqWithMultiIdenticalUsage.toLocaleString()})`,
+  );
+  if (reqWithMultiIdenticalUsage > 0) {
+    console.log(
+      '  >>> RE-EMISSION DETECTED: same requestId, identical usage, >1 step — nest summing would double-count <<<',
+    );
+    for (const e of multiExamples) console.log(e);
+  } else if (reqWithMultiUsage === 0) {
+    console.log(
+      '  >>> CLEAN: every requestId has at most one usage-bearing step ==> nest per-step summing does NOT double-count within a chat.',
+    );
+  } else {
+    console.log(
+      '  >>> requestIds repeat across usage steps but with DISTINCT tuples (split usage, not duplication) — inspect.',
+    );
+  }
+
+  // turnGroup collision: distinct requestIds sharing a turnGroup (=> deterministic-id overwrite risk)
+  const turnToReqs = new Map<string, Set<string>>();
+  for (const s of steps) {
+    if (s.turnGroup === null) continue;
+    const set = turnToReqs.get(s.turnGroup) ?? new Set<string>();
+    if (s.requestId !== null) set.add(s.requestId);
+    turnToReqs.set(s.turnGroup, set);
+  }
+  let turnsMultiReq = 0;
+  for (const set of turnToReqs.values()) if (set.size > 1) turnsMultiReq += 1;
+  const withTurn = steps.filter((s) => s.turnGroup !== null).length;
+  console.log(
+    `\nturnGroup (5.12): ${turnToReqs.size.toLocaleString()} distinct turns across ${withTurn.toLocaleString()} steps;` +
+      ` turns spanning >1 requestId (multi-call turns): ${turnsMultiReq.toLocaleString()}`,
+  );
+  console.log(
+    '  (multi-call turns are EXPECTED and correct — a turn = many model calls; this confirms summing-per-turn is the intended model, not a bug.)',
+  );
+}
+
+main();
