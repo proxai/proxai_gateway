@@ -42,6 +42,9 @@ export function buildCaptureContext(input: {
   if (deps.loadDesktopCliSessionIds !== undefined) {
     ctx.loadDesktopCliSessionIds = deps.loadDesktopCliSessionIds;
   }
+  if (deps.loadExcludedProjects !== undefined) {
+    ctx.loadExcludedProjects = deps.loadExcludedProjects;
+  }
   return ctx;
 }
 
