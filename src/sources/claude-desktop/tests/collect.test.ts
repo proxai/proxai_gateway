@@ -288,4 +288,55 @@ describe('collectClaudeDesktopFile', () => {
     db.close();
     await rmRecursive(testDir);
   });
+
+  test('skips a desktop session whose correlated cwd is excluded', async () => {
+    const db = openInMemoryBufferDb();
+    const testDir = await mkdtemp(join(tmpdir(), 'proxai-test-claude-desktop-excl-'));
+    try {
+      // CLI transcript correlates cwd=/my/secret to the audit record below.
+      const transcriptDir = join(testDir, '.claude', 'projects', 'p1');
+      await Bun.write(
+        join(transcriptDir, 'transcript.jsonl'),
+        JSON.stringify({
+          type: 'user',
+          uuid: 'user-123',
+          cwd: '/my/secret',
+          version: '1',
+          gitBranch: 'main',
+          sessionId: 's1',
+        }) + '\n',
+      );
+      const tempFile = join(testDir, 'audit.jsonl');
+      await writeFile(
+        tempFile,
+        JSON.stringify({
+          type: 'user',
+          uuid: 'user-123',
+          session_id: 'sess-1',
+          message: { content: 'hello' },
+        }) + '\n',
+      );
+      const stat = await statFile(tempFile);
+      const file: DiscoveredClaudeDesktopFile = {
+        sourcePath: tempFile,
+        sourcePathHash: 'hash-excl',
+        inode: stat.exists ? Number(stat.inode) : 0,
+        sizeBytes: stat.exists ? stat.size : 0,
+        lastModifiedMs: Date.now(),
+      };
+
+      const res = await collectClaudeDesktopFile(file, {
+        buffer: db,
+        maxDecompressedBytes: 1000,
+        excludedProjects: ['/my/secret'],
+      });
+
+      expect(res.capturedBatches).toBe(0);
+      expect(res.errors).toEqual([]);
+      expect(nextPendingBatch(db)).toBeNull();
+    } finally {
+      db.close();
+      await rmRecursive(testDir);
+    }
+  });
 });

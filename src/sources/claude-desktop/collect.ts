@@ -1,6 +1,7 @@
 import { join, dirname } from 'node:path';
 import { statFile } from 'core/io/fs';
 import { readJsonlRange } from 'core/io/jsonl';
+import { isProjectExcluded } from 'services/exclusion';
 import {
   generateUuidV7,
   nowIsoUtc,
@@ -109,6 +110,37 @@ export async function collectClaudeDesktopFile(
 
     const sessionDir = dirname(file.sourcePath);
     const { userMap, assistantMap } = await loadCliMetadataMap(sessionDir);
+
+    const excluded = context.excludedProjects ?? [];
+    if (excluded.length > 0) {
+      let firstCwd: string | null = null;
+      for (const meta of [...userMap.values(), ...assistantMap.values()]) {
+        if (meta.cwd.length > 0) {
+          firstCwd = meta.cwd;
+          break;
+        }
+      }
+      if (firstCwd !== null && isProjectExcluded(firstCwd, excluded)) {
+        context.logger?.info(
+          {
+            event: 'capture.project_excluded',
+            source_app: CLAUDE_DESKTOP_SOURCE_APP,
+            project: firstCwd,
+          },
+          'skipped capture for excluded project',
+        );
+        setCursor(context.buffer, {
+          sourceApp: CLAUDE_DESKTOP_SOURCE_APP,
+          sourcePathHash: file.sourcePathHash,
+          sourcePath: file.sourcePath,
+          sourceInode: file.inode,
+          watermarkTable: null,
+          watermarkEnd: range.endByte,
+          consecutiveErrors: 0,
+        });
+        return result;
+      }
+    }
 
     const rawText = DECODER.decode(range.bytes);
     const lines = rawText.split('\n');
