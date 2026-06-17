@@ -1,19 +1,19 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-16T22:42:29.355Z",
-  "sourceHash": "319f21ebf4f2979781f90cb9aa9ba12f",
+  "generatedAt": "2026-06-17T01:19:02.251Z",
+  "sourceHash": "a7c9015c0fc8de5c8494baefbcadf0cb",
   "files": [
     {
       "path": "CLAUDE.md",
-      "hash": "c7c29e3a9f1bf441"
+      "hash": "9c213d908a1b1648"
     },
     {
       "path": "AGENTS.md",
-      "hash": "209e1139223eb2c6"
+      "hash": "33af9e57b5605b66"
     },
     {
       "path": ".agents/AGENTS.md",
-      "hash": "027ef9d3206bc6f0"
+      "hash": "3099772d9d0209f0"
     },
     {
       "path": ".claude/rules/_always.md",
@@ -209,19 +209,19 @@
     },
     {
       "path": ".claude/rules/services/daemon-loops.md",
-      "hash": "0c6c28357ea80a65"
+      "hash": "1facb0d025ea8748"
     },
     {
       "path": ".cursor/rules/services-daemon-loops.mdc",
-      "hash": "d05bc9bf58d75769"
+      "hash": "1fc5b870cb3ed237"
     },
     {
       "path": ".codex/rules/services/daemon-loops.md",
-      "hash": "e5f52678324d67c8"
+      "hash": "a97d9de6d02f2ab9"
     },
     {
       "path": ".agents/rules/services/daemon-loops.md",
-      "hash": "7edbc130f417ad6e"
+      "hash": "e1d1723ff3cce036"
     },
     {
       "path": ".claude/rules/services/no-direct-sqlite-outside-buffer.md",
@@ -849,19 +849,19 @@
     },
     {
       "path": ".claude/knowledge/services/_overview.md",
-      "hash": "274880ca0e42b539"
+      "hash": "3d963768f54a0a54"
     },
     {
       "path": ".cursor/knowledge/services/_overview.md",
-      "hash": "274880ca0e42b539"
+      "hash": "3d963768f54a0a54"
     },
     {
       "path": ".codex/knowledge/services/_overview.md",
-      "hash": "274880ca0e42b539"
+      "hash": "3d963768f54a0a54"
     },
     {
       "path": ".agents/knowledge/services/_overview.md",
-      "hash": "274880ca0e42b539"
+      "hash": "3d963768f54a0a54"
     },
     {
       "path": ".claude/knowledge/services/buffer.md",
@@ -945,19 +945,19 @@
     },
     {
       "path": ".claude/knowledge/services/polling.md",
-      "hash": "26880b8b571a3ca2"
+      "hash": "f9f66a803c387245"
     },
     {
       "path": ".cursor/knowledge/services/polling.md",
-      "hash": "26880b8b571a3ca2"
+      "hash": "f9f66a803c387245"
     },
     {
       "path": ".codex/knowledge/services/polling.md",
-      "hash": "26880b8b571a3ca2"
+      "hash": "f9f66a803c387245"
     },
     {
       "path": ".agents/knowledge/services/polling.md",
-      "hash": "26880b8b571a3ca2"
+      "hash": "f9f66a803c387245"
     },
     {
       "path": ".claude/knowledge/services/redaction.md",
@@ -974,6 +974,22 @@
     {
       "path": ".agents/knowledge/services/redaction.md",
       "hash": "7791dbed5e99d870"
+    },
+    {
+      "path": ".claude/knowledge/services/rescue.md",
+      "hash": "8bfc599bf1b5b2f3"
+    },
+    {
+      "path": ".cursor/knowledge/services/rescue.md",
+      "hash": "8bfc599bf1b5b2f3"
+    },
+    {
+      "path": ".codex/knowledge/services/rescue.md",
+      "hash": "8bfc599bf1b5b2f3"
+    },
+    {
+      "path": ".agents/knowledge/services/rescue.md",
+      "hash": "8bfc599bf1b5b2f3"
     },
     {
       "path": ".claude/knowledge/services/retention-and-stats.md",
