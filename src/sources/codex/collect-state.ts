@@ -48,7 +48,6 @@ export async function collectCodexState(
         try {
           collectOneTable(
             db,
-            file,
             context,
             table,
             agentSchemaVersion,

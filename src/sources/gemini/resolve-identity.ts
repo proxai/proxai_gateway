@@ -2,7 +2,7 @@ import type { Database } from 'bun:sqlite';
 
 import { maxRowid, tableExists } from 'core/io/sqlite';
 import { nextGenerationSuffix, sha256Hex } from 'core/utils';
-import { detectVacuum, getCursorWithFallback } from 'services/buffer';
+import { detectVacuum, getCursorWithFallback, getHighestGenerationPath } from 'services/buffer';
 import { GEMINI_ALLOWED_TABLES, GEMINI_SOURCE_APP } from 'sources/gemini/gemini.constants.ts';
 import type { DiscoveredGeminiFile, GeminiCollectorContext } from 'sources/gemini/gemini.types.ts';
 
@@ -19,13 +19,19 @@ export function resolveGeminiIdentity(
   currentSizeBytes: number,
   currentPageCount: number,
 ): GeminiIdentity {
+  let currentPath = file.sourcePath;
+  try {
+    currentPath = getHighestGenerationPath(context.buffer, GEMINI_SOURCE_APP, file.sourcePath);
+  } catch {}
+  const currentPathHash = sha256Hex(currentPath);
+
   for (const table of GEMINI_ALLOWED_TABLES) {
     if (!tableExists(db, table)) continue;
     let cursor;
     try {
       cursor = getCursorWithFallback(context.buffer, {
         sourceApp: GEMINI_SOURCE_APP,
-        sourcePathHash: file.sourcePathHash,
+        sourcePathHash: currentPathHash,
         sourceInode: null,
         watermarkTable: table,
       });
@@ -42,13 +48,13 @@ export function resolveGeminiIdentity(
       currentMaxRowid: maxRowid(db, table),
     });
     if (detection.vacuumed) {
-      const newPath = nextGenerationSuffix(file.sourcePath);
+      const newPath = nextGenerationSuffix(currentPath);
       context.logger?.warn(
         {
           event: 'vacuum.detected',
           source_app: GEMINI_SOURCE_APP,
           reason: detection.reason,
-          old_path: file.sourcePath,
+          old_path: currentPath,
           new_path: newPath,
           triggering_table: table,
         },
@@ -62,8 +68,8 @@ export function resolveGeminiIdentity(
     }
   }
   return {
-    sourcePath: file.sourcePath,
-    sourcePathHash: file.sourcePathHash,
+    sourcePath: currentPath,
+    sourcePathHash: currentPathHash,
     rotated: false,
   };
 }

@@ -328,3 +328,95 @@ test('bumps consecutive_errors when the source database is corrupt', async () =>
   });
   expect(cursor?.consecutiveErrors).toBe(1);
 });
+
+async function makeLargeGeminiDb(count: number): Promise<DiscoveredGeminiFile> {
+  const path = join(dir, 'cascade-large.db');
+  const db = new Database(path, { create: true });
+  db.run(
+    'CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, status INTEGER, step_payload BLOB)',
+  );
+  db.run(
+    'CREATE TABLE trajectory_meta (trajectory_id TEXT, cascade_id TEXT, trajectory_type INTEGER, source INTEGER)',
+  );
+  db.run('CREATE TABLE trajectory_metadata_blob (id TEXT, data BLOB)');
+  const insertStep = db.query(
+    'INSERT INTO steps (idx, step_type, status, step_payload) VALUES (?, ?, ?, ?)',
+  );
+  const largeBlob = new Uint8Array(1024);
+  for (let i = 0; i < count; i += 1) {
+    insertStep.run(i, 14, 3, largeBlob);
+  }
+  db.query('INSERT INTO trajectory_meta VALUES (?, ?, ?, ?)').run('traj-1', 'cascade-1', 4, 17);
+  db.query('INSERT INTO trajectory_metadata_blob VALUES (?, ?)').run('main', metadataBlob());
+  db.close();
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('file missing after write');
+  return {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+    sourcePlatform: 'antigravity-cli',
+  };
+}
+
+test('vacuum convergence and advance tests', async () => {
+  const file = await makeLargeGeminiDb(200);
+  const res1 = await collectGeminiConversation(file, ctx(buffer));
+  expect(res1.capturedBatches).toBeGreaterThan(0);
+  const baseCursor = getCursor(buffer, {
+    sourceApp: 'gemini',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: 'trajectory_meta',
+  });
+  expect(baseCursor).not.toBeNull();
+  const db1 = new Database(file.sourcePath);
+  db1.run('DELETE FROM steps');
+  db1.run('VACUUM');
+  db1.close();
+  const res2 = await collectGeminiConversation(file, ctx(buffer));
+  expect(res2.capturedBatches).toBeGreaterThan(0);
+  const gen1Hash = sha256Hex(`${file.sourcePath}#gen=1`);
+  const gen1Cursor = getCursor(buffer, {
+    sourceApp: 'gemini',
+    sourcePathHash: gen1Hash,
+    sourceInode: null,
+    watermarkTable: 'trajectory_meta',
+  });
+  expect(gen1Cursor).not.toBeNull();
+  const res3 = await collectGeminiConversation(file, ctx(buffer));
+  expect(res3.capturedBatches).toBe(0);
+  const gen2CursorMissing = getCursor(buffer, {
+    sourceApp: 'gemini',
+    sourcePathHash: sha256Hex(`${file.sourcePath}#gen=2`),
+    sourceInode: null,
+    watermarkTable: 'trajectory_meta',
+  });
+  expect(gen2CursorMissing).toBeNull();
+  const db2 = new Database(file.sourcePath);
+  db2.run('INSERT INTO steps (idx, step_type, status, step_payload) VALUES (?, ?, ?, ?)', [
+    10,
+    14,
+    1,
+    userPayload('more text'),
+  ]);
+  db2.close();
+  const res4 = await collectGeminiConversation(file, ctx(buffer));
+  expect(res4.capturedBatches).toBe(1);
+  const db3 = new Database(file.sourcePath);
+  db3.run('DELETE FROM steps WHERE idx = 10');
+  db3.run('VACUUM');
+  db3.close();
+  const res5 = await collectGeminiConversation(file, ctx(buffer));
+  expect(res5.capturedBatches).toBeGreaterThan(0);
+  const gen2Hash = sha256Hex(`${file.sourcePath}#gen=2`);
+  const gen2Cursor = getCursor(buffer, {
+    sourceApp: 'gemini',
+    sourcePathHash: gen2Hash,
+    sourceInode: null,
+    watermarkTable: 'trajectory_meta',
+  });
+  expect(gen2Cursor).not.toBeNull();
+});

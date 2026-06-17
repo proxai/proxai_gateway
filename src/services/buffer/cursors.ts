@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 
-import { nowIsoUtc } from 'core/utils';
+import { currentGenerationNumber, nowIsoUtc, stripGenerationSuffix } from 'core/utils';
 import {
   BUFFER_TABLES,
   CURSOR_COLS,
@@ -98,6 +98,30 @@ export function getCursorWithFallback(db: Database, key: CursorKey): CursorState
   if (exact !== null) return exact;
   if ((key.sourceInode ?? NO_INODE_SENTINEL) === NO_INODE_SENTINEL) return null;
   return getCursor(db, { ...key, sourceInode: NO_INODE_SENTINEL });
+}
+
+export function getHighestGenerationPath(
+  db: Database,
+  sourceApp: SourceApp,
+  baseSourcePath: string,
+): string {
+  const base = stripGenerationSuffix(baseSourcePath);
+  const rows = db
+    .query<
+      { source_path: string },
+      [string, string, string]
+    >(`SELECT DISTINCT source_path FROM ${BUFFER_TABLES.cursors} WHERE source_app = ? AND (source_path = ? OR source_path LIKE ?)`)
+    .all(sourceApp, base, `${base}#gen=%`);
+  let maxGen = 0;
+  let resultPath = base;
+  for (const row of rows) {
+    const gen = currentGenerationNumber(row.source_path);
+    if (gen > maxGen) {
+      maxGen = gen;
+      resultPath = row.source_path;
+    }
+  }
+  return resultPath;
 }
 
 const COUNT_CURSORS_SQL = `SELECT COUNT(*) AS count FROM ${BUFFER_TABLES.cursors}`;

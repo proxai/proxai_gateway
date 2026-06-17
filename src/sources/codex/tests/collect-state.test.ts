@@ -1052,3 +1052,116 @@ test('threads batch defaults to codex-cli when the threads table has no source c
   const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.sourcePlatform).toBe('codex-cli');
 });
+
+async function makeLargeStateDb(
+  count: number,
+  name = 'state_large.sqlite',
+): Promise<DiscoveredCodexStateFile> {
+  const path = join(dir, name);
+  const db = new Database(path, { create: true });
+  db.run(
+    `CREATE TABLE threads (
+      id TEXT PRIMARY KEY,
+      cli_version TEXT,
+      cwd TEXT,
+      title TEXT,
+      model TEXT
+    )`,
+  );
+  db.run(
+    `CREATE TABLE thread_dynamic_tools (
+      thread_id TEXT,
+      position INTEGER,
+      name TEXT,
+      PRIMARY KEY (thread_id, position)
+    )`,
+  );
+  db.run(
+    `CREATE TABLE thread_spawn_edges (
+      parent_thread_id TEXT,
+      child_thread_id TEXT PRIMARY KEY,
+      status TEXT
+    )`,
+  );
+  const insertThread = db.query(
+    'INSERT INTO threads (id, cli_version, cwd, title, model) VALUES (?, ?, ?, ?, ?)',
+  );
+  const largeVal = 'x'.repeat(1024);
+  for (let i = 0; i < count; i += 1) {
+    insertThread.run(`t-${i}`, '0.1.0', largeVal, `title-${i}`, 'gpt-5');
+  }
+  db.query(
+    'INSERT INTO thread_spawn_edges (parent_thread_id, child_thread_id, status) VALUES (?, ?, ?)',
+  ).run('t-0', 't-child', 'completed');
+  db.close();
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('seed missing');
+  return {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+}
+
+test('vacuum convergence and advance tests for Codex', async () => {
+  const file = await makeLargeStateDb(200);
+  const { result: res1 } = await collectCodexState(file, ctx(buffer));
+  expect(res1.capturedBatches).toBeGreaterThan(0);
+  const baseCursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: 'thread_spawn_edges',
+  });
+  expect(baseCursor).not.toBeNull();
+  const db1 = new Database(file.sourcePath);
+  db1.run('DELETE FROM threads');
+  db1.run('VACUUM');
+  db1.close();
+  const { result: res2 } = await collectCodexState(file, ctx(buffer));
+  expect(res2.capturedBatches).toBeGreaterThan(0);
+  const gen1Hash = sha256Hex(`${file.sourcePath}#gen=1`);
+  const gen1Cursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: gen1Hash,
+    sourceInode: null,
+    watermarkTable: 'thread_spawn_edges',
+  });
+  expect(gen1Cursor).not.toBeNull();
+  const { result: res3 } = await collectCodexState(file, ctx(buffer));
+  expect(res3.capturedBatches).toBe(0);
+  const gen2CursorMissing = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: sha256Hex(`${file.sourcePath}#gen=2`),
+    sourceInode: null,
+    watermarkTable: 'thread_spawn_edges',
+  });
+  expect(gen2CursorMissing).toBeNull();
+  const db2 = new Database(file.sourcePath);
+  db2.run('INSERT INTO threads (id, cli_version, cwd, title, model) VALUES (?, ?, ?, ?, ?)', [
+    't-new',
+    '0.1.0',
+    '/tmp',
+    'new-title',
+    'gpt-5',
+  ]);
+  db2.close();
+  const { result: res4 } = await collectCodexState(file, ctx(buffer));
+  expect(res4.capturedBatches).toBe(1);
+  const db3 = new Database(file.sourcePath);
+  db3.run("DELETE FROM threads WHERE id = 't-new'");
+  db3.run('VACUUM');
+  db3.close();
+  const { result: res5 } = await collectCodexState(file, ctx(buffer));
+  expect(res5.capturedBatches).toBeGreaterThan(0);
+  const gen2Hash = sha256Hex(`${file.sourcePath}#gen=2`);
+  const gen2Cursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: gen2Hash,
+    sourceInode: null,
+    watermarkTable: 'thread_spawn_edges',
+  });
+  expect(gen2Cursor).not.toBeNull();
+});

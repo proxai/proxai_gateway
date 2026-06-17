@@ -678,3 +678,88 @@ test('filters out invalid or empty bubbleId rows during processRows', async () =
   expect(result.errors).toEqual([]);
   expect(result.capturedBatches).toBe(0);
 });
+
+async function makeLargeCursorDb(
+  count: number,
+  name = 'state_large.vscdb',
+): Promise<DiscoveredCursorFile> {
+  const path = join(dir, name);
+  const db = new Database(path, { create: true });
+  db.run('CREATE TABLE cursorDiskKV (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)');
+  const insert = db.prepare('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)');
+  const largeVal = 'x'.repeat(1024);
+  const tx = db.transaction(() => {
+    for (let i = 0; i < count; i += 1) {
+      insert.run(`bubbleId:c${i}:b1`, JSON.stringify({ _v: 3, text: largeVal }));
+    }
+  });
+  tx();
+  db.close();
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('file missing after write');
+  return {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+}
+
+test('vacuum convergence and advance tests for Cursor', async () => {
+  const file = await makeLargeCursorDb(200);
+  const res1 = await collectCursorFile(file, ctx(buffer));
+  expect(res1.capturedBatches).toBeGreaterThan(0);
+  const baseCursor = getCursor(buffer, {
+    sourceApp: 'cursor',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: null,
+    watermarkTable: null,
+  });
+  expect(baseCursor).not.toBeNull();
+  const db1 = new Database(file.sourcePath);
+  db1.run('DELETE FROM cursorDiskKV');
+  db1.run('VACUUM');
+  db1.close();
+  const res2 = await collectCursorFile(file, ctx(buffer));
+  expect(res2.capturedBatches).toBe(0);
+  const gen1Hash = sha256Hex(`${file.sourcePath}#gen=1`);
+  const gen1Cursor = getCursor(buffer, {
+    sourceApp: 'cursor',
+    sourcePathHash: gen1Hash,
+    sourceInode: null,
+    watermarkTable: null,
+  });
+  expect(gen1Cursor).not.toBeNull();
+  const res3 = await collectCursorFile(file, ctx(buffer));
+  expect(res3.capturedBatches).toBe(0);
+  const gen2CursorMissing = getCursor(buffer, {
+    sourceApp: 'cursor',
+    sourcePathHash: sha256Hex(`${file.sourcePath}#gen=2`),
+    sourceInode: null,
+    watermarkTable: null,
+  });
+  expect(gen2CursorMissing).toBeNull();
+  const db2 = new Database(file.sourcePath);
+  db2.run('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)', [
+    'bubbleId:c-new:b1',
+    JSON.stringify({ _v: 3, text: 'some text' }),
+  ]);
+  db2.close();
+  const res4 = await collectCursorFile(file, ctx(buffer));
+  expect(res4.capturedBatches).toBe(1);
+  const db3 = new Database(file.sourcePath);
+  db3.run("DELETE FROM cursorDiskKV WHERE key = 'bubbleId:c-new:b1'");
+  db3.run('VACUUM');
+  db3.close();
+  const res5 = await collectCursorFile(file, ctx(buffer));
+  expect(res5.capturedBatches).toBe(0);
+  const gen2Hash = sha256Hex(`${file.sourcePath}#gen=2`);
+  const gen2Cursor = getCursor(buffer, {
+    sourceApp: 'cursor',
+    sourcePathHash: gen2Hash,
+    sourceInode: null,
+    watermarkTable: null,
+  });
+  expect(gen2Cursor).not.toBeNull();
+});
