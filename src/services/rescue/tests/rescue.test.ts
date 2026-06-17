@@ -36,6 +36,7 @@ test('rescue ledger CRUD and bootId mismatch handling', async () => {
       lastRescueAt: '2026-06-16T12:00:00.000Z',
       consecutiveFailures: 1,
       attempts: [{ at: '2026-06-16T12:00:00.000Z', action: 'start' }],
+      lastObservedHeartbeatAt: null,
     };
 
     await writeRescueLedger(ledgerPath, initial);
@@ -69,6 +70,7 @@ test('rescue ledger helpers', () => {
     lastRescueAt: null,
     consecutiveFailures: 0,
     attempts: [],
+    lastObservedHeartbeatAt: null,
   };
 
   recordRescueAttempt(ledger, '2026-06-16T12:00:00.000Z', 'start');
@@ -129,6 +131,7 @@ test('decideRescue transitions', () => {
     lastRescueAt: null,
     consecutiveFailures: 3,
     attempts: [],
+    lastObservedHeartbeatAt: null,
   };
   expect(decideRescue({ ...baseInput, ledger: brokenLedger })).toEqual({
     kind: 'none',
@@ -140,6 +143,7 @@ test('decideRescue transitions', () => {
     lastRescueAt: '2026-06-16T12:03:00.000Z',
     consecutiveFailures: 0,
     attempts: [],
+    lastObservedHeartbeatAt: null,
   };
   expect(decideRescue({ ...baseInput, ledger: cappedLedger })).toEqual({
     kind: 'none',
@@ -191,6 +195,13 @@ test('decideRescue transitions', () => {
       isRunning: true,
       captureLastCycleAt: '2026-06-16T11:30:00.000Z',
       drainLastCycleAt: '2026-06-16T11:30:00.000Z',
+      ledger: {
+        bootId: 'boot-1',
+        lastRescueAt: null,
+        consecutiveFailures: 0,
+        attempts: [],
+        lastObservedHeartbeatAt: '2026-06-16T11:30:00.000Z',
+      },
     }),
   ).toEqual({
     kind: 'restart',
@@ -201,6 +212,7 @@ test('decideRescue transitions', () => {
     lastRescueAt: '2026-06-16T10:00:00.000Z',
     consecutiveFailures: 0,
     attempts: [],
+    lastObservedHeartbeatAt: null,
   };
   expect(
     decideRescue({
@@ -219,6 +231,7 @@ test('decideRescue transitions', () => {
     lastRescueAt: 'invalid-date',
     consecutiveFailures: 0,
     attempts: [],
+    lastObservedHeartbeatAt: null,
   };
   expect(
     decideRescue({
@@ -296,6 +309,7 @@ test('decideRescue transitions', () => {
     lastRescueAt: '2026-06-16T12:10:00.000Z',
     consecutiveFailures: 0,
     attempts: [],
+    lastObservedHeartbeatAt: null,
   };
   expect(
     decideRescue({
@@ -450,6 +464,7 @@ test('readRescueLedgerReadOnly behaviour', async () => {
       lastRescueAt: '2026-06-16T12:00:00.000Z',
       consecutiveFailures: 2,
       attempts: [],
+      lastObservedHeartbeatAt: null,
     };
     await writeRescueLedger(ledgerPath, initial);
 
@@ -475,4 +490,74 @@ test('readRescueLedgerReadOnly behaviour', async () => {
       process.env['PROXAI_TEST_PROFILE_ROOT'] = original;
     }
   }
+});
+
+test('decideRescue wedge confirmation logic (R5)', () => {
+  const baseInput: RescueDecisionInput = {
+    configExists: true,
+    serviceUnitRegistered: true,
+    isRunning: true,
+    captureLastCycleAt: '2026-06-16T12:00:00.000Z',
+    drainLastCycleAt: '2026-06-16T12:00:00.000Z',
+    authFailedPresent: false,
+    bufferFullPresent: false,
+    sessionStoppedThisBoot: false,
+    upgradeInProgress: false,
+    ledger: null,
+    now: new Date('2026-06-16T12:40:00.000Z'),
+  };
+
+  const ledgerNull: RescueLedger = {
+    bootId: 'boot-1',
+    lastRescueAt: null,
+    consecutiveFailures: 0,
+    attempts: [],
+    lastObservedHeartbeatAt: null,
+  };
+  expect(decideRescue({ ...baseInput, ledger: ledgerNull })).toEqual({
+    kind: 'none',
+    reason: 'healthy',
+  });
+
+  const ledgerAdvanced: RescueLedger = {
+    bootId: 'boot-1',
+    lastRescueAt: null,
+    consecutiveFailures: 0,
+    attempts: [],
+    lastObservedHeartbeatAt: '2026-06-16T11:50:00.000Z',
+  };
+  expect(decideRescue({ ...baseInput, ledger: ledgerAdvanced })).toEqual({
+    kind: 'none',
+    reason: 'healthy',
+  });
+
+  const ledgerUnchanged: RescueLedger = {
+    bootId: 'boot-1',
+    lastRescueAt: null,
+    consecutiveFailures: 0,
+    attempts: [],
+    lastObservedHeartbeatAt: '2026-06-16T12:00:00.000Z',
+  };
+  expect(decideRescue({ ...baseInput, ledger: ledgerUnchanged })).toEqual({
+    kind: 'restart',
+  });
+
+  const sleepCheck1 = decideRescue({ ...baseInput, ledger: ledgerNull });
+  expect(sleepCheck1).toEqual({ kind: 'none', reason: 'healthy' });
+
+  const ledgerAfterSleep: RescueLedger = {
+    bootId: 'boot-1',
+    lastRescueAt: null,
+    consecutiveFailures: 0,
+    attempts: [],
+    lastObservedHeartbeatAt: '2026-06-16T12:00:00.000Z',
+  };
+  const sleepCheck2 = decideRescue({
+    ...baseInput,
+    captureLastCycleAt: '2026-06-16T12:45:00.000Z',
+    drainLastCycleAt: '2026-06-16T12:45:00.000Z',
+    ledger: ledgerAfterSleep,
+    now: new Date('2026-06-16T12:55:00.000Z'),
+  });
+  expect(sleepCheck2).toEqual({ kind: 'none', reason: 'healthy' });
 });

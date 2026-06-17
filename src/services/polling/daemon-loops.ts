@@ -197,21 +197,41 @@ async function captureLoop(
   sleep: NonNullable<DaemonLoopOptions['sleep']>,
   onComplete: ((result: CaptureCycleResult) => void) | undefined,
 ): Promise<void> {
+  let inFlight = false;
   while (!isAborted(signal)) {
     if (await pausedByAuth(ctx.authFailedSentinelPath)) {
       await sleep(Math.min(intervalMs, PAUSE_RECHECK_MS), signal);
       continue;
     }
-    try {
-      const result = await runWithTimeout(runCaptureCycle(ctx), 90_000, 'capture', ctx.logger);
-      if (result !== null) {
-        notify(onComplete, result, ctx.logger, 'capture.cycle.callback_failed');
-      }
-    } catch (err) {
+    if (inFlight) {
       ctx.logger?.error(
-        { event: 'capture.cycle.error', error: (err as Error).message ?? String(err) },
-        'capture cycle threw',
+        { event: 'capture.cycle.skipped_in_flight' },
+        'capture cycle skipped due to previous run still in flight',
       );
+    } else {
+      inFlight = true;
+      const cyclePromise = runCaptureCycle(ctx);
+      void cyclePromise.then(
+        () => {
+          inFlight = false;
+          return null;
+        },
+        () => {
+          inFlight = false;
+          return null;
+        },
+      );
+      try {
+        const result = await runWithTimeout(cyclePromise, 90_000, 'capture', ctx.logger);
+        if (result !== null) {
+          notify(onComplete, result, ctx.logger, 'capture.cycle.callback_failed');
+        }
+      } catch (err) {
+        ctx.logger?.error(
+          { event: 'capture.cycle.error', error: (err as Error).message ?? String(err) },
+          'capture cycle threw',
+        );
+      }
     }
     if (isAborted(signal)) return;
     await sleep(intervalMs, signal);
@@ -225,21 +245,41 @@ async function drainLoop(
   sleep: NonNullable<DaemonLoopOptions['sleep']>,
   onComplete: ((result: DrainCycleResult) => void) | undefined,
 ): Promise<void> {
+  let inFlight = false;
   while (!isAborted(signal)) {
     if (await pausedByAuth(ctx.authFailedSentinelPath)) {
       await sleep(Math.min(intervalMs, PAUSE_RECHECK_MS), signal);
       continue;
     }
-    try {
-      const result = await runWithTimeout(runDrainCycle(ctx), 25_000, 'drain', ctx.logger);
-      if (result !== null) {
-        notify(onComplete, result, ctx.logger, 'drain.cycle.callback_failed');
-      }
-    } catch (err) {
+    if (inFlight) {
       ctx.logger?.error(
-        { event: 'drain.cycle.error', error: (err as Error).message ?? String(err) },
-        'drain cycle threw',
+        { event: 'drain.cycle.skipped_in_flight' },
+        'drain cycle skipped due to previous run still in flight',
       );
+    } else {
+      inFlight = true;
+      const cyclePromise = runDrainCycle(ctx);
+      void cyclePromise.then(
+        () => {
+          inFlight = false;
+          return null;
+        },
+        () => {
+          inFlight = false;
+          return null;
+        },
+      );
+      try {
+        const result = await runWithTimeout(cyclePromise, 25_000, 'drain', ctx.logger);
+        if (result !== null) {
+          notify(onComplete, result, ctx.logger, 'drain.cycle.callback_failed');
+        }
+      } catch (err) {
+        ctx.logger?.error(
+          { event: 'drain.cycle.error', error: (err as Error).message ?? String(err) },
+          'drain cycle threw',
+        );
+      }
     }
     if (isAborted(signal)) return;
     await sleep(intervalMs, signal);
@@ -253,21 +293,41 @@ async function heartbeatLoop(
   sleep: NonNullable<DaemonLoopOptions['sleep']>,
   onComplete: ((result: HeartbeatCycleResult) => void) | undefined,
 ): Promise<void> {
+  let inFlight = false;
   while (!isAborted(signal)) {
     if (await pausedByAuth(ctx.authFailedSentinelPath)) {
       await sleep(Math.min(intervalMs, PAUSE_RECHECK_MS), signal);
       continue;
     }
-    try {
-      const result = await runWithTimeout(runHeartbeatCycle(ctx), 600_000, 'heartbeat', ctx.logger);
-      if (result !== null) {
-        notify(onComplete, result, ctx.logger, 'heartbeat.cycle.callback_failed');
-      }
-    } catch (err) {
+    if (inFlight) {
       ctx.logger?.error(
-        { event: 'heartbeat.cycle.error', error: (err as Error).message ?? String(err) },
-        'heartbeat cycle threw',
+        { event: 'heartbeat.cycle.skipped_in_flight' },
+        'heartbeat cycle skipped due to previous run still in flight',
       );
+    } else {
+      inFlight = true;
+      const cyclePromise = runHeartbeatCycle(ctx);
+      void cyclePromise.then(
+        () => {
+          inFlight = false;
+          return null;
+        },
+        () => {
+          inFlight = false;
+          return null;
+        },
+      );
+      try {
+        const result = await runWithTimeout(cyclePromise, 600_000, 'heartbeat', ctx.logger);
+        if (result !== null) {
+          notify(onComplete, result, ctx.logger, 'heartbeat.cycle.callback_failed');
+        }
+      } catch (err) {
+        ctx.logger?.error(
+          { event: 'heartbeat.cycle.error', error: (err as Error).message ?? String(err) },
+          'heartbeat cycle threw',
+        );
+      }
     }
     if (isAborted(signal)) return;
     await sleep(intervalMs, signal);

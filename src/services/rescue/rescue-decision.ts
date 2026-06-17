@@ -3,7 +3,7 @@ import type { RescueLedger } from 'services/rescue/rescue-ledger.ts';
 const SUSTAINED_DOWN_MS = 600_000;
 const WEDGE_STALE_MS = 1_800_000;
 const RESCUE_RATE_CAP_MS = 3_600_000;
-const MAX_CONSECUTIVE_FAILURES = 3;
+export const MAX_CONSECUTIVE_FAILURES = 3;
 
 export interface RescueDecisionInput {
   configExists: boolean;
@@ -96,7 +96,13 @@ export function decideRescue(input: RescueDecisionInput): RescueDecisionResult {
   }
   const age = input.now.getTime() - lastHeartbeatMs;
   if (age > WEDGE_STALE_MS) {
-    return { kind: 'restart' };
+    if (input.ledger !== null && input.ledger.lastObservedHeartbeatAt !== null) {
+      const prevMs = Date.parse(input.ledger.lastObservedHeartbeatAt);
+      if (Number.isFinite(prevMs) && lastHeartbeatMs === prevMs) {
+        return { kind: 'restart' };
+      }
+    }
+    return { kind: 'none', reason: 'healthy' };
   }
 
   return { kind: 'none', reason: 'healthy' };

@@ -5,6 +5,7 @@ export interface RescueLedger {
   lastRescueAt: string | null;
   consecutiveFailures: number;
   attempts: Array<{ at: string; action: 'start' | 'restart' }>;
+  lastObservedHeartbeatAt: string | null;
 }
 
 export async function readRescueLedger(
@@ -22,12 +23,17 @@ export async function readRescueLedger(
     const consecutiveFailures =
       typeof parsed['consecutiveFailures'] === 'number' ? parsed['consecutiveFailures'] : 0;
     const attempts = Array.isArray(parsed['attempts']) ? parsed['attempts'] : [];
+    const lastObservedHeartbeatAt =
+      typeof parsed['lastObservedHeartbeatAt'] === 'string'
+        ? parsed['lastObservedHeartbeatAt']
+        : null;
 
     const ledger: RescueLedger = {
       bootId,
       lastRescueAt,
       consecutiveFailures,
       attempts: attempts as Array<{ at: string; action: 'start' | 'restart' }>,
+      lastObservedHeartbeatAt,
     };
 
     if (bootId !== currentBootId) {
@@ -35,6 +41,7 @@ export async function readRescueLedger(
       ledger.consecutiveFailures = 0;
       ledger.attempts = [];
       ledger.lastRescueAt = null;
+      ledger.lastObservedHeartbeatAt = null;
       await writeRescueLedger(path, ledger);
     }
     return ledger;
@@ -60,18 +67,24 @@ export async function readRescueLedgerReadOnly(
         lastRescueAt: null,
         consecutiveFailures: 0,
         attempts: [],
+        lastObservedHeartbeatAt: null,
       };
     }
     const lastRescueAt = typeof parsed['lastRescueAt'] === 'string' ? parsed['lastRescueAt'] : null;
     const consecutiveFailures =
       typeof parsed['consecutiveFailures'] === 'number' ? parsed['consecutiveFailures'] : 0;
     const attempts = Array.isArray(parsed['attempts']) ? parsed['attempts'] : [];
+    const lastObservedHeartbeatAt =
+      typeof parsed['lastObservedHeartbeatAt'] === 'string'
+        ? parsed['lastObservedHeartbeatAt']
+        : null;
 
     return {
       bootId,
       lastRescueAt,
       consecutiveFailures,
       attempts: attempts as Array<{ at: string; action: 'start' | 'restart' }>,
+      lastObservedHeartbeatAt,
     };
   } catch {
     return null;

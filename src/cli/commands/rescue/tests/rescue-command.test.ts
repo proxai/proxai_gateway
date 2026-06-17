@@ -14,6 +14,10 @@ import { EXIT_CODE } from 'cli/cli.constants.ts';
 let mockDecisionKind: 'none' | 'start' | 'restart' | 'paused' = 'none';
 let originalBootId: string | undefined;
 let lastDecisionInput: unknown = null;
+let mockHeartbeat = {
+  captureLastCycleAt: null as string | null,
+  drainLastCycleAt: null as string | null,
+};
 
 mock.module('services/rescue/rescue-decision.ts', () => ({
   decideRescue: (input: unknown) => {
@@ -31,6 +35,10 @@ mock.module('services/rescue/rescue-decision.ts', () => ({
   },
 }));
 
+mock.module('services/rescue/heartbeat-read.ts', () => ({
+  readHeartbeat: () => mockHeartbeat,
+}));
+
 beforeEach(() => {
   originalBootId = process.env['PROXAI_TEST_BOOT_ID'];
   process.env['PROXAI_TEST_BOOT_ID'] = 'mock-boot-id';
@@ -38,6 +46,7 @@ beforeEach(() => {
 
 afterEach(() => {
   mockDecisionKind = 'none';
+  mockHeartbeat = { captureLastCycleAt: null, drainLastCycleAt: null };
   if (originalBootId === undefined) {
     delete process.env['PROXAI_TEST_BOOT_ID'];
   } else {
@@ -74,7 +83,7 @@ test('runRescue starts daemon on start decision', async () => {
     const bootId = await readBootId();
     const ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
     expect(ledger).not.toBeNull();
-    expect(ledger?.consecutiveFailures).toBe(1);
+    expect(ledger?.consecutiveFailures).toBe(0);
     expect(ledger?.attempts.length).toBe(1);
     expect(ledger?.attempts[0]?.action).toBe('start');
 
@@ -108,12 +117,21 @@ test('runRescue restarts daemon on restart decision', async () => {
       skipExit: true,
     });
 
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+
     const bootId = await readBootId();
     const ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
     expect(ledger).not.toBeNull();
     expect(ledger?.consecutiveFailures).toBe(1);
-    expect(ledger?.attempts.length).toBe(1);
+    expect(ledger?.attempts.length).toBe(2);
     expect(ledger?.attempts[0]?.action).toBe('restart');
+    expect(ledger?.attempts[1]?.action).toBe('restart');
 
     await clearRescueLedger(profileCtx.sentinels.rescueLedger);
   } finally {
@@ -141,6 +159,7 @@ test('runRescue clears consecutiveFailures on none/healthy decision', async () =
       lastRescueAt: null,
       consecutiveFailures: 2,
       attempts: [],
+      lastObservedHeartbeatAt: null,
     });
 
     const { spawn } = mockSpawn(() => ({ exitCode: 0 }));
@@ -277,6 +296,151 @@ test('runRescue detects upgrade lock at profile root', async () => {
 
     await rm(lockPath, { force: true });
   } finally {
+    if (original === undefined) {
+      delete process.env['PROXAI_TEST_PROFILE_ROOT'];
+    } else {
+      process.env['PROXAI_TEST_PROFILE_ROOT'] = original;
+    }
+  }
+});
+
+test('runRescue consecutive failures logic: increments only if prior attempt exists, reset on healthy, unchanged on paused', async () => {
+  const original = process.env['PROXAI_TEST_PROFILE_ROOT'];
+  const root = join('/tmp', 'proxai-rescue-cmd-test-consecutive');
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = root;
+
+  try {
+    const profileCtx = buildProfileContext('prod');
+    await clearRescueLedger(profileCtx.sentinels.rescueLedger);
+
+    const { spawn } = mockSpawn(() => ({ exitCode: 0 }));
+
+    mockDecisionKind = 'start';
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+
+    const bootId = await readBootId();
+    let ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
+    expect(ledger?.consecutiveFailures).toBe(0);
+    expect(ledger?.lastRescueAt).not.toBeNull();
+
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+    ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
+    expect(ledger?.consecutiveFailures).toBe(1);
+
+    mockDecisionKind = 'paused';
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+    ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
+    expect(ledger?.consecutiveFailures).toBe(1);
+
+    mockDecisionKind = 'none';
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+    ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
+    expect(ledger?.consecutiveFailures).toBe(0);
+
+    await clearRescueLedger(profileCtx.sentinels.rescueLedger);
+  } finally {
+    if (original === undefined) {
+      delete process.env['PROXAI_TEST_PROFILE_ROOT'];
+    } else {
+      process.env['PROXAI_TEST_PROFILE_ROOT'] = original;
+    }
+  }
+});
+
+test('runRescue computes currentHeartbeat correctly from capture and drain heartbeats', async () => {
+  const original = process.env['PROXAI_TEST_PROFILE_ROOT'];
+  const root = join('/tmp', 'proxai-rescue-cmd-test-hb-cover');
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = root;
+
+  try {
+    const profileCtx = buildProfileContext('prod');
+    await clearRescueLedger(profileCtx.sentinels.rescueLedger);
+    const { spawn } = mockSpawn(() => ({ exitCode: 0 }));
+
+    mockHeartbeat = {
+      captureLastCycleAt: '2026-06-16T12:00:00.000Z',
+      drainLastCycleAt: '2026-06-16T11:00:00.000Z',
+    };
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+    let bootId = await readBootId();
+    let ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
+    expect(ledger?.lastObservedHeartbeatAt).toBe('2026-06-16T12:00:00.000Z');
+
+    mockHeartbeat = {
+      captureLastCycleAt: '2026-06-16T11:00:00.000Z',
+      drainLastCycleAt: '2026-06-16T12:00:00.000Z',
+    };
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+    ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
+    expect(ledger?.lastObservedHeartbeatAt).toBe('2026-06-16T12:00:00.000Z');
+
+    mockHeartbeat = {
+      captureLastCycleAt: 'invalid-date',
+      drainLastCycleAt: '2026-06-16T12:00:00.000Z',
+    };
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+    ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
+    expect(ledger?.lastObservedHeartbeatAt).toBe('2026-06-16T12:00:00.000Z');
+
+    mockHeartbeat = {
+      captureLastCycleAt: '2026-06-16T12:00:00.000Z',
+      drainLastCycleAt: 'invalid-date',
+    };
+    await runRescue({
+      profileName: 'prod',
+      programPath: '/bin/gateway',
+      platform: 'linux',
+      spawn,
+      skipExit: true,
+    });
+    ledger = await readRescueLedger(profileCtx.sentinels.rescueLedger, bootId);
+    expect(ledger?.lastObservedHeartbeatAt).toBe('2026-06-16T12:00:00.000Z');
+
+    await clearRescueLedger(profileCtx.sentinels.rescueLedger);
+  } finally {
+    mockHeartbeat = { captureLastCycleAt: null, drainLastCycleAt: null };
     if (original === undefined) {
       delete process.env['PROXAI_TEST_PROFILE_ROOT'];
     } else {
