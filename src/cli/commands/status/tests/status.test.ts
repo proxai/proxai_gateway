@@ -5,6 +5,9 @@ import { rmRecursive } from 'core/io/fs';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { buildProfileContext } from 'core/io/fs/profile.ts';
+import { writeRescueLedger } from 'services/rescue/rescue-ledger.ts';
+
 const STATUS_BOOT_ID = 'test-boot-id-status';
 
 import {
@@ -700,4 +703,74 @@ test('gatherStatusSnapshot handles loadConfig error and serviceManager error cle
   expect(snapshot.runtime.isRunning).toBe(false);
   expect(snapshot.runtime.pid).toBeNull();
   expect(snapshot.runtime.startedAt).toBeNull();
+});
+
+test('gatherStatusSnapshot populates rescue information from ledger when consecutiveFailures < 3', async () => {
+  const original = process.env['PROXAI_TEST_PROFILE_ROOT'];
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = dir;
+
+  try {
+    const profileCtx = buildProfileContext('dev');
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(profileCtx.configDir, { recursive: true });
+
+    await writeRescueLedger(profileCtx.sentinels.rescueLedger, {
+      bootId: STATUS_BOOT_ID,
+      lastRescueAt: '2026-06-16T12:00:00.000Z',
+      consecutiveFailures: 2,
+      attempts: [],
+      lastObservedCaptureAt: null,
+      lastObservedDrainAt: null,
+      lastWatchdogRunAt: null,
+    });
+
+    const d = makeDeps();
+    const snapshot = await gatherStatusSnapshot(d, buffer, 'dev');
+    expect(snapshot.rescue).not.toBeNull();
+    const r = requireDefined(snapshot.rescue);
+    expect(r.consecutiveFailures).toBe(2);
+    expect(r.lastRescueAt).toBe('2026-06-16T12:00:00.000Z');
+    expect(r.circuitBroken).toBe(false);
+  } finally {
+    if (original === undefined) {
+      delete process.env['PROXAI_TEST_PROFILE_ROOT'];
+    } else {
+      process.env['PROXAI_TEST_PROFILE_ROOT'] = original;
+    }
+  }
+});
+
+test('gatherStatusSnapshot populates rescue information from ledger when consecutiveFailures >= 3', async () => {
+  const original = process.env['PROXAI_TEST_PROFILE_ROOT'];
+  process.env['PROXAI_TEST_PROFILE_ROOT'] = dir;
+
+  try {
+    const profileCtx = buildProfileContext('dev');
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(profileCtx.configDir, { recursive: true });
+
+    await writeRescueLedger(profileCtx.sentinels.rescueLedger, {
+      bootId: STATUS_BOOT_ID,
+      lastRescueAt: '2026-06-16T12:00:00.000Z',
+      consecutiveFailures: 3,
+      attempts: [],
+      lastObservedCaptureAt: null,
+      lastObservedDrainAt: null,
+      lastWatchdogRunAt: null,
+    });
+
+    const d = makeDeps();
+    const snapshot = await gatherStatusSnapshot(d, buffer, 'dev');
+    expect(snapshot.rescue).not.toBeNull();
+    const r = requireDefined(snapshot.rescue);
+    expect(r.consecutiveFailures).toBe(3);
+    expect(r.lastRescueAt).toBe('2026-06-16T12:00:00.000Z');
+    expect(r.circuitBroken).toBe(true);
+  } finally {
+    if (original === undefined) {
+      delete process.env['PROXAI_TEST_PROFILE_ROOT'];
+    } else {
+      process.env['PROXAI_TEST_PROFILE_ROOT'] = original;
+    }
+  }
 });
