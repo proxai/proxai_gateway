@@ -1,4 +1,4 @@
-import type { Logger } from 'core/log';
+import type { Logger, MinimalLogger } from 'core/log';
 
 import type { OutputSink } from 'cli/cli.types.ts';
 import type { ProfileContext } from 'core/io/fs/profile.types.ts';
@@ -40,5 +40,5 @@ export interface RunCommandDeps {
   readBootId?: () => Promise<string>;
   coordinatedUpgradeDeps?: CoordinatedUpgradeDeps;
   loadDesktopCliSessionIds?: () => Promise<ReadonlySet<string>>;
-  loadExcludedProjects?: () => Promise<readonly string[]>;
+  loadExcludedProjects?: (logger?: MinimalLogger) => Promise<readonly string[]>;
 }

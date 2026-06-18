@@ -286,7 +286,7 @@ async function resolveExcludedProjects(
 ): Promise<readonly string[] | undefined> {
   if (ctx.loadExcludedProjects === undefined) return undefined;
   try {
-    return await ctx.loadExcludedProjects();
+    return await ctx.loadExcludedProjects(ctx.logger);
   } catch (err) {
     ctx.logger?.warn(
       { event: 'capture.exclusions_load_failed', error: (err as Error).message ?? String(err) },
