@@ -46,3 +46,11 @@ test('returns null for an empty/zero-byte file', async () => {
   const f = await write('empty.jsonl', '');
   expect(await resolveCwdFromHead(f.path, f.size)).toBeNull();
 });
+
+test('returns payload.cwd for the real Codex session_meta shape (cwd nested in payload)', async () => {
+  const f = await write(
+    'codex-real.jsonl',
+    '{"type":"session_meta","payload":{"cwd":"/Users/me/proj","cli_version":"x"}}\n',
+  );
+  expect(await resolveCwdFromHead(f.path, f.size)).toBe('/Users/me/proj');
+});

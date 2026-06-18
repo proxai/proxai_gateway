@@ -533,7 +533,7 @@ test('falls back to codex-cli when no session_meta platform signal is present', 
 
 test('pauses an excluded codex rollout: nothing captured, watermark unchanged', async () => {
   const content =
-    '{"type":"session_meta","cwd":"/Users/me/secret"}\n' +
+    '{"type":"session_meta","payload":{"cwd":"/Users/me/secret"}}\n' +
     '{"type":"response_item","payload":{"type":"message","role":"user","content":"hi"}}\n';
   const file = await makeFile(content);
   const c = ctx(buffer);
@@ -554,7 +554,7 @@ test('pauses an excluded codex rollout: nothing captured, watermark unchanged', 
 
 test('captures a non-excluded codex rollout normally', async () => {
   const content =
-    '{"type":"session_meta","cwd":"/Users/me/keep"}\n' +
+    '{"type":"session_meta","payload":{"cwd":"/Users/me/keep"}}\n' +
     '{"type":"response_item","payload":{"type":"message","role":"user","content":"hi"}}\n';
   const file = await makeFile(content);
   const c = ctx(buffer);
@@ -565,7 +565,7 @@ test('captures a non-excluded codex rollout normally', async () => {
 
 test('backfills a codex rollout when removed from the exclusion list', async () => {
   const content =
-    '{"type":"session_meta","cwd":"/Users/me/secret"}\n' +
+    '{"type":"session_meta","payload":{"cwd":"/Users/me/secret"}}\n' +
     '{"type":"response_item","payload":{"type":"message","role":"user","content":"hi"}}\n';
   const file = await makeFile(content);
 
@@ -577,5 +577,16 @@ test('backfills a codex rollout when removed from the exclusion list', async () 
   const openCtx = ctx(buffer);
   openCtx.excludedProjects = [];
   const result = await collectCodexRollout(file, openCtx, 'codex/test');
+  expect(result.capturedBatches).toBeGreaterThan(0);
+});
+
+test('fail-open: a rollout with no cwd in session_meta is captured even with an exclusion list', async () => {
+  const content =
+    '{"type":"session_meta","payload":{}}\n' +
+    '{"type":"response_item","payload":{"type":"message","role":"user","content":"hi"}}\n';
+  const file = await makeFile(content);
+  const c = ctx(buffer);
+  c.excludedProjects = ['/Users/me/secret'];
+  const result = await collectCodexRollout(file, c, 'codex/test');
   expect(result.capturedBatches).toBeGreaterThan(0);
 });

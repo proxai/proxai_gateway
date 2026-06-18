@@ -8,7 +8,14 @@ export const HEAD_SCAN_BYTES = 1024 * 1024;
 
 /**
  * Read the head of a JSONL file (from byte 0, up to HEAD_SCAN_BYTES) and return the
- * first record's non-empty top-level `cwd` string, or null if none is found.
+ * first non-empty cwd found in any record, or null if none is found.
+ *
+ * Lookup order (first non-empty wins):
+ *   1. Top-level `cwd` — used by Claude Code dialogue records.
+ *   2. `payload.cwd` — used by Codex rollout `session_meta` records where all
+ *      meaningful fields are nested under `payload` (top-level keys are only
+ *      `type`, `timestamp`, and `payload`).
+ *
  * Uses a private TextDecoder so a partial multi-byte sequence at the scan boundary
  * cannot perturb any other decode.
  */
@@ -24,7 +31,17 @@ export async function resolveCwdFromHead(
     if (line.trim().length === 0) continue;
     try {
       const parsed = JSON.parse(line);
-      if (typeof parsed.cwd === 'string' && parsed.cwd.length > 0) return parsed.cwd;
+      const top = typeof parsed.cwd === 'string' && parsed.cwd.length > 0 ? parsed.cwd : null;
+      const payload = parsed.payload;
+      const nested =
+        payload !== null &&
+        typeof payload === 'object' &&
+        typeof payload.cwd === 'string' &&
+        payload.cwd.length > 0
+          ? payload.cwd
+          : null;
+      const cwd = top ?? nested;
+      if (cwd !== null) return cwd;
     } catch {}
   }
   return null;
