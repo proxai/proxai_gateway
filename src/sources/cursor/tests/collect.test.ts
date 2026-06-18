@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import type { Database as SqliteDatabase } from 'bun:sqlite';
 import { randomBytes } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,6 +27,7 @@ import {
 } from 'services/contract';
 import { buildCursorSelectRowsSql, collectCursorFile, selectCursorSql } from 'sources/cursor';
 import type { CursorCollectorContext, DiscoveredCursorFile } from 'sources/cursor';
+import { CURSOR_SOURCE_APP } from 'sources/cursor/cursor.constants.ts';
 
 let dir: string;
 let buffer: SqliteDatabase;
@@ -762,4 +764,60 @@ test('vacuum convergence and advance tests for Cursor', async () => {
     watermarkTable: null,
   });
   expect(gen2Cursor).not.toBeNull();
+});
+
+// Helper: a per-workspace state.vscdb with a sibling workspace.json, under the `dir` fixture.
+// Its path contains `/workspaceStorage/`, so isCursorGlobalDb() returns false → per-workspace gate.
+async function makeWorkspaceDb(folder: string, hash = 'abc123'): Promise<DiscoveredCursorFile> {
+  const wsDir = join(dir, 'workspaceStorage', hash);
+  mkdirSync(wsDir, { recursive: true });
+  writeFileSync(join(wsDir, 'workspace.json'), JSON.stringify({ folder: `file://${folder}` }));
+  const dbPath = join(wsDir, 'state.vscdb');
+  const db = new Database(dbPath, { create: true });
+  db.run('CREATE TABLE cursorDiskKV (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)');
+  db.run('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)', [
+    'bubbleId:c1:b1',
+    JSON.stringify({ type: 1, text: 'hello world', bubbleId: 'b1' }),
+  ]);
+  db.close();
+  const stat = await statFile(dbPath);
+  return {
+    sourcePath: dbPath,
+    sourcePathHash: sha256Hex(dbPath),
+    inode: 0,
+    sizeBytes: stat.exists ? stat.size : 4096,
+    lastModifiedMs: Date.now(),
+  };
+}
+
+test('per-workspace gate: excluded workspace captures nothing and does NOT advance the cursor', async () => {
+  const file = await makeWorkspaceDb('/Users/me/secret-proj');
+  const exclusionCtx: CursorCollectorContext = {
+    buffer,
+    gatewayVersion: 'gw-test',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+    excludedProjects: ['/Users/me/secret-proj'],
+  };
+  const result = await collectCursorFile(file, exclusionCtx);
+  expect(result.capturedBatches).toBe(0);
+  expect(
+    getCursor(buffer, {
+      sourceApp: CURSOR_SOURCE_APP,
+      sourcePathHash: file.sourcePathHash,
+      sourceInode: null,
+      watermarkTable: null,
+    }),
+  ).toBeNull(); // PAUSE: no cursor written
+});
+
+test('per-workspace gate: non-excluded workspace captures normally', async () => {
+  const file = await makeWorkspaceDb('/Users/me/ok-proj');
+  const exclusionCtx: CursorCollectorContext = {
+    buffer,
+    gatewayVersion: 'gw-test',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+    excludedProjects: ['/Users/me/secret-proj'],
+  };
+  const result = await collectCursorFile(file, exclusionCtx);
+  expect(result.capturedBatches).toBeGreaterThan(0);
 });

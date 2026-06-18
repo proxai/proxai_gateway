@@ -9,6 +9,8 @@ import {
   setCursor,
 } from 'services/buffer';
 import { SUB_AGENT_CAPTURE_BY_SOURCE } from 'services/config/sub-agent-flags';
+import { isProjectExcluded } from 'services/exclusion';
+import { isCursorGlobalDb, resolveCursorWorkspaceFolder } from 'sources/cursor/exclusion.ts';
 import {
   CURSOR_DISK_KV_TABLE,
   CURSOR_KEY_PREFIX_AGENT_KV_BLOB,
@@ -74,6 +76,26 @@ export async function collectCursorFile(
     try {
       if (!tableExists(db, CURSOR_DISK_KV_TABLE)) {
         return result;
+      }
+
+      const excluded = context.excludedProjects ?? [];
+
+      // Per-workspace DB: the whole file maps to one folder (sibling workspace.json).
+      // PAUSE on exclusion — return without advancing the watermark (backfills on un-exclude).
+      if (excluded.length > 0 && !isCursorGlobalDb(file.sourcePath)) {
+        const folder = resolveCursorWorkspaceFolder(file.sourcePath);
+        if (folder !== null && isProjectExcluded(folder, excluded)) {
+          context.logger?.info(
+            {
+              event: 'capture.project_excluded',
+              source_app: CURSOR_SOURCE_APP,
+              source_path_hash: file.sourcePathHash,
+              project: folder,
+            },
+            'paused capture for excluded cursor workspace',
+          );
+          return result; // PAUSE: no setCursor
+        }
       }
 
       let effectiveSourcePath = file.sourcePath;
