@@ -520,8 +520,10 @@ test('handleCapture: runs capture for cursor successfully, maps quarantine', asy
 });
 
 test('handleCapture: runs capture for codex successfully', async () => {
-  const stateDbPath = join(dir, 'state_1.sqlite');
-  await seedCodexDb(stateDbPath, ['t1'], ['e1']);
+  // Codex capture is rollout-only; state sqlite is no longer captured.
+  const rolloutDir = join(dir, 'sessions', '2026', '05', '05');
+  await mkdir(rolloutDir, { recursive: true });
+  await writeFile(join(rolloutDir, 'rollout-001.jsonl'), '{"type":"session_meta","payload":{}}\n');
 
   const codexOutcome = await handleCapture('codex', {
     baseDir: dir,
@@ -529,7 +531,7 @@ test('handleCapture: runs capture for codex successfully', async () => {
     gatewayVersion: 'gw-0.1',
     maxDecompressedBytes: 9 * 1024 * 1024,
   });
-  expect(codexOutcome.filesProcessed).toBe(1);
+  expect(codexOutcome.filesProcessed).toBe(1); // the rollout (state no longer captured)
 });
 test('Web Worker Listener: handles inspect, capture, unknown task, and capture errors', async () => {
   // Point the global `self` at THIS file's mock (another test file may have set
