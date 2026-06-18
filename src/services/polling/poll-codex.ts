@@ -6,6 +6,7 @@ import {
   discoverCodexStateSqlite,
 } from 'sources/codex';
 import { CODEX_DEFAULT_AGENT_SCHEMA_VERSION } from 'sources/codex/codex.constants.ts';
+import type { CodexCollectorContext } from 'sources/codex/codex.types.ts';
 import type {
   SourcePoller,
   SourcePollerContext,
@@ -65,8 +66,18 @@ async function pollCodex(
     return result;
   }
 
+  const collectorCtx: CodexCollectorContext = {
+    buffer: ctx.buffer,
+    gatewayVersion: ctx.gatewayVersion,
+    maxDecompressedBytes: ctx.maxDecompressedBytes,
+  };
+  if (ctx.logger !== undefined) collectorCtx.logger = ctx.logger;
+  if (ctx.excludedProjects !== undefined) {
+    collectorCtx.excludedProjects = ctx.excludedProjects;
+  }
+
   for (const file of rolloutFiles) {
-    const collectResult = await deps.collectCodexRollout(file, ctx, agentSchemaVersion);
+    const collectResult = await deps.collectCodexRollout(file, collectorCtx, agentSchemaVersion);
     result.filesProcessed++;
     result.capturedBatches += collectResult.capturedBatches;
     result.capturedBytes += collectResult.capturedBytes;
