@@ -6,13 +6,18 @@ import {
   getCursor,
   getCursorWithFallback,
   getHighestGenerationPath,
+  getMetadata,
   setCursor,
+  setMetadata,
 } from 'services/buffer';
+import { METADATA_KEYS } from 'services/buffer/buffer.constants.ts';
 import { SUB_AGENT_CAPTURE_BY_SOURCE } from 'services/config/sub-agent-flags';
 import { isProjectExcluded } from 'services/exclusion';
 import {
   buildCursorGlobalExclusionPlan,
+  exclusionEntriesRemoved,
   isCursorGlobalDb,
+  normalizeExclusionSet,
   resolveCursorWorkspaceFolder,
 } from 'sources/cursor/exclusion.ts';
 import type { CursorGlobalExclusionPlan } from 'sources/cursor/exclusion.ts';
@@ -151,7 +156,31 @@ export async function collectCursorFile(
         }
       }
 
-      const lastMaxRowid = (priorCursor?.watermarkEnd ?? 1) - 1;
+      // READ + DECIDE only — do NOT persist the fingerprint here. Persisting before the
+      // re-scan runs would let a throw mid-cycle PERMANENTLY lose the backfill (next cycle
+      // the new fingerprint hides the removal). Persist only after the cycle succeeds (below).
+      let exclusionBackfillReset = false;
+      let exclusionFpKey: string | null = null;
+      let exclusionFpValue: string | null = null;
+      if (isCursorGlobalDb(file.sourcePath)) {
+        exclusionFpKey = `${METADATA_KEYS.cursorExclusionSetPrefix}${effectiveSourcePathHash}`;
+        const current = normalizeExclusionSet(excluded);
+        exclusionFpValue = JSON.stringify(current);
+        const stored = getMetadata(context.buffer, exclusionFpKey);
+        if (exclusionEntriesRemoved(stored, current)) {
+          exclusionBackfillReset = true;
+          context.logger?.info(
+            {
+              event: 'capture.exclusion_backfill_reset',
+              source_app: CURSOR_SOURCE_APP,
+              source_path_hash: effectiveSourcePathHash,
+            },
+            'exclusion entry removed; re-scanning cursor global db to backfill',
+          );
+        }
+      }
+
+      const lastMaxRowid = exclusionBackfillReset ? 0 : (priorCursor?.watermarkEnd ?? 1) - 1;
       const rows = db.query<KvRow, [number]>(selectCursorSql(captureSubAgents)).all(lastMaxRowid);
 
       if (rows.length === 0) {
@@ -179,6 +208,9 @@ export async function collectCursorFile(
             lastSeenPageCount: currentPageCount,
             consecutiveErrors: 0,
           });
+        }
+        if (exclusionFpKey !== null && exclusionFpValue !== null) {
+          setMetadata(context.buffer, exclusionFpKey, exclusionFpValue);
         }
         return result;
       }
@@ -210,6 +242,10 @@ export async function collectCursorFile(
         result,
         ...(exclusionPlan !== undefined && { exclusionPlan }),
       });
+
+      if (exclusionFpKey !== null && exclusionFpValue !== null) {
+        setMetadata(context.buffer, exclusionFpKey, exclusionFpValue);
+      }
     } finally {
       db.close();
     }

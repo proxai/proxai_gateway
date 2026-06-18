@@ -14,6 +14,7 @@ import {
   countQuarantined,
   deleteBatch,
   getCursor,
+  getMetadata,
   nextPendingBatch,
   openInMemoryBufferDb,
   setCursor,
@@ -820,4 +821,70 @@ test('per-workspace gate: non-excluded workspace captures normally', async () =>
   };
   const result = await collectCursorFile(file, exclusionCtx);
   expect(result.capturedBatches).toBeGreaterThan(0);
+});
+
+// Helper: a global state.vscdb (ItemTable + cursorDiskKV) under the `dir` fixture.
+// Its path contains `/globalStorage/`, so isCursorGlobalDb() returns true.
+async function makeGlobalDbFile(opts: {
+  headers: Array<{ composerId: string; folder: string }>;
+  rows: Array<{ key: string; value: string }>;
+}): Promise<DiscoveredCursorFile> {
+  const gsDir = join(dir, 'globalStorage');
+  mkdirSync(gsDir, { recursive: true });
+  const dbPath = join(gsDir, 'state.vscdb');
+  const db = new Database(dbPath, { create: true });
+  db.run('CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)');
+  db.run('CREATE TABLE cursorDiskKV (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)');
+  db.run('INSERT INTO ItemTable (key, value) VALUES (?, ?)', [
+    'composer.composerHeaders',
+    JSON.stringify({
+      allComposers: opts.headers.map((h) => ({
+        composerId: h.composerId,
+        workspaceIdentifier: { uri: { external: `file://${h.folder}` } },
+      })),
+    }),
+  ]);
+  const insert = db.prepare('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)');
+  for (const r of opts.rows) insert.run(r.key, r.value);
+  db.close();
+  const stat = await statFile(dbPath);
+  return {
+    sourcePath: dbPath,
+    sourcePathHash: sha256Hex(dbPath),
+    inode: 0,
+    sizeBytes: stat.exists ? stat.size : 8192,
+    lastModifiedMs: Date.now(),
+  };
+}
+
+test('backfill: un-exclude re-scans from rowid 0, and fingerprint commits only after success (no double-reset)', async () => {
+  const file = await makeGlobalDbFile({
+    headers: [{ composerId: 'web1', folder: '/Users/me/web' }],
+    rows: [
+      { key: 'composerData:web1', value: JSON.stringify({ conversationState: '~' }) },
+      {
+        key: 'bubbleId:web1:b1',
+        value: JSON.stringify({ type: 1, text: 'hello from web', bubbleId: 'b1' }),
+      },
+    ],
+  });
+  const fpKey = `cursor_exclusion_set:${file.sourcePathHash}`;
+  const baseCtx: CursorCollectorContext = {
+    buffer,
+    gatewayVersion: 'gw',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  };
+
+  // Cycle 1: web excluded → its rows dropped, watermark advances, fingerprint stored.
+  await collectCursorFile(file, { ...baseCtx, excludedProjects: ['/Users/me/web'] });
+  expect(getMetadata(buffer, fpKey)).not.toBeNull();
+
+  // Cycle 2: web un-excluded → removal detected → re-scan from 0 → bubble backfilled.
+  const c2 = await collectCursorFile(file, { ...baseCtx, excludedProjects: [] });
+  expect(c2.capturedBatches).toBeGreaterThan(0);
+
+  // Cycle 3: still un-excluded, nothing removed → no second reset, nothing new.
+  // Proves the fingerprint was persisted on cycle 2's success.
+  const c3 = await collectCursorFile(file, { ...baseCtx, excludedProjects: [] });
+  expect(c3.capturedBatches).toBe(0);
 });
