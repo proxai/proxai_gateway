@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import {
   decodeConversationStateHashes,
   isProjectExcluded,
-  normalizeFolderPath,
+  lexicalFolderKey,
   parseComposerHeadersFolders,
   parseWorkspaceFolder,
 } from 'services/exclusion';
@@ -123,7 +123,9 @@ export function normalizeExclusionSet(excludedProjects: readonly string[]): stri
   const set = new Set<string>();
   for (const raw of excludedProjects) {
     if (raw.trim().length === 0) continue;
-    set.add(normalizeFolderPath(raw));
+    // Lexical (no realpathSync) so the fingerprint depends only on the file contents and does
+    // not drift if an excluded folder is created/deleted/relinked between cycles.
+    set.add(lexicalFolderKey(raw));
   }
   return [...set].toSorted();
 }

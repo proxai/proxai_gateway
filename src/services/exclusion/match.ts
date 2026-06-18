@@ -1,9 +1,30 @@
 // src/services/exclusion/match.ts
 import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 const CASE_INSENSITIVE_FS = process.platform === 'darwin' || process.platform === 'win32';
+
+/**
+ * realpathSync, but when the leaf does not exist it resolves the deepest EXISTING ancestor
+ * (so a symlinked PARENT still canonicalizes) and re-appends the non-existent tail. Never
+ * throws — returns the lexical input if nothing resolves.
+ */
+function realpathOfDeepestExisting(p: string): string {
+  const tail: string[] = [];
+  let current = p;
+  for (;;) {
+    try {
+      const real = realpathSync(current);
+      return tail.length === 0 ? real : join(real, ...tail.toReversed());
+    } catch {
+      const parent = dirname(current);
+      if (parent === current) return p; // reached root unresolved -> lexical fallback
+      tail.push(basename(current));
+      current = parent;
+    }
+  }
+}
 
 /**
  * Canonicalize a folder path for comparison. Idempotent: safe to call on its own output.
@@ -18,11 +39,9 @@ export function normalizeFolderPath(input: string): string {
   if (out.length === 0) return '';
   if (out === '~') out = homedir();
   else if (out.startsWith('~/')) out = join(homedir(), out.slice(2));
-  try {
-    out = realpathSync(out);
-  } catch {
-    // path may not exist (yet) or be inaccessible; fall back to lexical normalization
-  }
+  // Resolve symlinks. If the leaf doesn't exist, resolve the deepest existing ancestor so a
+  // symlinked PARENT still canonicalizes (realpathSync alone would throw and lose it).
+  out = realpathOfDeepestExisting(out);
   out = out.replace(/\/+$/, '');
   if (CASE_INSENSITIVE_FS) out = out.toLowerCase();
   return out;
@@ -38,4 +57,20 @@ export function isProjectExcluded(folderPath: string, excludedPaths: readonly st
     if (folder === prefix || folder.startsWith(prefix + '/')) return true;
   }
   return false;
+}
+
+/**
+ * Stable, filesystem-independent canonicalization for CHANGE DETECTION (e.g. the cursor
+ * backfill fingerprint). Same as normalizeFolderPath but WITHOUT realpathSync, so the result
+ * depends only on the input string and never drifts when a folder is created/deleted/relinked
+ * between cycles. Do NOT use for matching — use normalizeFolderPath (which resolves symlinks).
+ */
+export function lexicalFolderKey(input: string): string {
+  let out = input.trim();
+  if (out.length === 0) return '';
+  if (out === '~') out = homedir();
+  else if (out.startsWith('~/')) out = join(homedir(), out.slice(2));
+  out = out.replace(/\/+$/, '');
+  if (CASE_INSENSITIVE_FS) out = out.toLowerCase();
+  return out;
 }

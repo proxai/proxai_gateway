@@ -3,7 +3,11 @@ import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { isProjectExcluded, normalizeFolderPath } from 'services/exclusion/match.ts';
+import {
+  isProjectExcluded,
+  lexicalFolderKey,
+  normalizeFolderPath,
+} from 'services/exclusion/match.ts';
 
 test('empty exclusion list never matches', () => {
   expect(isProjectExcluded('/Users/me/p', [])).toBe(false);
@@ -69,4 +73,27 @@ test('symlinked project path matches the real excluded path', async () => {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('resolves a symlinked PARENT even when the leaf does not exist', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'proxai-symlink-leaf-'));
+  try {
+    const real = join(dir, 'real-project');
+    const link = join(dir, 'link-project');
+    await mkdir(real);
+    await symlink(real, link);
+    // folder = <symlinked-parent>/sub where `sub` does not exist; must still match excluded `real`.
+    expect(isProjectExcluded(join(link, 'sub'), [real])).toBe(true);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('lexicalFolderKey canonicalizes without touching the filesystem (stable fingerprint key)', () => {
+  expect(lexicalFolderKey('  ')).toBe('');
+  expect(lexicalFolderKey('/x/y/')).toBe('/x/y'); // trailing slash stripped
+  // A non-existent path returns in lexical form (no realpathSync) — stable regardless of FS state.
+  expect(lexicalFolderKey('/nonexistent-xyz-123/sub')).toBe('/nonexistent-xyz-123/sub');
+  const once = lexicalFolderKey('/x/y/');
+  expect(lexicalFolderKey(once)).toBe(once); // idempotent
 });
