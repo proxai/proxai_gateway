@@ -1,4 +1,5 @@
 import { readJsonlRange } from 'core/io/jsonl';
+import { isProjectExcluded, resolveCwdFromHead } from 'services/exclusion';
 import {
   OversizedDecompressedSliceError,
   generateUuidV7,
@@ -131,6 +132,24 @@ export async function collectCodexRollout(
 
     if (file.sizeBytes <= watermarkStart) {
       return result;
+    }
+
+    const excluded = context.excludedProjects ?? [];
+    if (excluded.length > 0) {
+      const projectCwd = await resolveCwdFromHead(file.sourcePath, file.sizeBytes);
+      if (projectCwd !== null && isProjectExcluded(projectCwd, excluded)) {
+        context.logger?.info(
+          {
+            event: 'capture.project_excluded',
+            source_app: CODEX_SOURCE_APP,
+            source_path_hash: file.sourcePathHash,
+            project: projectCwd,
+          },
+          'paused capture for excluded project',
+        );
+        // PAUSE: no setCursor -> watermark frozen -> backfills if un-excluded.
+        return result;
+      }
     }
 
     const range = await readJsonlRange(file.sourcePath, watermarkStart, file.sizeBytes);

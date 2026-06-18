@@ -530,3 +530,52 @@ test('falls back to codex-cli when no session_meta platform signal is present', 
   const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.sourcePlatform).toBe('codex-cli');
 });
+
+test('pauses an excluded codex rollout: nothing captured, watermark unchanged', async () => {
+  const content =
+    '{"type":"session_meta","cwd":"/Users/me/secret"}\n' +
+    '{"type":"response_item","payload":{"type":"message","role":"user","content":"hi"}}\n';
+  const file = await makeFile(content);
+  const c = ctx(buffer);
+  c.excludedProjects = ['/Users/me/secret'];
+
+  const result = await collectCodexRollout(file, c, 'codex/test');
+
+  expect(result.capturedBatches).toBe(0);
+  expect(countByStatus(buffer).pending).toBe(0);
+  const cursor = getCursor(buffer, {
+    sourceApp: 'codex',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.watermarkEnd ?? 0).toBe(0);
+});
+
+test('captures a non-excluded codex rollout normally', async () => {
+  const content =
+    '{"type":"session_meta","cwd":"/Users/me/keep"}\n' +
+    '{"type":"response_item","payload":{"type":"message","role":"user","content":"hi"}}\n';
+  const file = await makeFile(content);
+  const c = ctx(buffer);
+  c.excludedProjects = ['/Users/me/secret'];
+  const result = await collectCodexRollout(file, c, 'codex/test');
+  expect(result.capturedBatches).toBeGreaterThan(0);
+});
+
+test('backfills a codex rollout when removed from the exclusion list', async () => {
+  const content =
+    '{"type":"session_meta","cwd":"/Users/me/secret"}\n' +
+    '{"type":"response_item","payload":{"type":"message","role":"user","content":"hi"}}\n';
+  const file = await makeFile(content);
+
+  const exCtx = ctx(buffer);
+  exCtx.excludedProjects = ['/Users/me/secret'];
+  await collectCodexRollout(file, exCtx, 'codex/test');
+  expect(countByStatus(buffer).pending).toBe(0);
+
+  const openCtx = ctx(buffer);
+  openCtx.excludedProjects = [];
+  const result = await collectCodexRollout(file, openCtx, 'codex/test');
+  expect(result.capturedBatches).toBeGreaterThan(0);
+});
