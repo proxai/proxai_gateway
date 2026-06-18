@@ -841,3 +841,34 @@ test('backfills when a project is removed from the exclusion list (no cursor res
   expect(result.capturedBatches).toBe(1);
   expect(countByStatus(buffer).pending).toBe(1);
 });
+
+test('pauses an excluded subagent transcript (top-level cwd is honored)', async () => {
+  const subDir = join(dir, 'sess-excl', 'subagents');
+  await Bun.write(
+    join(subDir, 'agent-1.jsonl'),
+    '{"type":"user","cwd":"/Users/me/secret","message":{"role":"user","content":"hi"}}\n',
+  );
+  const sourcePath = join(subDir, 'agent-1.jsonl');
+  const stat = await statFile(sourcePath);
+  if (!stat.exists) throw new Error('subagent file missing');
+  const file: DiscoveredClaudeCodeFile = {
+    sourcePath,
+    sourcePathHash: sha256Hex(sourcePath),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+  const c = ctx(buffer);
+  c.excludedProjects = ['/Users/me/secret'];
+  const result = await collectClaudeCodeFile(file, c);
+  expect(result.capturedBatches).toBe(0);
+  expect(countByStatus(buffer).pending).toBe(0);
+  // Subagent transcripts carry a top-level cwd, so the gate fires; watermark stays frozen (PAUSE).
+  const cursor = getCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.watermarkEnd ?? 0).toBe(0);
+});
