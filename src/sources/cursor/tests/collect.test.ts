@@ -883,6 +883,15 @@ test('backfill: un-exclude re-scans from rowid 0, and fingerprint commits only a
   const c2 = await collectCursorFile(file, { ...baseCtx, excludedProjects: [] });
   expect(c2.capturedBatches).toBeGreaterThan(0);
 
+  // The backfilled batch must actually contain the previously-excluded content.
+  const decoder = new TextDecoder();
+  let backfilled = '';
+  for (let b = nextPendingBatch(buffer); b !== null; b = nextPendingBatch(buffer)) {
+    backfilled += decoder.decode(zstdDecompressSync(b.body));
+    deleteBatch(buffer, b.captureId);
+  }
+  expect(backfilled).toContain('hello from web');
+
   // Cycle 3: still un-excluded, nothing removed → no second reset, nothing new.
   // Proves the fingerprint was persisted on cycle 2's success.
   const c3 = await collectCursorFile(file, { ...baseCtx, excludedProjects: [] });
