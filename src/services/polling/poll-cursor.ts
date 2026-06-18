@@ -1,4 +1,5 @@
 import { collectCursorFile, defaultCursorUserRoot, discoverCursorFiles } from 'sources/cursor';
+import type { CursorCollectorContext } from 'sources/cursor/cursor.types.ts';
 import type {
   SourcePoller,
   SourcePollerContext,
@@ -35,8 +36,18 @@ async function pollCursor(ctx: SourcePollerContext, baseDir: string): Promise<So
     return result;
   }
 
+  const collectorCtx: CursorCollectorContext = {
+    buffer: ctx.buffer,
+    gatewayVersion: ctx.gatewayVersion,
+    maxDecompressedBytes: ctx.maxDecompressedBytes,
+  };
+  if (ctx.logger !== undefined) collectorCtx.logger = ctx.logger;
+  if (ctx.excludedProjects !== undefined) {
+    collectorCtx.excludedProjects = ctx.excludedProjects;
+  }
+
   for (const file of files) {
-    const collectResult = await collectCursorFile(file, ctx);
+    const collectResult = await collectCursorFile(file, collectorCtx);
     result.filesProcessed++;
     result.capturedBatches += collectResult.capturedBatches;
     result.capturedBytes += collectResult.capturedBytes;
