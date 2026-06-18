@@ -9,7 +9,6 @@ import { CODEX_DEFAULT_AGENT_SCHEMA_VERSION } from 'sources/codex/codex.constant
 import type {
   SourcePoller,
   SourcePollerContext,
-  SourcePollerError,
   SourcePollerResult,
 } from 'services/polling/polling.types.ts';
 
@@ -48,29 +47,12 @@ async function pollCodex(
     errors: [],
   };
 
-  let agentSchemaVersion = CODEX_DEFAULT_AGENT_SCHEMA_VERSION;
+  // State capture intentionally disabled: nest never parses state sqlite into
+  // agent-call-records, and capturing it unfiltered would upload excluded projects' rows.
+  // discoverCodexStateSqlite / collectCodexState remain in CodexSourceDeps (still exported
+  // and unit-tested directly) — only this poller stops calling them.
+  const agentSchemaVersion = CODEX_DEFAULT_AGENT_SCHEMA_VERSION;
   const minimumMtime = resolveMinimumMtime(ctx);
-
-  try {
-    const stateFile = await deps.discoverCodexStateSqlite(baseDir, { minimumMtime });
-    if (stateFile !== null) {
-      const stateOutcome = await deps.collectCodexState(stateFile, ctx);
-      agentSchemaVersion = stateOutcome.agentSchemaVersion;
-      result.filesProcessed++;
-      result.capturedBatches += stateOutcome.result.capturedBatches;
-      result.capturedBytes += stateOutcome.result.capturedBytes;
-      for (const err of stateOutcome.result.errors) {
-        const entry: SourcePollerError = { sourcePath: err.sourcePath, reason: err.reason };
-        if (err.table !== undefined) entry.table = err.table;
-        result.errors.push(entry);
-      }
-    }
-  } catch (err) {
-    result.errors.push({
-      sourcePath: baseDir,
-      reason: err instanceof Error ? err.message : String(err),
-    });
-  }
 
   let rolloutFiles;
   try {
