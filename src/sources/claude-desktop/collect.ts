@@ -127,17 +127,9 @@ export async function collectClaudeDesktopFile(
             source_app: CLAUDE_DESKTOP_SOURCE_APP,
             project: firstCwd,
           },
-          'skipped capture for excluded project',
+          'paused capture for excluded project',
         );
-        setCursor(context.buffer, {
-          sourceApp: CLAUDE_DESKTOP_SOURCE_APP,
-          sourcePathHash: file.sourcePathHash,
-          sourcePath: file.sourcePath,
-          sourceInode: file.inode,
-          watermarkTable: null,
-          watermarkEnd: range.endByte,
-          consecutiveErrors: 0,
-        });
+        // PAUSE: no setCursor -> watermark frozen -> backfills if un-excluded.
         return result;
       }
     }

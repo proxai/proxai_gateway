@@ -334,6 +334,13 @@ describe('collectClaudeDesktopFile', () => {
       expect(res.capturedBatches).toBe(0);
       expect(res.errors).toEqual([]);
       expect(nextPendingBatch(db)).toBeNull();
+      const cursor = getCursorWithFallback(db, {
+        sourceApp: 'claude-desktop',
+        sourcePathHash: 'hash-excl',
+        sourceInode: file.inode,
+        watermarkTable: null,
+      });
+      expect(cursor?.watermarkEnd ?? 0).toBe(0); // PAUSE: watermark not advanced
     } finally {
       db.close();
       await rmRecursive(testDir);
