@@ -289,6 +289,46 @@ describe('collectClaudeDesktopFile', () => {
     await rmRecursive(testDir);
   });
 
+  test('fail-open: a desktop session with no correlated cwd is captured even with an exclusion list', async () => {
+    const db = openInMemoryBufferDb();
+    const testDir = await mkdtemp(join(tmpdir(), 'proxai-test-claude-desktop-failopen-'));
+    try {
+      // audit.jsonl with a dialogue record, but NO .claude/projects transcript ->
+      // loadCliMetadataMap finds no cwd -> firstCwd stays null -> fail-open.
+      const tempFile = join(testDir, 'audit.jsonl');
+      await writeFile(
+        tempFile,
+        JSON.stringify({
+          type: 'user',
+          uuid: 'u-failopen',
+          session_id: 'sess-1',
+          message: { content: 'hello' },
+        }) + '\n',
+      );
+      const stat = await statFile(tempFile);
+      const file: DiscoveredClaudeDesktopFile = {
+        sourcePath: tempFile,
+        sourcePathHash: 'hash-failopen',
+        inode: stat.exists ? Number(stat.inode) : 0,
+        sizeBytes: stat.exists ? stat.size : 0,
+        lastModifiedMs: Date.now(),
+      };
+
+      const res = await collectClaudeDesktopFile(file, {
+        buffer: db,
+        maxDecompressedBytes: 1000,
+        excludedProjects: ['/Users/me/secret'],
+      });
+
+      expect(res.errors).toEqual([]);
+      expect(res.capturedBatches).toBeGreaterThan(0); // fail-open: no cwd -> captured
+      expect(nextPendingBatch(db)).not.toBeNull();
+    } finally {
+      db.close();
+      await rmRecursive(testDir);
+    }
+  });
+
   test('skips a desktop session whose correlated cwd is excluded', async () => {
     const db = openInMemoryBufferDb();
     const testDir = await mkdtemp(join(tmpdir(), 'proxai-test-claude-desktop-excl-'));
