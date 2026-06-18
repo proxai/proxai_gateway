@@ -10,7 +10,12 @@ import {
 } from 'services/buffer';
 import { SUB_AGENT_CAPTURE_BY_SOURCE } from 'services/config/sub-agent-flags';
 import { isProjectExcluded } from 'services/exclusion';
-import { isCursorGlobalDb, resolveCursorWorkspaceFolder } from 'sources/cursor/exclusion.ts';
+import {
+  buildCursorGlobalExclusionPlan,
+  isCursorGlobalDb,
+  resolveCursorWorkspaceFolder,
+} from 'sources/cursor/exclusion.ts';
+import type { CursorGlobalExclusionPlan } from 'sources/cursor/exclusion.ts';
 import {
   CURSOR_DISK_KV_TABLE,
   CURSOR_KEY_PREFIX_AGENT_KV_BLOB,
@@ -188,6 +193,11 @@ export async function collectCursorFile(
       const lastRow = requireDefined(rows[rows.length - 1], 'last row');
       const finalWatermarkEnd = lastRow.rowid + 1;
 
+      let exclusionPlan: CursorGlobalExclusionPlan | undefined;
+      if (excluded.length > 0 && isCursorGlobalDb(file.sourcePath)) {
+        exclusionPlan = buildCursorGlobalExclusionPlan(db, excluded);
+      }
+
       processRows({
         rows: kvRows,
         context,
@@ -198,6 +208,7 @@ export async function collectCursorFile(
         currentPageCount,
         finalWatermarkEnd,
         result,
+        ...(exclusionPlan !== undefined && { exclusionPlan }),
       });
     } finally {
       db.close();
