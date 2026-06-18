@@ -782,7 +782,7 @@ function bridgeDatabase(db: unknown): Database {
   return db as unknown as Database;
 }
 
-test('skips a session whose cwd is excluded; advances cursor; inserts nothing', async () => {
+test('pauses an excluded session: inserts nothing AND leaves the watermark unchanged', async () => {
   const content =
     '{"type":"user","cwd":"/Users/me/secret","message":{"role":"user","content":"hi"}}\n';
   const file = await makeFile(content);
@@ -793,16 +793,17 @@ test('skips a session whose cwd is excluded; advances cursor; inserts nothing', 
 
   expect(result.capturedBatches).toBe(0);
   expect(countByStatus(buffer).pending).toBe(0);
+  // PAUSE: no cursor row created (watermark NOT advanced) — so it backfills later.
   const cursor = getCursor(buffer, {
     sourceApp: 'claude-code',
     sourcePathHash: file.sourcePathHash,
     sourceInode: file.inode,
     watermarkTable: null,
   });
-  expect(cursor?.watermarkEnd).toBe(content.length);
+  expect(cursor?.watermarkEnd ?? 0).toBe(0);
 });
 
-test('captures a session whose cwd is not excluded', async () => {
+test('captures a non-excluded session normally', async () => {
   const content =
     '{"type":"user","cwd":"/Users/me/keep","message":{"role":"user","content":"hi"}}\n';
   const file = await makeFile(content);
@@ -813,18 +814,7 @@ test('captures a session whose cwd is not excluded', async () => {
   expect(countByStatus(buffer).pending).toBe(1);
 });
 
-test('first cwd decides exclusion when records carry different cwds', async () => {
-  const content =
-    '{"type":"user","cwd":"/Users/me/secret","message":{"role":"user","content":"a"}}\n' +
-    '{"type":"assistant","cwd":"/Users/me/keep","message":{"role":"assistant","content":"b"}}\n';
-  const file = await makeFile(content);
-  const c = ctx(buffer);
-  c.excludedProjects = ['/Users/me/secret'];
-  const result = await collectClaudeCodeFile(file, c);
-  expect(result.capturedBatches).toBe(0);
-});
-
-test('fail-open: a session with no cwd anywhere is captured even with an exclusion list', async () => {
+test('fail-open: a session with no cwd is captured even with an exclusion list', async () => {
   const content = '{"type":"user","message":{"role":"user","content":"hi"}}\n';
   const file = await makeFile(content);
   const c = ctx(buffer);
@@ -833,46 +823,21 @@ test('fail-open: a session with no cwd anywhere is captured even with an exclusi
   expect(result.capturedBatches).toBe(1);
 });
 
-test('incremental append with no cwd in the new slice is still excluded (head fallback)', async () => {
-  // First cycle: a cwd-bearing record establishes the (excluded) project.
-  const first =
-    '{"type":"user","cwd":"/Users/me/secret","message":{"role":"user","content":"a"}}\n';
-  const file1 = await makeFile(first, 'incremental.jsonl');
-  const c = ctx(buffer);
-  c.excludedProjects = ['/Users/me/secret'];
-  await collectClaudeCodeFile(file1, c);
-  expect(countByStatus(buffer).pending).toBe(0);
-
-  // Append a record WITHOUT a cwd, then re-collect the same file.
-  const appended = '{"type":"assistant","message":{"role":"assistant","content":"b"}}\n';
-  await Bun.write(file1.sourcePath, first + appended);
-  const stat = await statFile(file1.sourcePath);
-  const file2 = { ...file1, sizeBytes: stat.exists ? stat.size : 0 };
-  const result = await collectClaudeCodeFile(file2, c);
-
-  expect(result.capturedBatches).toBe(0); // head-read resolves the excluded cwd; no leak
-  expect(countByStatus(buffer).pending).toBe(0);
-});
-
-test('head-read finds a cwd that sits beyond 64KB (large preamble) on a cwd-less append', async () => {
-  // A ~70KB non-dialogue, no-cwd preamble pushes the cwd-bearing record past the old 64KB cap.
-  const filler = '{"type":"summary","summary":"' + 'x'.repeat(70_000) + '"}\n';
-  const cwdRec =
+test('backfills when a project is removed from the exclusion list (no cursor reset needed)', async () => {
+  const content =
     '{"type":"user","cwd":"/Users/me/secret","message":{"role":"user","content":"hi"}}\n';
-  const first = filler + cwdRec;
-  const file1 = await makeFile(first, 'big-preamble.jsonl');
-  const c = ctx(buffer);
-  c.excludedProjects = ['/Users/me/secret'];
-  await collectClaudeCodeFile(file1, c); // cycle 1: parse loop finds the cwd directly
+  const file = await makeFile(content);
+
+  // Cycle 1: excluded -> nothing captured, watermark frozen at 0.
+  const excludedCtx = ctx(buffer);
+  excludedCtx.excludedProjects = ['/Users/me/secret'];
+  await collectClaudeCodeFile(file, excludedCtx);
   expect(countByStatus(buffer).pending).toBe(0);
 
-  // Append a cwd-less record so cycle 2's slice forces the head-read past 64KB.
-  const appended = '{"type":"assistant","message":{"role":"assistant","content":"b"}}\n';
-  await Bun.write(file1.sourcePath, first + appended);
-  const stat = await statFile(file1.sourcePath);
-  const file2 = { ...file1, sizeBytes: stat.exists ? stat.size : 0 };
-  const result = await collectClaudeCodeFile(file2, c);
-
-  expect(result.capturedBatches).toBe(0); // would be 1 (leak) under a 64KB head cap
-  expect(countByStatus(buffer).pending).toBe(0);
+  // Cycle 2: no longer excluded -> backfills from byte 0.
+  const openCtx = ctx(buffer);
+  openCtx.excludedProjects = [];
+  const result = await collectClaudeCodeFile(file, openCtx);
+  expect(result.capturedBatches).toBe(1);
+  expect(countByStatus(buffer).pending).toBe(1);
 });

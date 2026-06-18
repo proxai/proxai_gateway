@@ -11,7 +11,7 @@ import {
 } from 'core/utils';
 import { getCursor, getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
-import { isProjectExcluded } from 'services/exclusion';
+import { isProjectExcluded, resolveCwdFromHead } from 'services/exclusion';
 import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import type { SourcePlatform } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
@@ -30,37 +30,6 @@ import type {
 
 const DECODER = new TextDecoder('utf-8', { fatal: false });
 const ENCODER = new TextEncoder();
-
-// Head-read scan bound. `cwd` appears on the first user/assistant turn, so 1MB covers
-// every realistic session; a session whose first `cwd` sits beyond 1MB fails open (rare).
-// Cost: one bounded read, triggered ONLY on an incremental slice that has no `cwd`
-// (uncommon — ~87% of records carry it); stateless by design (no cross-cycle cache).
-const HEAD_SCAN_BYTES = 1024 * 1024;
-
-/**
- * Resolve the session's project folder from the file head (from byte 0).
- * Returns the first record's `cwd`, or null if none is found within HEAD_SCAN_BYTES.
- * Uses a PRIVATE decoder so a partial multi-byte sequence at the scan boundary can never
- * perturb the main slice decode (the shared DECODER is non-streaming and safe, but this
- * keeps the head-read fully self-contained).
- */
-async function resolveSessionCwdFromHead(
-  sourcePath: string,
-  sizeBytes: number,
-): Promise<string | null> {
-  const end = Math.min(sizeBytes, HEAD_SCAN_BYTES);
-  if (end <= 0) return null;
-  const head = await readJsonlRange(sourcePath, 0, end);
-  const headDecoder = new TextDecoder('utf-8', { fatal: false });
-  for (const line of headDecoder.decode(head.bytes).split('\n')) {
-    if (line.trim().length === 0) continue;
-    try {
-      const parsed = JSON.parse(line);
-      if (typeof parsed.cwd === 'string' && parsed.cwd.length > 0) return parsed.cwd;
-    } catch {}
-  }
-  return null;
-}
 
 const CLAUDE_CODE_SUBAGENT_DIR = 'subagents';
 
@@ -258,6 +227,24 @@ export async function collectClaudeCodeFile(
       return result;
     }
 
+    const excluded = context.excludedProjects ?? [];
+    if (excluded.length > 0) {
+      const projectCwd = await resolveCwdFromHead(file.sourcePath, file.sizeBytes);
+      if (projectCwd !== null && isProjectExcluded(projectCwd, excluded)) {
+        context.logger?.info(
+          {
+            event: 'capture.project_excluded',
+            source_app: CLAUDE_CODE_SOURCE_APP,
+            source_path_hash: file.sourcePathHash,
+            project: projectCwd,
+          },
+          'paused capture for excluded project',
+        );
+        // PAUSE: no setCursor -> watermark frozen -> backfills if un-excluded.
+        return result;
+      }
+    }
+
     const range = await readJsonlRange(file.sourcePath, watermarkStart, file.sizeBytes);
     if (range.bytes.byteLength === 0) {
       return result;
@@ -273,7 +260,6 @@ export async function collectClaudeCodeFile(
     const kept: KeptLine[] = [];
 
     let currentOffset = 0;
-    let sessionCwd: string | null = null;
     for (const line of lines) {
       const lineByteLength = ENCODER.encode(line).byteLength;
       const lineEndOffset = currentOffset + lineByteLength + 1;
@@ -281,9 +267,6 @@ export async function collectClaudeCodeFile(
       if (line.trim().length > 0) {
         try {
           const parsed = JSON.parse(line);
-          if (sessionCwd === null && typeof parsed.cwd === 'string' && parsed.cwd.length > 0) {
-            sessionCwd = parsed.cwd;
-          }
           if (isDialogueRecord(parsed)) {
             kept.push({
               text: line,
@@ -307,37 +290,6 @@ export async function collectClaudeCodeFile(
         consecutiveErrors: 0,
       });
       return result;
-    }
-
-    const excluded = context.excludedProjects ?? [];
-    if (excluded.length > 0) {
-      // Resolve from the slice; on an incremental read with no cwd, read the file head
-      // so an already-excluded active session can't slip through (stateless).
-      let projectCwd = sessionCwd;
-      if (projectCwd === null && watermarkStart > 0) {
-        projectCwd = await resolveSessionCwdFromHead(file.sourcePath, file.sizeBytes);
-      }
-      if (projectCwd !== null && isProjectExcluded(projectCwd, excluded)) {
-        context.logger?.info(
-          {
-            event: 'capture.project_excluded',
-            source_app: CLAUDE_CODE_SOURCE_APP,
-            source_path_hash: file.sourcePathHash,
-            project: projectCwd,
-          },
-          'skipped capture for excluded project',
-        );
-        setCursor(context.buffer, {
-          sourceApp: CLAUDE_CODE_SOURCE_APP,
-          sourcePathHash: file.sourcePathHash,
-          sourcePath: file.sourcePath,
-          sourceInode: file.inode,
-          watermarkTable: null,
-          watermarkEnd: range.endByte,
-          consecutiveErrors: 0,
-        });
-        return result;
-      }
     }
 
     const filteredBytes = ENCODER.encode(filteredText);
