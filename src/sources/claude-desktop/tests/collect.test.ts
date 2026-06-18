@@ -386,4 +386,81 @@ describe('collectClaudeDesktopFile', () => {
       await rmRecursive(testDir);
     }
   });
+
+  test('multi-cwd session: pauses if ANY correlated cwd is excluded, not just the first', async () => {
+    const db = openInMemoryBufferDb();
+    const testDir = await mkdtemp(join(tmpdir(), 'proxai-test-claude-desktop-multicwd-'));
+    try {
+      // One transcript correlating two audit records to two project cwds: the FIRST
+      // (user-ok -> /my/ok) is NOT excluded, the second (user-secret -> /my/secret) IS.
+      const transcriptDir = join(testDir, '.claude', 'projects', 'p1');
+      await Bun.write(
+        join(transcriptDir, 'transcript.jsonl'),
+        [
+          JSON.stringify({
+            type: 'user',
+            uuid: 'user-ok',
+            cwd: '/my/ok',
+            version: '1',
+            gitBranch: 'main',
+            sessionId: 's1',
+          }),
+          JSON.stringify({
+            type: 'user',
+            uuid: 'user-secret',
+            cwd: '/my/secret',
+            version: '1',
+            gitBranch: 'main',
+            sessionId: 's2',
+          }),
+        ].join('\n') + '\n',
+      );
+      const tempFile = join(testDir, 'audit.jsonl');
+      await writeFile(
+        tempFile,
+        [
+          JSON.stringify({
+            type: 'user',
+            uuid: 'user-ok',
+            session_id: 'sess-1',
+            message: { content: 'public hi' },
+          }),
+          JSON.stringify({
+            type: 'user',
+            uuid: 'user-secret',
+            session_id: 'sess-2',
+            message: { content: 'secret hi' },
+          }),
+        ].join('\n') + '\n',
+      );
+      const stat = await statFile(tempFile);
+      const file: DiscoveredClaudeDesktopFile = {
+        sourcePath: tempFile,
+        sourcePathHash: 'hash-multicwd',
+        inode: stat.exists ? Number(stat.inode) : 0,
+        sizeBytes: stat.exists ? stat.size : 0,
+        lastModifiedMs: Date.now(),
+      };
+
+      const res = await collectClaudeDesktopFile(file, {
+        buffer: db,
+        maxDecompressedBytes: 10_000,
+        excludedProjects: ['/my/secret'],
+      });
+
+      expect(res.capturedBatches).toBe(0); // PAUSE: an excluded cwd is present in the file
+      expect(res.errors).toEqual([]);
+      expect(nextPendingBatch(db)).toBeNull();
+      const cursor = getCursorWithFallback(db, {
+        sourceApp: 'claude-desktop',
+        sourcePathHash: 'hash-multicwd',
+        sourceInode: file.inode,
+        watermarkTable: null,
+      });
+      expect(cursor?.watermarkEnd ?? 0).toBe(0); // watermark frozen -> backfills on un-exclude
+    } finally {
+      db.close();
+      await rmRecursive(testDir);
+    }
+  });
 });

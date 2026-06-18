@@ -113,24 +113,22 @@ export async function collectClaudeDesktopFile(
 
     const excluded = context.excludedProjects ?? [];
     if (excluded.length > 0) {
-      let firstCwd: string | null = null;
+      // A desktop audit.jsonl can correlate records to MULTIPLE project cwds. Pause the whole
+      // file if ANY correlated cwd is excluded (all-or-nothing PAUSE, matching the per-file
+      // model) — checking only the first cwd would leak an excluded project's later records.
       for (const meta of [...userMap.values(), ...assistantMap.values()]) {
-        if (meta.cwd.length > 0) {
-          firstCwd = meta.cwd;
-          break;
+        if (meta.cwd.trim().length > 0 && isProjectExcluded(meta.cwd, excluded)) {
+          context.logger?.info(
+            {
+              event: 'capture.project_excluded',
+              source_app: CLAUDE_DESKTOP_SOURCE_APP,
+              project: meta.cwd,
+            },
+            'paused capture for excluded project',
+          );
+          // PAUSE: no setCursor -> watermark frozen -> backfills if un-excluded.
+          return result;
         }
-      }
-      if (firstCwd !== null && isProjectExcluded(firstCwd, excluded)) {
-        context.logger?.info(
-          {
-            event: 'capture.project_excluded',
-            source_app: CLAUDE_DESKTOP_SOURCE_APP,
-            project: firstCwd,
-          },
-          'paused capture for excluded project',
-        );
-        // PAUSE: no setCursor -> watermark frozen -> backfills if un-excluded.
-        return result;
       }
     }
 
