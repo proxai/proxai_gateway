@@ -13,6 +13,9 @@ const CASE_INSENSITIVE_FS = process.platform === 'darwin' || process.platform ==
  */
 export function normalizeFolderPath(input: string): string {
   let out = input.trim();
+  // Empty/whitespace input must NOT fall through to realpathSync(''), which resolves to the
+  // daemon's process.cwd() — that would silently turn a junk cwd into "wherever the daemon runs".
+  if (out.length === 0) return '';
   if (out === '~') out = homedir();
   else if (out.startsWith('~/')) out = join(homedir(), out.slice(2));
   try {

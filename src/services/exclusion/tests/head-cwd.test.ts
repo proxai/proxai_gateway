@@ -54,3 +54,13 @@ test('returns payload.cwd for the real Codex session_meta shape (cwd nested in p
   );
   expect(await resolveCwdFromHead(f.path, f.size)).toBe('/Users/me/proj');
 });
+
+test('treats a whitespace-only cwd as no cwd (top-level and payload)', async () => {
+  const top = await write('ws-top.jsonl', '{"type":"user","cwd":"   "}\n');
+  expect(await resolveCwdFromHead(top.path, top.size)).toBeNull();
+  const nested = await write(
+    'ws-payload.jsonl',
+    '{"type":"session_meta","payload":{"cwd":"   "}}\n',
+  );
+  expect(await resolveCwdFromHead(nested.path, nested.size)).toBeNull();
+});

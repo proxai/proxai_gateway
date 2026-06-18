@@ -45,6 +45,17 @@ test('whitespace-only or empty pattern never matches', () => {
   expect(isProjectExcluded('/Users/me/project', [''])).toBe(false);
 });
 
+test('normalizeFolderPath maps empty/whitespace input to "" (not the daemon cwd)', () => {
+  expect(normalizeFolderPath('')).toBe('');
+  expect(normalizeFolderPath('   ')).toBe('');
+});
+
+test('whitespace-only folder does not match even the daemon cwd', () => {
+  // Before the empty-input fix, normalizeFolderPath('   ') resolved to process.cwd(),
+  // so a junk-cwd chat would spuriously match a daemon running inside an excluded folder.
+  expect(isProjectExcluded('   ', [process.cwd()])).toBe(false);
+});
+
 test('symlinked project path matches the real excluded path', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'proxai-symlink-'));
   try {

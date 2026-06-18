@@ -31,13 +31,14 @@ export async function resolveCwdFromHead(
     if (line.trim().length === 0) continue;
     try {
       const parsed = JSON.parse(line);
-      const top = typeof parsed.cwd === 'string' && parsed.cwd.length > 0 ? parsed.cwd : null;
+      const top =
+        typeof parsed.cwd === 'string' && parsed.cwd.trim().length > 0 ? parsed.cwd : null;
       const payload = parsed.payload;
       const nested =
         payload !== null &&
         typeof payload === 'object' &&
         typeof payload.cwd === 'string' &&
-        payload.cwd.length > 0
+        payload.cwd.trim().length > 0
           ? payload.cwd
           : null;
       const cwd = top ?? nested;
