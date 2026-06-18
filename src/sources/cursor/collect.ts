@@ -169,13 +169,23 @@ export async function collectCursorFile(
         const stored = getMetadata(context.buffer, exclusionFpKey);
         if (exclusionEntriesRemoved(stored, current)) {
           exclusionBackfillReset = true;
+          // Re-key the stream so the backfill ships under a FRESH source_path_hash.
+          // Resetting the watermark in place would overlap the already-shipped range for
+          // this hash → backend WatermarkRegressionError → the uploader discards the
+          // backfill batch (silent data loss; 08_BACKEND_CONTRACT §6.3). A new #gen path is
+          // a new file to the backend; nest dedups any re-sent rows by record id. Mirrors
+          // the vacuum re-key above.
+          effectiveSourcePath = nextGenerationSuffix(effectiveSourcePath);
+          effectiveSourcePathHash = sha256Hex(effectiveSourcePath);
+          priorCursor = null;
+          exclusionFpKey = `${METADATA_KEYS.cursorExclusionSetPrefix}${effectiveSourcePathHash}`;
           context.logger?.info(
             {
               event: 'capture.exclusion_backfill_reset',
               source_app: CURSOR_SOURCE_APP,
               source_path_hash: effectiveSourcePathHash,
             },
-            'exclusion entry removed; re-scanning cursor global db to backfill',
+            'exclusion entry removed; re-keying cursor global db via #gen to backfill',
           );
         }
       }

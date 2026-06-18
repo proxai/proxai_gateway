@@ -897,3 +897,64 @@ test('backfill: un-exclude re-scans from rowid 0, and fingerprint commits only a
   const c3 = await collectCursorFile(file, { ...baseCtx, excludedProjects: [] });
   expect(c3.capturedBatches).toBe(0);
 });
+
+test('backfill re-keys to a fresh source_path_hash so the original stream never regresses', async () => {
+  // Mixed global DB: an excluded composer (rowids 1-2) + a non-excluded one (rowids 3-4).
+  const file = await makeGlobalDbFile({
+    headers: [
+      { composerId: 'secretC', folder: '/Users/me/secret' },
+      { composerId: 'okC', folder: '/Users/me/ok' },
+    ],
+    rows: [
+      { key: 'composerData:secretC', value: JSON.stringify({ conversationState: '~' }) },
+      {
+        key: 'bubbleId:secretC:b1',
+        value: JSON.stringify({ type: 1, text: 'secret', bubbleId: 'b1' }),
+      },
+      { key: 'composerData:okC', value: JSON.stringify({ conversationState: '~' }) },
+      {
+        key: 'bubbleId:okC:b2',
+        value: JSON.stringify({ type: 1, text: 'public', bubbleId: 'b2' }),
+      },
+    ],
+  });
+  const baseCtx: CursorCollectorContext = {
+    buffer,
+    gatewayVersion: 'gw',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  };
+
+  // Cycle 1: /Users/me/secret excluded → okC's rows ship under the ORIGINAL hash (watermarkStart=3).
+  await collectCursorFile(file, { ...baseCtx, excludedProjects: ['/Users/me/secret'] });
+  // Cycle 2: un-exclude → the backfill must ship under a NEW hash, never regressing the original.
+  await collectCursorFile(file, { ...baseCtx, excludedProjects: [] });
+
+  const batches: { hash: string; start: number; end: number }[] = [];
+  for (let b = nextPendingBatch(buffer); b !== null; b = nextPendingBatch(buffer)) {
+    batches.push({ hash: b.sourcePathHash, start: b.watermarkStart, end: b.watermarkEnd });
+    deleteBatch(buffer, b.captureId);
+  }
+
+  // The backfill batch (watermarkStart=1) lands under a DIFFERENT source_path_hash.
+  const backfill = requireDefined(
+    batches.find((x) => x.start === 1),
+    'backfill batch at watermarkStart=1',
+  );
+  expect(backfill.hash).not.toBe(file.sourcePathHash);
+
+  // Contract invariant (08_BACKEND_CONTRACT §6.3): per source_path_hash, batches never overlap.
+  const byHash = new Map<string, { start: number; end: number }[]>();
+  for (const x of batches) {
+    const arr = byHash.get(x.hash) ?? [];
+    arr.push({ start: x.start, end: x.end });
+    byHash.set(x.hash, arr);
+  }
+  for (const ranges of byHash.values()) {
+    const sorted = ranges.toSorted((a, b) => a.start - b.start);
+    for (let i = 1; i < sorted.length; i++) {
+      const cur = requireDefined(sorted[i], 'range');
+      const prev = requireDefined(sorted[i - 1], 'prev range');
+      expect(cur.start).toBeGreaterThanOrEqual(prev.end);
+    }
+  }
+});
