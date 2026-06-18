@@ -25,6 +25,7 @@ export interface CodexCollectorContext {
   maxDecompressedBytes: number;
   logger?: MinimalLogger;
   rolloutVersionReader?: (filePath: string) => Promise<string | null>;
+  excludedProjects?: readonly string[];
 }
 
 export interface CodexCollectorError {
