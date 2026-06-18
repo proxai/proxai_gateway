@@ -218,7 +218,7 @@ test('handleInspect: cursor database with various rows and keys', async () => {
   expect(result.promptCount).toBe(2);
 });
 
-test('handleInspect: codex with sqlite state and rollout jsonl files', async () => {
+test('handleInspect: codex inspects rollout only (state sqlite on disk is ignored)', async () => {
   // Seed the state SQLite db state_*.sqlite
   const stateDbPath = join(dir, 'state_1.sqlite');
   await seedCodexDb(stateDbPath, ['thread-1'], ['edge-1']);
@@ -255,8 +255,9 @@ test('handleInspect: codex with sqlite state and rollout jsonl files', async () 
     maxDecompressedBytes: 9 * 1024 * 1024,
   });
 
-  expect(result.filesProcessed).toBe(2);
-  expect(result.telemetryRecordCount).toBe(6);
+  // State sqlite is no longer inspected — only the rollout file is counted.
+  expect(result.filesProcessed).toBe(1); // was 2 (state + rollout); now rollout only
+  expect(result.telemetryRecordCount).toBe(4); // was 6 (2 state rows + 4 rollout); now 4
   expect(result.promptCount).toBe(1);
 });
 
@@ -282,19 +283,6 @@ test('handleInspect: handles file inspect errors and codex errors gracefully', a
     });
     expect(result.errors.length).toBe(1);
   }
-
-  // 2. Codex SQLite state database error: an invalid SQLite file (cross-platform)
-  const errStatePath = join(dir, 'state_1.sqlite');
-  await writeFile(errStatePath, 'invalid-sqlite-db-data');
-
-  const resultCodex = await handleInspect('codex', {
-    baseDir: dir,
-    captureSubAgents: true,
-    priorCursors: [],
-    gatewayVersion: 'gw-0.1',
-    maxDecompressedBytes: 9 * 1024 * 1024,
-  });
-  expect(resultCodex.errors.length).toBe(1);
 
   // 3. Cursor SQLite read error: an invalid state.vscdb (cross-platform)
   const cursorGlobalDir = join(dir, 'globalStorage');

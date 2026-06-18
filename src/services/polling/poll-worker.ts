@@ -27,7 +27,6 @@ import {
 } from 'sources/claude-desktop';
 import {
   discoverCodexRolloutFiles,
-  discoverCodexStateSqlite,
   defaultCodexHome,
   isCodexDialogueRecord,
   trimCodexRecord,
@@ -397,66 +396,6 @@ export async function handleInspect(
     }
   } else if (sourceName === 'codex') {
     const baseDir = options.baseDir ?? defaultCodexHome();
-
-    let stateSnapshot: { path: string; cleanup: () => Promise<void> } | null = null;
-    try {
-      const stateFile = await discoverCodexStateSqlite(baseDir, { minimumMtime: null });
-      if (stateFile !== null) {
-        filesProcessed++;
-        totalBytes += stateFile.sizeBytes;
-        updateChronological(null, stateFile.lastModifiedMs);
-
-        stateSnapshot = await snapshotSqlite(stateFile.sourcePath);
-        const db = openReadOnly(stateSnapshot.path);
-        try {
-          const tables = db
-            .query<
-              { name: string },
-              []
-            >("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-            .all();
-          for (const t of tables) {
-            const row = db
-              .query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM "${t.name}"`)
-              .get();
-            if (row !== null) {
-              recordCount += row.count;
-            }
-          }
-
-          const sizer = createCompressedSizer();
-          for (const tbl of ['threads', 'thread_spawn_edges']) {
-            const tableCheck = db
-              .query(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tbl}'`)
-              .get();
-            if (tableCheck !== null) {
-              const telRow = db
-                .query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM "${tbl}"`)
-                .get();
-              if (telRow !== null) {
-                telemetryRecordCount += telRow.count;
-              }
-
-              const allRows = db.query<Record<string, unknown>, []>(`SELECT * FROM "${tbl}"`).all();
-              for (const r of allRows) {
-                const rowJson = JSON.stringify(r);
-                telemetryRawBytes += Buffer.byteLength(rowJson, 'utf8');
-                sizer.add(rowJson + '\n');
-              }
-            }
-          }
-          telemetryCompressedBytes += sizer.finish();
-        } finally {
-          db.close();
-        }
-      }
-    } catch (err) {
-      errors.push(`codex state: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      if (stateSnapshot !== null) {
-        await stateSnapshot.cleanup();
-      }
-    }
 
     try {
       const rolloutFiles = await discoverCodexRolloutFiles(baseDir, {
