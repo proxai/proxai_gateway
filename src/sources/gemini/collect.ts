@@ -9,7 +9,7 @@ import {
 } from 'core/utils';
 import { getCursor, getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
-import { isProjectExcluded } from 'services/exclusion';
+import { isFolderUnderPrefixes, normalizeExcludedPrefixes } from 'services/exclusion';
 import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import { applyRedaction } from 'services/redaction';
 import {
@@ -84,8 +84,24 @@ export async function collectGeminiConversation(
     // conversation's byte watermark stays frozen and backfills if it is later un-excluded.
     const excluded = context.excludedProjects ?? [];
     if (excluded.length > 0) {
+      // FAIL CLOSED: if the agyhub index was read mid-write (incomplete), an excluded
+      // conversation may simply be absent from the partial map. Pause this cycle — no capture,
+      // no setCursor — so it backfills next cycle once the index is complete.
+      if (context.agyhubComplete === false) {
+        context.logger?.info(
+          {
+            event: 'capture.agyhub_partial_read_pause',
+            source_app: GEMINI_SOURCE_APP,
+            source_path_hash: file.sourcePathHash,
+          },
+          'agyhub index read incomplete (mid-write?); pausing this cycle to avoid leaking an excluded conversation',
+        );
+        return result;
+      }
+      // Normalize the exclusion list once per cycle (not once per candidate folder).
+      const prefixes = normalizeExcludedPrefixes(excluded);
       const folders = context.agyhubFolders?.get(file.conversationId) ?? [];
-      const hit = folders.find((folder) => isProjectExcluded(folder, excluded));
+      const hit = folders.find((folder) => isFolderUnderPrefixes(folder, prefixes));
       if (hit !== undefined) {
         context.logger?.info(
           {
@@ -258,7 +274,9 @@ export async function collectGeminiConversation(
     });
 
     result.capturedBatches = sourceSlices.length;
-    result.capturedBytes = range.bytes.byteLength;
+    // capturedBytes is the SUM of shipped compressed body bytes accumulated per-slice above; do
+    // NOT overwrite it with the uncompressed scanned range (that double-counted nothing useful
+    // and reported the wrong unit).
   } catch (err) {
     result.errors.push({
       sourcePath: file.sourcePath,

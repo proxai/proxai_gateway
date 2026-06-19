@@ -16,7 +16,10 @@ describe('geminiConversationIdFromPath', () => {
 });
 
 describe('loadAgyhubFolderMap', () => {
-  it('returns an empty map when the agyhub file is absent', () => {
-    expect(loadAgyhubFolderMap('/nonexistent-agyhub-xyz').size).toBe(0);
+  it('returns an empty map + complete:true when the agyhub file is absent (fail-open)', () => {
+    const { folders, complete } = loadAgyhubFolderMap('/nonexistent-agyhub-xyz');
+    expect(folders.size).toBe(0);
+    // A missing index is fail-open: nothing to protect, so the gate must not pause on it.
+    expect(complete).toBe(true);
   });
 });

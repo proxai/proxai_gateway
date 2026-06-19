@@ -39,13 +39,14 @@ function ctx(
   };
 }
 
-// A real-shaped Antigravity transcript line: USER_EXPLICIT / MODEL / SYSTEM origins with
+// A real-shaped Antigravity transcript line: USER_EXPLICIT / MODEL / SYSTEM sources with
 // USER_INPUT / PLANNER_RESPONSE / CONVERSATION_HISTORY types. NONE is user/assistant — the
-// claude-code isDialogueRecord filter would drop every one of these.
+// claude-code isDialogueRecord filter would drop every one of these. Real transcripts use the
+// "source" key (not "origin"); capture is key-agnostic, so the fixtures mirror reality.
 const TRANSCRIPT_LINES = [
-  '{"origin":"USER_EXPLICIT","type":"USER_INPUT","text":"fix the search bug"}',
-  '{"origin":"MODEL","type":"PLANNER_RESPONSE","text":"Looking into it now."}',
-  '{"origin":"SYSTEM","type":"CONVERSATION_HISTORY","summary":"prior turns"}',
+  '{"source":"USER_EXPLICIT","type":"USER_INPUT","text":"fix the search bug"}',
+  '{"source":"MODEL","type":"PLANNER_RESPONSE","text":"Looking into it now."}',
+  '{"source":"SYSTEM","type":"CONVERSATION_HISTORY","summary":"prior turns"}',
 ];
 
 async function makeTranscript(
@@ -133,6 +134,39 @@ test('captures every complete line with no content filter (one jsonl/byte_range 
   expect(cursorRow(file)?.watermarkEnd).toBe(completeBytes);
 });
 
+test('captures a model/system-only transcript (no USER_INPUT)', async () => {
+  // Pins the "no user-presence gate": a transcript with zero USER_* lines still captures.
+  const file = await makeTranscript([
+    JSON.stringify({
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      step_index: 0,
+      content: 'Looking into it.',
+    }),
+    JSON.stringify({
+      source: 'SYSTEM',
+      type: 'CONVERSATION_HISTORY',
+      status: 'DONE',
+      step_index: 1,
+      content: null,
+    }),
+  ]);
+  const result = await collectGeminiConversation(file, ctx(buffer));
+  expect(result.capturedBatches).toBe(1);
+});
+
+test('capturedBytes equals the summed compressed batch body sizes', async () => {
+  const file = await makeTranscript(TRANSCRIPT_LINES);
+  const result = await collectGeminiConversation(file, ctx(buffer));
+
+  expect(result.capturedBatches).toBe(1);
+  expect(result.capturedBytes).toBeGreaterThan(0);
+
+  const summedBodyBytes = readBatches(buffer).reduce((sum, b) => sum + b.body.byteLength, 0);
+  expect(result.capturedBytes).toBe(summedBodyBytes);
+});
+
 test('does nothing on a second poll with no new bytes', async () => {
   const file = await makeTranscript(TRANSCRIPT_LINES);
   await collectGeminiConversation(file, ctx(buffer));
@@ -147,7 +181,7 @@ test('holds back a trailing partial line; watermarkEnd is the last complete-line
   const completeLine = TRANSCRIPT_LINES[0];
   if (completeLine === undefined) throw new Error('fixture line missing');
   // File ends WITHOUT a trailing newline: the second line is incomplete and must be held back.
-  const file = await makeTranscript([completeLine, '{"origin":"MODEL","type":"PLANNER_'], {
+  const file = await makeTranscript([completeLine, '{"source":"MODEL","type":"PLANNER_'], {
     trailingNewline: false,
   });
 
@@ -182,6 +216,28 @@ test('PAUSE: an excluded folder for this conversation captures nothing and write
   expect(result.errors).toEqual([]);
   expect(readBatches(buffer).length).toBe(0);
   // PAUSE means the byte watermark stays frozen: no cursor row written at all.
+  expect(cursorRow(file)).toBeNull();
+});
+
+test('FAIL CLOSED: agyhubComplete:false + active exclusions captures nothing and writes no cursor', async () => {
+  // A truncated/mid-write agyhub index means an excluded conversation may simply be absent from
+  // the partial map. The gate must pause even for a uuid that is not in the map at all.
+  const file = await makeTranscript(TRANSCRIPT_LINES, { conversationId: 'cascade-not-in-map' });
+  const agyhubFolders = new Map<string, string[]>([['cascade-other', ['/Users/me/whatever']]]);
+
+  const result = await collectGeminiConversation(
+    file,
+    ctx(buffer, {
+      excludedProjects: ['/Users/me/secret'],
+      agyhubFolders,
+      agyhubComplete: false,
+    }),
+  );
+
+  expect(result.capturedBatches).toBe(0);
+  expect(result.errors).toEqual([]);
+  expect(readBatches(buffer).length).toBe(0);
+  // Fail-closed PAUSE: no cursor row written, so it backfills next cycle once the index is whole.
   expect(cursorRow(file)).toBeNull();
 });
 

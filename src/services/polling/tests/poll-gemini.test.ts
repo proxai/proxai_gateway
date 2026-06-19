@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { rmRecursive } from 'core/io/fs';
-import { countByStatus, openInMemoryBufferDb } from 'services/buffer';
+import { countByStatus, countCursors, openInMemoryBufferDb } from 'services/buffer';
+import { GEMINI_AGYHUB_FILE } from 'sources/gemini';
 import { makeGeminiSourcePoller } from 'services/polling/poll-gemini.ts';
 
 let dir: string;
@@ -30,6 +31,16 @@ async function seedTranscript(baseDir: string, uuid: string, text: string): Prom
     `{"origin":"USER_EXPLICIT","type":"USER_INPUT","text":${JSON.stringify(text)}}\n`,
   );
 }
+
+// agyhub protobuf helpers (mirror src/services/exclusion/tests/gemini-agyhub.test.ts):
+// top field1=repeated entry{ field1=uuid, field2=meta{ field9=repeated root{ field1=fileUri } } }
+function lp(field: number, payload: Buffer): Buffer {
+  return Buffer.concat([Buffer.from([(field << 3) | 2]), Buffer.from([payload.length]), payload]); // len<128 in tests
+}
+const root = (uri: string): Buffer => lp(1, Buffer.from(uri, 'utf8'));
+const meta = (uris: string[]): Buffer => Buffer.concat(uris.map((u) => lp(9, root(u))));
+const entry = (uuid: string, uris: string[]): Buffer =>
+  Buffer.concat([lp(1, Buffer.from(uuid)), lp(2, meta(uris))]);
 
 const POLL_CTX = {
   gatewayVersion: 'gw-0.1',
@@ -77,7 +88,7 @@ test('records a discovery error when the base path contains a null byte', async 
   expect(result.errors.length).toBeGreaterThan(0);
 });
 
-test('PAUSE: excluded conversation (agyhub maps uuid → excluded folder) captures nothing', async () => {
+test('fail-open plumbing: excludedProjects forwarded; a conversation with no agyhub entry still captures', async () => {
   const uuid = 'conv-secret-xyz';
   await seedTranscript(dir, uuid, 'secret prompt');
 
@@ -98,4 +109,31 @@ test('PAUSE: excluded conversation (agyhub maps uuid → excluded folder) captur
   expect(result.errors).toEqual([]);
   expect(result.filesProcessed).toBe(1);
   expect(result.capturedBatches).toBeGreaterThanOrEqual(1);
+});
+
+test('PAUSE: a real agyhub .pb mapping the conversation to an excluded folder captures nothing', async () => {
+  const uuid = 'conv-real-pause';
+  await seedTranscript(dir, uuid, 'secret prompt');
+
+  // Write a real agyhub_summaries_proto.pb under baseDir mapping this conversation's UUID to a
+  // file:// URI for the excluded folder, so the poller decodes it and the gate pauses.
+  const excludedFolder = '/Users/me/secret-project';
+  const pb = lp(1, entry(uuid, [`file://${excludedFolder}`]));
+  await writeFile(join(dir, GEMINI_AGYHUB_FILE), pb);
+
+  const poller = makeGeminiSourcePoller({ baseDir: dir });
+  const result = await poller({
+    buffer,
+    ...POLL_CTX,
+    excludedProjects: [excludedFolder],
+    minimumMtimeOverride: null,
+  });
+
+  expect(result.errors).toEqual([]);
+  expect(result.filesProcessed).toBe(1);
+  expect(result.capturedBatches).toBe(0);
+  expect(countByStatus(buffer).pending).toBe(0);
+
+  // PAUSE means the byte watermark stays frozen: no cursor row is written for the only file.
+  expect(countCursors(buffer)).toBe(0);
 });

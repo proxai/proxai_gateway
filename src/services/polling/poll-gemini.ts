@@ -46,10 +46,21 @@ async function pollGemini(ctx: SourcePollerContext, baseDir: string): Promise<So
     buffer: ctx.buffer,
     gatewayVersion: ctx.gatewayVersion,
     maxDecompressedBytes: ctx.maxDecompressedBytes,
-    agyhubFolders: loadAgyhubFolderMap(baseDir),
   };
   if (ctx.logger !== undefined) collectorContext.logger = ctx.logger;
   if (ctx.excludedProjects !== undefined) collectorContext.excludedProjects = ctx.excludedProjects;
+
+  // Only read/decode the agyhub index (up to 8MB) when there is at least one exclusion to
+  // enforce; otherwise the folder map is never consulted, so skip the work and pass an empty
+  // fail-open map. Decoding when nothing is excluded would burn CPU for no behavioral effect.
+  if (ctx.excludedProjects && ctx.excludedProjects.length > 0) {
+    const agy = loadAgyhubFolderMap(baseDir);
+    collectorContext.agyhubFolders = agy.folders;
+    collectorContext.agyhubComplete = agy.complete;
+  } else {
+    collectorContext.agyhubFolders = new Map();
+    collectorContext.agyhubComplete = true;
+  }
 
   async function processNext(index: number): Promise<void> {
     const file = files[index];

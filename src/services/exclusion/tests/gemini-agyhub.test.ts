@@ -19,12 +19,29 @@ describe('decodeAgyhubFolders', () => {
       lp(1, entry('uuid-multi', ['file:///Users/me/a', 'file:///Users/me/b'])),
       lp(1, entry('uuid-none', [])),
     ]);
-    const m = decodeAgyhubFolders(buf);
-    expect(m.get('uuid-nest')).toEqual(['/Users/me/nest']);
-    expect(m.get('uuid-multi')).toEqual(['/Users/me/a', '/Users/me/b']);
-    expect(m.get('uuid-none')).toEqual([]);
+    const { folders, complete } = decodeAgyhubFolders(buf);
+    expect(folders.get('uuid-nest')).toEqual(['/Users/me/nest']);
+    expect(folders.get('uuid-multi')).toEqual(['/Users/me/a', '/Users/me/b']);
+    expect(folders.get('uuid-none')).toEqual([]);
+    // A well-formed buffer whose top-level walk consumes every byte is complete.
+    expect(complete).toBe(true);
   });
   it('returns an empty map for garbage (never throws)', () => {
-    expect(decodeAgyhubFolders(Buffer.from([0xff, 0xff, 0xff])).size).toBe(0);
+    expect(decodeAgyhubFolders(Buffer.from([0xff, 0xff, 0xff])).folders.size).toBe(0);
+  });
+  it('reports complete:true for empty input (no data = nothing to protect)', () => {
+    const { folders, complete } = decodeAgyhubFolders(Buffer.alloc(0));
+    expect(folders.size).toBe(0);
+    expect(complete).toBe(true);
+  });
+  it('reports complete:false when the buffer is truncated mid-entry', () => {
+    const full = Buffer.concat([
+      lp(1, entry('uuid-a', ['file:///Users/me/a'])),
+      lp(1, entry('uuid-b', ['file:///Users/me/b'])),
+    ]);
+    // Lop off the tail so the final top-level length-delimited field claims more bytes than remain.
+    const truncated = full.subarray(0, full.length - 4);
+    const { complete } = decodeAgyhubFolders(truncated);
+    expect(complete).toBe(false);
   });
 });

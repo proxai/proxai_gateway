@@ -20,6 +20,12 @@ export interface GeminiCollectorContext {
   logger?: MinimalLogger;
   excludedProjects?: readonly string[];
   agyhubFolders?: ReadonlyMap<string, string[]>;
+  /**
+   * Truncated-read signal for the agyhub index this cycle. `false` = the `.pb` was read
+   * mid-write; the collect gate fails CLOSED (pauses) when exclusions are active so a
+   * conversation merely absent from a partial map cannot leak. Defaults to fail-open when omitted.
+   */
+  agyhubComplete?: boolean;
 }
 
 export interface GeminiCollectorError {
