@@ -3,10 +3,13 @@ import type { Database } from 'bun:sqlite';
 import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
 
+import { tableExists } from 'core/io/sqlite';
+
 import {
   decodeConversationStateHashes,
-  isProjectExcluded,
+  isFolderUnderPrefixes,
   lexicalFolderKey,
+  normalizeExcludedPrefixes,
   parseComposerHeadersFolders,
   parseWorkspaceFolder,
 } from 'services/exclusion';
@@ -62,23 +65,27 @@ export function buildCursorGlobalExclusionPlan(
 ): CursorGlobalExclusionPlan {
   const excludedComposerIds = new Set<string>();
   const blobsToDrop = new Set<string>();
-  if (excludedProjects.length === 0) {
+  const excludedPrefixes = normalizeExcludedPrefixes(excludedProjects);
+  if (excludedPrefixes.length === 0) {
     return { excludedComposerIds, blobsToDrop };
   }
 
-  // composerId -> folder (authoritative folder source)
-  const headerRow = db
-    .query<
-      ItemValueRow,
-      [string]
-    >(`SELECT CAST(value AS TEXT) AS value FROM ItemTable WHERE key = ?`)
-    .get(COMPOSER_HEADERS_ITEM_KEY);
+  // composerId -> folder (authoritative folder source). Fail open if ItemTable is absent
+  // (atypical/partial/corrupt profile) — never throw; every composer just keeps shipping.
+  const headerRow = tableExists(db, 'ItemTable')
+    ? db
+        .query<
+          ItemValueRow,
+          [string]
+        >(`SELECT CAST(value AS TEXT) AS value FROM ItemTable WHERE key = ?`)
+        .get(COMPOSER_HEADERS_ITEM_KEY)
+    : null;
   const folderByComposer = headerRow
     ? parseComposerHeadersFolders(headerRow.value)
     : new Map<string, string | null>();
 
   for (const [composerId, folder] of folderByComposer) {
-    if (folder !== null && isProjectExcluded(folder, excludedProjects)) {
+    if (folder !== null && isFolderUnderPrefixes(folder, excludedPrefixes)) {
       excludedComposerIds.add(composerId);
     }
   }

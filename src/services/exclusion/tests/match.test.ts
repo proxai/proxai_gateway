@@ -4,8 +4,10 @@ import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  isFolderUnderPrefixes,
   isProjectExcluded,
   lexicalFolderKey,
+  normalizeExcludedPrefixes,
   normalizeFolderPath,
 } from 'services/exclusion/match.ts';
 
@@ -96,4 +98,20 @@ test('lexicalFolderKey canonicalizes without touching the filesystem (stable fin
   expect(lexicalFolderKey('/nonexistent-xyz-123/sub')).toBe('/nonexistent-xyz-123/sub');
   const once = lexicalFolderKey('/x/y/');
   expect(lexicalFolderKey(once)).toBe(once); // idempotent
+});
+
+test('relative cwd never anchors to the daemon cwd (normalizes to "")', () => {
+  expect(normalizeFolderPath('relative/path')).toBe('');
+  expect(normalizeFolderPath('./foo')).toBe('');
+  expect(normalizeFolderPath('../escape')).toBe('');
+  // A junk relative cwd must NOT match even if the daemon happens to run inside an excluded dir.
+  expect(isProjectExcluded('relative/path', [process.cwd()])).toBe(false);
+});
+
+test('normalizeExcludedPrefixes + isFolderUnderPrefixes match isProjectExcluded but normalize once', () => {
+  const prefixes = normalizeExcludedPrefixes(['/Users/me/secret', '  ', 'relative/x']);
+  expect(prefixes).toEqual([normalizeFolderPath('/Users/me/secret')]); // blanks + relative dropped
+  expect(isFolderUnderPrefixes('/Users/me/secret/sub', prefixes)).toBe(true);
+  expect(isFolderUnderPrefixes('/Users/me/secret-2', prefixes)).toBe(false); // boundary anchored
+  expect(isFolderUnderPrefixes('/Users/me/other', prefixes)).toBe(false);
 });

@@ -1,7 +1,7 @@
 // src/services/exclusion/match.ts
 import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 
 const CASE_INSENSITIVE_FS = process.platform === 'darwin' || process.platform === 'win32';
 
@@ -28,9 +28,9 @@ function realpathOfDeepestExisting(p: string): string {
 
 /**
  * Canonicalize a folder path for comparison. Idempotent: safe to call on its own output.
- * Steps: trim -> expand leading ~ -> resolve symlinks (realpathSync, ENOENT-tolerant)
- * -> strip trailing slashes -> lowercase on case-insensitive filesystems.
- * Never throws (a non-existent path falls back to its lexical form).
+ * trim -> empty/whitespace => '' -> expand leading ~ -> reject non-absolute (=> '') ->
+ * resolve symlinks (deepest existing ancestor) -> strip trailing slashes -> case-fold.
+ * Never throws. Returns '' for any input that cannot be a real absolute folder.
  */
 export function normalizeFolderPath(input: string): string {
   let out = input.trim();
@@ -39,24 +39,46 @@ export function normalizeFolderPath(input: string): string {
   if (out.length === 0) return '';
   if (out === '~') out = homedir();
   else if (out.startsWith('~/')) out = join(homedir(), out.slice(2));
-  // Resolve symlinks. If the leaf doesn't exist, resolve the deepest existing ancestor so a
-  // symlinked PARENT still canonicalizes (realpathSync alone would throw and lose it).
+  // A non-absolute path here would be resolved against the daemon's cwd by realpathSync — never
+  // anchor a chat's folder identity to "wherever the daemon runs". Treat it as no-match.
+  if (!isAbsolute(out)) return '';
   out = realpathOfDeepestExisting(out);
   out = out.replace(/\/+$/, '');
   if (CASE_INSENSITIVE_FS) out = out.toLowerCase();
   return out;
 }
 
-/** True if `folderPath` equals, or is nested under, any excluded path (path-boundary anchored). */
-export function isProjectExcluded(folderPath: string, excludedPaths: readonly string[]): boolean {
-  if (excludedPaths.length === 0) return false;
-  const folder = normalizeFolderPath(folderPath);
+/**
+ * Normalize an exclusion list once into a comparable prefix list (drops blanks + anything that
+ * canonicalizes to '' — empty/whitespace/non-absolute). Hoist this out of per-item loops so the
+ * realpathSync cost is paid once per cycle, not once per candidate folder.
+ */
+export function normalizeExcludedPrefixes(excludedPaths: readonly string[]): string[] {
+  const out: string[] = [];
   for (const raw of excludedPaths) {
-    if (raw.trim().length === 0) continue; // guard the raw entry, before normalization
     const prefix = normalizeFolderPath(raw);
+    if (prefix.length > 0) out.push(prefix);
+  }
+  return out;
+}
+
+/** True if `folderPath` equals, or is nested under, any ALREADY-NORMALIZED prefix (boundary anchored). */
+export function isFolderUnderPrefixes(
+  folderPath: string,
+  normalizedPrefixes: readonly string[],
+): boolean {
+  if (normalizedPrefixes.length === 0) return false;
+  const folder = normalizeFolderPath(folderPath);
+  if (folder.length === 0) return false;
+  for (const prefix of normalizedPrefixes) {
     if (folder === prefix || folder.startsWith(prefix + '/')) return true;
   }
   return false;
+}
+
+/** True if `folderPath` equals, or is nested under, any excluded path (path-boundary anchored). */
+export function isProjectExcluded(folderPath: string, excludedPaths: readonly string[]): boolean {
+  return isFolderUnderPrefixes(folderPath, normalizeExcludedPrefixes(excludedPaths));
 }
 
 /**
@@ -70,6 +92,7 @@ export function lexicalFolderKey(input: string): string {
   if (out.length === 0) return '';
   if (out === '~') out = homedir();
   else if (out.startsWith('~/')) out = join(homedir(), out.slice(2));
+  if (!isAbsolute(out)) return '';
   out = out.replace(/\/+$/, '');
   if (CASE_INSENSITIVE_FS) out = out.toLowerCase();
   return out;

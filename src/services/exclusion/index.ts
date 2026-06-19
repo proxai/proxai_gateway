@@ -1,6 +1,8 @@
 // src/services/exclusion/index.ts
 export {
   isProjectExcluded,
+  isFolderUnderPrefixes,
+  normalizeExcludedPrefixes,
   normalizeFolderPath,
   lexicalFolderKey,
 } from 'services/exclusion/match.ts';

@@ -119,6 +119,15 @@ describe('buildCursorGlobalExclusionPlan', () => {
     expect(plan.excludedComposerIds.has('nest1')).toBe(true);
     expect(plan.blobsToDrop.size).toBe(0);
   });
+
+  it('fails open (no throw, empty plan) when the global DB has no ItemTable', () => {
+    const db = new Database(':memory:');
+    db.run('CREATE TABLE cursorDiskKV (key TEXT PRIMARY KEY, value BLOB)');
+    // no ItemTable at all (atypical/partial profile)
+    const plan = buildCursorGlobalExclusionPlan(db, ['/Users/me/nest']);
+    expect(plan.excludedComposerIds.size).toBe(0);
+    expect(plan.blobsToDrop.size).toBe(0);
+  });
 });
 
 describe('normalizeExclusionSet', () => {
