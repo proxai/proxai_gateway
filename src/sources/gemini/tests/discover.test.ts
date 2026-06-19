@@ -1,11 +1,12 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, it, test } from 'bun:test';
+import { mkdir } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 
 import { rmRecursive } from 'core/io/fs';
 import { sha256Hex } from 'core/utils';
-import { discoverGeminiConversations } from 'sources/gemini';
+import { discoverGeminiConversations, discoverGeminiTranscripts } from 'sources/gemini';
 import {
   defaultGeminiCliConversationsDir,
   defaultGeminiIdeConversationsDir,
@@ -78,4 +79,18 @@ test('default conversation dirs are home-relative and platform mapping is stable
   expect(defaultGeminiCliConversationsDir().includes(`${sep}.gemini${sep}`)).toBe(true);
   expect(geminiPlatformForRoot('cli')).toBe('antigravity-cli');
   expect(geminiPlatformForRoot('ide')).toBe('antigravity-ide');
+});
+
+it('discovers transcript.jsonl under the hidden .system_generated dir (dot:true)', async () => {
+  // Build <dir>/brain/conv-uuid-1/.system_generated/logs/transcript.jsonl
+  // The .system_generated segment is a hidden (dotted) directory — Bun.Glob skips it unless dot:true.
+  const transcriptDir = join(dir, 'brain', 'conv-uuid-1', '.system_generated', 'logs');
+  await mkdir(transcriptDir, { recursive: true });
+  await Bun.write(join(transcriptDir, 'transcript.jsonl'), '{"role":"user","text":"hello"}\n');
+
+  const files = await discoverGeminiTranscripts(dir, { minimumMtime: null });
+  expect(files).toHaveLength(1);
+  expect(files[0]?.conversationId).toBe('conv-uuid-1');
+  expect(files[0]?.sourcePlatform).toBe('antigravity-ide');
+  expect(files[0]?.sourcePath.endsWith('transcript.jsonl')).toBe(true);
 });

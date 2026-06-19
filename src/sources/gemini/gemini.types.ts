@@ -12,6 +12,7 @@ export interface DiscoveredGeminiFile {
   sizeBytes: number;
   lastModifiedMs: number;
   sourcePlatform: SourcePlatform;
+  conversationId: string;
 }
 
 export interface GeminiCollectorContext {
@@ -19,6 +20,8 @@ export interface GeminiCollectorContext {
   gatewayVersion: string;
   maxDecompressedBytes: number;
   logger?: MinimalLogger;
+  excludedProjects?: readonly string[];
+  agyhubFolders?: ReadonlyMap<string, string[]>;
 }
 
 export interface GeminiCollectorError {

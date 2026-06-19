@@ -65,6 +65,7 @@ async function makeStepsOnlyDb(options: SeedOptions): Promise<DiscoveredGeminiFi
     sizeBytes: stat.size,
     lastModifiedMs: stat.mtimeMs,
     sourcePlatform: 'antigravity-cli',
+    conversationId: '',
   };
 }
 

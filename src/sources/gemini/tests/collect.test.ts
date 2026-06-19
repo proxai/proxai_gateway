@@ -115,6 +115,7 @@ async function makeGeminiDb(options: MakeDbOptions = {}): Promise<DiscoveredGemi
     sizeBytes: stat.size,
     lastModifiedMs: stat.mtimeMs,
     sourcePlatform: 'antigravity-cli',
+    conversationId: '',
   };
 }
 
@@ -315,6 +316,7 @@ test('bumps consecutive_errors when the source database is corrupt', async () =>
     sizeBytes: stat.size,
     lastModifiedMs: stat.mtimeMs,
     sourcePlatform: 'antigravity-cli',
+    conversationId: '',
   };
 
   const result = await collectGeminiConversation(file, ctx(buffer));
@@ -358,6 +360,7 @@ async function makeLargeGeminiDb(count: number): Promise<DiscoveredGeminiFile> {
     sizeBytes: stat.size,
     lastModifiedMs: stat.mtimeMs,
     sourcePlatform: 'antigravity-cli',
+    conversationId: '',
   };
 }
 

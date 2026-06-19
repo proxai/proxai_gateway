@@ -41,6 +41,7 @@ function makeFile(): DiscoveredGeminiFile {
     sizeBytes: 4096,
     lastModifiedMs: Date.now(),
     sourcePlatform: 'antigravity-cli',
+    conversationId: '',
   };
 }
 
