@@ -1,10 +1,4 @@
-import {
-  collectCodexRollout,
-  collectCodexState,
-  defaultCodexHome,
-  discoverCodexRolloutFiles,
-  discoverCodexStateSqlite,
-} from 'sources/codex';
+import { collectCodexRollout, defaultCodexHome, discoverCodexRolloutFiles } from 'sources/codex';
 import { CODEX_DEFAULT_AGENT_SCHEMA_VERSION } from 'sources/codex/codex.constants.ts';
 import type { CodexCollectorContext } from 'sources/codex/codex.types.ts';
 import type {
@@ -14,8 +8,6 @@ import type {
 } from 'services/polling/polling.types.ts';
 
 export interface CodexSourceDeps {
-  discoverCodexStateSqlite: typeof discoverCodexStateSqlite;
-  collectCodexState: typeof collectCodexState;
   discoverCodexRolloutFiles: typeof discoverCodexRolloutFiles;
   collectCodexRollout: typeof collectCodexRollout;
 }
@@ -28,8 +20,6 @@ export interface CodexSourcePollerOptions {
 export function makeCodexSourcePoller(options: CodexSourcePollerOptions = {}): SourcePoller {
   const baseDir = options.baseDir ?? defaultCodexHome();
   const deps: CodexSourceDeps = {
-    discoverCodexStateSqlite: options.deps?.discoverCodexStateSqlite ?? discoverCodexStateSqlite,
-    collectCodexState: options.deps?.collectCodexState ?? collectCodexState,
     discoverCodexRolloutFiles: options.deps?.discoverCodexRolloutFiles ?? discoverCodexRolloutFiles,
     collectCodexRollout: options.deps?.collectCodexRollout ?? collectCodexRollout,
   };
@@ -50,8 +40,8 @@ async function pollCodex(
 
   // State capture intentionally disabled: nest never parses state sqlite into
   // agent-call-records, and capturing it unfiltered would upload excluded projects' rows.
-  // discoverCodexStateSqlite / collectCodexState remain in CodexSourceDeps (still exported
-  // and unit-tested directly) — only this poller stops calling them.
+  // discoverCodexStateSqlite / collectCodexState stay exported from sources/codex (with their
+  // own unit tests) but are no longer wired into this poller.
   const agentSchemaVersion = CODEX_DEFAULT_AGENT_SCHEMA_VERSION;
   const minimumMtime = resolveMinimumMtime(ctx);
 
