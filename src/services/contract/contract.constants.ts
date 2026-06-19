@@ -2,7 +2,6 @@ import type {
   BodyCompression,
   BodyFormat,
   CodexTable,
-  GeminiTable,
   SourceApp,
   SourceKind,
   SourcePlatform,
@@ -50,12 +49,6 @@ export const VALID_CODEX_TABLES: readonly CodexTable[] = [
   'threads',
   'thread_dynamic_tools',
   'thread_spawn_edges',
-];
-
-export const VALID_GEMINI_TABLES: readonly GeminiTable[] = [
-  'trajectory_meta',
-  'steps',
-  'trajectory_metadata_blob',
 ];
 
 export const SOURCE_VARIANTS: readonly SourceVariantSpec[] = [
