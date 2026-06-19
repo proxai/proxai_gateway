@@ -5,6 +5,7 @@ import type { SourcePlatform } from 'services/contract';
 import {
   ANTIGRAVITY_CLI_PLATFORM,
   ANTIGRAVITY_IDE_PLATFORM,
+  GEMINI_ANTIGRAVITY_BASE_SUBPATH,
   GEMINI_CLI_VARIANT_DIR,
   GEMINI_CONVERSATIONS_DIR,
   GEMINI_HOME_SUBPATH,
@@ -23,4 +24,8 @@ export function defaultGeminiCliConversationsDir(): string {
 
 export function defaultGeminiIdeConversationsDir(): string {
   return join(homedir(), GEMINI_HOME_SUBPATH, GEMINI_IDE_VARIANT_DIR, GEMINI_CONVERSATIONS_DIR);
+}
+
+export function defaultGeminiAntigravityBaseDir(): string {
+  return join(homedir(), GEMINI_ANTIGRAVITY_BASE_SUBPATH);
 }

@@ -76,43 +76,17 @@ async function seedCursorDb(
   db.close();
 }
 
-function geminiUserStepPayload(): Uint8Array {
-  const enc = (value: number): number[] => {
-    const out: number[] = [];
-    let remaining = value;
-    do {
-      let byte = remaining & 0x7f;
-      remaining >>>= 7;
-      if (remaining > 0) byte |= 0x80;
-      out.push(byte);
-    } while (remaining > 0);
-    return out;
-  };
-  const fld = (n: number, wire: number, body: number[]): number[] => [
-    ...enc((n << 3) | wire),
-    ...body,
-  ];
-  const str = (n: number, text: string): number[] => {
-    const bytes = [...new TextEncoder().encode(text)];
-    return fld(n, 2, [...enc(bytes.length), ...bytes]);
-  };
-  const msg = (n: number, parts: number[]): number[] => fld(n, 2, [...enc(parts.length), ...parts]);
-  return Uint8Array.from([...fld(1, 0, enc(14)), ...msg(19, [...str(2, 'hi gemini')])]);
-}
-
-// Helper to create a fake gemini SQLite DB with a steps table
-async function seedGeminiDb(baseDir: string, name: string): Promise<void> {
-  await mkdir(baseDir, { recursive: true });
-  const db = new Database(join(baseDir, name), { create: true });
-  db.run(
-    'CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, status INTEGER, step_payload BLOB)',
-  );
-  const stmt = db.prepare(
-    'INSERT INTO steps (idx, step_type, status, step_payload) VALUES (?, ?, ?, ?)',
-  );
-  stmt.run(0, 14, 3, geminiUserStepPayload());
-  stmt.run(1, 23, 3, geminiUserStepPayload());
-  db.close();
+// Helper to seed a gemini transcript.jsonl fixture at brain/<uuid>/.system_generated/logs/
+async function seedGeminiTranscript(
+  baseDir: string,
+  uuid: string,
+  lines: string[],
+): Promise<string> {
+  const transcriptDir = join(baseDir, 'brain', uuid, '.system_generated', 'logs');
+  await mkdir(transcriptDir, { recursive: true });
+  const transcriptPath = join(transcriptDir, 'transcript.jsonl');
+  await writeFile(transcriptPath, lines.join('\n') + '\n');
+  return transcriptPath;
 }
 
 // Helper to create a fake codex SQLite DB
@@ -334,9 +308,14 @@ test('handleInspect: codex rollout discovery error is recorded as codex rollout'
   expect(errors.some((e) => e.startsWith('codex rollout:'))).toBe(true);
 });
 
-test('handleInspect: gemini counts steps, telemetry, and prompts from a given baseDir', async () => {
-  const baseDir = join(dir, 'gemini-cli');
-  await seedGeminiDb(baseDir, 'cascade-1.db');
+test('handleInspect: gemini counts lines and prompts from a transcript.jsonl baseDir', async () => {
+  const baseDir = join(dir, 'gemini-antigravity');
+  const lines = [
+    JSON.stringify({ type: 'user', message: { role: 'user', content: 'hello' } }),
+    JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: 'hi' } }),
+    JSON.stringify({ type: 'user', message: { role: 'user', content: 'bye' } }),
+  ];
+  await seedGeminiTranscript(baseDir, 'conv-uuid-1', lines);
 
   const result = await handleInspect('gemini', {
     baseDir,
@@ -346,15 +325,17 @@ test('handleInspect: gemini counts steps, telemetry, and prompts from a given ba
   });
 
   expect(result.filesProcessed).toBe(1);
-  expect(result.recordCount).toBe(2);
-  expect(result.telemetryRecordCount).toBe(2);
-  expect(result.promptCount).toBe(1);
+  expect(result.recordCount).toBe(3);
+  expect(result.telemetryRecordCount).toBe(3);
+  expect(result.promptCount).toBe(2);
 });
 
-test('handleInspect: gemini records a per-file error for an invalid sqlite file', async () => {
+test('handleInspect: gemini records a per-file error for an unreadable transcript (POSIX only)', async () => {
+  if (process.platform === 'win32') return;
+
   const baseDir = join(dir, 'gemini-broken');
-  await mkdir(baseDir, { recursive: true });
-  await writeFile(join(baseDir, 'broken.db'), 'not a real sqlite database');
+  const transcriptPath = await seedGeminiTranscript(baseDir, 'conv-broken', ['{"type":"user"}']);
+  await chmod(transcriptPath, 0o000);
 
   const result = await handleInspect('gemini', {
     baseDir,
@@ -366,7 +347,7 @@ test('handleInspect: gemini records a per-file error for an invalid sqlite file'
   expect(result.errors.length).toBe(1);
 });
 
-test('handleInspect: gemini scans default roots when no baseDir is supplied', async () => {
+test('handleInspect: gemini scans default base dir when no baseDir is supplied', async () => {
   const result = await handleInspect('gemini', {
     priorCursors: [],
     gatewayVersion: 'gw-0.1',
