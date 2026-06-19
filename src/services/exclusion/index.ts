@@ -14,3 +14,4 @@ export {
   parseWorkspaceFolder,
   parseComposerHeadersFolders,
 } from 'services/exclusion/cursor-folder.ts';
+export { decodeAgyhubFolders } from 'services/exclusion/gemini-agyhub.ts';
