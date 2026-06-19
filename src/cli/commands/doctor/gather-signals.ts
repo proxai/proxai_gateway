@@ -9,7 +9,7 @@ import { queryAllDoctorData } from 'services/buffer/doctor-queries.ts';
 import { readAuthFailedSentinel } from 'services/polling/auth-failed-sentinel.ts';
 import { profileSystemdUnitName } from 'cli/service-unit/dev-labels.ts';
 import { defaultClaudeDesktopSessionsRoot } from 'sources/claude-desktop';
-import { defaultGeminiCliConversationsDir, defaultGeminiIdeConversationsDir } from 'sources/gemini';
+import { defaultGeminiAntigravityBaseDir } from 'sources/gemini';
 import { loadConfigFromString, type InstallSource } from 'services/config';
 import { readRescueLedgerReadOnly } from 'services/rescue/rescue-ledger.ts';
 import { readBootId } from 'core/system/boot-id.ts';
@@ -551,8 +551,7 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     cursorExists,
     codexExists,
     claudeDesktopExists,
-    geminiCliExists,
-    geminiIdeExists,
+    geminiExists,
     networkResult,
     diskFreeBytes,
     installSource,
@@ -573,8 +572,7 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
     probeSourcePathExists([cursorConfigDir]),
     probeSourcePathExists([homedir(), '.codex']),
     probeSourcePathExists([defaultClaudeDesktopSessionsRoot(deps.platform)]),
-    probeSourcePathExists([defaultGeminiCliConversationsDir()]),
-    probeSourcePathExists([defaultGeminiIdeConversationsDir()]),
+    probeSourcePathExists([defaultGeminiAntigravityBaseDir()]),
     probeNestReachable(deps.nestVerifyKeyUrl),
     probeDiskFreeBytes(deps.configDirPath, deps.platform),
     probeInstallSource(deps.binaryPath, deps.platform),
@@ -680,7 +678,7 @@ export async function gatherSignals(deps: DoctorCommandDeps): Promise<DoctorSign
       cursorExists,
       codexExists,
       claudeDesktopExists,
-      geminiExists: geminiCliExists || geminiIdeExists,
+      geminiExists,
     },
     resyncEvents: {
       totalCount: dbData.resyncStats.totalCount,
