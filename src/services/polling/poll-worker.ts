@@ -73,7 +73,7 @@ function createCompressedSizer(): { add: (text: string) => void; finish: () => n
 
 function isPromptRecord(
   parsed: unknown,
-  sourceApp: 'claude-code' | 'codex' | 'claude-desktop',
+  sourceApp: 'claude-code' | 'codex' | 'claude-desktop' | 'gemini',
 ): boolean {
   const rec = parsed as Record<string, unknown>;
   if (sourceApp === 'codex') {
@@ -86,6 +86,10 @@ function isPromptRecord(
       typeof payload === 'object' &&
       (payload as { role?: unknown }).role === 'user'
     );
+  }
+  if (sourceApp === 'gemini') {
+    // Antigravity user prompts: a USER_EXPLICIT source with a USER_INPUT type.
+    return rec.source === 'USER_EXPLICIT' && rec.type === 'USER_INPUT';
   }
   return rec.type === 'user';
 }
@@ -115,7 +119,7 @@ function isCursorPromptRow(key: string, value: string | null): boolean {
 
 async function analyzeJsonlLogFile(
   filePath: string,
-  sourceApp: 'claude-code' | 'codex' | 'claude-desktop',
+  sourceApp: 'claude-code' | 'codex' | 'claude-desktop' | 'gemini',
 ): Promise<{
   totalLines: number;
   oldestDate: string | null;
@@ -172,6 +176,11 @@ async function analyzeJsonlLogFile(
           capturedText = JSON.stringify(trimCodexRecord(parsed));
           lineBytes = Buffer.byteLength(capturedText, 'utf8') + 1;
         }
+      } else if (sourceApp === 'gemini') {
+        // Keep-all, mirroring the gemini collector: every non-empty, JSON-parseable line is
+        // captured verbatim (no type/content filter). capturedText/lineBytes already reflect the
+        // raw line, so the consent-surface bytes match what is actually shipped.
+        match = true;
       }
       if (match) {
         telemetryRecordCount++;
@@ -422,7 +431,7 @@ export async function handleInspect(
         telemetryCompressedBytes: telComp,
         promptCount: telPrompts,
         error,
-      } = await analyzeJsonlLogFile(f.sourcePath, 'claude-code');
+      } = await analyzeJsonlLogFile(f.sourcePath, 'gemini');
       recordCount += totalLines;
       updateChronological(oldestDate, f.lastModifiedMs);
       updateChronological(newestDate, f.lastModifiedMs);

@@ -310,10 +310,13 @@ test('handleInspect: codex rollout discovery error is recorded as codex rollout'
 
 test('handleInspect: gemini counts lines and prompts from a transcript.jsonl baseDir', async () => {
   const baseDir = join(dir, 'gemini-antigravity');
+  // Real Antigravity shapes: USER_EXPLICIT/MODEL sources (NOT claude-code user/assistant). The
+  // gemini arm counts every parseable line as telemetry (keep-all, mirroring the collector) and
+  // maps promptCount to USER_EXPLICIT + USER_INPUT lines only.
   const lines = [
-    JSON.stringify({ type: 'user', message: { role: 'user', content: 'hello' } }),
-    JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: 'hi' } }),
-    JSON.stringify({ type: 'user', message: { role: 'user', content: 'bye' } }),
+    JSON.stringify({ source: 'USER_EXPLICIT', type: 'USER_INPUT', text: 'hello' }),
+    JSON.stringify({ source: 'MODEL', type: 'PLANNER_RESPONSE', text: 'hi' }),
+    JSON.stringify({ source: 'USER_EXPLICIT', type: 'USER_INPUT', text: 'bye' }),
   ];
   await seedGeminiTranscript(baseDir, 'conv-uuid-1', lines);
 
@@ -326,7 +329,9 @@ test('handleInspect: gemini counts lines and prompts from a transcript.jsonl bas
 
   expect(result.filesProcessed).toBe(1);
   expect(result.recordCount).toBe(3);
+  // Keep-all: every parseable line is telemetry, including the MODEL line.
   expect(result.telemetryRecordCount).toBe(3);
+  // Only the two USER_EXPLICIT/USER_INPUT lines are prompts.
   expect(result.promptCount).toBe(2);
 });
 

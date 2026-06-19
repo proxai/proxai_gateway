@@ -137,3 +137,27 @@ test('PAUSE: a real agyhub .pb mapping the conversation to an excluded folder ca
   // PAUSE means the byte watermark stays frozen: no cursor row is written for the only file.
   expect(countCursors(buffer)).toBe(0);
 });
+
+test('FAIL CLOSED: present-but-empty agyhub .pb + active exclusion captures nothing, no cursor advance', async () => {
+  // A transiently-empty .pb (0 bytes) under an active exclusion must NOT fall through to fail-open:
+  // the excluded conversation could simply be absent from the empty index. loadAgyhubFolderMap
+  // returns complete:false, which routes through the collect gate's agyhubComplete===false pause.
+  const uuid = 'conv-empty-agyhub';
+  await seedTranscript(dir, uuid, 'secret prompt');
+  await writeFile(join(dir, GEMINI_AGYHUB_FILE), new Uint8Array(0));
+
+  const poller = makeGeminiSourcePoller({ baseDir: dir });
+  const result = await poller({
+    buffer,
+    ...POLL_CTX,
+    excludedProjects: ['/Users/me/secret-project'],
+    minimumMtimeOverride: null,
+  });
+
+  expect(result.errors).toEqual([]);
+  expect(result.filesProcessed).toBe(1);
+  expect(result.capturedBatches).toBe(0);
+  expect(countByStatus(buffer).pending).toBe(0);
+  // Fail-closed PAUSE: watermark frozen, so it backfills once the index populates.
+  expect(countCursors(buffer)).toBe(0);
+});

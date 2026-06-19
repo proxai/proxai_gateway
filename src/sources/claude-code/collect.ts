@@ -1,5 +1,6 @@
 import { basename, dirname } from 'node:path';
 
+import { NEWLINE_BYTE } from 'core/io/jsonl/jsonl.constants.ts';
 import { readJsonlRange } from 'core/io/jsonl';
 import {
   OversizedDecompressedSliceError,
@@ -7,14 +8,13 @@ import {
   nowIsoUtc,
   requireDefined,
   splitJsonlAtBoundary,
-  zstdCompressSync,
 } from 'core/utils';
 import { getCursor, getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import { isProjectExcluded, resolveCwdFromHead } from 'services/exclusion';
 import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import type { SourcePlatform } from 'services/contract';
-import { applyRedaction } from 'services/redaction';
+import { applyRedaction, createJsonlSliceRedactor } from 'services/redaction';
 import {
   CLAUDE_CODE_BODY_COMPRESSION,
   CLAUDE_CODE_BODY_FORMAT,
@@ -47,25 +47,6 @@ function resolveClaudeCodeSourcePlatform(
 ): SourcePlatform {
   const sessionId = deriveClaudeCodeSessionId(sourcePath);
   return desktopCliSessionIds?.has(sessionId) ? 'claude-code-desktop' : 'claude-code-cli';
-}
-
-interface SliceRedaction {
-  redactedBytes: Uint8Array;
-  compressed: Uint8Array;
-}
-
-function createSliceRedactor(): (slice: Uint8Array) => SliceRedaction {
-  const cache = new WeakMap<Uint8Array, SliceRedaction>();
-  return (slice) => {
-    let entry = cache.get(slice);
-    if (entry === undefined) {
-      const redactedBytes = ENCODER.encode(applyRedaction(DECODER.decode(slice)).redacted);
-      const compressed = zstdCompressSync(redactedBytes);
-      entry = { redactedBytes, compressed };
-      cache.set(slice, entry);
-    }
-    return entry;
-  };
 }
 
 const CLAUDE_SYNTHETIC_TEXT_PREFIXES = [
@@ -250,32 +231,33 @@ export async function collectClaudeCodeFile(
       return result;
     }
 
-    const rawText = DECODER.decode(range.bytes);
-    const lines = rawText.split('\n');
-
     interface KeptLine {
       text: string;
       physicalEndOffset: number;
     }
     const kept: KeptLine[] = [];
 
-    let currentOffset = 0;
-    for (const line of lines) {
-      const lineByteLength = ENCODER.encode(line).byteLength;
-      const lineEndOffset = currentOffset + lineByteLength + 1;
-
-      if (line.trim().length > 0) {
-        try {
-          const parsed = JSON.parse(line);
-          if (isDialogueRecord(parsed)) {
-            kept.push({
-              text: line,
-              physicalEndOffset: lineEndOffset,
-            });
-          }
-        } catch {}
-      }
-      currentOffset = lineEndOffset;
+    // Walk the RAW byte range, splitting on 0x0A so each line's physicalEndOffset comes from the
+    // raw bytes — NOT from re-encoding decoded text. An invalid-UTF8 line decodes to U+FFFD and
+    // re-encodes LONGER, which would desync the non-final-slice watermark boundaries below; the raw
+    // end is the only stable offset. readJsonlRange guarantees range.bytes ends at a newline.
+    let lineStart = 0;
+    for (let i = 0; i < range.bytes.byteLength; i++) {
+      if (range.bytes[i] !== NEWLINE_BYTE) continue;
+      const lineEndOffset = i + 1; // raw byte offset just past this line's newline
+      const lineBytes = range.bytes.subarray(lineStart, i); // exclude the newline
+      lineStart = lineEndOffset;
+      const line = DECODER.decode(lineBytes);
+      if (line.trim().length === 0) continue;
+      try {
+        const parsed = JSON.parse(line);
+        if (isDialogueRecord(parsed)) {
+          kept.push({
+            text: line,
+            physicalEndOffset: lineEndOffset,
+          });
+        }
+      } catch {}
     }
 
     const filteredText = kept.map((k) => k.text).join('\n') + '\n';
@@ -300,7 +282,7 @@ export async function collectClaudeCodeFile(
       context.desktopCliSessionIds,
     );
 
-    const redactSlice = createSliceRedactor();
+    const redactSlice = createJsonlSliceRedactor();
     const sourceSlices = splitJsonlAtBoundary(filteredBytes, {
       targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
       maxDecompressedBytes: context.maxDecompressedBytes,

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Database as SqliteDatabase } from 'bun:sqlite';
+import { randomBytes } from 'node:crypto';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -267,4 +268,144 @@ test('fail-open: empty folder list for the conversation still captures', async (
 
   expect(result.capturedBatches).toBe(1);
   expect(readBatches(buffer).length).toBe(1);
+});
+
+test('splits an oversized transcript into contiguous byte_range batches covering every line', async () => {
+  // Many fat lines + a small decompressed cap forces splitJsonlAtBoundary to chunk. Mirrors the
+  // claude-code contiguity test: batches must tile [0, size) with no gap or overlap.
+  const total = 20;
+  const markers: string[] = [];
+  const linesArr: string[] = [];
+  for (let i = 0; i < total; i++) {
+    const marker = `gemini-line-marker-${i}`;
+    markers.push(marker);
+    linesArr.push(
+      JSON.stringify({
+        source: 'MODEL',
+        type: 'PLANNER_RESPONSE',
+        marker,
+        noise: randomBytes(1000).toString('base64'),
+      }),
+    );
+  }
+  const file = await makeTranscript(linesArr);
+
+  const result = await collectGeminiConversation(
+    file,
+    ctx(buffer, { maxDecompressedBytes: 15_000 }),
+  );
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
+
+  const batches = readBatches(buffer);
+  expect(batches.length).toBe(result.capturedBatches);
+
+  let prevEnd = 0;
+  let allBodies = '';
+  for (const batch of batches) {
+    expect(batch.watermark_start).toBe(prevEnd);
+    expect(batch.watermark_end).toBeGreaterThan(batch.watermark_start);
+    prevEnd = batch.watermark_end;
+    allBodies += DECODER.decode(zstdDecompressSync(batch.body));
+  }
+  const first = batches[0];
+  if (first === undefined) throw new Error('no batches');
+  expect(first.watermark_start).toBe(0);
+  expect(prevEnd).toBe(file.sizeBytes);
+  expect(cursorRow(file)?.watermarkEnd).toBe(file.sizeBytes);
+
+  // Every kept line is present exactly once across the batch bodies.
+  for (const marker of markers) {
+    expect(allBodies).toContain(marker);
+  }
+});
+
+test('multi-slice with interleaved unparseable lines: kept-vs-raw byte mapping stays contiguous', async () => {
+  // Locks the F5 raw-byte offset behaviour: unparseable lines are dropped from the body but their
+  // bytes still belong to the scanned range, so the final batch end + cursor still reach size, and
+  // batch boundaries remain contiguous. An invalid-UTF8 line is included to exercise the raw split.
+  const markers: string[] = [];
+  const parts: string[] = [];
+  for (let i = 0; i < 20; i++) {
+    const marker = `keep-marker-${i}`;
+    markers.push(marker);
+    parts.push(
+      JSON.stringify({
+        source: 'MODEL',
+        type: 'PLANNER_RESPONSE',
+        marker,
+        noise: randomBytes(1000).toString('base64'),
+      }),
+    );
+    // Interleave junk: a non-JSON line dropped by the parse-guard but still inside the byte range.
+    if (i % 3 === 0) parts.push('this is not json at all');
+  }
+  // Build the file with a raw invalid-UTF8 byte (0xff) embedded on its own line.
+  const path = join(dir, 'transcript.jsonl');
+  const head = Buffer.from(parts.join('\n') + '\n', 'utf8');
+  const junkLine = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('\n', 'utf8')]);
+  const tailMarker = 'keep-marker-tail';
+  markers.push(tailMarker);
+  const tail = Buffer.from(
+    JSON.stringify({ source: 'USER_EXPLICIT', type: 'USER_INPUT', marker: tailMarker }) + '\n',
+    'utf8',
+  );
+  await writeFile(path, Buffer.concat([head, junkLine, tail]));
+  const stat = await statFile(path);
+  if (!stat.exists) throw new Error('file missing after write');
+  const file: DiscoveredGeminiFile = {
+    sourcePath: path,
+    sourcePathHash: sha256Hex(path),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+    sourcePlatform: 'antigravity-cli',
+    conversationId: 'cascade-junk',
+  };
+
+  const result = await collectGeminiConversation(
+    file,
+    ctx(buffer, { maxDecompressedBytes: 15_000 }),
+  );
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
+
+  const batches = readBatches(buffer);
+  let prevEnd = 0;
+  let allBodies = '';
+  for (const batch of batches) {
+    expect(batch.watermark_start).toBe(prevEnd);
+    prevEnd = batch.watermark_end;
+    allBodies += DECODER.decode(zstdDecompressSync(batch.body));
+  }
+  // Final boundary + cursor reach the full file size even though junk lines were dropped.
+  expect(prevEnd).toBe(file.sizeBytes);
+  expect(cursorRow(file)?.watermarkEnd).toBe(file.sizeBytes);
+  // Every parseable line survived; the junk text did not.
+  for (const marker of markers) {
+    expect(allBodies).toContain(marker);
+  }
+  expect(allBodies).not.toContain('this is not json at all');
+});
+
+test('oversized single line surfaces a decompressed-slice error and does NOT advance the cursor', async () => {
+  // Mirrors the claude-code oversized test: one line bigger than maxDecompressedBytes cannot be
+  // split, so the collector throws OversizedDecompressedSliceError and the cursor stays frozen.
+  const giant = 'x'.repeat(20_000);
+  const file = await makeTranscript([
+    JSON.stringify({ source: 'MODEL', type: 'PLANNER_RESPONSE', text: giant }),
+  ]);
+
+  const result = await collectGeminiConversation(
+    file,
+    ctx(buffer, { maxDecompressedBytes: 15_000 }),
+  );
+  expect(result.errors.length).toBeGreaterThanOrEqual(1);
+  const firstError = result.errors[0];
+  if (firstError === undefined) throw new Error('expected an error');
+  expect(firstError.reason).toMatch(/decompressed slice/);
+
+  expect(readBatches(buffer).length).toBe(0);
+  // The error path writes a cursor row with consecutiveErrors but watermarkEnd stays at 0 (no advance).
+  expect(cursorRow(file)?.watermarkEnd ?? 0).toBe(0);
 });

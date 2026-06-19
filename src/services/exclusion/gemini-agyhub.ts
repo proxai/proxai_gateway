@@ -86,6 +86,8 @@ function decodeEntry(entry: Buffer, map: Map<string, string[]>): void {
     }
   }
   if (uuid !== null && uuid.length > 0) {
+    // Merge (not overwrite) when a UUID appears in more than one entry, so no folder identity for an
+    // excluded conversation is dropped — the exclusion gate needs the full set of mapped folders.
     const existing = map.get(uuid);
     if (existing) existing.push(...folders);
     else map.set(uuid, folders);
@@ -95,14 +97,16 @@ function decodeEntry(entry: Buffer, map: Map<string, string[]>): void {
 /**
  * Decode the agyhub index into `{ folders, complete }`.
  *
- * `complete` is the truncated-read signal: it is `true` only when the TOP-LEVEL field walk
+ * `complete` here is ONLY the top-level-frame signal: it is `true` when the TOP-LEVEL field walk
  * consumed exactly every byte with no malformed bail (`r.ok && r.pos === bytes.length`). A
- * partial/mid-write `.pb` yields `complete: false` so callers can fail CLOSED instead of
- * shipping bytes for an excluded conversation that is merely absent from a truncated map.
+ * partial/mid-write `.pb` yields `complete: false`. This does NOT by itself catch a present-but-
+ * empty or zero-entry index — that fail-CLOSED backstop is layered in loadAgyhubFolderMap, which
+ * downgrades a 0-byte read or a zero-entry decode to `complete: false`. Treat this function as the
+ * raw decoder; rely on loadAgyhubFolderMap for the full fail-closed contract.
  *
- * Empty input is `{ folders: new Map(), complete: true }` — no data means there is nothing to
- * protect, so fail-open is correct. Garbage / oversized input yields an empty map with
- * `complete: false`.
+ * Empty input returns `{ folders: new Map(), complete: true }` (the empty buffer parses trivially);
+ * loadAgyhubFolderMap overrides that to `complete: false`. Garbage / oversized input yields an
+ * empty map with `complete: false`.
  */
 export function decodeAgyhubFolders(bytes: Buffer): {
   folders: Map<string, string[]>;
