@@ -96,10 +96,10 @@ export const SOURCE_VARIANTS: readonly SourceVariantSpec[] = [
   },
   {
     sourceApp: 'gemini',
-    sourceKind: 'sqlite_table_snapshot',
-    bodyFormat: 'sqlite_rows_json',
-    watermarkKind: 'rowid_range',
-    watermarkTableRequired: true,
+    sourceKind: 'jsonl_append',
+    bodyFormat: 'jsonl',
+    watermarkKind: 'byte_range',
+    watermarkTableRequired: false,
   },
 ];
 
