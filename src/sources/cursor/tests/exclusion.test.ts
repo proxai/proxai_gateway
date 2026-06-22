@@ -7,6 +7,7 @@ import {
   exclusionEntriesRemoved,
   isCursorGlobalDb,
   normalizeExclusionSet,
+  resolveCursorWorkspaceFolder,
 } from 'sources/cursor/exclusion.ts';
 
 // Build a protobuf conversationState referencing the given 32-byte hex hashes.
@@ -128,6 +129,30 @@ describe('buildCursorGlobalExclusionPlan', () => {
     expect(plan.excludedComposerIds.size).toBe(0);
     expect(plan.blobsToDrop.size).toBe(0);
   });
+
+  it('treats an excluded composer with an unparseable conversationState value as zero hashes', () => {
+    // A composerData row whose stored value is not valid JSON hits the per-row catch (hashes = []),
+    // so the excluded composer contributes NO hashes — no blobs are dropped, and it does not throw.
+    const db = makeGlobalDb({
+      headers: [{ composerId: 'nest1', folder: '/Users/me/nest' }],
+      composers: [], // we insert the malformed row by hand below
+    });
+    db.run('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)', [
+      'composerData:nest1',
+      'this is not json{',
+    ]);
+    const plan = buildCursorGlobalExclusionPlan(db, ['/Users/me/nest']);
+    // The folder is still excluded (header-driven), but the unparseable row yields no blobs.
+    expect(plan.excludedComposerIds.has('nest1')).toBe(true);
+    expect(plan.blobsToDrop.size).toBe(0);
+  });
+});
+
+describe('resolveCursorWorkspaceFolder', () => {
+  it('returns null when the sibling workspace.json is missing (fail-open)', () => {
+    // No workspace.json next to this state.vscdb -> readFileSync throws -> caught -> null.
+    expect(resolveCursorWorkspaceFolder('/no/such/dir/state.vscdb')).toBeNull();
+  });
 });
 
 describe('normalizeExclusionSet', () => {
@@ -144,5 +169,14 @@ describe('exclusionEntriesRemoved', () => {
   it('is false on first run (null) or pure additions', () => {
     expect(exclusionEntriesRemoved(null, ['/a'])).toBe(false);
     expect(exclusionEntriesRemoved(JSON.stringify(['/a']), ['/a', '/b'])).toBe(false);
+  });
+  it('is false (fail-open) when the stored JSON is malformed', () => {
+    // A non-null but unparseable stored fingerprint hits the JSON.parse catch -> returns false,
+    // so a corrupt stored value never triggers a backfill (no false "entries removed").
+    expect(exclusionEntriesRemoved('not valid json{', ['/a'])).toBe(false);
+  });
+  it('is false when the stored JSON parses to a non-array', () => {
+    // Parses fine but is not an array -> the !Array.isArray guard returns false.
+    expect(exclusionEntriesRemoved(JSON.stringify({ foo: 1 }), ['/a'])).toBe(false);
   });
 });

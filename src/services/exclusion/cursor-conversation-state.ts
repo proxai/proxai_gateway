@@ -68,19 +68,13 @@ export function decodeConversationStateHashes(conversationState: string): string
     if (wireType === WIRE_VARINT) {
       readVarint(reader);
       if (!reader.ok) break;
-      continue;
-    }
-    if (wireType === WIRE_FIXED64) {
+    } else if (wireType === WIRE_FIXED64) {
       reader.pos += 8;
       if (reader.pos > buf.length) break;
-      continue;
-    }
-    if (wireType === WIRE_FIXED32) {
+    } else if (wireType === WIRE_FIXED32) {
       reader.pos += 4;
       if (reader.pos > buf.length) break;
-      continue;
-    }
-    if (wireType === WIRE_LENGTH_DELIMITED) {
+    } else if (wireType === WIRE_LENGTH_DELIMITED) {
       const length = readVarint(reader);
       if (!reader.ok) break;
       const start = reader.pos;
@@ -91,10 +85,9 @@ export function decodeConversationStateHashes(conversationState: string): string
         if (hashes.length >= MAX_HASHES) break;
         hashes.push(buf.subarray(start, end).toString('hex'));
       }
-      continue;
+    } else {
+      break; // unknown wire type
     }
-
-    break; // unknown wire type
   }
 
   return hashes;

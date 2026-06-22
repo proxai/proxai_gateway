@@ -77,4 +77,16 @@ describe('isRowExcludedByPlan', () => {
     expect(isRowExcludedByPlan('bubbleId:web1:b2', plan)).toBe(false);
     expect(isRowExcludedByPlan('agentKv:blob:bbbb', plan)).toBe(false);
   });
+  it('classifies an agentKv blob purely on blobsToDrop membership of the sliced hash', () => {
+    // Exercises the agentKv:blob branch on its own (true when the post-prefix hash is in
+    // blobsToDrop, false otherwise) — the slice must strip exactly the 'agentKv:blob:' prefix.
+    const blobPlan = {
+      excludedComposerIds: new Set<string>(),
+      blobsToDrop: new Set(['deadbeef']),
+    };
+    expect(isRowExcludedByPlan('agentKv:blob:deadbeef', blobPlan)).toBe(true);
+    expect(isRowExcludedByPlan('agentKv:blob:cafe', blobPlan)).toBe(false);
+    // A bare prefix with no hash slices to '' — not in the set, so kept (false).
+    expect(isRowExcludedByPlan('agentKv:blob:', blobPlan)).toBe(false);
+  });
 });

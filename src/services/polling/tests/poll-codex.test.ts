@@ -160,6 +160,25 @@ test('captures per-rollout collect errors in result.errors', async () => {
   expect(result.filesProcessed).toBeGreaterThanOrEqual(0);
 });
 
+test('forwards excludedProjects so an excluded rollout cwd pauses capture (no batch)', async () => {
+  // Codex resolves cwd from the session_meta payload.cwd. An excluded prefix → collector pauses.
+  // Without the poller forwarding ctx.excludedProjects, this rollout would capture a batch.
+  await seedRollout(
+    'sessions/2026/05/05/rollout-secret.jsonl',
+    '{"type":"session_meta","payload":{"cwd":"/Users/me/secret"}}\n',
+  );
+  const poller = makeCodexSourcePoller({ baseDir: dir });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+    excludedProjects: ['/Users/me/secret'],
+  });
+  expect(result.filesProcessed).toBe(1);
+  expect(result.capturedBatches).toBe(0);
+  expect(nextPendingBatch(buffer)).toBeNull();
+});
+
 test('minimumMtimeOverride applies a floor on a fresh buffer', async () => {
   const oldPath = await seedRollout(
     'sessions/2020/01/01/rollout-old.jsonl',

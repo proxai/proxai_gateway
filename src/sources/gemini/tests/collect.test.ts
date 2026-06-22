@@ -270,6 +270,34 @@ test('fail-open: empty folder list for the conversation still captures', async (
   expect(readBatches(buffer).length).toBe(1);
 });
 
+test('no complete line yet (single unterminated line): captures nothing, writes no cursor', async () => {
+  // The only content is a trailing partial line (no newline). readJsonlRange holds it back, so the
+  // complete-line byte range is empty -> early return before any scan/insert/setCursor.
+  const file = await makeTranscript(['{"source":"MODEL","type":"PLANNER_'], {
+    trailingNewline: false,
+  });
+  const result = await collectGeminiConversation(file, ctx(buffer));
+
+  expect(result.capturedBatches).toBe(0);
+  expect(result.errors).toEqual([]);
+  expect(readBatches(buffer).length).toBe(0);
+  // No complete bytes scanned -> no cursor row written (watermark stays at 0 for backfill).
+  expect(cursorRow(file)).toBeNull();
+});
+
+test('all complete lines unparseable: advances the cursor with no batch (no re-scan loop)', async () => {
+  // Every complete line is non-JSON junk. kept is empty, but the bytes were fully scanned, so the
+  // cursor advances over them (without a batch) so we never re-scan the same junk forever.
+  const file = await makeTranscript(['this is not json', 'neither is this', '<<<garbage>>>']);
+  const result = await collectGeminiConversation(file, ctx(buffer));
+
+  expect(result.capturedBatches).toBe(0);
+  expect(result.errors).toEqual([]);
+  expect(readBatches(buffer).length).toBe(0);
+  // Cursor advanced over the scanned (junk) bytes = the full file (it ends in \n).
+  expect(cursorRow(file)?.watermarkEnd).toBe(file.sizeBytes);
+});
+
 test('splits an oversized transcript into contiguous byte_range batches covering every line', async () => {
   // Many fat lines + a small decompressed cap forces splitJsonlAtBoundary to chunk. Mirrors the
   // claude-code contiguity test: batches must tile [0, size) with no gap or overlap.

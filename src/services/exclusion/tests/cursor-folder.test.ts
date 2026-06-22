@@ -20,6 +20,11 @@ describe('fileUriToPath', () => {
     // @ts-expect-error runtime guard
     expect(fileUriToPath(null)).toBeNull();
   });
+  it('returns null when a file:// URI parses but fileURLToPath throws (non-localhost host)', () => {
+    // `file://x` passes the startsWith('file://') guard but fileURLToPath rejects the host
+    // (ERR_INVALID_FILE_URL_HOST) -> the catch returns null instead of throwing.
+    expect(fileUriToPath('file://x/some/path')).toBeNull();
+  });
 });
 
 describe('parseWorkspaceFolder', () => {

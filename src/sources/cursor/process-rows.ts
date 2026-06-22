@@ -183,10 +183,8 @@ export function isRowExcludedByPlan(key: string, plan: CursorGlobalExclusionPlan
     const composerId = key.split(':')[1] ?? '';
     return plan.excludedComposerIds.has(composerId);
   }
-  if (key.startsWith(CURSOR_KEY_PREFIX_AGENT_KV_BLOB)) {
-    return plan.blobsToDrop.has(key.slice(CURSOR_KEY_PREFIX_AGENT_KV_BLOB.length));
-  }
-  return false;
+  if (!key.startsWith(CURSOR_KEY_PREFIX_AGENT_KV_BLOB)) return false;
+  return plan.blobsToDrop.has(key.slice(CURSOR_KEY_PREFIX_AGENT_KV_BLOB.length));
 }
 
 export function processRows(input: ProcessRowsInput): void {
