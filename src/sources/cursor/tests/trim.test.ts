@@ -99,3 +99,20 @@ test('trimCursorRowValue: leaves composerData, tool blobs, and odd values untouc
     JSON.stringify('bare string'),
   );
 });
+
+test('trimCursorRowValue: bubbleId keeps the per-turn context-size gauge', () => {
+  const value = JSON.stringify({
+    _v: 3,
+    type: 1,
+    bubbleId: 'b1',
+    text: 'do the thing',
+    contextWindowStatusAtCreation: { tokensUsed: 114724, tokenLimit: 200000 },
+    gitDiffs: [],
+  });
+  const trimmed = parse(trimCursorRowValue('bubbleId:c1:b1', value));
+  expect(trimmed.contextWindowStatusAtCreation).toEqual({
+    tokensUsed: 114724,
+    tokenLimit: 200000,
+  });
+  expect(trimmed.gitDiffs).toBeUndefined(); // non-keep keys still dropped
+});

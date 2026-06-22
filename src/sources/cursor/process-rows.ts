@@ -69,6 +69,9 @@ const CURSOR_BUBBLE_KEEP_KEYS = [
   'toolFormerData',
   'thinking',
   'context',
+  // Per-turn input-context-size gauge consumed by the nest cursor parser
+  // (agent_metadata.turn_context_tokens). New captures only.
+  'contextWindowStatusAtCreation',
 ];
 const CURSOR_ENV_WRAPPER_PREFIXES = [
   '<user_info>',
