@@ -57,18 +57,31 @@ async function loadCliMetadataMap(sessionDir: string): Promise<{
 
       for (const line of lines) {
         if (line.trim().length === 0) continue;
-        const rec = JSON.parse(line);
-        const cwd = typeof rec.cwd === 'string' ? rec.cwd : '';
-        const version = typeof rec.version === 'string' ? rec.version : '';
-        const gitBranch = typeof rec.gitBranch === 'string' ? rec.gitBranch : '';
-        const sessionId = typeof rec.sessionId === 'string' ? rec.sessionId : '';
+        const rec: unknown = JSON.parse(line);
+        if (!rec || typeof rec !== 'object') continue;
+        const recObj = rec as {
+          cwd?: unknown;
+          version?: unknown;
+          gitBranch?: unknown;
+          sessionId?: unknown;
+          type?: unknown;
+          uuid?: unknown;
+          message?: unknown;
+        };
+
+        const cwd = typeof recObj.cwd === 'string' ? recObj.cwd : '';
+        const version = typeof recObj.version === 'string' ? recObj.version : '';
+        const gitBranch = typeof recObj.gitBranch === 'string' ? recObj.gitBranch : '';
+        const sessionId = typeof recObj.sessionId === 'string' ? recObj.sessionId : '';
 
         const meta: CliMetadata = { cwd, version, gitBranch, sessionId };
 
-        if (rec.type === 'user' && typeof rec.uuid === 'string') {
-          userMap.set(rec.uuid, meta);
-        } else if (rec.type === 'assistant') {
-          const msgId = rec.message?.id;
+        if (recObj.type === 'user' && typeof recObj.uuid === 'string') {
+          userMap.set(recObj.uuid, meta);
+        } else if (recObj.type === 'assistant') {
+          const msgObj = recObj.message;
+          const msgId =
+            msgObj && typeof msgObj === 'object' ? (msgObj as { id?: unknown }).id : undefined;
           if (typeof msgId === 'string') {
             assistantMap.set(msgId, meta);
           }
@@ -139,46 +152,50 @@ export async function collectClaudeDesktopFile(
     for (const line of lines) {
       if (line.trim().length === 0) continue;
       try {
-        const parsed = JSON.parse(line);
+        const parsed: unknown = JSON.parse(line);
+        if (!parsed || typeof parsed !== 'object') continue;
+        const parsedObj = parsed as Record<string, unknown>;
         // Keep telemetry-bearing assistant records (tool_use steps carrying
         // per-call `usage`) alongside the display-filtered dialogue records,
         // so the backend's aggregateUsage sums the full agentic loop instead
         // of only the final text record. Mirrors the Claude Code collector's
         // union; Desktop embeds the same CLI and routes to the same parser.
         if (
-          parsed.isReplay === true ||
+          parsedObj.isReplay === true ||
           !(isDialogueRecord(parsed) || isUsageBearingAssistantRecord(parsed))
         ) {
           continue;
         }
 
         let cliMeta: CliMetadata | undefined;
-        if (parsed.type === 'user' && typeof parsed.uuid === 'string') {
-          cliMeta = userMap.get(parsed.uuid);
-        } else if (parsed.type === 'assistant') {
-          const msgId = parsed.message?.id;
+        if (parsedObj.type === 'user' && typeof parsedObj.uuid === 'string') {
+          cliMeta = userMap.get(parsedObj.uuid);
+        } else if (parsedObj.type === 'assistant') {
+          const msgObj = parsedObj.message;
+          const msgId =
+            msgObj && typeof msgObj === 'object' ? (msgObj as { id?: unknown }).id : undefined;
           if (typeof msgId === 'string') {
             cliMeta = assistantMap.get(msgId);
           }
         }
 
         if (cliMeta !== undefined) {
-          parsed.cwd = cliMeta.cwd;
-          parsed.gitBranch = cliMeta.gitBranch;
-          parsed.cliSessionId = cliMeta.sessionId;
-          parsed.agentVersion = cliMeta.version;
+          parsedObj.cwd = cliMeta.cwd;
+          parsedObj.gitBranch = cliMeta.gitBranch;
+          parsedObj.cliSessionId = cliMeta.sessionId;
+          parsedObj.agentVersion = cliMeta.version;
         }
 
-        if (typeof parsed.session_id === 'string') {
-          parsed.desktopSessionId = parsed.session_id;
-          delete parsed.session_id;
+        if (typeof parsedObj.session_id === 'string') {
+          parsedObj.desktopSessionId = parsedObj.session_id;
+          delete (parsedObj as { session_id?: unknown }).session_id;
         }
-        if (typeof parsed.client_platform === 'string') {
-          parsed.clientPlatform = parsed.client_platform;
-          delete parsed.client_platform;
+        if (typeof parsedObj.client_platform === 'string') {
+          parsedObj.clientPlatform = parsedObj.client_platform;
+          delete (parsedObj as { client_platform?: unknown }).client_platform;
         }
 
-        keptLines.push(JSON.stringify(parsed));
+        keptLines.push(JSON.stringify(parsedObj));
       } catch {}
     }
 
@@ -202,9 +219,12 @@ export async function collectClaudeDesktopFile(
     const firstLine = keptLines[0];
     if (firstLine !== undefined) {
       try {
-        const first = JSON.parse(firstLine);
-        if (typeof first.agentVersion === 'string' && first.agentVersion.length > 0) {
-          agentSchemaVersion = `claude-desktop/${first.agentVersion}`;
+        const first: unknown = JSON.parse(firstLine);
+        if (first && typeof first === 'object') {
+          const firstObj = first as { agentVersion?: unknown };
+          if (typeof firstObj.agentVersion === 'string' && firstObj.agentVersion.length > 0) {
+            agentSchemaVersion = `claude-desktop/${firstObj.agentVersion}`;
+          }
         }
       } catch {}
     }

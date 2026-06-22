@@ -9,6 +9,8 @@ The remediation replaces `console.warn` with:
 - A Grafana-visible counter metric `agent_gateway_parser_record_id_hash_downgraded_total`.
 - A Sentry capture message (`Sentry.captureMessage`) configured with `fingerprint` for deduplication and severity set to `error`.
 
+To respect SOLID/DIP principles and ensure utility purity, the capability detection is encapsulated as a pure function in `parsers.utils.ts`, while the side-effecting telemetry alarm is decoupled and executed on startup in `agent-gateway.module.ts`.
+
 Because the blake2b availability check is memoized at module load, this telemetry triggers exactly **once per process** rather than hot-looping on every ID generated.
 
 ---
@@ -16,85 +18,67 @@ Because the blake2b availability check is memoized at module load, this telemetr
 ## 2. Implemented Changes
 
 ### 2.1 Product Code Changes
-**File:** [parsers.utils.ts](file:///Users/onurseckinsenoglu/repos/proxai/proxai_gateway/src/agent-gateway/parsers/parsers.utils.ts)
-We replaced the `console.warn` logic within `isBlake2bAvailable`'s `catch` block with `Logger.metric` and `Sentry.captureMessage` calls. Imports and docstrings have been refreshed.
+**File:** [parsers.utils.ts](file:///Users/onurseckinsenoglu/repos/proxai/proxai_nest/src/agent-gateway/parsers/parsers.utils.ts)
+We updated `isBlake2bAvailable` to be a pure capability checker without Sentry or Logger imports, and exported it for boot-time probing.
 
 ```diff
-@@ -1,8 +1,11 @@
- /**
-  * Shared parser utilities. Per-agent specifics live in `<agent>/<agent>.utils.ts`
-  * (Claude Code's JSONL classifier, Cursor's lexical-format JSON walker, Codex's
-  * thread-uuid joiner). Cross-agent helpers live here.
-  *
+@@ -29,2 +29,2 @@
 - * No NestJS imports; pure functions only — safe to call from any service or
 - * test fixture.
 + * These helpers use no NestJS dependency injection — they are importable from any
 + * service or test fixture. The one side effect is the memoized blake2b availability
 + * probe, which emits a metric + Sentry alarm (once per process) when the runtime
 + * forces the sha256 record-id fallback.
-  */
- 
+@@ -37,2 +37,4 @@
  import { createHash } from 'node:crypto';
- 
-+import * as Sentry from '@sentry/nestjs';
+-import type { AgentAppName } from '../agent-gateway.types';
 +
-+import { Logger } from '../../common/utils';
- import type { AgentAppName } from '../agent-gateway.types';
- 
- /**
-@@ -23,6 +27,8 @@
-  * Falls back to sha256 truncation when the Node runtime doesn't expose
-  * `blake2b512` (very old builds; OpenSSL FIPS configs). The fallback is
-  * deterministic in itself but produces DIFFERENT ids than blake2b — re-parse
-- * compatibility breaks across the fallback boundary. We log a warning so the
-- * operator notices.
-+ * compatibility breaks across the fallback boundary. The downgrade is alarmed
-+ * loudly — a Grafana counter (`agent_gateway_parser_record_id_hash_downgraded_total`)
-+ * plus a Sentry capture — because it is a silent duplicate-row source, not a
-+ * benign degradation.
-  */
- let blake2bAvailable: boolean | null = null;
- 
- function isBlake2bAvailable(): boolean {
-   if (blake2bAvailable !== null) return blake2bAvailable;
-   try {
-     createHash('blake2b512');
-     blake2bAvailable = true;
-   } catch {
-     blake2bAvailable = false;
--
++import type { AgentAppName } from '../agent-gateway.types';
+@@ -58,1 +58,1 @@
+-function isBlake2bAvailable(): boolean {
++export function isBlake2bAvailable(): boolean {
+@@ -66,5 +66,0 @@
 -    console.warn(
 -      '[parsers] blake2b512 unavailable; falling back to sha256 truncation. ' +
 -        'Re-parse compatibility may break across this boundary.',
 -    );
-+    // A runtime without blake2b512 mints record ids via sha256 truncation, which
-+    // differ from blake2b ids for the same (agent, chatId, turnId). In a fleet where
-+    // some replicas expose blake2b and some don't, the same turn re-keys to a NEW
-+    // primary key instead of upserting — double-counting usage at the (user, chat)
-+    // rollup. The probe is memoized, so this fires at most once per process: a
-+    // Grafana-visible counter (bypasses LOG_LEVEL) plus a Sentry capture so the
-+    // condition pages instead of hiding in stdout.
-+    Logger.metric(
-+      'agent_gateway_parser_record_id_hash_downgraded_total',
-+      1,
-+      {},
-+    );
-+    Sentry.captureMessage(
-+      'deterministicRecordId: blake2b512 unavailable; record ids minted via sha256 ' +
-+        'truncation — id identity diverges from blake2b across the fallback boundary',
-+      {
-+        level: 'error',
-+        fingerprint: ['parsers-blake2b-unavailable'],
-+        extra: { algorithm: 'sha256' },
-+      },
-+    );
-   }
-   return blake2bAvailable;
- }
 ```
 
-### 2.2 Telemetry Registry Changes
-**File:** [metric-kind-registry.ts](file:///Users/onurseckinsenoglu/repos/proxai/proxai_gateway/src/telemetry/metric-kind-registry.ts)
+### 2.2 Startup Telemetry Changes
+**File:** [agent-gateway.module.ts](file:///Users/onurseckinsenoglu/repos/proxai/proxai_nest/src/agent-gateway/agent-gateway.module.ts)
+We integrated the capability check inside `AgentGatewayModule.onModuleInit()`. When the module boots up, it checks if `blake2b512` is available, and if not, it fires a Grafana metric increment and a Sentry error alert exactly once per process.
+
+```diff
+@@ -27,2 +27,4 @@
+ import { listRegisteredVersionRanges } from './parsers/parsers.versions';
++import * as Sentry from '@sentry/nestjs';
++import { isBlake2bAvailable } from './parsers/parsers.utils';
+ import { RedactionModule } from './redaction/redaction.module';
+@@ -209,3 +211,18 @@
+     Logger.process.info('agent-gateway', 'parsers', 'registry-loaded', {
+       ranges: listRegisteredVersionRanges(),
+     });
++
++    if (!isBlake2bAvailable()) {
++      Logger.metric(
++        'agent_gateway_parser_record_id_hash_downgraded_total',
++        1,
++        {},
++      );
++      Sentry.captureMessage(
++        'deterministicRecordId: blake2b512 unavailable; record ids minted via sha256 ' +
++          'truncation — id identity diverges from blake2b across the fallback boundary',
++        {
++          level: 'error',
++          fingerprint: ['parsers-blake2b-unavailable'],
++          extra: { algorithm: 'sha256' },
++        },
++      );
++    }
+```
+
+### 2.3 Telemetry Registry Changes
+**File:** [metric-kind-registry.ts](file:///Users/onurseckinsenoglu/repos/proxai/proxai_nest/src/telemetry/metric-kind-registry.ts)
 Registered the `agent_gateway_parser_record_id_hash_downgraded_total` metric as a `'counter'` to satisfy OTLP validation.
 
 ```diff
@@ -104,9 +88,9 @@ Registered the `agent_gateway_parser_record_id_hash_downgraded_total` metric as 
      agent_gateway_parser_replay_filtered_other_composer_total: 'counter',
 ```
 
-### 2.3 Test Code Changes
-**File:** [parsers.utils.spec.ts](file:///Users/onurseckinsenoglu/repos/proxai/proxai_gateway/src/agent-gateway/parsers/tests/parsers.utils.spec.ts)
-Updated the fallback test to check the metric and Sentry calls, added clean-up for the mocks in `afterEach`, and added a memoization test proving that the alarm triggers at most once per process.
+### 2.4 Test Code Changes
+**File:** [parsers.utils.spec.ts](file:///Users/onurseckinsenoglu/repos/proxai/proxai_nest/src/agent-gateway/parsers/tests/parsers.utils.spec.ts)
+Updated the fallback test to check that the helper correctly detects capability failure and memoization, without requiring Sentry or Logger mocks.
 
 ---
 
@@ -124,17 +108,17 @@ All unit tests passed successfully under Vitest:
 ```bash
 $ vitest run src/agent-gateway/parsers/tests/parsers.utils.spec.ts
 
- ✓ src/agent-gateway/parsers/tests/parsers.utils.spec.ts (5 tests) 579ms
-     ✓ creates stable deterministic record ids  566ms
-     ✓ emits a metric and Sentry alarm and still returns an id when blake2b512 is unavailable
-     ✓ alarms at most once per process even across repeated calls
+ ✓ src/agent-gateway/parsers/tests/parsers.utils.spec.ts (5 tests) 12ms
+     ✓ creates stable deterministic record ids
+     ✓ still returns an id and detects false capability when blake2b512 is unavailable
+     ✓ memoizes the capability check correctly
      ✓ builds plain text message content
      ✓ builds plain and encrypted thinking content
 
  Test Files  1 passed (1)
       Tests  5 passed (5)
-   Start at  13:07:54
-   Duration  744ms (transform 102ms, setup 55ms, import 17ms, tests 579ms, environment 0ms)
+   Start at  14:41:25
+   Duration  187ms (transform 52ms, setup 70ms, import 16ms, tests 12ms, environment 0ms)
 ```
 
 Metric Kind Registry tests:

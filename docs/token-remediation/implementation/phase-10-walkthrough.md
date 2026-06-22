@@ -180,3 +180,49 @@ Found 0 warnings and 0 errors.
   - No backend code (`proxai_nest`), wire-contract API types, or other columns (RECORDS, TOOL CALLS, AVG DURATION) were modified.
   - The KPI value calculation functions (`extractor`, `summaryPicker`, `aggregateValue`) remain completely untouched.
 - **Cache Creation Tokens Sum Audit**: Grep checks confirmed that no frontend sum folds `cacheCreationTokens` (which is a non-additive subset under the normalization scheme) into a total sum with input/output/cache-read tokens.
+
+---
+
+## 5. Design Decisions, Trade-Offs, and Architectural Notes
+
+During Round 2 Verification, the architectural and SOLID design aspects of Phase 10 were audited. The following sections document the architectural feedback received, the selected trade-offs, and recommendations for future major API versions.
+
+### 5.1 Architectural Feedback (Verifier B)
+
+The current frontend implementation uses a hardcoded constant (`CURSOR_AGENT: AgentKind = 'CURSOR'`) to detect the Cursor agent client-side and override the rendering of its token cells to display `"not captured"`. While functional, this approach introduces several design compromises:
+1. **Leakage of Business Logic to the View Layer:** The information that Cursor token collection is deferred is an infrastructure detail. Hardcoding agent-specific logic in the presentation layer (`acr-stats-org-source-table.tsx`) leaks backend data-state assumptions directly into frontend view components.
+2. **Semantics of the Wire Contract (Information Loss):** The backend API currently coalesces database `NULL` values (data absent / not captured) to `0` (data present and value is zero) on the wire. This results in information loss at the API boundary, forcing the client-side to employ heuristics to reverse-engineer data presence.
+3. **Violation of the Open-Closed Principle (OCP):** If new agents are subsequently added with deferred telemetry or if Cursor telemetry is enabled in a later phase, developer intervention is required in the frontend view tier to update checking logic.
+
+### 5.2 Selected Trade-offs (Current Quick-Fix)
+
+To address the immediate telemetry display requirement for this release cycle, client-side hardcoding was selected as the quick-fix due to the following trade-offs:
+* **Scope Isolation:** Restricts changes entirely to the frontend view components (`proxai_web`), eliminating risk of regression in critical backend APIs or databases.
+* **Release Velocity:** Avoids complex database migrations, database schema alterations, and changes to the wire-contract definitions, allowing for an immediate fix.
+* **Compile-Time Safety:** The check is typed against the `AgentKind` enum. If the agent identifier changes on the wire, the compile check will fail, providing safety against runtime mismatches.
+* **User Clarity:** Ensures that the end-user immediately sees `"not captured"` instead of a misleading `"0"` for Cursor rows, eliminating data interpretation confusion.
+
+### 5.3 Recommended Architecture for Next Major API Version
+
+For the next major version of the API, it is recommended to preserve `null` semantics on the wire to restore clean separation of concerns and satisfy SOLID principles.
+
+#### Recommended Option: Preserve `null` on the Wire
+* **Backend Contract:** The API should transmit a literal `null` (or omit the properties) for token columns when token capture is deferred or not supported, rather than coalescing to `0`.
+* **Frontend Controller/View:** The UI components will render the `"not captured"` label dynamically based solely on the presence/absence of data, without querying agent identifiers:
+  ```typescript
+  function renderTokenCell(value: number | null): ReactNode {
+    if (value === null) {
+      return (
+        <Typography as="span" variant="body" color="tertiary">
+          not captured
+        </Typography>
+      );
+    }
+    return formatTokens(value);
+  }
+  ```
+* **Benefits:**
+  * Completely decouples the view layer from agent-specific telemetry logic.
+  * Preserves data integrity and semantic distinction across the API wire.
+  * Fully OCP-compliant: any future agents with deferred telemetry will automatically display correctly without modifying presentation source code.
+

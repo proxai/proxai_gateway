@@ -893,4 +893,3 @@ test('uploads usage-bearing tool_use assistant records so the full agentic loop 
   // The final text record is present too (regression guard for normal records).
   expect(body).toContain('"input_tokens":5');
 });
-});

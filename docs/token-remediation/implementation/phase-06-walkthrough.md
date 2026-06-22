@@ -89,10 +89,10 @@ We executed the parser tests via `vitest`:
 ```bash
 $ bun run test:unit src/agent-gateway/parsers/codex/tests/codex-parse-chat.service.spec.ts
 
- ✓ src/agent-gateway/parsers/codex/tests/codex-parse-chat.service.spec.ts (52 tests) 39ms
+  ✓ src/agent-gateway/parsers/codex/tests/codex-parse-chat.service.spec.ts (53 tests) 38ms
 
  Test Files  1 passed (1)
-      Tests  52 passed (52)
+      Tests  53 passed (53)
    Start at  13:08:15
    Duration  869ms (transform 227ms, setup 86ms, import 648ms, tests 39ms, environment 0ms)
 ```

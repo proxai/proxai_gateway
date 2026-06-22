@@ -200,9 +200,12 @@ export function processRows(input: ProcessRowsInput): void {
   const filteredRows = exclusionFilteredRows.filter((row) => {
     if (row.key.startsWith('bubbleId:')) {
       try {
-        const parsed = JSON.parse(row.value);
+        const parsed: unknown = JSON.parse(row.value);
         if (parsed && typeof parsed === 'object') {
-          const text = typeof parsed.text === 'string' ? parsed.text.trim() : '';
+          const text =
+            typeof (parsed as { text?: unknown }).text === 'string'
+              ? (parsed as { text: string }).text.trim()
+              : '';
           return text.length > 0;
         }
       } catch {
