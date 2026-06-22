@@ -25,7 +25,7 @@ import type {
   ClaudeDesktopCollectorResult,
   DiscoveredClaudeDesktopFile,
 } from 'sources/claude-desktop/claude-desktop.types.ts';
-import { isDialogueRecord } from 'sources/claude-code';
+import { isDialogueRecord, isUsageBearingAssistantRecord } from 'sources/claude-code';
 
 const DECODER = new TextDecoder('utf-8', { fatal: false });
 const ENCODER = new TextEncoder();
@@ -140,7 +140,15 @@ export async function collectClaudeDesktopFile(
       if (line.trim().length === 0) continue;
       try {
         const parsed = JSON.parse(line);
-        if (parsed.isReplay === true || !isDialogueRecord(parsed)) {
+        // Keep telemetry-bearing assistant records (tool_use steps carrying
+        // per-call `usage`) alongside the display-filtered dialogue records,
+        // so the backend's aggregateUsage sums the full agentic loop instead
+        // of only the final text record. Mirrors the Claude Code collector's
+        // union; Desktop embeds the same CLI and routes to the same parser.
+        if (
+          parsed.isReplay === true ||
+          !(isDialogueRecord(parsed) || isUsageBearingAssistantRecord(parsed))
+        ) {
           continue;
         }
 

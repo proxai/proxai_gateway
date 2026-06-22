@@ -463,4 +463,69 @@ describe('collectClaudeDesktopFile', () => {
       await rmRecursive(testDir);
     }
   });
+
+  test('keeps usage-bearing tool_use assistant records so the full Desktop loop reaches the backend', async () => {
+    const db = openInMemoryBufferDb();
+    const testDir = await mkdtemp(join(tmpdir(), 'proxai-test-claude-desktop-'));
+    const tempFile = join(testDir, 'audit.jsonl');
+
+    const auditContent =
+      [
+        JSON.stringify({
+          type: 'user',
+          uuid: 'u-1',
+          session_id: 'sess-1',
+          message: { role: 'user', content: 'read foo' },
+        }),
+        JSON.stringify({
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            id: 'msg-tool',
+            content: [{ type: 'tool_use', id: 'toolu_desktop', name: 'Read' }],
+            usage: { input_tokens: 3, output_tokens: 4 },
+          },
+        }),
+        JSON.stringify({
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            id: 'msg-text',
+            content: [{ type: 'text', text: 'done' }],
+            usage: { input_tokens: 5, output_tokens: 6 },
+          },
+        }),
+        '',
+      ].join('\n') + '\n';
+    await writeFile(tempFile, auditContent);
+
+    const stat = await statFile(tempFile);
+    if (!stat.exists) throw new Error(`Test file not found: ${tempFile}`);
+    const file: DiscoveredClaudeDesktopFile = {
+      sourcePath: tempFile,
+      sourcePathHash: 'hash-desktop-usage',
+      inode: Number(stat.inode),
+      sizeBytes: stat.size,
+      lastModifiedMs: Date.now(),
+    };
+
+    const res = await collectClaudeDesktopFile(file, {
+      buffer: db,
+      maxDecompressedBytes: 10_000,
+    });
+    expect(res.errors).toEqual([]);
+    expect(res.capturedBatches).toBe(1);
+
+    const batch = requireDefined(nextPendingBatch(db));
+    const body = new TextDecoder().decode(zstdDecompressSync(batch.body));
+    // The intermediate tool_use call and its per-call usage survive to the body.
+    expect(body).toContain('toolu_desktop');
+    expect(body).toContain('"input_tokens":3');
+    expect(body).toContain('"output_tokens":4');
+    // The final text record is present too (regression guard for normal records).
+    expect(body).toContain('"input_tokens":5');
+
+    db.close();
+    await rmRecursive(testDir);
+  });
 });
