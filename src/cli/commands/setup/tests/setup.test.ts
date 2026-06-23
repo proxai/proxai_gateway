@@ -245,6 +245,7 @@ async function writeExistingConfig(
       uploadMaxBatchesPerSec: DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
       uploadMaxBytesPerMinute: DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
       uploadBackoffOn429Multiplier: DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
+      excludedProjects: [],
     },
     logging: { level: 'info', logDir },
     staleBinary: {

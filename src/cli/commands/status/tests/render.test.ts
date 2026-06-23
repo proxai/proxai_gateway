@@ -40,6 +40,7 @@ const mockCfg: GatewayConfig = {
     uploadMaxBatchesPerSec: 10,
     uploadMaxBytesPerMinute: 1000,
     uploadBackoffOn429Multiplier: 1.5,
+    excludedProjects: [],
   },
   logging: { level: 'info', logDir: '/logs' },
   staleBinary: {

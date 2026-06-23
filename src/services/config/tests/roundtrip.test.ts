@@ -36,6 +36,7 @@ const fullConfig: GatewayConfig = {
     uploadMaxBatchesPerSec: 5,
     uploadMaxBytesPerMinute: 50 * 1024 * 1024,
     uploadBackoffOn429Multiplier: 2,
+    excludedProjects: [],
   },
   logging: {
     level: 'info',

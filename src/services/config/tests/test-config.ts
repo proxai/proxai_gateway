@@ -32,6 +32,7 @@ export const TEST_CAPTURE_CONFIG: CaptureConfig = {
   uploadMaxBatchesPerSec: 1,
   uploadMaxBytesPerMinute: 1_000_000,
   uploadBackoffOn429Multiplier: 2,
+  excludedProjects: [],
 };
 
 export const TEST_LOGGING_CONFIG: LoggingConfig = {
