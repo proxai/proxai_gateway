@@ -8,41 +8,59 @@ import type { MinimalLogger } from 'core/log';
 import { loadExcludedProjects } from 'services/exclusion/load.ts';
 
 let dir: string;
+let cfg: string;
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'proxai-test-exclude-'));
+  cfg = join(dir, 'config.toml');
 });
 afterEach(async () => {
   await rmRecursive(dir);
 });
 
-test('missing file yields empty list', async () => {
-  expect(await loadExcludedProjects(dir)).toEqual([]);
-});
-
-test('parses absolute paths, skips comments and blank lines, trims whitespace', async () => {
-  await writeFile(
-    join(dir, 'excluded-projects'),
-    '# header\n\n  /Users/me/a  \n/Users/me/b\n\t# indented comment\n~/c\n',
-  );
-  expect(await loadExcludedProjects(dir)).toEqual(['/Users/me/a', '/Users/me/b', '~/c']);
-});
-
-test('skips relative paths (does not silently treat them as literals)', async () => {
-  const skipped: string[] = [];
-  await writeFile(join(dir, 'excluded-projects'), 'projects/secret\n/Users/me/ok\nrelative\n');
-  const warnLogger: MinimalLogger = {
+function collectWarnings(sink: string[]): MinimalLogger {
+  const logger: MinimalLogger = {
     warn: (o: unknown) => {
-      const obj = o as { line?: string };
-      if (typeof obj.line === 'string') skipped.push(obj.line);
+      const obj = o as { line?: string; event?: string };
+      if (typeof obj.line === 'string') sink.push(obj.line);
+      else if (typeof obj.event === 'string') sink.push(obj.event);
     },
     info: () => undefined,
     error: () => undefined,
     debug: () => undefined,
     fatal: () => undefined,
     trace: () => undefined,
-    child: () => warnLogger,
+    child: () => logger,
   };
-  const result = await loadExcludedProjects(dir, warnLogger);
-  expect(result).toEqual(['/Users/me/ok']);
-  expect(skipped).toEqual(['projects/secret', 'relative']);
+  return logger;
+}
+
+test('missing config file returns the fallback (fail-safe, not [])', async () => {
+  expect(await loadExcludedProjects(cfg, ['/fallback'])).toEqual(['/fallback']);
+  expect(await loadExcludedProjects(cfg)).toEqual([]); // default fallback is []
+});
+
+test('reads + trims capture.excluded_projects', async () => {
+  await writeFile(cfg, '[capture]\nexcluded_projects = ["  /Users/me/a  ", "~/b"]\n');
+  expect(await loadExcludedProjects(cfg, ['/fallback'])).toEqual(['/Users/me/a', '~/b']);
+});
+
+test('unparseable TOML returns the fallback and warns', async () => {
+  const warnings: string[] = [];
+  await writeFile(cfg, 'this is = = not toml');
+  expect(await loadExcludedProjects(cfg, ['/keep'], collectWarnings(warnings))).toEqual(['/keep']);
+  expect(warnings).toContain('exclusion.config_read_failed');
+});
+
+test('parsed config with no [capture] or non-array yields [] (not fallback)', async () => {
+  await writeFile(cfg, '[logging]\nlevel = "info"\n');
+  expect(await loadExcludedProjects(cfg, ['/keep'])).toEqual([]);
+  await writeFile(cfg, '[capture]\nexcluded_projects = "x"\n');
+  expect(await loadExcludedProjects(cfg, ['/keep'])).toEqual([]);
+});
+
+test('skips non-string, empty, and relative entries (relative is logged)', async () => {
+  const warnings: string[] = [];
+  await writeFile(cfg, '[capture]\nexcluded_projects = ["/Users/me/ok", "  ", "relative/x", 3]\n');
+  expect(await loadExcludedProjects(cfg, [], collectWarnings(warnings))).toEqual(['/Users/me/ok']);
+  expect(warnings).toContain('relative/x');
 });

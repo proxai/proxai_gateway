@@ -36,7 +36,12 @@ export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
     devMode: inputs.profileCtx.isDev,
     exitProcess: inputs.exitProcess,
     loadDesktopCliSessionIds: () => loadDesktopCliSessionIds(platform, env),
-    loadExcludedProjects: (logger) => loadExcludedProjects(inputs.profileCtx.configDir, logger),
+    loadExcludedProjects: (logger) =>
+      loadExcludedProjects(
+        inputs.profileCtx.configFilePath,
+        inputs.config.capture.excludedProjects,
+        logger,
+      ),
   };
   if (inputs.xstateInspect !== undefined) {
     deps.xstateInspect = inputs.xstateInspect;

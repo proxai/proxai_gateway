@@ -87,17 +87,18 @@ afterEach(async () => {
   }
 });
 
-test('buildRunDeps: binds loadExcludedProjects reading the profile config dir', async () => {
+test('buildRunDeps: binds loadExcludedProjects reading config.toml [capture].excluded_projects', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'proxai-run-deps-exclude-'));
   try {
-    await writeFile(join(dir, 'excluded-projects'), '/Users/me/secret\n');
+    const configFilePath = join(dir, 'config.toml');
+    await writeFile(configFilePath, '[capture]\nexcluded_projects = ["/Users/me/secret"]\n');
     const ctrl = new AbortController();
     const deps = buildRunDeps({
       config: cfg,
       abortSignal: ctrl.signal,
       binaryPath: '/bin/p',
       exitProcess: () => {},
-      profileCtx: { ...prodCtx, configDir: dir },
+      profileCtx: { ...prodCtx, configFilePath },
     });
     expect(typeof deps.loadExcludedProjects).toBe('function');
     expect(await deps.loadExcludedProjects?.()).toEqual(['/Users/me/secret']);
