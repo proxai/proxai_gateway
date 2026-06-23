@@ -20,6 +20,11 @@ export interface BuildRunDepsInputs {
 export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
   const platform = inputs.platform ?? process.platform;
   const env = process.env;
+  // Fail-safe fallback for the per-cycle exclusion read: the LAST SUCCESSFULLY-read
+  // list, seeded from the startup config. A bare startup-list fallback would
+  // transiently leak a CLI-added exclusion if a later cycle's config.toml read
+  // failed; tracking last-good keeps runtime `exclude` additions protected too.
+  let lastGoodExcluded: readonly string[] = inputs.config.capture.excludedProjects;
   const deps: RunCommandDeps = {
     profileCtx: inputs.profileCtx,
     output: consoleOutput(),
@@ -36,12 +41,15 @@ export function buildRunDeps(inputs: BuildRunDepsInputs): RunCommandDeps {
     devMode: inputs.profileCtx.isDev,
     exitProcess: inputs.exitProcess,
     loadDesktopCliSessionIds: () => loadDesktopCliSessionIds(platform, env),
-    loadExcludedProjects: (logger) =>
-      loadExcludedProjects(
+    loadExcludedProjects: async (logger) => {
+      const result = await loadExcludedProjects(
         inputs.profileCtx.configFilePath,
-        inputs.config.capture.excludedProjects,
+        lastGoodExcluded,
         logger,
-      ),
+      );
+      lastGoodExcluded = result; // advance the fail-safe baseline on every successful read
+      return result;
+    },
   };
   if (inputs.xstateInspect !== undefined) {
     deps.xstateInspect = inputs.xstateInspect;
