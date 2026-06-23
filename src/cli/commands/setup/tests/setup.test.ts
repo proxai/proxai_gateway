@@ -219,6 +219,7 @@ function fakeServiceManager(opts: { failStart?: boolean } = {}): FakeServiceMana
 
 async function writeExistingConfig(
   overrides: Partial<GatewayConfig['account']> = {},
+  captureOverrides: Partial<GatewayConfig['capture']> = {},
 ): Promise<void> {
   const config: GatewayConfig = {
     account: {
@@ -246,6 +247,7 @@ async function writeExistingConfig(
       uploadMaxBytesPerMinute: DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
       uploadBackoffOn429Multiplier: DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
       excludedProjects: [],
+      ...captureOverrides,
     },
     logging: { level: 'info', logDir },
     staleBinary: {
@@ -943,4 +945,13 @@ test('autoStartDaemon formatError falls back to String(err) on non-Error values'
         l.level === 'warn' && l.msg.includes('daemon auto-start failed: launchd-offline-string'),
     ),
   ).toBe(true);
+});
+
+test('setup new preserves excluded_projects from the existing config on key rotation', async () => {
+  await writeExistingConfig({}, { excludedProjects: ['/Users/me/keep'] });
+  const control = newControl();
+  const result = await runSetupNew(deps(control), { apiKey: NEW_KEY });
+  expect(result.exitCode).toBe(0);
+  const config = await loadConfigFromFile(configPath);
+  expect(config.capture.excludedProjects).toEqual(['/Users/me/keep']);
 });

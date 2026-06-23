@@ -66,12 +66,14 @@ async function runConfigure(
   let installSource: InstallSource;
   let previousHostId: string | null = null;
   let previousUserId: string | null = null;
+  let excludedProjects: string[] = [];
   if (isReplace) {
     const existing = await loadConfigFromFile(deps.configPath);
     installedAt = existing.account.installedAt;
     installSource = existing.account.installSource;
     previousHostId = existing.account.hostId;
     previousUserId = existing.account.userId;
+    excludedProjects = [...existing.capture.excludedProjects];
   } else {
     installedAt = (deps.now ?? nowIsoUtc)();
     installSource = options.installSource ?? 'github_release';
@@ -97,6 +99,7 @@ async function runConfigure(
     bufferDbPath: deps.bufferDbPath,
     logDir: deps.logDir,
     defaultNestBaseUrl: deps.defaultNestBaseUrl,
+    excludedProjects,
   });
   await writeConfigArtifacts(config, deps);
   machine.send({ type: 'CONFIG_WRITTEN' });
