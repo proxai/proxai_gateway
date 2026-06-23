@@ -65,7 +65,9 @@ import { buildProfileContext, profileRootDir } from 'core/io/fs/profile.ts';
 import type { ProfileName } from 'core/io/fs/profile.types.ts';
 import { VALID_PROFILES } from 'core/io/fs/profile.types.ts';
 import { GatewayError, PACKAGE_DESCRIPTION, PACKAGE_VERSION, UserAbortedError } from 'core/utils';
-import { loadConfigFromFile } from 'services/config';
+import { loadConfigFromFile, writeConfigToFile } from 'services/config';
+import type { GatewayConfig } from 'services/config';
+import { runExclude } from 'cli/commands/exclude';
 
 const isDevMode = await readDevModeSentinel(join(profileRootDir(), 'DEV_MODE'));
 
@@ -302,6 +304,46 @@ withProfileOption(
       profileCtx,
     }),
   );
+  process.exit(result.exitCode);
+});
+
+function buildExcludeDeps(profileName: string | undefined) {
+  const profileCtx = buildProfileContext(parseProfileName(profileName));
+  return {
+    loadConfig: () =>
+      loadConfigFromFile(profileCtx.configFilePath, {
+        defaultBufferPath: profileCtx.bufferDbPath,
+        defaultLogDir: profileCtx.logDir,
+      }),
+    writeConfig: (c: GatewayConfig) => writeConfigToFile(c, profileCtx.configFilePath),
+    print: (line: string) => console.log(line),
+  };
+}
+
+withProfileOption(
+  program
+    .command('exclude [path]')
+    .description(
+      'Exclude a project folder from capture (its chats are paused; they backfill if you remove the exclusion later). With no path, or with --list, prints the current exclusions.',
+    )
+    .option('--list', 'list the current excluded projects', false),
+).action(async (path: string | undefined, opts: { list?: boolean; profile?: string }) => {
+  const action =
+    opts.list === true || path === undefined
+      ? ({ kind: 'list' } as const)
+      : ({ kind: 'add', path } as const);
+  const result = await runExclude(buildExcludeDeps(opts.profile), action);
+  process.exit(result.exitCode);
+});
+
+withProfileOption(
+  program
+    .command('unexclude <path>')
+    .description(
+      'Remove a project folder from the exclusion list; its chats backfill on the next capture cycle.',
+    ),
+).action(async (path: string, opts: { profile?: string }) => {
+  const result = await runExclude(buildExcludeDeps(opts.profile), { kind: 'remove', path });
   process.exit(result.exitCode);
 });
 
