@@ -1,5 +1,5 @@
 // src/services/exclusion/load.ts
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { statFile } from 'core/io/fs';
 import type { MinimalLogger } from 'core/log';
 
@@ -23,10 +23,14 @@ export async function loadExcludedProjects(
   for (const rawLine of text.split('\n')) {
     const line = rawLine.trim();
     if (line.length === 0 || line.startsWith('#')) continue;
-    if (!line.startsWith('/') && !line.startsWith('~')) {
+    // Accept any absolute path (POSIX `/…`, Windows `C:\…` / `\…`) or a
+    // ~-prefixed home path. `isAbsolute` is host-native, so a Windows drive
+    // path is kept on Windows and a POSIX path on POSIX; relative lines are
+    // skipped + logged (never silently kept as a never-matching literal).
+    if (!isAbsolute(line) && !line.startsWith('~')) {
       logger?.warn(
         { event: 'exclusion.invalid_pattern', line },
-        'skipping non-absolute exclusion pattern (must start with / or ~)',
+        'skipping non-absolute exclusion pattern (must be an absolute or ~-prefixed path)',
       );
       continue;
     }

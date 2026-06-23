@@ -27,6 +27,14 @@ test('sibling with shared prefix is NOT excluded (boundary anchored)', () => {
   expect(isProjectExcluded('/Users/me/secret-2', ['/Users/me/secret'])).toBe(false);
 });
 
+test('canonicalizes backslash separators so Windows-native nesting matches', () => {
+  // normalizeFolderPath folds '\' -> '/' so the boundary-anchored prefix check
+  // works on Windows-native paths. Exercised here on the POSIX runner via literal
+  // backslashes (no realpath resolution -> lexical fallback), proving the fold is
+  // unconditional rather than win32-gated (which the coverage runner could not hit).
+  expect(isProjectExcluded('/proj\\sub\\chat', ['/proj'])).toBe(true);
+});
+
 test('trailing slash on pattern is ignored', () => {
   expect(isProjectExcluded('/Users/me/secret', ['/Users/me/secret/'])).toBe(true);
 });

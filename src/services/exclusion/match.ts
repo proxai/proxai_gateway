@@ -43,6 +43,10 @@ export function normalizeFolderPath(input: string): string {
   // anchor a chat's folder identity to "wherever the daemon runs". Treat it as no-match.
   if (!isAbsolute(out)) return '';
   out = realpathOfDeepestExisting(out);
+  // Canonicalize Windows '\' to '/' so the boundary-anchored prefix check in
+  // isFolderUnderPrefixes (`startsWith(prefix + '/')`) and the trailing-slash
+  // strip below both operate on a single separator on every OS.
+  out = out.replace(/\\/g, '/');
   out = out.replace(/\/+$/, '');
   if (CASE_INSENSITIVE_FS) out = out.toLowerCase();
   return out;
@@ -93,6 +97,7 @@ export function lexicalFolderKey(input: string): string {
   if (out === '~') out = homedir();
   else if (out.startsWith('~/')) out = join(homedir(), out.slice(2));
   if (!isAbsolute(out)) return '';
+  out = out.replace(/\\/g, '/'); // Windows '\' -> '/' (same canonical form as normalizeFolderPath)
   out = out.replace(/\/+$/, '');
   if (CASE_INSENSITIVE_FS) out = out.toLowerCase();
   return out;

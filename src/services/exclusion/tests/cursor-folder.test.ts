@@ -20,10 +20,24 @@ describe('fileUriToPath', () => {
     // @ts-expect-error runtime guard
     expect(fileUriToPath(null)).toBeNull();
   });
-  it('returns null when a file:// URI parses but fileURLToPath throws (non-localhost host)', () => {
-    // `file://x` passes the startsWith('file://') guard but fileURLToPath rejects the host
-    // (ERR_INVALID_FILE_URL_HOST) -> the catch returns null instead of throwing.
+  it('returns null for a non-local host (file://x/...)', () => {
+    // `file://x` passes the `file://` guard but names a remote host, which has no
+    // usable local path -> null (it must never be coerced into `/some/path`).
     expect(fileUriToPath('file://x/some/path')).toBeNull();
+  });
+  it('accepts an explicit localhost host', () => {
+    expect(fileUriToPath('file://localhost/Users/me/proj')).toBe('/Users/me/proj');
+  });
+  it('maps a Windows drive URI to a drive-rooted path on every platform', () => {
+    // The daemon ships to Windows, so `file:///C:/…` must decode to `C:/…` even on
+    // the macOS/Linux CI runner (host-native fileURLToPath would throw here). The
+    // leading slash before the drive letter is stripped.
+    expect(fileUriToPath('file:///C:/Users/me/proj')).toBe('C:/Users/me/proj');
+  });
+  it('returns null when the path has a malformed percent-escape', () => {
+    // `%ZZ` survives URL parsing but makes decodeURIComponent throw URIError ->
+    // the catch returns null instead of propagating.
+    expect(fileUriToPath('file:///a%ZZ')).toBeNull();
   });
 });
 

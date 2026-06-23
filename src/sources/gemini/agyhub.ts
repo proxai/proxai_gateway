@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { join } from 'node:path';
 
 import { decodeAgyhubFolders } from 'services/exclusion';
 import { GEMINI_AGYHUB_FILE } from 'sources/gemini/gemini.constants.ts';
@@ -48,7 +48,10 @@ export function loadAgyhubFolderMap(baseDir: string): {
 
 /** brain/<uuid>/.system_generated/logs/transcript.jsonl -> <uuid> (empty string if no brain/ segment). */
 export function geminiConversationIdFromPath(transcriptPath: string): string {
-  const parts = transcriptPath.split(sep);
+  // Split on BOTH separators, not node:path.sep: discovery (Bun.Glob) yields
+  // `/`-separated paths even on Windows, while a native FS path uses `\`. Pinning
+  // to `sep` would match only one of them per OS and return '' on the other.
+  const parts = transcriptPath.split(/[/\\]/);
   const i = parts.lastIndexOf('brain');
   return i >= 0 && i + 1 < parts.length ? (parts[i + 1] ?? '') : '';
 }
