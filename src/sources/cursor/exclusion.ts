@@ -29,7 +29,10 @@ export interface CursorGlobalExclusionPlan {
 
 /** The global DB mixes all workspaces; per-workspace DBs map 1:1 to a folder. */
 export function isCursorGlobalDb(sourcePath: string): boolean {
-  return sourcePath.includes('/globalStorage/');
+  // Match either separator: discovery yields `/`-paths even on Windows, but a
+  // native-join path uses `\`. A `/`-only check silently misclassifies the global
+  // DB as per-workspace on Windows → no exclusion plan, no backfill fingerprint.
+  return /[/\\]globalStorage[/\\]/.test(sourcePath);
 }
 
 /** Resolve a per-workspace state.vscdb's folder via its sibling workspace.json. Null = fail-open. */

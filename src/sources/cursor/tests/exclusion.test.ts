@@ -56,6 +56,14 @@ describe('isCursorGlobalDb', () => {
     expect(isCursorGlobalDb('/x/Cursor/User/globalStorage/state.vscdb')).toBe(true);
     expect(isCursorGlobalDb('/x/Cursor/User/workspaceStorage/abc/state.vscdb')).toBe(false);
   });
+  it('classifies a Windows-native (backslash) path the same way', () => {
+    // A native-join path uses `\`; a `/`-only check would misclassify the global
+    // DB as per-workspace on Windows (no exclusion plan / no backfill fingerprint).
+    expect(isCursorGlobalDb('C:\\Users\\me\\Cursor\\User\\globalStorage\\state.vscdb')).toBe(true);
+    expect(
+      isCursorGlobalDb('C:\\Users\\me\\Cursor\\User\\workspaceStorage\\abc\\state.vscdb'),
+    ).toBe(false);
+  });
 });
 
 describe('buildCursorGlobalExclusionPlan', () => {
