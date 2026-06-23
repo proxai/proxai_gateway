@@ -23,6 +23,24 @@ function isValidExclusionPath(path: string): boolean {
   return isAbsolute(path) || path === '~' || path.startsWith('~/');
 }
 
+/** Write the mutated config, reporting a disk/permission failure cleanly instead of throwing. */
+async function persist(
+  deps: ExcludeDeps,
+  config: GatewayConfig,
+  successMessage: string,
+): Promise<ExcludeResult> {
+  try {
+    await deps.writeConfig(config);
+  } catch (err) {
+    deps.print(
+      `Failed to update the configuration: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return { exitCode: 1 };
+  }
+  deps.print(successMessage);
+  return { exitCode: 0 };
+}
+
 export async function runExclude(deps: ExcludeDeps, action: ExcludeAction): Promise<ExcludeResult> {
   let config: GatewayConfig;
   try {
@@ -37,7 +55,9 @@ export async function runExclude(deps: ExcludeDeps, action: ExcludeAction): Prom
     if (current.length === 0) {
       deps.print('No excluded projects.');
     } else {
-      for (const p of current) deps.print(p);
+      for (const p of current) {
+        deps.print(isValidExclusionPath(p) ? p : `${p}  (ignored — not an absolute or ~/ path)`);
+      }
     }
     return { exitCode: 0 };
   }
@@ -55,9 +75,7 @@ export async function runExclude(deps: ExcludeDeps, action: ExcludeAction): Prom
       return { exitCode: 0 };
     }
     config.capture.excludedProjects = [...current, path];
-    await deps.writeConfig(config);
-    deps.print(`Excluded ${path}`);
-    return { exitCode: 0 };
+    return persist(deps, config, `Excluded ${path}`);
   }
 
   const next = current.filter((p) => lexicalFolderKey(p) !== key);
@@ -66,7 +84,5 @@ export async function runExclude(deps: ExcludeDeps, action: ExcludeAction): Prom
     return { exitCode: 0 };
   }
   config.capture.excludedProjects = next;
-  await deps.writeConfig(config);
-  deps.print(`Un-excluded ${path}`);
-  return { exitCode: 0 };
+  return persist(deps, config, `Un-excluded ${path}`);
 }

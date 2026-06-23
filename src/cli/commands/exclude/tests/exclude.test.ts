@@ -114,3 +114,22 @@ test('missing config is reported with exit code 1', async () => {
   expect(r.exitCode).toBe(1);
   expect(lines.join('\n')).toContain('setup');
 });
+test('a write failure is reported cleanly with exit code 1 (does not throw)', async () => {
+  const out: string[] = [];
+  const failingDeps = {
+    loadConfig: async () => makeConfig([]),
+    writeConfig: async () => {
+      throw new Error('EACCES');
+    },
+    print: (l: string) => out.push(l),
+  };
+  const r = await runExclude(failingDeps, { kind: 'add', path: '/Users/me/p' });
+  expect(r.exitCode).toBe(1);
+  expect(out.join('\n')).toContain('Failed to update the configuration');
+  expect(out.join('\n')).toContain('EACCES');
+});
+test('list annotates a hand-edited non-absolute entry as ignored', async () => {
+  const r = await runExclude(deps(makeConfig(['/Users/me/ok', 'relative/x'])), { kind: 'list' });
+  expect(r.exitCode).toBe(0);
+  expect(lines).toEqual(['/Users/me/ok', 'relative/x  (ignored — not an absolute or ~/ path)']);
+});
