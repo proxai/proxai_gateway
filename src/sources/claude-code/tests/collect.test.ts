@@ -781,3 +781,94 @@ test('subagent transcript inherits its parent session desktop classification', a
 function bridgeDatabase(db: unknown): Database {
   return db as unknown as Database;
 }
+
+test('pauses an excluded session: inserts nothing AND leaves the watermark unchanged', async () => {
+  const content =
+    '{"type":"user","cwd":"/Users/me/secret","message":{"role":"user","content":"hi"}}\n';
+  const file = await makeFile(content);
+  const c = ctx(buffer);
+  c.excludedProjects = ['/Users/me/secret'];
+
+  const result = await collectClaudeCodeFile(file, c);
+
+  expect(result.capturedBatches).toBe(0);
+  expect(countByStatus(buffer).pending).toBe(0);
+  // PAUSE: no cursor row created (watermark NOT advanced) — so it backfills later.
+  const cursor = getCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.watermarkEnd ?? 0).toBe(0);
+});
+
+test('captures a non-excluded session normally', async () => {
+  const content =
+    '{"type":"user","cwd":"/Users/me/keep","message":{"role":"user","content":"hi"}}\n';
+  const file = await makeFile(content);
+  const c = ctx(buffer);
+  c.excludedProjects = ['/Users/me/secret'];
+  const result = await collectClaudeCodeFile(file, c);
+  expect(result.capturedBatches).toBe(1);
+  expect(countByStatus(buffer).pending).toBe(1);
+});
+
+test('fail-open: a session with no cwd is captured even with an exclusion list', async () => {
+  const content = '{"type":"user","message":{"role":"user","content":"hi"}}\n';
+  const file = await makeFile(content);
+  const c = ctx(buffer);
+  c.excludedProjects = ['/Users/me/secret'];
+  const result = await collectClaudeCodeFile(file, c);
+  expect(result.capturedBatches).toBe(1);
+});
+
+test('backfills when a project is removed from the exclusion list (no cursor reset needed)', async () => {
+  const content =
+    '{"type":"user","cwd":"/Users/me/secret","message":{"role":"user","content":"hi"}}\n';
+  const file = await makeFile(content);
+
+  // Cycle 1: excluded -> nothing captured, watermark frozen at 0.
+  const excludedCtx = ctx(buffer);
+  excludedCtx.excludedProjects = ['/Users/me/secret'];
+  await collectClaudeCodeFile(file, excludedCtx);
+  expect(countByStatus(buffer).pending).toBe(0);
+
+  // Cycle 2: no longer excluded -> backfills from byte 0.
+  const openCtx = ctx(buffer);
+  openCtx.excludedProjects = [];
+  const result = await collectClaudeCodeFile(file, openCtx);
+  expect(result.capturedBatches).toBe(1);
+  expect(countByStatus(buffer).pending).toBe(1);
+});
+
+test('pauses an excluded subagent transcript (top-level cwd is honored)', async () => {
+  const subDir = join(dir, 'sess-excl', 'subagents');
+  await Bun.write(
+    join(subDir, 'agent-1.jsonl'),
+    '{"type":"user","cwd":"/Users/me/secret","message":{"role":"user","content":"hi"}}\n',
+  );
+  const sourcePath = join(subDir, 'agent-1.jsonl');
+  const stat = await statFile(sourcePath);
+  if (!stat.exists) throw new Error('subagent file missing');
+  const file: DiscoveredClaudeCodeFile = {
+    sourcePath,
+    sourcePathHash: sha256Hex(sourcePath),
+    inode: Number(stat.inode),
+    sizeBytes: stat.size,
+    lastModifiedMs: stat.mtimeMs,
+  };
+  const c = ctx(buffer);
+  c.excludedProjects = ['/Users/me/secret'];
+  const result = await collectClaudeCodeFile(file, c);
+  expect(result.capturedBatches).toBe(0);
+  expect(countByStatus(buffer).pending).toBe(0);
+  // Subagent transcripts carry a top-level cwd, so the gate fires; watermark stays frozen (PAUSE).
+  const cursor = getCursor(buffer, {
+    sourceApp: 'claude-code',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
+  expect(cursor?.watermarkEnd ?? 0).toBe(0);
+});

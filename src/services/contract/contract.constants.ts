@@ -2,7 +2,6 @@ import type {
   BodyCompression,
   BodyFormat,
   CodexTable,
-  GeminiTable,
   SourceApp,
   SourceKind,
   SourcePlatform,
@@ -52,12 +51,6 @@ export const VALID_CODEX_TABLES: readonly CodexTable[] = [
   'thread_spawn_edges',
 ];
 
-export const VALID_GEMINI_TABLES: readonly GeminiTable[] = [
-  'trajectory_meta',
-  'steps',
-  'trajectory_metadata_blob',
-];
-
 export const SOURCE_VARIANTS: readonly SourceVariantSpec[] = [
   {
     sourceApp: 'claude-code',
@@ -96,10 +89,10 @@ export const SOURCE_VARIANTS: readonly SourceVariantSpec[] = [
   },
   {
     sourceApp: 'gemini',
-    sourceKind: 'sqlite_table_snapshot',
-    bodyFormat: 'sqlite_rows_json',
-    watermarkKind: 'rowid_range',
-    watermarkTableRequired: true,
+    sourceKind: 'jsonl_append',
+    bodyFormat: 'jsonl',
+    watermarkKind: 'byte_range',
+    watermarkTableRequired: false,
   },
 ];
 

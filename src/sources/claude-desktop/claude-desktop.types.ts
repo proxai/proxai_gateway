@@ -13,6 +13,7 @@ export interface ClaudeDesktopCollectorContext {
   buffer: Database;
   maxDecompressedBytes: number;
   logger?: MinimalLogger;
+  excludedProjects?: readonly string[];
 }
 
 export interface ClaudeDesktopCollectorResult {

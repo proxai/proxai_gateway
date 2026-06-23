@@ -185,6 +185,46 @@ test('tags sessions claude-code-cli when no desktopCliSessionIds option is given
   expect(batch.sourcePlatform).toBe('claude-code-cli');
 });
 
+test('forwards excludedProjects so an excluded project pauses capture (no batch)', async () => {
+  // Head record carries a cwd under the excluded prefix → collector pauses (no batch, no cursor).
+  // If the poller failed to forward ctx.excludedProjects, this session would capture a batch.
+  await seedSession(
+    'excluded-proj',
+    'session.jsonl',
+    '{"type":"user","cwd":"/Users/me/secret","message":{"content":"hi"},"text":"x"}\n',
+  );
+  const poller = makeClaudeCodeSourcePoller({ baseDir: dir });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+    excludedProjects: ['/Users/me/secret'],
+  });
+  expect(result.filesProcessed).toBe(1);
+  expect(result.capturedBatches).toBe(0);
+  expect(result.errors).toEqual([]);
+  expect(countByStatus(buffer).pending).toBe(0);
+});
+
+test('excludedProjects forwarded but non-matching cwd still captures', async () => {
+  // Same forwarding path (line covers ctx.excludedProjects assignment) but the cwd is NOT excluded,
+  // so capture proceeds — proving the forwarded list is consulted, not blindly applied.
+  await seedSession(
+    'kept-proj',
+    'session.jsonl',
+    '{"type":"user","cwd":"/Users/me/public","message":{"content":"hi"},"text":"x"}\n',
+  );
+  const poller = makeClaudeCodeSourcePoller({ baseDir: dir });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+    excludedProjects: ['/Users/me/secret'],
+  });
+  expect(result.filesProcessed).toBe(1);
+  expect(result.capturedBatches).toBe(1);
+});
+
 test('default minimumMtime (null): processes all historical files unconditionally', async () => {
   const oldPath = await seedSession('proj', 'old.jsonl', '{"type":"user","text":"old"}\n');
   await seedSession('proj', 'fresh.jsonl', '{"type":"user","text":"fresh"}\n');

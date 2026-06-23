@@ -28,6 +28,8 @@ export interface BuildAndWriteConfigInputs {
   hostId: string;
   installedAt: string;
   installSource: InstallSource;
+  /** Carried over on `setup new` so a key rotation never wipes the user's exclusions. Defaults to []. */
+  excludedProjects?: string[];
   bufferDbPath: string;
   logDir: string;
   defaultNestBaseUrl: string;
@@ -58,6 +60,7 @@ export function buildGatewayConfig(input: BuildAndWriteConfigInputs): GatewayCon
       uploadMaxBatchesPerSec: DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
       uploadMaxBytesPerMinute: DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
       uploadBackoffOn429Multiplier: DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
+      excludedProjects: input.excludedProjects ?? [],
     },
     logging: { level: 'info', logDir: input.logDir },
     staleBinary: {

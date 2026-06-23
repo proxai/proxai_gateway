@@ -1,21 +1,13 @@
-import {
-  collectCodexRollout,
-  collectCodexState,
-  defaultCodexHome,
-  discoverCodexRolloutFiles,
-  discoverCodexStateSqlite,
-} from 'sources/codex';
+import { collectCodexRollout, defaultCodexHome, discoverCodexRolloutFiles } from 'sources/codex';
 import { CODEX_DEFAULT_AGENT_SCHEMA_VERSION } from 'sources/codex/codex.constants.ts';
+import type { CodexCollectorContext } from 'sources/codex/codex.types.ts';
 import type {
   SourcePoller,
   SourcePollerContext,
-  SourcePollerError,
   SourcePollerResult,
 } from 'services/polling/polling.types.ts';
 
 export interface CodexSourceDeps {
-  discoverCodexStateSqlite: typeof discoverCodexStateSqlite;
-  collectCodexState: typeof collectCodexState;
   discoverCodexRolloutFiles: typeof discoverCodexRolloutFiles;
   collectCodexRollout: typeof collectCodexRollout;
 }
@@ -28,8 +20,6 @@ export interface CodexSourcePollerOptions {
 export function makeCodexSourcePoller(options: CodexSourcePollerOptions = {}): SourcePoller {
   const baseDir = options.baseDir ?? defaultCodexHome();
   const deps: CodexSourceDeps = {
-    discoverCodexStateSqlite: options.deps?.discoverCodexStateSqlite ?? discoverCodexStateSqlite,
-    collectCodexState: options.deps?.collectCodexState ?? collectCodexState,
     discoverCodexRolloutFiles: options.deps?.discoverCodexRolloutFiles ?? discoverCodexRolloutFiles,
     collectCodexRollout: options.deps?.collectCodexRollout ?? collectCodexRollout,
   };
@@ -48,29 +38,12 @@ async function pollCodex(
     errors: [],
   };
 
-  let agentSchemaVersion = CODEX_DEFAULT_AGENT_SCHEMA_VERSION;
+  // State capture intentionally disabled: nest never parses state sqlite into
+  // agent-call-records, and capturing it unfiltered would upload excluded projects' rows.
+  // discoverCodexStateSqlite / collectCodexState stay exported from sources/codex (with their
+  // own unit tests) but are no longer wired into this poller.
+  const agentSchemaVersion = CODEX_DEFAULT_AGENT_SCHEMA_VERSION;
   const minimumMtime = resolveMinimumMtime(ctx);
-
-  try {
-    const stateFile = await deps.discoverCodexStateSqlite(baseDir, { minimumMtime });
-    if (stateFile !== null) {
-      const stateOutcome = await deps.collectCodexState(stateFile, ctx);
-      agentSchemaVersion = stateOutcome.agentSchemaVersion;
-      result.filesProcessed++;
-      result.capturedBatches += stateOutcome.result.capturedBatches;
-      result.capturedBytes += stateOutcome.result.capturedBytes;
-      for (const err of stateOutcome.result.errors) {
-        const entry: SourcePollerError = { sourcePath: err.sourcePath, reason: err.reason };
-        if (err.table !== undefined) entry.table = err.table;
-        result.errors.push(entry);
-      }
-    }
-  } catch (err) {
-    result.errors.push({
-      sourcePath: baseDir,
-      reason: err instanceof Error ? err.message : String(err),
-    });
-  }
 
   let rolloutFiles;
   try {
@@ -83,8 +56,18 @@ async function pollCodex(
     return result;
   }
 
+  const collectorCtx: CodexCollectorContext = {
+    buffer: ctx.buffer,
+    gatewayVersion: ctx.gatewayVersion,
+    maxDecompressedBytes: ctx.maxDecompressedBytes,
+  };
+  if (ctx.logger !== undefined) collectorCtx.logger = ctx.logger;
+  if (ctx.excludedProjects !== undefined) {
+    collectorCtx.excludedProjects = ctx.excludedProjects;
+  }
+
   for (const file of rolloutFiles) {
-    const collectResult = await deps.collectCodexRollout(file, ctx, agentSchemaVersion);
+    const collectResult = await deps.collectCodexRollout(file, collectorCtx, agentSchemaVersion);
     result.filesProcessed++;
     result.capturedBatches += collectResult.capturedBatches;
     result.capturedBytes += collectResult.capturedBytes;

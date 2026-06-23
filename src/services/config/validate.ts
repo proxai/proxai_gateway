@@ -149,6 +149,7 @@ function validateCapture(raw: unknown, defaults?: ValidateDefaults): CaptureConf
       'capture.upload_backoff_on_429_multiplier',
       1,
     ),
+    excludedProjects: optionalStringArray(r['excluded_projects'], 'capture.excluded_projects'),
   };
   const maxDecompressed = optionalPositiveNumberOrInfinity(
     r['max_decompressed_bytes'],
@@ -216,6 +217,19 @@ function requireString(value: unknown, fieldPath: string): string {
 function optionalString(value: unknown, fallback: string, fieldPath: string): string {
   if (value === undefined) return fallback;
   return requireString(value, fieldPath);
+}
+
+function optionalStringArray(value: unknown, fieldPath: string): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new ValidationError(`${fieldPath} must be an array of strings`);
+  }
+  return value.map((entry, i) => {
+    if (typeof entry !== 'string') {
+      throw new ValidationError(`${fieldPath}[${i}] must be a string`);
+    }
+    return entry.trim();
+  });
 }
 
 function optionalNumber(

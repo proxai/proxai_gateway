@@ -21,8 +21,6 @@ export type WatermarkKind = 'byte_range' | 'rowid_range';
 
 export type CodexTable = 'threads' | 'thread_dynamic_tools' | 'thread_spawn_edges';
 
-export type GeminiTable = 'trajectory_meta' | 'steps' | 'trajectory_metadata_blob';
-
 export interface ByteRangeWatermark {
   kind: 'byte_range';
   start: number;

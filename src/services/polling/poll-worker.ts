@@ -27,7 +27,6 @@ import {
 } from 'sources/claude-desktop';
 import {
   discoverCodexRolloutFiles,
-  discoverCodexStateSqlite,
   defaultCodexHome,
   isCodexDialogueRecord,
   trimCodexRecord,
@@ -39,12 +38,8 @@ import {
   trimCursorRowValue,
 } from 'sources/cursor';
 import {
-  discoverGeminiConversations,
-  defaultGeminiCliConversationsDir,
-  defaultGeminiIdeConversationsDir,
-  geminiPlatformForRoot,
-  measureGeminiUploadSize,
-  GEMINI_USER_STEP_TYPE,
+  discoverGeminiTranscripts,
+  defaultGeminiAntigravityBaseDir,
   type DiscoveredGeminiFile,
 } from 'sources/gemini';
 
@@ -78,7 +73,7 @@ function createCompressedSizer(): { add: (text: string) => void; finish: () => n
 
 function isPromptRecord(
   parsed: unknown,
-  sourceApp: 'claude-code' | 'codex' | 'claude-desktop',
+  sourceApp: 'claude-code' | 'codex' | 'claude-desktop' | 'gemini',
 ): boolean {
   const rec = parsed as Record<string, unknown>;
   if (sourceApp === 'codex') {
@@ -91,6 +86,10 @@ function isPromptRecord(
       typeof payload === 'object' &&
       (payload as { role?: unknown }).role === 'user'
     );
+  }
+  if (sourceApp === 'gemini') {
+    // Antigravity user prompts: a USER_EXPLICIT source with a USER_INPUT type.
+    return rec.source === 'USER_EXPLICIT' && rec.type === 'USER_INPUT';
   }
   return rec.type === 'user';
 }
@@ -120,7 +119,7 @@ function isCursorPromptRow(key: string, value: string | null): boolean {
 
 async function analyzeJsonlLogFile(
   filePath: string,
-  sourceApp: 'claude-code' | 'codex' | 'claude-desktop',
+  sourceApp: 'claude-code' | 'codex' | 'claude-desktop' | 'gemini',
 ): Promise<{
   totalLines: number;
   oldestDate: string | null;
@@ -177,6 +176,11 @@ async function analyzeJsonlLogFile(
           capturedText = JSON.stringify(trimCodexRecord(parsed));
           lineBytes = Buffer.byteLength(capturedText, 'utf8') + 1;
         }
+      } else if (sourceApp === 'gemini') {
+        // Keep-all, mirroring the gemini collector: every non-empty, JSON-parseable line is
+        // captured verbatim (no type/content filter). capturedText/lineBytes already reflect the
+        // raw line, so the consent-surface bytes match what is actually shipped.
+        match = true;
       }
       if (match) {
         telemetryRecordCount++;
@@ -208,31 +212,13 @@ async function analyzeJsonlLogFile(
 async function discoverGeminiFilesForInspect(
   baseDir: string | undefined,
 ): Promise<DiscoveredGeminiFile[]> {
-  if (baseDir !== undefined) {
-    try {
-      return await discoverGeminiConversations(baseDir, {
-        minimumMtime: null,
-        sourcePlatform: geminiPlatformForRoot('cli'),
-      });
-    } catch {
-      return [];
-    }
+  try {
+    return await discoverGeminiTranscripts(baseDir ?? defaultGeminiAntigravityBaseDir(), {
+      minimumMtime: null,
+    });
+  } catch {
+    return [];
   }
-  const roots: { dir: string; kind: 'cli' | 'ide' }[] = [
-    { dir: defaultGeminiCliConversationsDir(), kind: 'cli' },
-    { dir: defaultGeminiIdeConversationsDir(), kind: 'ide' },
-  ];
-  const collected: DiscoveredGeminiFile[] = [];
-  for (const root of roots) {
-    try {
-      const found = await discoverGeminiConversations(root.dir, {
-        minimumMtime: null,
-        sourcePlatform: geminiPlatformForRoot(root.kind),
-      });
-      collected.push(...found);
-    } catch {}
-  }
-  return collected;
 }
 
 export async function handleInspect(
@@ -398,66 +384,6 @@ export async function handleInspect(
   } else if (sourceName === 'codex') {
     const baseDir = options.baseDir ?? defaultCodexHome();
 
-    let stateSnapshot: { path: string; cleanup: () => Promise<void> } | null = null;
-    try {
-      const stateFile = await discoverCodexStateSqlite(baseDir, { minimumMtime: null });
-      if (stateFile !== null) {
-        filesProcessed++;
-        totalBytes += stateFile.sizeBytes;
-        updateChronological(null, stateFile.lastModifiedMs);
-
-        stateSnapshot = await snapshotSqlite(stateFile.sourcePath);
-        const db = openReadOnly(stateSnapshot.path);
-        try {
-          const tables = db
-            .query<
-              { name: string },
-              []
-            >("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-            .all();
-          for (const t of tables) {
-            const row = db
-              .query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM "${t.name}"`)
-              .get();
-            if (row !== null) {
-              recordCount += row.count;
-            }
-          }
-
-          const sizer = createCompressedSizer();
-          for (const tbl of ['threads', 'thread_spawn_edges']) {
-            const tableCheck = db
-              .query(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tbl}'`)
-              .get();
-            if (tableCheck !== null) {
-              const telRow = db
-                .query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM "${tbl}"`)
-                .get();
-              if (telRow !== null) {
-                telemetryRecordCount += telRow.count;
-              }
-
-              const allRows = db.query<Record<string, unknown>, []>(`SELECT * FROM "${tbl}"`).all();
-              for (const r of allRows) {
-                const rowJson = JSON.stringify(r);
-                telemetryRawBytes += Buffer.byteLength(rowJson, 'utf8');
-                sizer.add(rowJson + '\n');
-              }
-            }
-          }
-          telemetryCompressedBytes += sizer.finish();
-        } finally {
-          db.close();
-        }
-      }
-    } catch (err) {
-      errors.push(`codex state: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      if (stateSnapshot !== null) {
-        await stateSnapshot.cleanup();
-      }
-    }
-
     try {
       const rolloutFiles = await discoverCodexRolloutFiles(baseDir, {
         minimumMtime: null,
@@ -496,46 +422,26 @@ export async function handleInspect(
     for (const f of geminiFiles) {
       filesProcessed++;
       totalBytes += f.sizeBytes;
-      updateChronological(null, f.lastModifiedMs);
+      const {
+        totalLines,
+        oldestDate,
+        newestDate,
+        telemetryRecordCount: telCount,
+        telemetryRawBytes: telBytes,
+        telemetryCompressedBytes: telComp,
+        promptCount: telPrompts,
+        error,
+      } = await analyzeJsonlLogFile(f.sourcePath, 'gemini');
+      recordCount += totalLines;
+      updateChronological(oldestDate, f.lastModifiedMs);
+      updateChronological(newestDate, f.lastModifiedMs);
 
-      let snapshot: { path: string; cleanup: () => Promise<void> } | null = null;
-      try {
-        snapshot = await snapshotSqlite(f.sourcePath);
-        const db = openReadOnly(snapshot.path);
-        try {
-          const stepsCheck = db
-            .query("SELECT name FROM sqlite_master WHERE type='table' AND name='steps'")
-            .get();
-          if (stepsCheck !== null) {
-            const countRow = db
-              .query<{ count: number }, []>('SELECT COUNT(*) AS count FROM "steps"')
-              .get();
-            if (countRow !== null) {
-              recordCount += countRow.count;
-              telemetryRecordCount += countRow.count;
-            }
-            const promptRow = db
-              .query<
-                { count: number },
-                [number]
-              >('SELECT COUNT(*) AS count FROM "steps" WHERE step_type = ?')
-              .get(GEMINI_USER_STEP_TYPE);
-            if (promptRow !== null) {
-              promptCount += promptRow.count;
-            }
-          }
-          const uploadSize = measureGeminiUploadSize(db, options.maxDecompressedBytes);
-          telemetryRawBytes += uploadSize.rawBytes;
-          telemetryCompressedBytes += uploadSize.compressedBytes;
-        } finally {
-          db.close();
-        }
-      } catch (err) {
-        errors.push(`${f.sourcePath}: ${err instanceof Error ? err.message : String(err)}`);
-      } finally {
-        if (snapshot !== null) {
-          await snapshot.cleanup();
-        }
+      telemetryRawBytes += telBytes;
+      telemetryCompressedBytes += telComp;
+      telemetryRecordCount += telCount;
+      promptCount += telPrompts;
+      if (error !== null) {
+        errors.push(`${f.sourcePath}: ${error}`);
       }
     }
   }
@@ -605,6 +511,7 @@ export async function handleCapture(
       gatewayVersion: options.gatewayVersion,
       maxDecompressedBytes: options.maxDecompressedBytes,
       minimumMtimeOverride: null,
+      ...(options.excludedProjects !== undefined && { excludedProjects: options.excludedProjects }),
     };
     const outcome = await poller(ctx);
 

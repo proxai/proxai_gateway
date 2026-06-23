@@ -113,6 +113,18 @@ test('buildCaptureContext: forwards loadDesktopCliSessionIds when present on dep
   expect(ctx.loadDesktopCliSessionIds).toBe(loader);
 });
 
+test('buildCaptureContext: forwards loadExcludedProjects when present on deps', () => {
+  const loader = async (): Promise<readonly string[]> => ['/Users/me/secret'];
+  const deps = makeMockDeps({ loadExcludedProjects: loader });
+  const ctx = buildCaptureContext({
+    buffer: mockDb,
+    deps,
+    sources: mockSources,
+    logger: mockLogger,
+  });
+  expect(ctx.loadExcludedProjects).toBe(loader);
+});
+
 test('buildDrainContext: correctly maps drain context fields', () => {
   const deps = makeMockDeps();
   const ctx = buildDrainContext({

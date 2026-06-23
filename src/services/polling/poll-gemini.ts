@@ -1,12 +1,11 @@
 import {
   collectGeminiConversation,
-  defaultGeminiCliConversationsDir,
-  defaultGeminiIdeConversationsDir,
-  discoverGeminiConversations,
-  geminiPlatformForRoot,
+  defaultGeminiAntigravityBaseDir,
+  discoverGeminiTranscripts,
   type DiscoveredGeminiFile,
   type GeminiCollectorContext,
 } from 'sources/gemini';
+import { loadAgyhubFolderMap } from 'sources/gemini/agyhub.ts';
 import type {
   SourcePoller,
   SourcePollerContext,
@@ -14,21 +13,15 @@ import type {
 } from 'services/polling/polling.types.ts';
 
 export interface GeminiSourcePollerOptions {
-  cliBaseDir?: string;
-  ideBaseDir?: string;
+  baseDir?: string;
 }
 
 export function makeGeminiSourcePoller(options: GeminiSourcePollerOptions = {}): SourcePoller {
-  const cliBaseDir = options.cliBaseDir ?? defaultGeminiCliConversationsDir();
-  const ideBaseDir = options.ideBaseDir ?? defaultGeminiIdeConversationsDir();
-  return (ctx) => pollGemini(ctx, cliBaseDir, ideBaseDir);
+  const baseDir = options.baseDir ?? defaultGeminiAntigravityBaseDir();
+  return (ctx) => pollGemini(ctx, baseDir);
 }
 
-async function pollGemini(
-  ctx: SourcePollerContext,
-  cliBaseDir: string,
-  ideBaseDir: string,
-): Promise<SourcePollerResult> {
+async function pollGemini(ctx: SourcePollerContext, baseDir: string): Promise<SourcePollerResult> {
   const result: SourcePollerResult = {
     filesProcessed: 0,
     capturedBatches: 0,
@@ -38,16 +31,36 @@ async function pollGemini(
 
   const minimumMtime = ctx.minimumMtimeOverride !== undefined ? ctx.minimumMtimeOverride : null;
 
-  const cliFiles = await discoverRoot(cliBaseDir, 'cli', minimumMtime, result);
-  const ideFiles = await discoverRoot(ideBaseDir, 'ide', minimumMtime, result);
-  const files = [...cliFiles, ...ideFiles];
+  let files: DiscoveredGeminiFile[];
+  try {
+    files = await discoverGeminiTranscripts(baseDir, { minimumMtime });
+  } catch (err) {
+    result.errors.push({
+      sourcePath: baseDir,
+      reason: err instanceof Error ? err.message : String(err),
+    });
+    return result;
+  }
 
   const collectorContext: GeminiCollectorContext = {
     buffer: ctx.buffer,
     gatewayVersion: ctx.gatewayVersion,
     maxDecompressedBytes: ctx.maxDecompressedBytes,
-    ...(ctx.logger !== undefined ? { logger: ctx.logger } : {}),
   };
+  if (ctx.logger !== undefined) collectorContext.logger = ctx.logger;
+  if (ctx.excludedProjects !== undefined) collectorContext.excludedProjects = ctx.excludedProjects;
+
+  // Only read/decode the agyhub index (up to 8MB) when there is at least one exclusion to
+  // enforce; otherwise the folder map is never consulted, so skip the work and pass an empty
+  // fail-open map. Decoding when nothing is excluded would burn CPU for no behavioral effect.
+  if (ctx.excludedProjects && ctx.excludedProjects.length > 0) {
+    const agy = loadAgyhubFolderMap(baseDir);
+    collectorContext.agyhubFolders = agy.folders;
+    collectorContext.agyhubComplete = agy.complete;
+  } else {
+    collectorContext.agyhubFolders = new Map();
+    collectorContext.agyhubComplete = true;
+  }
 
   async function processNext(index: number): Promise<void> {
     const file = files[index];
@@ -65,24 +78,4 @@ async function pollGemini(
   await processNext(0);
 
   return result;
-}
-
-async function discoverRoot(
-  baseDir: string,
-  rootKind: 'cli' | 'ide',
-  minimumMtime: Date | null,
-  result: SourcePollerResult,
-): Promise<DiscoveredGeminiFile[]> {
-  try {
-    return await discoverGeminiConversations(baseDir, {
-      minimumMtime,
-      sourcePlatform: geminiPlatformForRoot(rootKind),
-    });
-  } catch (err) {
-    result.errors.push({
-      sourcePath: baseDir,
-      reason: err instanceof Error ? err.message : String(err),
-    });
-    return [];
-  }
 }

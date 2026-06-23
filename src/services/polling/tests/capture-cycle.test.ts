@@ -892,6 +892,72 @@ test('continues capture when loadDesktopCliSessionIds throws', async () => {
   }
 });
 
+test('threads excludedProjects into the in-process claude-code worker options', async () => {
+  __deps.isCompiledBinary = () => true;
+  let seen: readonly string[] | undefined;
+  __deps.handleCapture = (async (_name: string, options: WorkerInput['options']) => {
+    seen = options.excludedProjects;
+    return null;
+  }) as unknown as typeof __deps.handleCapture;
+
+  const list = ['/Users/me/secret'];
+  const ctx = makeContext([{ name: 'claude-code', poll: stubPoll }], {
+    loadExcludedProjects: async () => list,
+  });
+  await runCaptureCycle(ctx);
+  expect(seen).toEqual(list);
+});
+
+test('threads excludedProjects into the threaded claude-code worker options', async () => {
+  __deps.isCompiledBinary = () => false;
+  const originalWorker = globalThis.Worker;
+  const postedInputs: WorkerInput[] = [];
+  globalThis.Worker = emptyCaptureWorker(postedInputs, 'claude-code');
+  try {
+    const list = ['/Users/me/secret'];
+    const ctx = makeContext([{ name: 'claude-code', poll: stubPoll }], {
+      loadExcludedProjects: async () => list,
+    });
+    await runCaptureCycle(ctx);
+    expect(postedInputs[0]?.options.excludedProjects).toEqual(list);
+  } finally {
+    globalThis.Worker = originalWorker;
+  }
+});
+
+test('continues capture when loadExcludedProjects throws', async () => {
+  __deps.isCompiledBinary = () => false;
+  const originalWorker = globalThis.Worker;
+  const postedInputs: WorkerInput[] = [];
+  globalThis.Worker = emptyCaptureWorker(postedInputs, 'claude-code');
+  const warnings: string[] = [];
+  const logger = {
+    info: () => undefined,
+    debug: () => undefined,
+    warn: (obj: unknown) => {
+      const event = (obj as { event?: unknown }).event;
+      if (typeof event === 'string') warnings.push(event);
+    },
+    error: () => undefined,
+    fatal: () => undefined,
+    trace: () => undefined,
+    child: () => logger,
+  };
+  try {
+    const ctx = makeContext([{ name: 'claude-code', poll: stubPoll }], {
+      loadExcludedProjects: async () => {
+        throw new Error('exclude boom');
+      },
+      logger,
+    });
+    await runCaptureCycle(ctx);
+    expect(postedInputs[0]?.options.excludedProjects).toBeUndefined();
+    expect(warnings).toContain('capture.exclusions_load_failed');
+  } finally {
+    globalThis.Worker = originalWorker;
+  }
+});
+
 test('threaded worker forwards desktopCliSessionIds for the claude-code source', async () => {
   __deps.isCompiledBinary = () => false;
   const originalWorker = globalThis.Worker;

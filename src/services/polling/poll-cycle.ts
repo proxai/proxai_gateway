@@ -24,6 +24,9 @@ export async function runPollCycle(ctx: PollCycleContext): Promise<PollCycleResu
   if (ctx.loadDesktopCliSessionIds !== undefined) {
     captureCtx.loadDesktopCliSessionIds = ctx.loadDesktopCliSessionIds;
   }
+  if (ctx.loadExcludedProjects !== undefined) {
+    captureCtx.loadExcludedProjects = ctx.loadExcludedProjects;
+  }
   const captureResult = await runCaptureCycle(captureCtx);
 
   if (captureResult.authFailed || captureResult.bufferFull) {

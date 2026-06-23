@@ -1,17 +1,18 @@
+import { NEWLINE_BYTE } from 'core/io/jsonl/jsonl.constants.ts';
 import { readJsonlRange } from 'core/io/jsonl';
+import { isProjectExcluded, resolveCwdFromHead } from 'services/exclusion';
 import {
   OversizedDecompressedSliceError,
   generateUuidV7,
   nowIsoUtc,
   requireDefined,
   splitJsonlAtBoundary,
-  zstdCompressSync,
 } from 'core/utils';
 import { getCursor, getCursorWithFallback, insertBatch, setCursor } from 'services/buffer';
 import type { NewBatch } from 'services/buffer';
 import { BODY_TARGET_COMPRESSED_BYTES } from 'services/contract';
 import type { SourcePlatform } from 'services/contract';
-import { applyRedaction } from 'services/redaction';
+import { createJsonlSliceRedactor } from 'services/redaction';
 import { codexPlatformFromSessionMeta } from 'sources/codex/source-platform.ts';
 import {
   CODEX_BODY_COMPRESSION,
@@ -29,25 +30,6 @@ import { extractRolloutCliVersion } from 'sources/codex/rollout-version.ts';
 
 const DECODER = new TextDecoder('utf-8', { fatal: false });
 const ENCODER = new TextEncoder();
-
-interface SliceRedaction {
-  redactedBytes: Uint8Array;
-  compressed: Uint8Array;
-}
-
-function createSliceRedactor(): (slice: Uint8Array) => SliceRedaction {
-  const cache = new WeakMap<Uint8Array, SliceRedaction>();
-  return (slice) => {
-    let entry = cache.get(slice);
-    if (entry === undefined) {
-      const redactedBytes = ENCODER.encode(applyRedaction(DECODER.decode(slice)).redacted);
-      const compressed = zstdCompressSync(redactedBytes);
-      entry = { redactedBytes, compressed };
-      cache.set(slice, entry);
-    }
-    return entry;
-  };
-}
 
 export function isCodexDialogueRecord(parsed: unknown): boolean {
   if (parsed === null || typeof parsed !== 'object') {
@@ -133,13 +115,28 @@ export async function collectCodexRollout(
       return result;
     }
 
+    const excluded = context.excludedProjects ?? [];
+    if (excluded.length > 0) {
+      const projectCwd = await resolveCwdFromHead(file.sourcePath, file.sizeBytes);
+      if (projectCwd !== null && isProjectExcluded(projectCwd, excluded)) {
+        context.logger?.info(
+          {
+            event: 'capture.project_excluded',
+            source_app: CODEX_SOURCE_APP,
+            source_path_hash: file.sourcePathHash,
+            project: projectCwd,
+          },
+          'paused capture for excluded project',
+        );
+        // PAUSE: no setCursor -> watermark frozen -> backfills if un-excluded.
+        return result;
+      }
+    }
+
     const range = await readJsonlRange(file.sourcePath, watermarkStart, file.sizeBytes);
     if (range.bytes.byteLength === 0) {
       return result;
     }
-
-    const rawText = DECODER.decode(range.bytes);
-    const lines = rawText.split('\n');
 
     interface KeptLine {
       text: string;
@@ -148,27 +145,31 @@ export async function collectCodexRollout(
     const kept: KeptLine[] = [];
 
     let detectedSourcePlatform: SourcePlatform | null = null;
-    let currentOffset = 0;
-    for (const line of lines) {
-      const lineByteLength = ENCODER.encode(line).byteLength;
-      const lineEndOffset = currentOffset + lineByteLength + 1;
-
-      if (line.trim().length > 0) {
-        if (detectedSourcePlatform === null) {
-          detectedSourcePlatform = codexPlatformFromSessionMeta(line);
-        }
-        try {
-          const parsed = JSON.parse(line);
-          if (isCodexDialogueRecord(parsed)) {
-            const trimmed = trimCodexRecord(parsed);
-            kept.push({
-              text: JSON.stringify(trimmed),
-              physicalEndOffset: lineEndOffset,
-            });
-          }
-        } catch {}
+    // Walk the RAW byte range, splitting on 0x0A so each line's physicalEndOffset comes from the
+    // raw bytes — NOT from re-encoding decoded text. An invalid-UTF8 line decodes to U+FFFD and
+    // re-encodes LONGER, which would desync the non-final-slice watermark boundaries below; the raw
+    // end is the only stable offset. readJsonlRange guarantees range.bytes ends at a newline.
+    let lineStart = 0;
+    for (let i = 0; i < range.bytes.byteLength; i++) {
+      if (range.bytes[i] !== NEWLINE_BYTE) continue;
+      const lineEndOffset = i + 1; // raw byte offset just past this line's newline
+      const lineBytes = range.bytes.subarray(lineStart, i); // exclude the newline
+      lineStart = lineEndOffset;
+      const line = DECODER.decode(lineBytes);
+      if (line.trim().length === 0) continue;
+      if (detectedSourcePlatform === null) {
+        detectedSourcePlatform = codexPlatformFromSessionMeta(line);
       }
-      currentOffset = lineEndOffset;
+      try {
+        const parsed = JSON.parse(line);
+        if (isCodexDialogueRecord(parsed)) {
+          const trimmed = trimCodexRecord(parsed);
+          kept.push({
+            text: JSON.stringify(trimmed),
+            physicalEndOffset: lineEndOffset,
+          });
+        }
+      } catch {}
     }
 
     const sourcePlatform: SourcePlatform = detectedSourcePlatform ?? 'codex-cli';
@@ -189,7 +190,7 @@ export async function collectCodexRollout(
 
     const filteredBytes = ENCODER.encode(filteredText);
 
-    const redactSlice = createSliceRedactor();
+    const redactSlice = createJsonlSliceRedactor();
     const sourceSlices = splitJsonlAtBoundary(filteredBytes, {
       targetCompressedBytes: BODY_TARGET_COMPRESSED_BYTES,
       maxDecompressedBytes: context.maxDecompressedBytes,

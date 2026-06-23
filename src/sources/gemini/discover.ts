@@ -2,18 +2,20 @@ import { join } from 'node:path';
 
 import { statFile } from 'core/io/fs';
 import { sha256Hex } from 'core/utils';
-import type { SourcePlatform } from 'services/contract';
-import { GEMINI_CONVERSATIONS_GLOB } from 'sources/gemini/gemini.constants.ts';
+import { geminiConversationIdFromPath } from 'sources/gemini/agyhub.ts';
+import {
+  ANTIGRAVITY_IDE_PLATFORM,
+  GEMINI_TRANSCRIPT_GLOB,
+} from 'sources/gemini/gemini.constants.ts';
 import type { DiscoveredGeminiFile } from 'sources/gemini/gemini.types.ts';
 
-export interface DiscoverGeminiOptions {
+export interface DiscoverGeminiTranscriptsOptions {
   minimumMtime?: Date | null;
-  sourcePlatform: SourcePlatform;
 }
 
-export async function discoverGeminiConversations(
+export async function discoverGeminiTranscripts(
   baseDir: string,
-  options: DiscoverGeminiOptions,
+  options: DiscoverGeminiTranscriptsOptions = {},
 ): Promise<DiscoveredGeminiFile[]> {
   const found: DiscoveredGeminiFile[] = [];
   const minMtimeMs = options.minimumMtime?.getTime() ?? null;
@@ -21,8 +23,9 @@ export async function discoverGeminiConversations(
   const baseStat = await statFile(baseDir);
   if (!baseStat.exists) return found;
 
-  const glob = new Bun.Glob(GEMINI_CONVERSATIONS_GLOB);
-  for await (const relativePath of glob.scan({ cwd: baseDir, onlyFiles: true })) {
+  // dot:true REQUIRED — transcripts live under the hidden .system_generated/ segment.
+  const glob = new Bun.Glob(GEMINI_TRANSCRIPT_GLOB);
+  for await (const relativePath of glob.scan({ cwd: baseDir, onlyFiles: true, dot: true })) {
     const sourcePath = join(baseDir, relativePath);
     const stat = await statFile(sourcePath);
     if (!stat.exists) continue;
@@ -34,7 +37,8 @@ export async function discoverGeminiConversations(
       inode: Number(stat.inode),
       sizeBytes: stat.size,
       lastModifiedMs: stat.mtimeMs,
-      sourcePlatform: options.sourcePlatform,
+      sourcePlatform: ANTIGRAVITY_IDE_PLATFORM,
+      conversationId: geminiConversationIdFromPath(sourcePath),
     });
   }
 

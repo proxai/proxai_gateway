@@ -15,6 +15,7 @@ export interface CursorCollectorContext {
   gatewayVersion: string;
   maxDecompressedBytes: number;
   logger?: MinimalLogger;
+  excludedProjects?: readonly string[];
 }
 
 export interface CursorCollectorResult {

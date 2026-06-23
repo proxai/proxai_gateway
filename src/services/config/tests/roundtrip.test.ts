@@ -36,6 +36,7 @@ const fullConfig: GatewayConfig = {
     uploadMaxBatchesPerSec: 5,
     uploadMaxBytesPerMinute: 50 * 1024 * 1024,
     uploadBackoffOn429Multiplier: 2,
+    excludedProjects: [],
   },
   logging: {
     level: 'info',
@@ -68,4 +69,17 @@ test('writeConfigToFile -> loadConfigFromFile round-trips through disk', async (
   await writeConfigToFile(fullConfig, filePath);
   const loaded = await loadConfigFromFile(filePath);
   expect(loaded).toEqual(fullConfig);
+});
+
+test('excluded_projects round-trips through serialize -> load', () => {
+  const cfg: GatewayConfig = {
+    ...fullConfig,
+    capture: { ...fullConfig.capture, excludedProjects: ['/Users/me/secret', '~/p'] },
+  };
+  const restored = loadConfigFromString(serializeConfig(cfg));
+  expect(restored.capture.excludedProjects).toEqual(['/Users/me/secret', '~/p']);
+});
+
+test('empty excluded_projects is omitted from the serialized TOML', () => {
+  expect(serializeConfig(fullConfig)).not.toContain('excluded_projects');
 });

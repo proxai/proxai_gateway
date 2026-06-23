@@ -12,9 +12,13 @@ import { applyRedaction } from 'services/redaction';
 import {
   CURSOR_BODY_COMPRESSION,
   CURSOR_BODY_FORMAT,
+  CURSOR_KEY_PREFIX_AGENT_KV_BLOB,
+  CURSOR_KEY_PREFIX_BUBBLE,
+  CURSOR_KEY_PREFIX_COMPOSER,
   CURSOR_SOURCE_APP,
   CURSOR_SOURCE_KIND,
 } from 'sources/cursor/cursor.constants.ts';
+import type { CursorGlobalExclusionPlan } from 'sources/cursor/exclusion.ts';
 import type {
   CursorCollectorContext,
   CursorCollectorResult,
@@ -37,6 +41,7 @@ export interface ProcessRowsInput {
   currentPageCount: number;
   finalWatermarkEnd: number;
   result: CursorCollectorResult;
+  exclusionPlan?: CursorGlobalExclusionPlan;
 }
 
 export function isAgentKvConversationBlob(value: string): boolean {
@@ -169,8 +174,27 @@ export function trimCursorRowValue(key: string, value: string): string {
   return value;
 }
 
+/** True if a captured global-DB row belongs to an excluded composer (composerData/bubble) or is an excluded-only blob. */
+export function isRowExcludedByPlan(key: string, plan: CursorGlobalExclusionPlan): boolean {
+  if (key.startsWith(CURSOR_KEY_PREFIX_COMPOSER)) {
+    return plan.excludedComposerIds.has(key.slice(CURSOR_KEY_PREFIX_COMPOSER.length));
+  }
+  if (key.startsWith(CURSOR_KEY_PREFIX_BUBBLE)) {
+    const composerId = key.split(':')[1] ?? '';
+    return plan.excludedComposerIds.has(composerId);
+  }
+  if (!key.startsWith(CURSOR_KEY_PREFIX_AGENT_KV_BLOB)) return false;
+  return plan.blobsToDrop.has(key.slice(CURSOR_KEY_PREFIX_AGENT_KV_BLOB.length));
+}
+
 export function processRows(input: ProcessRowsInput): void {
-  const filteredRows = input.rows.filter((row) => {
+  const plan = input.exclusionPlan;
+  const exclusionFilteredRows =
+    plan && (plan.excludedComposerIds.size > 0 || plan.blobsToDrop.size > 0)
+      ? input.rows.filter((row) => !isRowExcludedByPlan(row.key, plan))
+      : input.rows;
+
+  const filteredRows = exclusionFilteredRows.filter((row) => {
     if (row.key.startsWith('bubbleId:')) {
       try {
         const parsed = JSON.parse(row.value);

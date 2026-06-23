@@ -27,6 +27,8 @@ export interface CaptureConfig {
   uploadMaxBatchesPerSec: number;
   uploadMaxBytesPerMinute: number;
   uploadBackoffOn429Multiplier: number;
+  /** Project folders whose chats are paused (not captured) across all sources; backfills on removal. */
+  excludedProjects: string[];
   maxDecompressedBytes?: number;
 }
 

@@ -16,6 +16,7 @@ export interface ClaudeCodeCollectorContext {
   maxDecompressedBytes: number;
   logger?: MinimalLogger;
   desktopCliSessionIds?: ReadonlySet<string>;
+  excludedProjects?: readonly string[];
 }
 
 export interface ClaudeCodeCollectorResult {

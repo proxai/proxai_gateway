@@ -130,6 +130,29 @@ test('aggregates per-file collect errors into result.errors', async () => {
   expect(result.errors.length).toBeGreaterThan(0);
 });
 
+test('forwards excludedProjects so an excluded workspace folder pauses capture (no batch)', async () => {
+  // Per-workspace DB maps 1:1 to its sibling workspace.json folder. An excluded prefix → pause.
+  // Without the poller forwarding ctx.excludedProjects, this workspace would capture a batch.
+  const wsDbPath = await seedDb('workspaceStorage/secretws/state.vscdb', [
+    { key: 'composerData:secret', value: JSON.stringify({ _v: 13 }) },
+  ]);
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(
+    join(wsDbPath, '..', 'workspace.json'),
+    JSON.stringify({ folder: 'file:///Users/me/secret' }),
+  );
+  const poller = makeCursorSourcePoller({ baseDir: dir });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+    excludedProjects: ['/Users/me/secret'],
+  });
+  expect(result.filesProcessed).toBe(1);
+  expect(result.capturedBatches).toBe(0);
+  expect(countByStatus(buffer).pending).toBe(0);
+});
+
 test('minimumMtimeOverride applies a floor on a fresh buffer', async () => {
   const oldPath = await seedDb('workspaceStorage/old/state.vscdb', [
     { key: 'composerData:abc', value: JSON.stringify({ _v: 13 }) },

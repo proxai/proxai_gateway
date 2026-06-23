@@ -1,0 +1,163 @@
+import { fileUriToPath } from 'services/exclusion/cursor-folder.ts';
+
+const MAX_BYTES = 8 * 1024 * 1024;
+interface R {
+  buf: Buffer;
+  pos: number;
+  ok: boolean;
+}
+function varint(r: R): number {
+  let res = 0;
+  let sh = 0;
+  let n = 0;
+  while (r.pos < r.buf.length) {
+    const b = r.buf[r.pos] ?? 0;
+    r.pos++;
+    n++;
+    res += (b & 0x7f) * 2 ** sh;
+    if (!(b & 0x80)) return res;
+    sh += 7;
+    if (n >= 10) {
+      r.ok = false;
+      return 0;
+    }
+  }
+  r.ok = false;
+  return 0;
+}
+/** Yield (fieldNumber, payloadBytes) for every length-delimited (wiretype 2) field; skip others. */
+function* fields(buf: Buffer): Generator<[number, Buffer]> {
+  const r: R = { buf, pos: 0, ok: true };
+  while (r.pos < buf.length) {
+    const tag = varint(r);
+    if (!r.ok) return;
+    const field = tag >>> 3;
+    const wt = tag & 7;
+    if (wt === 2) {
+      const len = varint(r);
+      if (!r.ok) return;
+      const start = r.pos;
+      const end = start + len;
+      if (len < 0 || end > buf.length) return;
+      r.pos = end;
+      yield [field, buf.subarray(start, end)];
+    } else if (wt === 0) {
+      varint(r);
+      if (!r.ok) return;
+    } else if (wt === 1) {
+      r.pos += 8;
+      if (r.pos > buf.length) return;
+    } else if (wt === 5) {
+      r.pos += 4;
+      if (r.pos > buf.length) return;
+    } else return;
+  }
+}
+function rootFolder(rootBytes: Buffer): string | null {
+  for (const [f, payload] of fields(rootBytes)) {
+    if (f === 1 || f === 2) {
+      const p = fileUriToPath(payload.toString('utf8'));
+      if (p !== null) return p;
+    }
+  }
+  return null;
+}
+
+function decodeEntry(entry: Buffer, map: Map<string, string[]>): void {
+  let uuid: string | null = null;
+  const folders: string[] = [];
+  for (const [f, payload] of fields(entry)) {
+    if (f === 1 && uuid === null) uuid = payload.toString('utf8');
+    else if (f === 2) {
+      const roots: string[] = [];
+      let primary: string | null = null;
+      for (const [mf, mpayload] of fields(payload)) {
+        if (mf === 9) {
+          const rt = rootFolder(mpayload);
+          if (rt) roots.push(rt);
+        } else if (mf === 17 && primary === null) {
+          // Defensive fallback: real Antigravity data always carries field 9, so this
+          // field-17 ('primary') path is never exercised against observed buffers.
+          primary = rootFolder(mpayload);
+        }
+      }
+      if (roots.length > 0) folders.push(...roots);
+      else if (primary !== null) folders.push(primary);
+    }
+  }
+  if (uuid !== null && uuid.length > 0) {
+    // Merge (not overwrite) when a UUID appears in more than one entry, so no folder identity for an
+    // excluded conversation is dropped — the exclusion gate needs the full set of mapped folders.
+    const existing = map.get(uuid);
+    if (existing) existing.push(...folders);
+    else map.set(uuid, folders);
+  }
+}
+
+/**
+ * Decode the agyhub index into `{ folders, complete }`.
+ *
+ * `complete` here is ONLY the top-level-frame signal: it is `true` when the TOP-LEVEL field walk
+ * consumed exactly every byte with no malformed bail (`r.ok && r.pos === bytes.length`). A
+ * partial/mid-write `.pb` yields `complete: false`. This does NOT by itself catch a present-but-
+ * empty or zero-entry index — that fail-CLOSED backstop is layered in loadAgyhubFolderMap, which
+ * downgrades a 0-byte read or a zero-entry decode to `complete: false`. Treat this function as the
+ * raw decoder; rely on loadAgyhubFolderMap for the full fail-closed contract.
+ *
+ * Empty input returns `{ folders: new Map(), complete: true }` (the empty buffer parses trivially);
+ * loadAgyhubFolderMap overrides that to `complete: false`. Garbage / oversized input yields an
+ * empty map with `complete: false`.
+ */
+export function decodeAgyhubFolders(bytes: Buffer): {
+  folders: Map<string, string[]>;
+  complete: boolean;
+} {
+  const map = new Map<string, string[]>();
+  if (!Buffer.isBuffer(bytes) || bytes.length === 0) {
+    return { folders: map, complete: true };
+  }
+  if (bytes.length > MAX_BYTES) return { folders: map, complete: false };
+
+  // Drive the top-level walk with an explicit reader we own, so after the loop we can read
+  // r.pos / r.ok to decide completeness. Nested entry/meta/root decodes still use fields().
+  const r: R = { buf: bytes, pos: 0, ok: true };
+  while (r.pos < bytes.length) {
+    const tag = varint(r);
+    if (!r.ok) break;
+    const field = tag >>> 3;
+    const wt = tag & 7;
+    if (wt === 2) {
+      const len = varint(r);
+      if (!r.ok) break;
+      const start = r.pos;
+      const end = start + len;
+      if (len < 0 || end > bytes.length) {
+        r.ok = false;
+        break;
+      }
+      r.pos = end;
+      if (field === 1) decodeEntry(bytes.subarray(start, end), map);
+    } else if (wt === 0) {
+      varint(r);
+      if (!r.ok) break;
+    } else if (wt === 1) {
+      r.pos += 8;
+      if (r.pos > bytes.length) {
+        r.ok = false;
+        break;
+      }
+    } else if (wt === 5) {
+      r.pos += 4;
+      if (r.pos > bytes.length) {
+        r.ok = false;
+        break;
+      }
+    } else {
+      r.ok = false;
+      break;
+    }
+  }
+
+  const complete = r.ok && r.pos === bytes.length;
+  return { folders: map, complete };
+}

@@ -1,16 +1,19 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { mkdtemp } from 'node:fs/promises';
-import { homedir, tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { afterEach, beforeEach, expect, it } from 'bun:test';
+import { mkdir, mkdtemp, utimes } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { rmRecursive } from 'core/io/fs';
-import { sha256Hex } from 'core/utils';
-import { discoverGeminiConversations } from 'sources/gemini';
-import {
-  defaultGeminiCliConversationsDir,
-  defaultGeminiIdeConversationsDir,
-  geminiPlatformForRoot,
-} from 'sources/gemini/source-platform.ts';
+import { discoverGeminiTranscripts } from 'sources/gemini';
+
+/** Seed <dir>/brain/<uuid>/.system_generated/logs/transcript.jsonl, return its absolute path. */
+async function seedTranscript(baseDir: string, uuid: string): Promise<string> {
+  const transcriptDir = join(baseDir, 'brain', uuid, '.system_generated', 'logs');
+  await mkdir(transcriptDir, { recursive: true });
+  const path = join(transcriptDir, 'transcript.jsonl');
+  await Bun.write(path, '{"source":"USER_EXPLICIT","type":"USER_INPUT","text":"hi"}\n');
+  return path;
+}
 
 let dir: string;
 
@@ -22,60 +25,42 @@ afterEach(async () => {
   await rmRecursive(dir);
 }, 30_000);
 
-test('discovers .db files and ignores other extensions', async () => {
-  await Bun.write(join(dir, 'a.db'), 'one');
-  await Bun.write(join(dir, 'b.db'), 'two');
-  await Bun.write(join(dir, 'history.jsonl'), 'noise');
-  await Bun.write(join(dir, 'notes.txt'), 'noise');
+it('discovers transcript.jsonl under the hidden .system_generated dir (dot:true)', async () => {
+  // Build <dir>/brain/conv-uuid-1/.system_generated/logs/transcript.jsonl
+  // The .system_generated segment is a hidden (dotted) directory — Bun.Glob skips it unless dot:true.
+  const transcriptDir = join(dir, 'brain', 'conv-uuid-1', '.system_generated', 'logs');
+  await mkdir(transcriptDir, { recursive: true });
+  await Bun.write(join(transcriptDir, 'transcript.jsonl'), '{"role":"user","text":"hello"}\n');
 
-  const files = await discoverGeminiConversations(dir, { sourcePlatform: 'antigravity-cli' });
-  expect(files.length).toBe(2);
-  for (const file of files) {
-    expect(file.sourcePath.endsWith('.db')).toBe(true);
-    expect(file.sourcePathHash).toBe(sha256Hex(file.sourcePath));
-    expect(file.sourcePlatform).toBe('antigravity-cli');
-    expect(Number.isFinite(file.inode)).toBe(true);
-  }
-});
-
-test('tags discovered files with the requested ide platform', async () => {
-  await Bun.write(join(dir, 'c.db'), 'x');
-  const files = await discoverGeminiConversations(dir, { sourcePlatform: 'antigravity-ide' });
-  expect(files.length).toBe(1);
+  const files = await discoverGeminiTranscripts(dir, { minimumMtime: null });
+  expect(files).toHaveLength(1);
+  expect(files[0]?.conversationId).toBe('conv-uuid-1');
   expect(files[0]?.sourcePlatform).toBe('antigravity-ide');
+  expect(files[0]?.sourcePath.endsWith('transcript.jsonl')).toBe(true);
 });
 
-test('respects the minimumMtime filter', async () => {
-  await Bun.write(join(dir, 'recent.db'), 'x');
+it('skips transcripts older than minimumMtime, keeps newer ones', async () => {
+  const oldPath = await seedTranscript(dir, 'conv-old');
+  const newPath = await seedTranscript(dir, 'conv-new');
 
-  const future = new Date(Date.now() + 60_000);
-  const excluded = await discoverGeminiConversations(dir, {
-    minimumMtime: future,
-    sourcePlatform: 'antigravity-cli',
-  });
-  expect(excluded.length).toBe(0);
+  const oldEpoch = new Date('2024-01-01T00:00:00Z');
+  const newEpoch = new Date();
+  await utimes(oldPath, oldEpoch, oldEpoch);
+  await utimes(newPath, newEpoch, newEpoch);
 
-  const included = await discoverGeminiConversations(dir, {
-    minimumMtime: new Date(0),
-    sourcePlatform: 'antigravity-cli',
-  });
-  expect(included.length).toBe(1);
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const files = await discoverGeminiTranscripts(dir, { minimumMtime: cutoff });
+  expect(files).toHaveLength(1);
+  expect(files[0]?.sourcePath).toBe(newPath);
+  expect(files[0]?.conversationId).toBe('conv-new');
 });
 
-test('returns an empty list for a missing base directory', async () => {
-  const files = await discoverGeminiConversations(join(dir, 'does-not-exist'), {
-    sourcePlatform: 'antigravity-cli',
-  });
+it('returns [] when minimumMtime is in the future (everything is older)', async () => {
+  const path = await seedTranscript(dir, 'conv-recent');
+  const now = new Date();
+  await utimes(path, now, now);
+
+  const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  const files = await discoverGeminiTranscripts(dir, { minimumMtime: future });
   expect(files).toEqual([]);
-});
-
-test('default conversation dirs are home-relative and platform mapping is stable', () => {
-  const home = homedir();
-  const cliExpected = join(home, '.gemini', 'antigravity-cli', 'conversations');
-  const ideExpected = join(home, '.gemini', 'antigravity-ide', 'conversations');
-  expect(defaultGeminiCliConversationsDir()).toBe(cliExpected);
-  expect(defaultGeminiIdeConversationsDir()).toBe(ideExpected);
-  expect(defaultGeminiCliConversationsDir().includes(`${sep}.gemini${sep}`)).toBe(true);
-  expect(geminiPlatformForRoot('cli')).toBe('antigravity-cli');
-  expect(geminiPlatformForRoot('ide')).toBe('antigravity-ide');
 });

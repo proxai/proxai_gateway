@@ -38,6 +38,9 @@ export function serializeConfig(config: GatewayConfig): string {
       Number.isFinite(config.capture.maxDecompressedBytes)
         ? { max_decompressed_bytes: config.capture.maxDecompressedBytes }
         : {}),
+      ...(config.capture.excludedProjects.length > 0
+        ? { excluded_projects: config.capture.excludedProjects }
+        : {}),
     },
     logging: {
       level: config.logging.level,

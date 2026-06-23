@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { Database } from 'bun:sqlite';
 import type { Database as SqliteDatabase } from 'bun:sqlite';
-import { mkdtemp } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -11,7 +11,6 @@ import { getCursor, openInMemoryBufferDb } from 'services/buffer';
 import { BODY_TARGET_DECOMPRESSED_BYTES } from 'services/contract';
 import { collectGeminiConversation } from 'sources/gemini';
 import type { DiscoveredGeminiFile, GeminiCollectorContext } from 'sources/gemini';
-import { concatBytes, msgField, strField, varintField } from 'sources/gemini/tests/proto-encode.ts';
 
 let dir: string;
 let buffer: SqliteDatabase;
@@ -27,85 +26,38 @@ afterEach(async () => {
 }, 30_000);
 
 const DECODER = new TextDecoder();
+const ENCODER = new TextEncoder();
 
-function ctx(b: SqliteDatabase): GeminiCollectorContext {
+function ctx(
+  b: SqliteDatabase,
+  extra: Partial<GeminiCollectorContext> = {},
+): GeminiCollectorContext {
   return {
     buffer: b,
     gatewayVersion: '@proxai/gateway 0.1.0',
     maxDecompressedBytes: BODY_TARGET_DECOMPRESSED_BYTES,
+    ...extra,
   };
 }
 
-function timestamp(seconds: number): Uint8Array {
-  return msgField(1, [varintField(1, seconds), varintField(2, 0)]);
-}
+// A real-shaped Antigravity transcript line: USER_EXPLICIT / MODEL / SYSTEM sources with
+// USER_INPUT / PLANNER_RESPONSE / CONVERSATION_HISTORY types. NONE is user/assistant — the
+// claude-code isDialogueRecord filter would drop every one of these. Real transcripts use the
+// "source" key (not "origin"); capture is key-agnostic, so the fixtures mirror reality.
+const TRANSCRIPT_LINES = [
+  '{"source":"USER_EXPLICIT","type":"USER_INPUT","text":"fix the search bug"}',
+  '{"source":"MODEL","type":"PLANNER_RESPONSE","text":"Looking into it now."}',
+  '{"source":"SYSTEM","type":"CONVERSATION_HISTORY","summary":"prior turns"}',
+];
 
-function stepRef(cascadeId: string, idx: number): Uint8Array {
-  return msgField(20, [strField(1, 'traj-1'), varintField(2, idx), strField(4, cascadeId)]);
-}
-
-function userPayload(text: string): Uint8Array {
-  return concatBytes([
-    varintField(1, 14),
-    msgField(5, [timestamp(1781035381), varintField(3, 4), stepRef('cascade-1', 0)]),
-    msgField(19, [strField(2, text)]),
-  ]);
-}
-
-function toolPayload(): Uint8Array {
-  return concatBytes([
-    varintField(1, 21),
-    msgField(5, [
-      timestamp(1781035382),
-      varintField(3, 2),
-      msgField(4, [strField(2, 'run_command'), strField(3, '{"CommandLine":"ls"}')]),
-      stepRef('cascade-1', 1),
-    ]),
-  ]);
-}
-
-function assistantPayload(text: string): Uint8Array {
-  return concatBytes([
-    varintField(1, 23),
-    msgField(5, [timestamp(1781035383), varintField(3, 5), stepRef('cascade-1', 2)]),
-    msgField(30, [strField(4, text)]),
-  ]);
-}
-
-function metadataBlob(): Uint8Array {
-  return msgField(1, [
-    strField(1, 'file:///Users/me/repo'),
-    msgField(3, [strField(1, 'org/repo'), strField(2, 'git@github.com:org/repo.git')]),
-  ]);
-}
-
-interface MakeDbOptions {
-  userText?: string;
-  assistantText?: string;
-}
-
-async function makeGeminiDb(options: MakeDbOptions = {}): Promise<DiscoveredGeminiFile> {
-  const path = join(dir, 'cascade-1.db');
-  const db = new Database(path, { create: true });
-  db.run(
-    'CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, status INTEGER, step_payload BLOB)',
-  );
-  db.run(
-    'CREATE TABLE trajectory_meta (trajectory_id TEXT, cascade_id TEXT, trajectory_type INTEGER, source INTEGER)',
-  );
-  db.run('CREATE TABLE trajectory_metadata_blob (id TEXT, data BLOB)');
-
-  const insertStep = db.query(
-    'INSERT INTO steps (idx, step_type, status, step_payload) VALUES (?, ?, ?, ?)',
-  );
-  insertStep.run(0, 14, 3, userPayload(options.userText ?? 'fix the search bug'));
-  insertStep.run(1, 21, 3, toolPayload());
-  insertStep.run(2, 23, 3, assistantPayload(options.assistantText ?? 'All done.'));
-
-  db.query('INSERT INTO trajectory_meta VALUES (?, ?, ?, ?)').run('traj-1', 'cascade-1', 4, 17);
-  db.query('INSERT INTO trajectory_metadata_blob VALUES (?, ?)').run('main', metadataBlob());
-  db.close();
-
+async function makeTranscript(
+  lines: string[],
+  options: { trailingNewline?: boolean; conversationId?: string } = {},
+): Promise<DiscoveredGeminiFile> {
+  const path = join(dir, 'transcript.jsonl');
+  const trailingNewline = options.trailingNewline ?? true;
+  const content = lines.join('\n') + (trailingNewline ? '\n' : '');
+  await writeFile(path, content);
   const stat = await statFile(path);
   if (!stat.exists) throw new Error('file missing after write');
   return {
@@ -115,14 +67,18 @@ async function makeGeminiDb(options: MakeDbOptions = {}): Promise<DiscoveredGemi
     sizeBytes: stat.size,
     lastModifiedMs: stat.mtimeMs,
     sourcePlatform: 'antigravity-cli',
+    conversationId: options.conversationId ?? 'cascade-1',
   };
 }
 
 interface BatchRow {
   watermark_table: string | null;
+  watermark_kind: string;
   watermark_start: number;
   watermark_end: number;
+  source_app: string;
   source_platform: string | null;
+  source_kind: string;
   agent_schema_version: string;
   body_format: string;
   body: Uint8Array;
@@ -133,179 +89,296 @@ function readBatches(b: SqliteDatabase): BatchRow[] {
     .query<
       BatchRow,
       []
-    >('SELECT watermark_table, watermark_start, watermark_end, source_platform, agent_schema_version, body_format, body FROM upload_batches ORDER BY watermark_table ASC')
+    >('SELECT watermark_table, watermark_kind, watermark_start, watermark_end, source_app, source_platform, source_kind, agent_schema_version, body_format, body FROM upload_batches ORDER BY watermark_start ASC')
     .all();
 }
 
-function decodeBody(batch: BatchRow): unknown {
-  return JSON.parse(DECODER.decode(zstdDecompressSync(batch.body)));
+function cursorRow(file: DiscoveredGeminiFile): ReturnType<typeof getCursor> {
+  return getCursor(buffer, {
+    sourceApp: 'gemini',
+    sourcePathHash: file.sourcePathHash,
+    sourceInode: file.inode,
+    watermarkTable: null,
+  });
 }
 
-test('captures all three tables and emits decoded plaintext step rows', async () => {
-  const file = await makeGeminiDb();
+test('captures every complete line with no content filter (one jsonl/byte_range batch)', async () => {
+  const file = await makeTranscript(TRANSCRIPT_LINES);
   const result = await collectGeminiConversation(file, ctx(buffer));
 
   expect(result.errors).toEqual([]);
-  expect(result.capturedBatches).toBe(3);
+  expect(result.capturedBatches).toBe(1);
 
   const batches = readBatches(buffer);
-  const byTable = new Map(batches.map((b) => [b.watermark_table, b]));
+  expect(batches.length).toBe(1);
+  const batch = batches[0];
+  if (batch === undefined) throw new Error('missing batch');
 
-  const stepsBatch = byTable.get('steps');
-  expect(stepsBatch).toBeDefined();
-  if (stepsBatch === undefined) throw new Error('missing steps batch');
-  expect(stepsBatch.source_platform).toBe('antigravity-cli');
-  expect(stepsBatch.agent_schema_version).toBe('antigravity/1.0.0');
-  expect(stepsBatch.body_format).toBe('sqlite_rows_json');
-  expect(stepsBatch.watermark_start).toBe(0);
-  expect(stepsBatch.watermark_end).toBe(3);
+  expect(batch.source_app).toBe('gemini');
+  expect(batch.source_platform).toBe('antigravity-cli');
+  expect(batch.source_kind).toBe('jsonl_append');
+  expect(batch.body_format).toBe('jsonl');
+  expect(batch.watermark_kind).toBe('byte_range');
+  expect(batch.agent_schema_version).toBe('antigravity/2.0.0');
+  expect(batch.watermark_start).toBe(0);
 
-  const stepRows = decodeBody(stepsBatch);
-  expect(stepRows).toEqual([
-    {
-      idx: 0,
-      step_type: 14,
-      status: 3,
-      role: 'user',
-      text: 'fix the search bug',
-      tool_name: null,
-      tool_args_json: null,
-      iso_timestamp: new Date(1781035381 * 1000).toISOString(),
-      turn_id: null,
-      conversation_id: 'cascade-1',
-      model: null,
-      input_tokens: null,
-      output_tokens: null,
-      cache_read_input_tokens: null,
-      cache_creation_input_tokens: null,
-    },
-    {
-      idx: 1,
-      step_type: 21,
-      status: 3,
-      role: 'tool',
-      text: null,
-      tool_name: 'run_command',
-      tool_args_json: '{"CommandLine":"ls"}',
-      iso_timestamp: new Date(1781035382 * 1000).toISOString(),
-      turn_id: null,
-      conversation_id: 'cascade-1',
-      model: null,
-      input_tokens: null,
-      output_tokens: null,
-      cache_read_input_tokens: null,
-      cache_creation_input_tokens: null,
-    },
-    {
-      idx: 2,
-      step_type: 23,
-      status: 3,
-      role: 'assistant',
-      text: 'All done.',
-      tool_name: null,
-      tool_args_json: null,
-      iso_timestamp: new Date(1781035383 * 1000).toISOString(),
-      turn_id: null,
-      conversation_id: 'cascade-1',
-      model: null,
-      input_tokens: null,
-      output_tokens: null,
-      cache_read_input_tokens: null,
-      cache_creation_input_tokens: null,
-    },
-  ]);
+  // watermarkEnd covers exactly the complete-line bytes (the whole file, since it ends in \n).
+  const completeBytes = ENCODER.encode(TRANSCRIPT_LINES.join('\n') + '\n').byteLength;
+  expect(batch.watermark_end).toBe(completeBytes);
+
+  // No content filter: every line survives in the captured (redacted) body.
+  const bodyText = DECODER.decode(zstdDecompressSync(batch.body));
+  expect(bodyText).toContain('USER_INPUT');
+  expect(bodyText).toContain('PLANNER_RESPONSE');
+  expect(bodyText).toContain('CONVERSATION_HISTORY');
+
+  expect(cursorRow(file)?.watermarkEnd).toBe(completeBytes);
 });
 
-test('emits trajectory_meta and trajectory_metadata_blob rows per the wire contract', async () => {
-  const file = await makeGeminiDb();
-  await collectGeminiConversation(file, ctx(buffer));
-
-  const byTable = new Map(readBatches(buffer).map((b) => [b.watermark_table, b]));
-
-  const metaBatch = byTable.get('trajectory_meta');
-  if (metaBatch === undefined) throw new Error('missing trajectory_meta batch');
-  expect(decodeBody(metaBatch)).toEqual([
-    { idx: 1, trajectory_id: 'traj-1', cascade_id: 'cascade-1', trajectory_type: 4, source: 17 },
+test('captures a model/system-only transcript (no USER_INPUT)', async () => {
+  // Pins the "no user-presence gate": a transcript with zero USER_* lines still captures.
+  const file = await makeTranscript([
+    JSON.stringify({
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      step_index: 0,
+      content: 'Looking into it.',
+    }),
+    JSON.stringify({
+      source: 'SYSTEM',
+      type: 'CONVERSATION_HISTORY',
+      status: 'DONE',
+      step_index: 1,
+      content: null,
+    }),
   ]);
-
-  const blobBatch = byTable.get('trajectory_metadata_blob');
-  if (blobBatch === undefined) throw new Error('missing trajectory_metadata_blob batch');
-  expect(decodeBody(blobBatch)).toEqual([
-    { idx: 1, workspace_path: 'file:///Users/me/repo', git_remote: 'git@github.com:org/repo.git' },
-  ]);
+  const result = await collectGeminiConversation(file, ctx(buffer));
+  expect(result.capturedBatches).toBe(1);
 });
 
-test('advances the steps watermark and is idempotent on a second poll', async () => {
-  const file = await makeGeminiDb();
-  await collectGeminiConversation(file, ctx(buffer));
+test('capturedBytes equals the summed compressed batch body sizes', async () => {
+  const file = await makeTranscript(TRANSCRIPT_LINES);
+  const result = await collectGeminiConversation(file, ctx(buffer));
 
-  const cursor = getCursor(buffer, {
-    sourceApp: 'gemini',
-    sourcePathHash: file.sourcePathHash,
-    sourceInode: null,
-    watermarkTable: 'steps',
-  });
-  expect(cursor?.watermarkEnd).toBe(3);
-  expect(cursor?.consecutiveErrors).toBe(0);
+  expect(result.capturedBatches).toBe(1);
+  expect(result.capturedBytes).toBeGreaterThan(0);
+
+  const summedBodyBytes = readBatches(buffer).reduce((sum, b) => sum + b.body.byteLength, 0);
+  expect(result.capturedBytes).toBe(summedBodyBytes);
+});
+
+test('does nothing on a second poll with no new bytes', async () => {
+  const file = await makeTranscript(TRANSCRIPT_LINES);
+  await collectGeminiConversation(file, ctx(buffer));
 
   const second = await collectGeminiConversation(file, ctx(buffer));
   expect(second.capturedBatches).toBe(0);
   expect(second.errors).toEqual([]);
+  expect(readBatches(buffer).length).toBe(1);
 });
 
-test('redacts secrets in decoded user text before emitting (decode-before-redact)', async () => {
-  const secret = 'ghp_0123456789abcdefghijklmnopqrstuvwxyzAB';
-  const file = await makeGeminiDb({ userText: `please use my token ${secret} now` });
-  await collectGeminiConversation(file, ctx(buffer));
+test('holds back a trailing partial line; watermarkEnd is the last complete-line boundary', async () => {
+  const completeLine = TRANSCRIPT_LINES[0];
+  if (completeLine === undefined) throw new Error('fixture line missing');
+  // File ends WITHOUT a trailing newline: the second line is incomplete and must be held back.
+  const file = await makeTranscript([completeLine, '{"source":"MODEL","type":"PLANNER_'], {
+    trailingNewline: false,
+  });
 
-  const stepsBatch = readBatches(buffer).find((b) => b.watermark_table === 'steps');
-  if (stepsBatch === undefined) throw new Error('missing steps batch');
-  const bodyText = DECODER.decode(zstdDecompressSync(stepsBatch.body));
-  expect(bodyText).not.toContain(secret);
-  expect(bodyText).toContain('[REDACTED:github-pat]');
+  const result = await collectGeminiConversation(file, ctx(buffer));
+  expect(result.capturedBatches).toBe(1);
+
+  const batch = readBatches(buffer)[0];
+  if (batch === undefined) throw new Error('missing batch');
+
+  const completeBytes = ENCODER.encode(completeLine + '\n').byteLength;
+  expect(batch.watermark_end).toBe(completeBytes);
+
+  const bodyText = DECODER.decode(zstdDecompressSync(batch.body));
+  expect(bodyText).toContain('USER_INPUT');
+  expect(bodyText).not.toContain('PLANNER_'); // partial line excluded
+
+  expect(cursorRow(file)?.watermarkEnd).toBe(completeBytes);
 });
 
-test('records a per-table error and bumps that table cursor when one table read throws', async () => {
-  const file = await makeGeminiDb();
+test('PAUSE: an excluded folder for this conversation captures nothing and writes no cursor', async () => {
+  const file = await makeTranscript(TRANSCRIPT_LINES, { conversationId: 'cascade-secret' });
+  const agyhubFolders = new Map<string, string[]>([
+    ['cascade-secret', ['/Users/me/ok', '/Users/me/secret']],
+  ]);
 
-  const originalQuery = Database.prototype.query;
-  Database.prototype.query = function (this: SqliteDatabase, sql: string) {
-    if (sql.includes('FROM "steps" WHERE rowid >')) {
-      throw new Error('injected steps read failure');
-    }
-    return originalQuery.call(this, sql);
-  } as typeof Database.prototype.query;
+  const result = await collectGeminiConversation(
+    file,
+    ctx(buffer, { excludedProjects: ['/Users/me/secret'], agyhubFolders }),
+  );
 
-  let result;
-  try {
-    result = await collectGeminiConversation(file, ctx(buffer));
-  } finally {
-    Database.prototype.query = originalQuery;
+  expect(result.capturedBatches).toBe(0);
+  expect(result.errors).toEqual([]);
+  expect(readBatches(buffer).length).toBe(0);
+  // PAUSE means the byte watermark stays frozen: no cursor row written at all.
+  expect(cursorRow(file)).toBeNull();
+});
+
+test('FAIL CLOSED: agyhubComplete:false + active exclusions captures nothing and writes no cursor', async () => {
+  // A truncated/mid-write agyhub index means an excluded conversation may simply be absent from
+  // the partial map. The gate must pause even for a uuid that is not in the map at all.
+  const file = await makeTranscript(TRANSCRIPT_LINES, { conversationId: 'cascade-not-in-map' });
+  const agyhubFolders = new Map<string, string[]>([['cascade-other', ['/Users/me/whatever']]]);
+
+  const result = await collectGeminiConversation(
+    file,
+    ctx(buffer, {
+      excludedProjects: ['/Users/me/secret'],
+      agyhubFolders,
+      agyhubComplete: false,
+    }),
+  );
+
+  expect(result.capturedBatches).toBe(0);
+  expect(result.errors).toEqual([]);
+  expect(readBatches(buffer).length).toBe(0);
+  // Fail-closed PAUSE: no cursor row written, so it backfills next cycle once the index is whole.
+  expect(cursorRow(file)).toBeNull();
+});
+
+test('fail-open: unknown conversation folder under a non-empty exclusion list still captures', async () => {
+  const file = await makeTranscript(TRANSCRIPT_LINES, { conversationId: 'cascade-unknown' });
+  // conversationId absent from the folder map -> no folder identity -> fail open (capture).
+  const agyhubFolders = new Map<string, string[]>([['cascade-other', ['/Users/me/secret']]]);
+
+  const result = await collectGeminiConversation(
+    file,
+    ctx(buffer, { excludedProjects: ['/Users/me/secret'], agyhubFolders }),
+  );
+
+  expect(result.capturedBatches).toBe(1);
+  expect(result.errors).toEqual([]);
+  expect(readBatches(buffer).length).toBe(1);
+});
+
+test('fail-open: empty folder list for the conversation still captures', async () => {
+  const file = await makeTranscript(TRANSCRIPT_LINES, { conversationId: 'cascade-empty' });
+  const agyhubFolders = new Map<string, string[]>([['cascade-empty', []]]);
+
+  const result = await collectGeminiConversation(
+    file,
+    ctx(buffer, { excludedProjects: ['/Users/me/secret'], agyhubFolders }),
+  );
+
+  expect(result.capturedBatches).toBe(1);
+  expect(readBatches(buffer).length).toBe(1);
+});
+
+test('no complete line yet (single unterminated line): captures nothing, writes no cursor', async () => {
+  // The only content is a trailing partial line (no newline). readJsonlRange holds it back, so the
+  // complete-line byte range is empty -> early return before any scan/insert/setCursor.
+  const file = await makeTranscript(['{"source":"MODEL","type":"PLANNER_'], {
+    trailingNewline: false,
+  });
+  const result = await collectGeminiConversation(file, ctx(buffer));
+
+  expect(result.capturedBatches).toBe(0);
+  expect(result.errors).toEqual([]);
+  expect(readBatches(buffer).length).toBe(0);
+  // No complete bytes scanned -> no cursor row written (watermark stays at 0 for backfill).
+  expect(cursorRow(file)).toBeNull();
+});
+
+test('all complete lines unparseable: advances the cursor with no batch (no re-scan loop)', async () => {
+  // Every complete line is non-JSON junk. kept is empty, but the bytes were fully scanned, so the
+  // cursor advances over them (without a batch) so we never re-scan the same junk forever.
+  const file = await makeTranscript(['this is not json', 'neither is this', '<<<garbage>>>']);
+  const result = await collectGeminiConversation(file, ctx(buffer));
+
+  expect(result.capturedBatches).toBe(0);
+  expect(result.errors).toEqual([]);
+  expect(readBatches(buffer).length).toBe(0);
+  // Cursor advanced over the scanned (junk) bytes = the full file (it ends in \n).
+  expect(cursorRow(file)?.watermarkEnd).toBe(file.sizeBytes);
+});
+
+test('splits an oversized transcript into contiguous byte_range batches covering every line', async () => {
+  // Many fat lines + a small decompressed cap forces splitJsonlAtBoundary to chunk. Mirrors the
+  // claude-code contiguity test: batches must tile [0, size) with no gap or overlap.
+  const total = 20;
+  const markers: string[] = [];
+  const linesArr: string[] = [];
+  for (let i = 0; i < total; i++) {
+    const marker = `gemini-line-marker-${i}`;
+    markers.push(marker);
+    linesArr.push(
+      JSON.stringify({
+        source: 'MODEL',
+        type: 'PLANNER_RESPONSE',
+        marker,
+        noise: randomBytes(1000).toString('base64'),
+      }),
+    );
   }
+  const file = await makeTranscript(linesArr);
 
-  expect(result.errors.some((e) => e.table === 'steps')).toBe(true);
-  expect(result.capturedBatches).toBe(2);
+  const result = await collectGeminiConversation(
+    file,
+    ctx(buffer, { maxDecompressedBytes: 15_000 }),
+  );
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
 
-  const stepsCursor = getCursor(buffer, {
-    sourceApp: 'gemini',
-    sourcePathHash: file.sourcePathHash,
-    sourceInode: null,
-    watermarkTable: 'steps',
-  });
-  expect(stepsCursor?.consecutiveErrors).toBe(1);
+  const batches = readBatches(buffer);
+  expect(batches.length).toBe(result.capturedBatches);
 
-  const metaCursor = getCursor(buffer, {
-    sourceApp: 'gemini',
-    sourcePathHash: file.sourcePathHash,
-    sourceInode: null,
-    watermarkTable: 'trajectory_meta',
-  });
-  expect(metaCursor?.consecutiveErrors).toBe(0);
+  let prevEnd = 0;
+  let allBodies = '';
+  for (const batch of batches) {
+    expect(batch.watermark_start).toBe(prevEnd);
+    expect(batch.watermark_end).toBeGreaterThan(batch.watermark_start);
+    prevEnd = batch.watermark_end;
+    allBodies += DECODER.decode(zstdDecompressSync(batch.body));
+  }
+  const first = batches[0];
+  if (first === undefined) throw new Error('no batches');
+  expect(first.watermark_start).toBe(0);
+  expect(prevEnd).toBe(file.sizeBytes);
+  expect(cursorRow(file)?.watermarkEnd).toBe(file.sizeBytes);
+
+  // Every kept line is present exactly once across the batch bodies.
+  for (const marker of markers) {
+    expect(allBodies).toContain(marker);
+  }
 });
 
-test('bumps consecutive_errors when the source database is corrupt', async () => {
-  const path = join(dir, 'broken.db');
-  await Bun.write(path, 'this is not a sqlite database at all');
+test('multi-slice with interleaved unparseable lines: kept-vs-raw byte mapping stays contiguous', async () => {
+  // Locks the F5 raw-byte offset behaviour: unparseable lines are dropped from the body but their
+  // bytes still belong to the scanned range, so the final batch end + cursor still reach size, and
+  // batch boundaries remain contiguous. An invalid-UTF8 line is included to exercise the raw split.
+  const markers: string[] = [];
+  const parts: string[] = [];
+  for (let i = 0; i < 20; i++) {
+    const marker = `keep-marker-${i}`;
+    markers.push(marker);
+    parts.push(
+      JSON.stringify({
+        source: 'MODEL',
+        type: 'PLANNER_RESPONSE',
+        marker,
+        noise: randomBytes(1000).toString('base64'),
+      }),
+    );
+    // Interleave junk: a non-JSON line dropped by the parse-guard but still inside the byte range.
+    if (i % 3 === 0) parts.push('this is not json at all');
+  }
+  // Build the file with a raw invalid-UTF8 byte (0xff) embedded on its own line.
+  const path = join(dir, 'transcript.jsonl');
+  const head = Buffer.from(parts.join('\n') + '\n', 'utf8');
+  const junkLine = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('\n', 'utf8')]);
+  const tailMarker = 'keep-marker-tail';
+  markers.push(tailMarker);
+  const tail = Buffer.from(
+    JSON.stringify({ source: 'USER_EXPLICIT', type: 'USER_INPUT', marker: tailMarker }) + '\n',
+    'utf8',
+  );
+  await writeFile(path, Buffer.concat([head, junkLine, tail]));
   const stat = await statFile(path);
   if (!stat.exists) throw new Error('file missing after write');
   const file: DiscoveredGeminiFile = {
@@ -315,108 +388,52 @@ test('bumps consecutive_errors when the source database is corrupt', async () =>
     sizeBytes: stat.size,
     lastModifiedMs: stat.mtimeMs,
     sourcePlatform: 'antigravity-cli',
+    conversationId: 'cascade-junk',
   };
 
-  const result = await collectGeminiConversation(file, ctx(buffer));
-  expect(result.errors.length).toBeGreaterThan(0);
+  const result = await collectGeminiConversation(
+    file,
+    ctx(buffer, { maxDecompressedBytes: 15_000 }),
+  );
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
 
-  const cursor = getCursor(buffer, {
-    sourceApp: 'gemini',
-    sourcePathHash: file.sourcePathHash,
-    sourceInode: null,
-    watermarkTable: null,
-  });
-  expect(cursor?.consecutiveErrors).toBe(1);
+  const batches = readBatches(buffer);
+  let prevEnd = 0;
+  let allBodies = '';
+  for (const batch of batches) {
+    expect(batch.watermark_start).toBe(prevEnd);
+    prevEnd = batch.watermark_end;
+    allBodies += DECODER.decode(zstdDecompressSync(batch.body));
+  }
+  // Final boundary + cursor reach the full file size even though junk lines were dropped.
+  expect(prevEnd).toBe(file.sizeBytes);
+  expect(cursorRow(file)?.watermarkEnd).toBe(file.sizeBytes);
+  // Every parseable line survived; the junk text did not.
+  for (const marker of markers) {
+    expect(allBodies).toContain(marker);
+  }
+  expect(allBodies).not.toContain('this is not json at all');
 });
 
-async function makeLargeGeminiDb(count: number): Promise<DiscoveredGeminiFile> {
-  const path = join(dir, 'cascade-large.db');
-  const db = new Database(path, { create: true });
-  db.run(
-    'CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, status INTEGER, step_payload BLOB)',
-  );
-  db.run(
-    'CREATE TABLE trajectory_meta (trajectory_id TEXT, cascade_id TEXT, trajectory_type INTEGER, source INTEGER)',
-  );
-  db.run('CREATE TABLE trajectory_metadata_blob (id TEXT, data BLOB)');
-  const insertStep = db.query(
-    'INSERT INTO steps (idx, step_type, status, step_payload) VALUES (?, ?, ?, ?)',
-  );
-  const largeBlob = new Uint8Array(1024);
-  for (let i = 0; i < count; i += 1) {
-    insertStep.run(i, 14, 3, largeBlob);
-  }
-  db.query('INSERT INTO trajectory_meta VALUES (?, ?, ?, ?)').run('traj-1', 'cascade-1', 4, 17);
-  db.query('INSERT INTO trajectory_metadata_blob VALUES (?, ?)').run('main', metadataBlob());
-  db.close();
-  const stat = await statFile(path);
-  if (!stat.exists) throw new Error('file missing after write');
-  return {
-    sourcePath: path,
-    sourcePathHash: sha256Hex(path),
-    inode: Number(stat.inode),
-    sizeBytes: stat.size,
-    lastModifiedMs: stat.mtimeMs,
-    sourcePlatform: 'antigravity-cli',
-  };
-}
-
-test('vacuum convergence and advance tests', async () => {
-  const file = await makeLargeGeminiDb(200);
-  const res1 = await collectGeminiConversation(file, ctx(buffer));
-  expect(res1.capturedBatches).toBeGreaterThan(0);
-  const baseCursor = getCursor(buffer, {
-    sourceApp: 'gemini',
-    sourcePathHash: file.sourcePathHash,
-    sourceInode: null,
-    watermarkTable: 'trajectory_meta',
-  });
-  expect(baseCursor).not.toBeNull();
-  const db1 = new Database(file.sourcePath);
-  db1.run('DELETE FROM steps');
-  db1.run('VACUUM');
-  db1.close();
-  const res2 = await collectGeminiConversation(file, ctx(buffer));
-  expect(res2.capturedBatches).toBeGreaterThan(0);
-  const gen1Hash = sha256Hex(`${file.sourcePath}#gen=1`);
-  const gen1Cursor = getCursor(buffer, {
-    sourceApp: 'gemini',
-    sourcePathHash: gen1Hash,
-    sourceInode: null,
-    watermarkTable: 'trajectory_meta',
-  });
-  expect(gen1Cursor).not.toBeNull();
-  const res3 = await collectGeminiConversation(file, ctx(buffer));
-  expect(res3.capturedBatches).toBe(0);
-  const gen2CursorMissing = getCursor(buffer, {
-    sourceApp: 'gemini',
-    sourcePathHash: sha256Hex(`${file.sourcePath}#gen=2`),
-    sourceInode: null,
-    watermarkTable: 'trajectory_meta',
-  });
-  expect(gen2CursorMissing).toBeNull();
-  const db2 = new Database(file.sourcePath);
-  db2.run('INSERT INTO steps (idx, step_type, status, step_payload) VALUES (?, ?, ?, ?)', [
-    10,
-    14,
-    1,
-    userPayload('more text'),
+test('oversized single line surfaces a decompressed-slice error and does NOT advance the cursor', async () => {
+  // Mirrors the claude-code oversized test: one line bigger than maxDecompressedBytes cannot be
+  // split, so the collector throws OversizedDecompressedSliceError and the cursor stays frozen.
+  const giant = 'x'.repeat(20_000);
+  const file = await makeTranscript([
+    JSON.stringify({ source: 'MODEL', type: 'PLANNER_RESPONSE', text: giant }),
   ]);
-  db2.close();
-  const res4 = await collectGeminiConversation(file, ctx(buffer));
-  expect(res4.capturedBatches).toBe(1);
-  const db3 = new Database(file.sourcePath);
-  db3.run('DELETE FROM steps WHERE idx = 10');
-  db3.run('VACUUM');
-  db3.close();
-  const res5 = await collectGeminiConversation(file, ctx(buffer));
-  expect(res5.capturedBatches).toBeGreaterThan(0);
-  const gen2Hash = sha256Hex(`${file.sourcePath}#gen=2`);
-  const gen2Cursor = getCursor(buffer, {
-    sourceApp: 'gemini',
-    sourcePathHash: gen2Hash,
-    sourceInode: null,
-    watermarkTable: 'trajectory_meta',
-  });
-  expect(gen2Cursor).not.toBeNull();
+
+  const result = await collectGeminiConversation(
+    file,
+    ctx(buffer, { maxDecompressedBytes: 15_000 }),
+  );
+  expect(result.errors.length).toBeGreaterThanOrEqual(1);
+  const firstError = result.errors[0];
+  if (firstError === undefined) throw new Error('expected an error');
+  expect(firstError.reason).toMatch(/decompressed slice/);
+
+  expect(readBatches(buffer).length).toBe(0);
+  // The error path writes a cursor row with consecutiveErrors but watermarkEnd stays at 0 (no advance).
+  expect(cursorRow(file)?.watermarkEnd ?? 0).toBe(0);
 });

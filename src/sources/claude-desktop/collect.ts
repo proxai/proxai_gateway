@@ -1,6 +1,7 @@
 import { join, dirname } from 'node:path';
 import { statFile } from 'core/io/fs';
 import { readJsonlRange } from 'core/io/jsonl';
+import { isProjectExcluded } from 'services/exclusion';
 import {
   generateUuidV7,
   nowIsoUtc,
@@ -109,6 +110,27 @@ export async function collectClaudeDesktopFile(
 
     const sessionDir = dirname(file.sourcePath);
     const { userMap, assistantMap } = await loadCliMetadataMap(sessionDir);
+
+    const excluded = context.excludedProjects ?? [];
+    if (excluded.length > 0) {
+      // A desktop audit.jsonl can correlate records to MULTIPLE project cwds. Pause the whole
+      // file if ANY correlated cwd is excluded (all-or-nothing PAUSE, matching the per-file
+      // model) — checking only the first cwd would leak an excluded project's later records.
+      for (const meta of [...userMap.values(), ...assistantMap.values()]) {
+        if (meta.cwd.trim().length > 0 && isProjectExcluded(meta.cwd, excluded)) {
+          context.logger?.info(
+            {
+              event: 'capture.project_excluded',
+              source_app: CLAUDE_DESKTOP_SOURCE_APP,
+              project: meta.cwd,
+            },
+            'paused capture for excluded project',
+          );
+          // PAUSE: no setCursor -> watermark frozen -> backfills if un-excluded.
+          return result;
+        }
+      }
+    }
 
     const rawText = DECODER.decode(range.bytes);
     const lines = rawText.split('\n');

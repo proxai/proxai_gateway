@@ -171,6 +171,7 @@ async function writeConfig(installSource: InstallSource = 'github_release'): Pro
       uploadMaxBatchesPerSec: DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
       uploadMaxBytesPerMinute: DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
       uploadBackoffOn429Multiplier: DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
+      excludedProjects: [],
     },
     logging: { level: 'info', logDir: logDirPath },
     staleBinary: {
@@ -438,6 +439,7 @@ test('per-platform smoke: stop + unregister called regardless of platform shim',
           uploadMaxBatchesPerSec: DEFAULT_UPLOAD_MAX_BATCHES_PER_SEC,
           uploadMaxBytesPerMinute: DEFAULT_UPLOAD_MAX_BYTES_PER_MINUTE,
           uploadBackoffOn429Multiplier: DEFAULT_UPLOAD_BACKOFF_ON_429_MULTIPLIER,
+          excludedProjects: [],
         },
         logging: { level: 'info', logDir: isolatedLogDir },
         staleBinary: {

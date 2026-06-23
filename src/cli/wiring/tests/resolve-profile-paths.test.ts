@@ -38,6 +38,7 @@ function sampleConfig(bufferPath: string, logDir: string): GatewayConfig {
       uploadMaxBatchesPerSec: 1,
       uploadMaxBytesPerMinute: 1,
       uploadBackoffOn429Multiplier: 2,
+      excludedProjects: [],
     },
     logging: { level: 'info', logDir },
     staleBinary: { warnAfterDays: 30, pauseAfterDays: 60 },

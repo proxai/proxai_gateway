@@ -6,13 +6,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { zstdDecompressSync, requireDefined } from 'core/utils';
-import {
-  countByStatus,
-  markBatchDelivered,
-  nextPendingBatch,
-  openInMemoryBufferDb,
-} from 'services/buffer';
+import { requireDefined } from 'core/utils';
+import { markBatchDelivered, nextPendingBatch, openInMemoryBufferDb } from 'services/buffer';
 import { makeCodexSourcePoller } from 'services/polling/poll-codex.ts';
 
 let dir: string;
@@ -64,8 +59,6 @@ async function seedStateDb(
   return path;
 }
 
-const DECODER = new TextDecoder();
-
 test('returns zero result when base dir missing', async () => {
   const poller = makeCodexSourcePoller({ baseDir: join(dir, 'missing') });
   const result = await poller({
@@ -75,40 +68,6 @@ test('returns zero result when base dir missing', async () => {
   });
   expect(result.filesProcessed).toBe(0);
   expect(result.capturedBatches).toBe(0);
-});
-
-test('processes state then rollouts and threads cli_version through', async () => {
-  await seedStateDb(
-    'state_3.sqlite',
-    [{ id: 't1', cli_version: 'codex-9.9.9' }],
-    [{ thread_id: 't1', position: 0, name: 'Read' }],
-  );
-  await seedRollout(
-    'sessions/2026/05/05/rollout-001.jsonl',
-    '{"type":"session_meta","payload":{}}\n',
-  );
-  const poller = makeCodexSourcePoller({ baseDir: dir });
-  const result = await poller({
-    buffer,
-    gatewayVersion: 'gw-0.1',
-    maxDecompressedBytes: 9 * 1024 * 1024,
-  });
-
-  expect(result.filesProcessed).toBeGreaterThanOrEqual(2);
-  expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
-  expect(countByStatus(buffer).pending).toBeGreaterThanOrEqual(2);
-
-  let foundRolloutWithVersion = false;
-  let row = nextPendingBatch(buffer);
-  while (row !== null) {
-    if (row.sourceKind === 'jsonl_append' && row.agentSchemaVersion === 'codex-9.9.9') {
-      foundRolloutWithVersion = true;
-    }
-    DECODER.decode(zstdDecompressSync(row.body));
-    markBatchDelivered(buffer, row, { idempotentOnServer: false });
-    row = nextPendingBatch(buffer);
-  }
-  expect(foundRolloutWithVersion).toBe(true);
 });
 
 test('rollouts use default version when no state file exists', async () => {
@@ -127,6 +86,24 @@ test('rollouts use default version when no state file exists', async () => {
   expect(row.agentSchemaVersion).toBe('unknown');
 });
 
+test('pollCodex does not capture Codex state — only the rollout produces batches', async () => {
+  await seedStateDb('state_1.sqlite', [{ id: 'tA', cli_version: 'codex-1.0.0' }]);
+  await seedRollout(
+    'sessions/2026/05/05/rollout-001.jsonl',
+    '{"type":"session_meta","payload":{}}\n',
+  );
+  const poller = makeCodexSourcePoller({ baseDir: dir });
+  const result = await poller({
+    buffer,
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
+  // State sqlite is no longer captured; only the rollout becomes a batch.
+  expect(result.capturedBatches).toBe(1);
+  const row = requireDefined(nextPendingBatch(buffer));
+  expect(row.sourceKind).toBe('jsonl_append'); // rollout, not the sqlite_table_snapshot state
+});
+
 test('captures discover errors when baseDir is a regular file', async () => {
   const filePath = join(dir, 'is-a-file');
   await writeFile(filePath, 'not a directory');
@@ -139,7 +116,7 @@ test('captures discover errors when baseDir is a regular file', async () => {
   expect(result.errors.length).toBeGreaterThan(0);
 });
 
-test('captures state-side discover error when baseDir is invalid', async () => {
+test('captures discover error when baseDir is invalid', async () => {
   const baseDir = `${join(dir, 'invalid')}${String.fromCharCode(0)}subdir`;
   const poller = makeCodexSourcePoller({ baseDir });
   const result = await poller({
@@ -148,20 +125,6 @@ test('captures state-side discover error when baseDir is invalid', async () => {
     maxDecompressedBytes: 9 * 1024 * 1024,
   });
   expect(result.errors.length).toBeGreaterThan(0);
-});
-
-test('copies per-table state errors into pollCodex result.errors', async () => {
-  await seedStateDb('state_3.sqlite', [{ id: 't1', cli_version: 'codex-test' }]);
-  const closedBuffer = openInMemoryBufferDb();
-  closedBuffer.close();
-  const poller = makeCodexSourcePoller({ baseDir: dir });
-  const result = await poller({
-    buffer: closedBuffer,
-    gatewayVersion: 'gw-0.1',
-    maxDecompressedBytes: 9 * 1024 * 1024,
-  });
-  expect(result.errors.length).toBeGreaterThan(0);
-  expect(result.errors.some((e) => e.table !== undefined)).toBe(true);
 });
 
 test('copies per-rollout collect errors into pollCodex result.errors', async () => {
@@ -197,15 +160,23 @@ test('captures per-rollout collect errors in result.errors', async () => {
   expect(result.filesProcessed).toBeGreaterThanOrEqual(0);
 });
 
-test('state-only run still inserts batches from threads table', async () => {
-  await seedStateDb('state_1.sqlite', [{ id: 'tA', cli_version: 'codex-1.0.0' }]);
+test('forwards excludedProjects so an excluded rollout cwd pauses capture (no batch)', async () => {
+  // Codex resolves cwd from the session_meta payload.cwd. An excluded prefix → collector pauses.
+  // Without the poller forwarding ctx.excludedProjects, this rollout would capture a batch.
+  await seedRollout(
+    'sessions/2026/05/05/rollout-secret.jsonl',
+    '{"type":"session_meta","payload":{"cwd":"/Users/me/secret"}}\n',
+  );
   const poller = makeCodexSourcePoller({ baseDir: dir });
   const result = await poller({
     buffer,
     gatewayVersion: 'gw-0.1',
     maxDecompressedBytes: 9 * 1024 * 1024,
+    excludedProjects: ['/Users/me/secret'],
   });
-  expect(result.capturedBatches).toBeGreaterThanOrEqual(1);
+  expect(result.filesProcessed).toBe(1);
+  expect(result.capturedBatches).toBe(0);
+  expect(nextPendingBatch(buffer)).toBeNull();
 });
 
 test('minimumMtimeOverride applies a floor on a fresh buffer', async () => {

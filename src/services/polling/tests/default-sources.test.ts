@@ -27,8 +27,7 @@ test('builds five sources named claude-code, cursor, codex, claude-desktop, gemi
     cursorBaseDir: join(dir, 'cur'),
     codexBaseDir: join(dir, 'cx'),
     claudeDesktopBaseDir: join(dir, 'cd'),
-    geminiCliBaseDir: join(dir, 'gem-cli'),
-    geminiIdeBaseDir: join(dir, 'gem-ide'),
+    geminiBaseDir: join(dir, 'gem'),
   });
   expect(sources).toHaveLength(5);
   expect(sources.map((s) => s.name)).toEqual([
@@ -46,8 +45,7 @@ test('each source poll returns no-op result for empty base dirs', async () => {
     cursorBaseDir: join(dir, 'cur'),
     codexBaseDir: join(dir, 'cx'),
     claudeDesktopBaseDir: join(dir, 'cd'),
-    geminiCliBaseDir: join(dir, 'gem-cli'),
-    geminiIdeBaseDir: join(dir, 'gem-ide'),
+    geminiBaseDir: join(dir, 'gem'),
   });
   for (const s of sources) {
     const result = await s.poll({

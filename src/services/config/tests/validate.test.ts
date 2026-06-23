@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 
 import { ValidationError } from 'core/utils';
+import { loadConfigFromString } from 'services/config/loader.ts';
 import {
   DEFAULT_BUFFER_SOFT_PAUSE_BYTES,
   DEFAULT_BUFFER_SOFT_RESUME_BYTES,
@@ -241,4 +242,49 @@ test('camelCase output mirrors snake_case input', () => {
   expect(result.account.hostId).toBe('01HZ-host-id');
   expect(result.account.installedAt).toBe('2026-04-28T22:30:00Z');
   expect(result.account.installSource).toBe('bun');
+});
+
+const BASE = `
+[account]
+api_key = "k"
+user_id = "u"
+host_id = "h"
+installed_at = "2026-01-01T00:00:00.000Z"
+install_source = "github_release"
+[backend]
+ingest_url = "http://localhost/v1/raw_records"
+[capture]
+buffer_path = "/tmp/b.db"
+[logging]
+log_dir = "/tmp/logs"
+[stale_binary]
+`;
+
+test('excluded_projects defaults to [] when absent', () => {
+  expect(loadConfigFromString(BASE).capture.excludedProjects).toEqual([]);
+});
+
+test('excluded_projects parses + trims a string array', () => {
+  // Inline into BASE's existing [capture] table — a SECOND [capture] table makes smol-toml throw.
+  const text = BASE.replace(
+    'buffer_path = "/tmp/b.db"',
+    'buffer_path = "/tmp/b.db"\nexcluded_projects = ["  /Users/me/a  ", "~/b"]',
+  );
+  expect(loadConfigFromString(text).capture.excludedProjects).toEqual(['/Users/me/a', '~/b']);
+});
+
+test('excluded_projects throws when not an array', () => {
+  const text = BASE.replace(
+    'buffer_path = "/tmp/b.db"',
+    'buffer_path = "/tmp/b.db"\nexcluded_projects = "x"',
+  );
+  expect(() => loadConfigFromString(text)).toThrow(/excluded_projects must be an array/);
+});
+
+test('excluded_projects throws on a non-string entry', () => {
+  const text = BASE.replace(
+    'buffer_path = "/tmp/b.db"',
+    'buffer_path = "/tmp/b.db"\nexcluded_projects = [1]',
+  );
+  expect(() => loadConfigFromString(text)).toThrow(/excluded_projects\[0\] must be a string/);
 });

@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -83,6 +84,51 @@ afterEach(async () => {
   if (profileRoot !== undefined) {
     await rmRecursive(profileRoot);
     profileRoot = undefined;
+  }
+});
+
+test('buildRunDeps: binds loadExcludedProjects reading config.toml [capture].excluded_projects', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'proxai-run-deps-exclude-'));
+  try {
+    const configFilePath = join(dir, 'config.toml');
+    await writeFile(configFilePath, '[capture]\nexcluded_projects = ["/Users/me/secret"]\n');
+    const ctrl = new AbortController();
+    const deps = buildRunDeps({
+      config: cfg,
+      abortSignal: ctrl.signal,
+      binaryPath: '/bin/p',
+      exitProcess: () => {},
+      profileCtx: { ...prodCtx, configFilePath },
+    });
+    expect(typeof deps.loadExcludedProjects).toBe('function');
+    expect(await deps.loadExcludedProjects?.()).toEqual(['/Users/me/secret']);
+  } finally {
+    await rmRecursive(dir);
+  }
+});
+
+test('buildRunDeps: a failed read falls back to the LAST successful read, not the startup list', async () => {
+  // cfg.capture.excludedProjects (startup) is []. After a successful read of
+  // ['/from-file'], a subsequent unreadable config.toml must fall back to
+  // ['/from-file'] (last-good), NOT [] (startup) — else a runtime `exclude`
+  // would transiently leak on a read error.
+  const dir = await mkdtemp(join(tmpdir(), 'proxai-run-deps-lastgood-'));
+  try {
+    const configFilePath = join(dir, 'config.toml');
+    await writeFile(configFilePath, '[capture]\nexcluded_projects = ["/from-file"]\n');
+    const ctrl = new AbortController();
+    const deps = buildRunDeps({
+      config: cfg,
+      abortSignal: ctrl.signal,
+      binaryPath: '/bin/p',
+      exitProcess: () => {},
+      profileCtx: { ...prodCtx, configFilePath },
+    });
+    expect(await deps.loadExcludedProjects?.()).toEqual(['/from-file']); // seeds last-good
+    await writeFile(configFilePath, 'this = = is not toml'); // next read fails
+    expect(await deps.loadExcludedProjects?.()).toEqual(['/from-file']); // last-good, not []
+  } finally {
+    await rmRecursive(dir);
   }
 });
 

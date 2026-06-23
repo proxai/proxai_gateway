@@ -51,6 +51,60 @@ test('handleInspect: claude-code telemetry record filtering', async () => {
   expect(result.telemetryRawBytes).toBeLessThan(result.totalBytes);
 });
 
+test('handleInspect: gemini counts every parseable line as telemetry (MODEL/SYSTEM included)', async () => {
+  // Antigravity lines are USER_EXPLICIT/MODEL/SYSTEM — none are claude-code user/assistant, so the
+  // claude-code arm would report telemetryRecordCount=0 on the consent surface while capture ships
+  // everything. The gemini arm must count EVERY non-empty parseable line (keep-all, mirroring the
+  // collector), so a MODEL/SYSTEM-only transcript still reports a non-zero telemetry count.
+  const transcriptDir = join(dir, 'brain', 'conv-uuid-1', '.system_generated', 'logs');
+  await mkdir(transcriptDir, { recursive: true });
+  const lines = [
+    JSON.stringify({ source: 'MODEL', type: 'PLANNER_RESPONSE', text: 'looking into it' }),
+    JSON.stringify({ source: 'SYSTEM', type: 'CONVERSATION_HISTORY', summary: 'prior turns' }),
+    'not valid json at all', // parse-guard drops it: counts toward recordCount? no — totalLines only on parse
+  ];
+  await writeFile(join(transcriptDir, 'transcript.jsonl'), lines.join('\n') + '\n');
+
+  const result = await handleInspect('gemini', {
+    baseDir: dir,
+    captureSubAgents: false,
+    priorCursors: [],
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
+
+  expect(result.filesProcessed).toBe(1);
+  // Every non-empty parseable line is telemetry, even with zero USER_* lines.
+  expect(result.telemetryRecordCount).toBe(2);
+  expect(result.telemetryRawBytes).toBeGreaterThan(0);
+  expect(result.telemetryCompressedBytes).toBeGreaterThan(0);
+  // No USER_EXPLICIT/USER_INPUT line -> zero prompts.
+  expect(result.promptCount).toBe(0);
+});
+
+test('handleInspect: gemini promptCount increments on USER_EXPLICIT/USER_INPUT lines', async () => {
+  const transcriptDir = join(dir, 'brain', 'conv-uuid-2', '.system_generated', 'logs');
+  await mkdir(transcriptDir, { recursive: true });
+  const lines = [
+    JSON.stringify({ source: 'USER_EXPLICIT', type: 'USER_INPUT', text: 'fix the bug' }),
+    JSON.stringify({ source: 'MODEL', type: 'PLANNER_RESPONSE', text: 'on it' }),
+    // USER_EXPLICIT but NOT USER_INPUT -> telemetry, but not a prompt.
+    JSON.stringify({ source: 'USER_EXPLICIT', type: 'TOOL_RESULT', text: 'output' }),
+  ];
+  await writeFile(join(transcriptDir, 'transcript.jsonl'), lines.join('\n') + '\n');
+
+  const result = await handleInspect('gemini', {
+    baseDir: dir,
+    captureSubAgents: false,
+    priorCursors: [],
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
+
+  expect(result.telemetryRecordCount).toBe(3);
+  expect(result.promptCount).toBe(1);
+});
+
 test('handleInspect: codex telemetry record filtering', async () => {
   const rolloutDir = join(dir, 'sessions', '2026', '05', '21');
   await mkdir(rolloutDir, { recursive: true });

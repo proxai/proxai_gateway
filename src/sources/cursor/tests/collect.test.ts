@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import type { Database as SqliteDatabase } from 'bun:sqlite';
 import { randomBytes } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,6 +14,7 @@ import {
   countQuarantined,
   deleteBatch,
   getCursor,
+  getMetadata,
   nextPendingBatch,
   openInMemoryBufferDb,
   setCursor,
@@ -26,6 +28,7 @@ import {
 } from 'services/contract';
 import { buildCursorSelectRowsSql, collectCursorFile, selectCursorSql } from 'sources/cursor';
 import type { CursorCollectorContext, DiscoveredCursorFile } from 'sources/cursor';
+import { CURSOR_SOURCE_APP } from 'sources/cursor/cursor.constants.ts';
 
 let dir: string;
 let buffer: SqliteDatabase;
@@ -762,4 +765,196 @@ test('vacuum convergence and advance tests for Cursor', async () => {
     watermarkTable: null,
   });
   expect(gen2Cursor).not.toBeNull();
+});
+
+// Helper: a per-workspace state.vscdb with a sibling workspace.json, under the `dir` fixture.
+// Its path contains `/workspaceStorage/`, so isCursorGlobalDb() returns false → per-workspace gate.
+async function makeWorkspaceDb(folder: string, hash = 'abc123'): Promise<DiscoveredCursorFile> {
+  const wsDir = join(dir, 'workspaceStorage', hash);
+  mkdirSync(wsDir, { recursive: true });
+  writeFileSync(join(wsDir, 'workspace.json'), JSON.stringify({ folder: `file://${folder}` }));
+  const dbPath = join(wsDir, 'state.vscdb');
+  const db = new Database(dbPath, { create: true });
+  db.run('CREATE TABLE cursorDiskKV (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)');
+  db.run('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)', [
+    'bubbleId:c1:b1',
+    JSON.stringify({ type: 1, text: 'hello world', bubbleId: 'b1' }),
+  ]);
+  db.close();
+  const stat = await statFile(dbPath);
+  return {
+    sourcePath: dbPath,
+    sourcePathHash: sha256Hex(dbPath),
+    inode: 0,
+    sizeBytes: stat.exists ? stat.size : 4096,
+    lastModifiedMs: Date.now(),
+  };
+}
+
+test('per-workspace gate: excluded workspace captures nothing and does NOT advance the cursor', async () => {
+  const file = await makeWorkspaceDb('/Users/me/secret-proj');
+  const exclusionCtx: CursorCollectorContext = {
+    buffer,
+    gatewayVersion: 'gw-test',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+    excludedProjects: ['/Users/me/secret-proj'],
+  };
+  const result = await collectCursorFile(file, exclusionCtx);
+  expect(result.capturedBatches).toBe(0);
+  expect(
+    getCursor(buffer, {
+      sourceApp: CURSOR_SOURCE_APP,
+      sourcePathHash: file.sourcePathHash,
+      sourceInode: null,
+      watermarkTable: null,
+    }),
+  ).toBeNull(); // PAUSE: no cursor written
+});
+
+test('per-workspace gate: non-excluded workspace captures normally', async () => {
+  const file = await makeWorkspaceDb('/Users/me/ok-proj');
+  const exclusionCtx: CursorCollectorContext = {
+    buffer,
+    gatewayVersion: 'gw-test',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+    excludedProjects: ['/Users/me/secret-proj'],
+  };
+  const result = await collectCursorFile(file, exclusionCtx);
+  expect(result.capturedBatches).toBeGreaterThan(0);
+});
+
+// Helper: a global state.vscdb (ItemTable + cursorDiskKV) under the `dir` fixture.
+// Its path contains `/globalStorage/`, so isCursorGlobalDb() returns true.
+async function makeGlobalDbFile(opts: {
+  headers: Array<{ composerId: string; folder: string }>;
+  rows: Array<{ key: string; value: string }>;
+}): Promise<DiscoveredCursorFile> {
+  const gsDir = join(dir, 'globalStorage');
+  mkdirSync(gsDir, { recursive: true });
+  const dbPath = join(gsDir, 'state.vscdb');
+  const db = new Database(dbPath, { create: true });
+  db.run('CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)');
+  db.run('CREATE TABLE cursorDiskKV (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)');
+  db.run('INSERT INTO ItemTable (key, value) VALUES (?, ?)', [
+    'composer.composerHeaders',
+    JSON.stringify({
+      allComposers: opts.headers.map((h) => ({
+        composerId: h.composerId,
+        workspaceIdentifier: { uri: { external: `file://${h.folder}` } },
+      })),
+    }),
+  ]);
+  const insert = db.prepare('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)');
+  for (const r of opts.rows) insert.run(r.key, r.value);
+  db.close();
+  const stat = await statFile(dbPath);
+  return {
+    sourcePath: dbPath,
+    sourcePathHash: sha256Hex(dbPath),
+    inode: 0,
+    sizeBytes: stat.exists ? stat.size : 8192,
+    lastModifiedMs: Date.now(),
+  };
+}
+
+test('backfill: un-exclude re-scans from rowid 0, and fingerprint commits only after success (no double-reset)', async () => {
+  const file = await makeGlobalDbFile({
+    headers: [{ composerId: 'web1', folder: '/Users/me/web' }],
+    rows: [
+      { key: 'composerData:web1', value: JSON.stringify({ conversationState: '~' }) },
+      {
+        key: 'bubbleId:web1:b1',
+        value: JSON.stringify({ type: 1, text: 'hello from web', bubbleId: 'b1' }),
+      },
+    ],
+  });
+  const fpKey = `cursor_exclusion_set:${file.sourcePathHash}`;
+  const baseCtx: CursorCollectorContext = {
+    buffer,
+    gatewayVersion: 'gw',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  };
+
+  // Cycle 1: web excluded → its rows dropped, watermark advances, fingerprint stored.
+  await collectCursorFile(file, { ...baseCtx, excludedProjects: ['/Users/me/web'] });
+  expect(getMetadata(buffer, fpKey)).not.toBeNull();
+
+  // Cycle 2: web un-excluded → removal detected → re-scan from 0 → bubble backfilled.
+  const c2 = await collectCursorFile(file, { ...baseCtx, excludedProjects: [] });
+  expect(c2.capturedBatches).toBeGreaterThan(0);
+
+  // The backfilled batch must actually contain the previously-excluded content.
+  const decoder = new TextDecoder();
+  let backfilled = '';
+  for (let b = nextPendingBatch(buffer); b !== null; b = nextPendingBatch(buffer)) {
+    backfilled += decoder.decode(zstdDecompressSync(b.body));
+    deleteBatch(buffer, b.captureId);
+  }
+  expect(backfilled).toContain('hello from web');
+
+  // Cycle 3: still un-excluded, nothing removed → no second reset, nothing new.
+  // Proves the fingerprint was persisted on cycle 2's success.
+  const c3 = await collectCursorFile(file, { ...baseCtx, excludedProjects: [] });
+  expect(c3.capturedBatches).toBe(0);
+});
+
+test('backfill re-keys to a fresh source_path_hash so the original stream never regresses', async () => {
+  // Mixed global DB: an excluded composer (rowids 1-2) + a non-excluded one (rowids 3-4).
+  const file = await makeGlobalDbFile({
+    headers: [
+      { composerId: 'secretC', folder: '/Users/me/secret' },
+      { composerId: 'okC', folder: '/Users/me/ok' },
+    ],
+    rows: [
+      { key: 'composerData:secretC', value: JSON.stringify({ conversationState: '~' }) },
+      {
+        key: 'bubbleId:secretC:b1',
+        value: JSON.stringify({ type: 1, text: 'secret', bubbleId: 'b1' }),
+      },
+      { key: 'composerData:okC', value: JSON.stringify({ conversationState: '~' }) },
+      {
+        key: 'bubbleId:okC:b2',
+        value: JSON.stringify({ type: 1, text: 'public', bubbleId: 'b2' }),
+      },
+    ],
+  });
+  const baseCtx: CursorCollectorContext = {
+    buffer,
+    gatewayVersion: 'gw',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  };
+
+  // Cycle 1: /Users/me/secret excluded → okC's rows ship under the ORIGINAL hash (watermarkStart=3).
+  await collectCursorFile(file, { ...baseCtx, excludedProjects: ['/Users/me/secret'] });
+  // Cycle 2: un-exclude → the backfill must ship under a NEW hash, never regressing the original.
+  await collectCursorFile(file, { ...baseCtx, excludedProjects: [] });
+
+  const batches: { hash: string; start: number; end: number }[] = [];
+  for (let b = nextPendingBatch(buffer); b !== null; b = nextPendingBatch(buffer)) {
+    batches.push({ hash: b.sourcePathHash, start: b.watermarkStart, end: b.watermarkEnd });
+    deleteBatch(buffer, b.captureId);
+  }
+
+  // The backfill batch (watermarkStart=1) lands under a DIFFERENT source_path_hash.
+  const backfill = requireDefined(
+    batches.find((x) => x.start === 1),
+    'backfill batch at watermarkStart=1',
+  );
+  expect(backfill.hash).not.toBe(file.sourcePathHash);
+
+  // Contract invariant (08_BACKEND_CONTRACT §6.3): per source_path_hash, batches never overlap.
+  const byHash = new Map<string, { start: number; end: number }[]>();
+  for (const x of batches) {
+    const arr = byHash.get(x.hash) ?? [];
+    arr.push({ start: x.start, end: x.end });
+    byHash.set(x.hash, arr);
+  }
+  for (const ranges of byHash.values()) {
+    const sorted = ranges.toSorted((a, b) => a.start - b.start);
+    for (let i = 1; i < sorted.length; i++) {
+      const cur = requireDefined(sorted[i], 'range');
+      const prev = requireDefined(sorted[i - 1], 'prev range');
+      expect(cur.start).toBeGreaterThanOrEqual(prev.end);
+    }
+  }
 });

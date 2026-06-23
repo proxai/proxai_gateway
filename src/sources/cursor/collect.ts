@@ -6,9 +6,21 @@ import {
   getCursor,
   getCursorWithFallback,
   getHighestGenerationPath,
+  getMetadata,
   setCursor,
+  setMetadata,
 } from 'services/buffer';
+import { METADATA_KEYS } from 'services/buffer/buffer.constants.ts';
 import { SUB_AGENT_CAPTURE_BY_SOURCE } from 'services/config/sub-agent-flags';
+import { isProjectExcluded } from 'services/exclusion';
+import {
+  buildCursorGlobalExclusionPlan,
+  exclusionEntriesRemoved,
+  isCursorGlobalDb,
+  normalizeExclusionSet,
+  resolveCursorWorkspaceFolder,
+} from 'sources/cursor/exclusion.ts';
+import type { CursorGlobalExclusionPlan } from 'sources/cursor/exclusion.ts';
 import {
   CURSOR_DISK_KV_TABLE,
   CURSOR_KEY_PREFIX_AGENT_KV_BLOB,
@@ -76,6 +88,26 @@ export async function collectCursorFile(
         return result;
       }
 
+      const excluded = context.excludedProjects ?? [];
+
+      // Per-workspace DB: the whole file maps to one folder (sibling workspace.json).
+      // PAUSE on exclusion — return without advancing the watermark (backfills on un-exclude).
+      if (excluded.length > 0 && !isCursorGlobalDb(file.sourcePath)) {
+        const folder = resolveCursorWorkspaceFolder(file.sourcePath);
+        if (folder !== null && isProjectExcluded(folder, excluded)) {
+          context.logger?.info(
+            {
+              event: 'capture.project_excluded',
+              source_app: CURSOR_SOURCE_APP,
+              source_path_hash: file.sourcePathHash,
+              project: folder,
+            },
+            'paused capture for excluded cursor workspace',
+          );
+          return result; // PAUSE: no setCursor
+        }
+      }
+
       let effectiveSourcePath = file.sourcePath;
       try {
         effectiveSourcePath = getHighestGenerationPath(
@@ -124,7 +156,41 @@ export async function collectCursorFile(
         }
       }
 
-      const lastMaxRowid = (priorCursor?.watermarkEnd ?? 1) - 1;
+      // READ + DECIDE only — do NOT persist the fingerprint here. Persisting before the
+      // re-scan runs would let a throw mid-cycle PERMANENTLY lose the backfill (next cycle
+      // the new fingerprint hides the removal). Persist only after the cycle succeeds (below).
+      let exclusionBackfillReset = false;
+      let exclusionFpKey: string | null = null;
+      let exclusionFpValue: string | null = null;
+      if (isCursorGlobalDb(file.sourcePath)) {
+        exclusionFpKey = `${METADATA_KEYS.cursorExclusionSetPrefix}${effectiveSourcePathHash}`;
+        const current = normalizeExclusionSet(excluded);
+        exclusionFpValue = JSON.stringify(current);
+        const stored = getMetadata(context.buffer, exclusionFpKey);
+        if (exclusionEntriesRemoved(stored, current)) {
+          exclusionBackfillReset = true;
+          // Re-key the stream so the backfill ships under a FRESH source_path_hash.
+          // Resetting the watermark in place would overlap the already-shipped range for
+          // this hash → backend WatermarkRegressionError → the uploader discards the
+          // backfill batch (silent data loss; 08_BACKEND_CONTRACT §6.3). A new #gen path is
+          // a new file to the backend; nest dedups any re-sent rows by record id. Mirrors
+          // the vacuum re-key above.
+          effectiveSourcePath = nextGenerationSuffix(effectiveSourcePath);
+          effectiveSourcePathHash = sha256Hex(effectiveSourcePath);
+          priorCursor = null;
+          exclusionFpKey = `${METADATA_KEYS.cursorExclusionSetPrefix}${effectiveSourcePathHash}`;
+          context.logger?.info(
+            {
+              event: 'capture.exclusion_backfill_reset',
+              source_app: CURSOR_SOURCE_APP,
+              source_path_hash: effectiveSourcePathHash,
+            },
+            'exclusion entry removed; re-keying cursor global db via #gen to backfill',
+          );
+        }
+      }
+
+      const lastMaxRowid = exclusionBackfillReset ? 0 : (priorCursor?.watermarkEnd ?? 1) - 1;
       const rows = db.query<KvRow, [number]>(selectCursorSql(captureSubAgents)).all(lastMaxRowid);
 
       if (rows.length === 0) {
@@ -153,6 +219,9 @@ export async function collectCursorFile(
             consecutiveErrors: 0,
           });
         }
+        if (exclusionFpKey !== null && exclusionFpValue !== null) {
+          setMetadata(context.buffer, exclusionFpKey, exclusionFpValue);
+        }
         return result;
       }
 
@@ -166,6 +235,11 @@ export async function collectCursorFile(
       const lastRow = requireDefined(rows[rows.length - 1], 'last row');
       const finalWatermarkEnd = lastRow.rowid + 1;
 
+      let exclusionPlan: CursorGlobalExclusionPlan | undefined;
+      if (excluded.length > 0 && isCursorGlobalDb(file.sourcePath)) {
+        exclusionPlan = buildCursorGlobalExclusionPlan(db, excluded);
+      }
+
       processRows({
         rows: kvRows,
         context,
@@ -176,7 +250,12 @@ export async function collectCursorFile(
         currentPageCount,
         finalWatermarkEnd,
         result,
+        ...(exclusionPlan !== undefined && { exclusionPlan }),
       });
+
+      if (exclusionFpKey !== null && exclusionFpValue !== null) {
+        setMetadata(context.buffer, exclusionFpKey, exclusionFpValue);
+      }
     } finally {
       db.close();
     }

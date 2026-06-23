@@ -17,7 +17,7 @@ scenarios: ["Every task execution", "Writing code and tests", "Creating git comm
 - Helpers in `core/utils/assert.ts`: `requireDefined`, `requireString`, `requireNumber`, `requireRecord`, `isErrnoException`, `errnoCode`, `isRecord`. Use these instead of inline `!`, ad-hoc `typeof` checks, or `as` casts when narrowing `unknown` from external sources (HTTP bodies, `JSON.parse` output, Node error catches).
 - Use bun (`bun.lock` present); never npm/yarn/pnpm.
 - Versioning is **pure CalVer** (`YYYY.M.D`); never SemVer; same-day retries suffix with hyphen (e.g. `2026.5.8-1`).
-- Conventional Commits required; subjects ≤70 chars in imperative mood; no AI/Co-Authored-By trailers.
+- Conventional Commits required; subjects ≤70 chars in imperative mood; never add Co-Authored-By, Generated-with-Claude, or any AI/tool attribution (specifically including Claude, Antigravity, Gemini, Cursor, Codex, OpenAI, and other LLM/AI providers) to commits or PR descriptions.
 - Be decisive in technical communication; do not lecture or narrate verification steps.
 - For non-trivial fixes with design choices, write a 2-3-option plan and wait for explicit go before coding.
 - Brainstorm specs and implementation plans live in `.tmp/`; the repo's `docs/` folder is the canonical product documentation tree imported from `~/repos/proxai/docs/proxai-gateway/` and may be added to.

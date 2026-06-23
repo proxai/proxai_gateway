@@ -15,6 +15,7 @@ export interface SourcePollerContext {
   logger?: MinimalLogger;
 
   minimumMtimeOverride?: Date | null;
+  excludedProjects?: readonly string[];
 }
 
 export interface SourcePollerError {
@@ -65,6 +66,7 @@ export interface CaptureCycleContext {
   logger?: MinimalLogger;
   minimumMtimeOverride?: Date | null;
   loadDesktopCliSessionIds?: () => Promise<ReadonlySet<string>>;
+  loadExcludedProjects?: (logger?: MinimalLogger) => Promise<readonly string[]>;
 }
 
 export interface CaptureCycleResult {
@@ -155,6 +157,7 @@ export interface PollCycleContext {
 
   minimumMtimeOverride?: Date | null;
   loadDesktopCliSessionIds?: () => Promise<ReadonlySet<string>>;
+  loadExcludedProjects?: (logger?: MinimalLogger) => Promise<readonly string[]>;
 }
 
 export interface PollCycleResult {

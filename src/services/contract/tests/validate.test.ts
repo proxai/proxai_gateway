@@ -1,9 +1,10 @@
-import { expect, test } from 'bun:test';
+import { expect, it, test } from 'bun:test';
 
 import { ValidationError } from 'core/utils';
 import {
   BODY_MAX_COMPRESSED_BYTES,
   MAX_SAFE_WATERMARK,
+  SOURCE_VARIANTS,
   validateRawRecordDTO,
   type RawRecordDTO,
 } from 'services/contract';
@@ -400,4 +401,14 @@ test('rejects non-string body', () => {
 
 test('rejects body whose base64 length is not a multiple of 4', () => {
   expect(() => validateRawRecordDTO(claudeCodeDto({ body: 'abc' }))).toThrow(/body/);
+});
+
+it('gemini source variant is jsonl_append/jsonl/byte_range (no watermark table)', () => {
+  const v = SOURCE_VARIANTS.find((s) => s.sourceApp === 'gemini');
+  expect(v).toMatchObject({
+    sourceKind: 'jsonl_append',
+    bodyFormat: 'jsonl',
+    watermarkKind: 'byte_range',
+    watermarkTableRequired: false,
+  });
 });

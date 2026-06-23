@@ -6,7 +6,6 @@ import {
   VALID_BODY_COMPRESSIONS,
   VALID_BODY_FORMATS,
   VALID_CODEX_TABLES,
-  VALID_GEMINI_TABLES,
   VALID_SOURCE_APPS,
   VALID_SOURCE_KINDS,
   VALID_SOURCE_PLATFORMS,
@@ -132,8 +131,7 @@ function validateWatermark(wm: Record<string, unknown>, variant: SourceVariantSp
     if (typeof table !== 'string' || table.length === 0) {
       throw new ValidationError('watermark.table is required for sqlite_table_snapshot');
     }
-    const allowedTables: readonly string[] =
-      variant.sourceApp === 'gemini' ? VALID_GEMINI_TABLES : VALID_CODEX_TABLES;
+    const allowedTables: readonly string[] = VALID_CODEX_TABLES;
     if (!allowedTables.includes(table)) {
       throw new ValidationError(`watermark.table must be one of: ${allowedTables.join(', ')}`);
     }
