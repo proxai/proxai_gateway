@@ -27,6 +27,7 @@ import {
   deriveClaudeCodeSessionId,
   isDialogueRecord,
   claudeFirstText,
+  slimClaudeUsageRecord,
 } from 'sources/claude-code';
 import type { ClaudeCodeCollectorContext, DiscoveredClaudeCodeFile } from 'sources/claude-code';
 
@@ -871,4 +872,96 @@ test('pauses an excluded subagent transcript (top-level cwd is honored)', async 
     watermarkTable: null,
   });
   expect(cursor?.watermarkEnd ?? 0).toBe(0);
+});
+
+test('slimClaudeUsageRecord projects a usage-bearing tool_use record to a closed usage-only shape', () => {
+  const rec = {
+    parentUuid: '66',
+    type: 'assistant',
+    uuid: 'a-uuid',
+    sessionId: 's-id',
+    timestamp: '2026-01-01T00:00:03.000Z',
+    requestId: 'req_bbbb',
+    message: {
+      id: 'msg_bbbb',
+      model: 'claude-fake-1',
+      role: 'assistant',
+      content: [{ type: 'tool_use', id: 'toolu_a', name: 'Read', input: { file_path: '/tmp/x' } }],
+      stop_reason: 'tool_use',
+      usage: {
+        input_tokens: 3,
+        output_tokens: 4,
+        cache_creation_input_tokens: 100,
+        cache_read_input_tokens: 0,
+        service_tier: 'standard',
+        extraneous: 'DROP_ME',
+      },
+    },
+  };
+  expect(slimClaudeUsageRecord(rec)).toEqual({
+    type: 'assistant',
+    sessionId: 's-id',
+    uuid: 'a-uuid',
+    timestamp: '2026-01-01T00:00:03.000Z',
+    message: {
+      model: 'claude-fake-1',
+      usage: {
+        input_tokens: 3,
+        output_tokens: 4,
+        cache_creation_input_tokens: 100,
+        cache_read_input_tokens: 0,
+        service_tier: 'standard',
+      },
+    },
+  });
+});
+
+test('slimClaudeUsageRecord drops unknown usage fields (closed shape — no passthrough)', () => {
+  const slim = slimClaudeUsageRecord({
+    type: 'assistant',
+    sessionId: 's',
+    uuid: 'u',
+    message: { usage: { input_tokens: 5, junk: { huge: 'x'.repeat(99) } } },
+  });
+  expect(slim).toEqual({
+    type: 'assistant',
+    sessionId: 's',
+    uuid: 'u',
+    message: { usage: { input_tokens: 5 } },
+  });
+});
+
+test('slimClaudeUsageRecord returns null for records with no recoverable usage', () => {
+  expect(
+    slimClaudeUsageRecord({
+      type: 'user',
+      sessionId: 's',
+      uuid: 'u',
+      message: { content: [{ type: 'tool_result' }] },
+    }),
+  ).toBeNull();
+  expect(
+    slimClaudeUsageRecord({
+      type: 'assistant',
+      sessionId: 's',
+      uuid: 'u',
+      message: { model: '<synthetic>', usage: { input_tokens: 1 } },
+    }),
+  ).toBeNull();
+  expect(
+    slimClaudeUsageRecord({
+      type: 'assistant',
+      isApiErrorMessage: true,
+      sessionId: 's',
+      uuid: 'u',
+      message: { usage: { input_tokens: 1 } },
+    }),
+  ).toBeNull();
+  expect(
+    slimClaudeUsageRecord({ type: 'assistant', sessionId: 's', uuid: 'u', message: {} }),
+  ).toBeNull();
+  expect(
+    slimClaudeUsageRecord({ type: 'assistant', message: { usage: { input_tokens: 1 } } }),
+  ).toBeNull();
+  expect(slimClaudeUsageRecord(null)).toBeNull();
 });
