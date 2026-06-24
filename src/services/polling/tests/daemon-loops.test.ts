@@ -907,6 +907,18 @@ test('daemon loops log daemon.resumed on sleep overrun', async () => {
 
     ctxs.heartbeat.binaryPath = '/bin/gateway';
     ctxs.heartbeat.currentVersion = '1.0.0';
+    // Hermetic: stub the version-check fetch so the heartbeat cycle never hits the
+    // real network. Without this, runAutoUpgrade falls back to globalThis.fetch and
+    // hangs in a no-network env → the cycle never completes → heartbeatCount never
+    // reaches 2 → ctrl.abort() never fires → the test times out (5s). Worse, the
+    // timeout skips the `finally` below, leaking a far-future Date.now mock into the
+    // next test file (breaks heartbeat-cycle's throttle test under shared-process runs).
+    // Returning the current version (v1.0.0) means no upgrade is attempted.
+    ctxs.heartbeat.versionCheckFetch = async () =>
+      new Response(JSON.stringify({ tag_name: 'v1.0.0', assets: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
 
     let heartbeatCount = 0;
     let fakeNow = Date.now();
