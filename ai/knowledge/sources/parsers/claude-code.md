@@ -49,9 +49,10 @@ Only `type === 'user'` and `type === 'assistant'` rows survive, and only when:
   AND content contains no `tool_use` part.
 
 Everything else (synthetic prompts, tool plumbing, summaries, meta lines) is
-dropped before redaction so it never reaches the wire. `isDialogueRecord` accepts
-`parsed: unknown` and narrows it using type guards and checks, staying fully
-compliant with the global typescript type safety rules.
+dropped before redaction. **Exception:** usage-bearing `tool_use` assistant records
+are NOT lost — they ship as a slim, usage-only projection (see *Usage recovery (F1)*
+below). `isDialogueRecord` accepts `parsed: unknown` and narrows it using type guards
+and checks, staying fully compliant with the global typescript type safety rules.
 
 ## Usage recovery (F1) (`slimClaudeUsageRecord`, collect.ts)
 
