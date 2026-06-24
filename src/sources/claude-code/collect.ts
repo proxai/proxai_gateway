@@ -315,7 +315,15 @@ export async function collectClaudeCodeFile(
           kept.push({
             text: line,
             physicalEndOffset: lineEndOffset,
-          });
+          }); // visible dialogue, verbatim
+        } else {
+          // non-dialogue: recover usage-only records (tool_use calls), slimmed.
+          // physicalEndOffset stays the SOURCE line's end → watermark continuity holds
+          // (one kept entry per source line, identical to codex trimCodexRecord).
+          const slim = slimClaudeUsageRecord(parsed);
+          if (slim !== null) {
+            kept.push({ text: JSON.stringify(slim), physicalEndOffset: lineEndOffset });
+          }
         }
       } catch {}
     }
