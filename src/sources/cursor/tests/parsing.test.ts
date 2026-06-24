@@ -61,12 +61,12 @@ test('typical session: composer + bubble rows derive agent_schema_version from f
   expect(text).toContain('bubbleId:00000000-0000-0000-0000-000000000001:b-003');
 });
 
-test('mixed _v values: derive from FIRST row of each prefix, not aggregate', async () => {
+test('mixed _v values: derive from MAX of each prefix (newest schema present wins)', async () => {
   const file = await writeFixtureDb(dir, MIXED_VERSIONS_FIXTURE);
   await collectCursorFile(file, ctx(buffer));
   const batch = requireDefined(nextPendingBatch(buffer));
   expect(batch.agentSchemaVersion).toBe(MIXED_VERSIONS_FIXTURE.expectedAgentSchemaVersion);
-  expect(batch.agentSchemaVersion).toBe('10:3');
+  expect(batch.agentSchemaVersion).toBe('15:5');
   const text = bodyText(batch);
   expect(text).toContain('\\"_v\\":10');
   expect(text).toContain('\\"_v\\":14');

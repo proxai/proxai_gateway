@@ -70,15 +70,6 @@ export function formatAgentSchemaVersion(
   return `${composer}:${bubble}`;
 }
 
-/**
- * TEMPORARY shim — keeps `collect.ts` compiling until Task 2 rewires it to the
- * per-batch helpers above. Reproduces the legacy cycle-wide string shape but on
- * MAX semantics. Removed in Task 2.
- */
-export function extractAgentSchemaVersion(rows: readonly CursorDiskKvRow[]): string {
-  return formatAgentSchemaVersion(computeCursorSchemaAxes(rows));
-}
-
 function parseInnerVersion(value: string): number | null {
   try {
     const parsed = JSON.parse(value) as Record<string, unknown>;

@@ -34,7 +34,7 @@ import type {
   CursorDiskKvRow,
   DiscoveredCursorFile,
 } from 'sources/cursor/cursor.types.ts';
-import { extractAgentSchemaVersion } from 'sources/cursor/extract-version.ts';
+import { computeCursorSchemaAxes } from 'sources/cursor/extract-version.ts';
 import { processRows } from 'sources/cursor/process-rows.ts';
 
 export function buildCursorSelectRowsSql(_captureSubAgents: boolean): string {
@@ -231,7 +231,13 @@ export async function collectCursorFile(
         value: r.value,
       }));
 
-      const agentSchemaVersion = extractAgentSchemaVersion(kvRows);
+      // Cycle-level composer version (MAX across the whole slice) — used only as
+      // a fallback for size-split bubble-only batches; each batch's real version
+      // is computed per-slice in processRows from its own rows. Read from kvRows
+      // (pre-exclusion): exclusion only removes specific composers' content that
+      // is never shipped anyway, and the composer axis is wide, so a slightly
+      // stale fallback on a bubble-only batch is harmless.
+      const cycleComposerVersion = computeCursorSchemaAxes(kvRows).composer;
       const lastRow = requireDefined(rows[rows.length - 1], 'last row');
       const finalWatermarkEnd = lastRow.rowid + 1;
 
@@ -243,7 +249,7 @@ export async function collectCursorFile(
       processRows({
         rows: kvRows,
         context,
-        agentSchemaVersion,
+        cycleComposerVersion,
         effectiveSourcePath,
         effectiveSourcePathHash,
         currentSizeBytes,
