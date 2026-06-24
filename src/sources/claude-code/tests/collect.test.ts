@@ -1032,3 +1032,65 @@ test('slim records survive the oversized-split path with watermark continuity an
   }
   expect(prevEnd).toBe(content.length); // full coverage, no gap
 });
+
+test('slimClaudeUsageRecord ignores content on a MIXED text+tool_use assistant (recovers usage only)', () => {
+  const rec = {
+    type: 'assistant',
+    sessionId: 's-id',
+    uuid: 'a-uuid',
+    message: {
+      model: 'claude-fake-1',
+      content: [
+        { type: 'text', text: 'Let me read that file.' },
+        { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/tmp/x' } },
+      ],
+      usage: {
+        input_tokens: 7,
+        output_tokens: 8,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
+    },
+  };
+  expect(slimClaudeUsageRecord(rec)).toEqual({
+    type: 'assistant',
+    sessionId: 's-id',
+    uuid: 'a-uuid',
+    message: {
+      model: 'claude-fake-1',
+      usage: {
+        input_tokens: 7,
+        output_tokens: 8,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
+    },
+  });
+});
+
+test('slimClaudeUsageRecord keeps a usage-bearing assistant with an EMPTY usage object (intentional; matches aggregateUsage)', () => {
+  expect(
+    slimClaudeUsageRecord({ type: 'assistant', sessionId: 's', uuid: 'u', message: { usage: {} } }),
+  ).toEqual({ type: 'assistant', sessionId: 's', uuid: 'u', message: { usage: {} } });
+});
+
+test('recovers a MIXED text+tool_use assistant record (slims it; reasoning text AND tool content both stripped)', async () => {
+  const user =
+    '{"type":"user","promptId":"p1","message":{"role":"user","content":"hi"},"uuid":"u1","sessionId":"s1","version":"2.1.122"}';
+  const mixed =
+    '{"type":"assistant","message":{"model":"claude-fake-1","role":"assistant","content":[{"type":"text","text":"REASONING-TEXT-XYZ"},{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/tmp/SECRET-PATH"}}],"usage":{"input_tokens":7,"output_tokens":8,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"uuid":"u2","sessionId":"s1"}';
+  const finalText =
+    '{"type":"assistant","message":{"model":"claude-fake-1","role":"assistant","content":[{"type":"text","text":"all done"}],"usage":{"input_tokens":2,"output_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":45000}},"uuid":"u3","sessionId":"s1"}';
+  const content = [user, mixed, finalText].join('\n') + '\n';
+  const file = await makeFile(content);
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const batch = requireDefined(nextPendingBatch(buffer));
+  const body = DECODER.decode(zstdDecompressSync(batch.body));
+  // a mixed record is dropped by isDialogueRecord (via hasToolUse) → recovered as slim; usage present
+  expect(body).toContain('"input_tokens":7');
+  // BOTH the reasoning text and the tool content are stripped (mixed records are slimmed, not shown)
+  expect(body).not.toContain('REASONING-TEXT-XYZ');
+  expect(body).not.toContain('SECRET-PATH');
+  // final dialogue retained verbatim
+  expect(body).toContain('all done');
+});

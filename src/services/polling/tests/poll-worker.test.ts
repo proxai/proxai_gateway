@@ -158,6 +158,32 @@ test('isPromptRecord & isCursorPromptRow: covers all matching cases in handleIns
   expect(result.newestDate).toBe('2026-06-01T00:00:00.000Z');
 });
 
+test('handleInspect: claude-desktop does NOT recover slim usage records (dialogue-only, no slim path)', async () => {
+  const sessionDir = join(dir, 'org', 'proj', 'local_slim');
+  await mkdir(sessionDir, { recursive: true });
+  const logPath = join(sessionDir, 'audit.jsonl');
+  const lines = [
+    '{"type":"user","message":{"role":"user","content":"hello"},"timestamp":"2026-05-01T00:00:00Z"}',
+    // usage-bearing tool_use: claude-code WOULD slim+count this; claude-desktop must NOT (it ships no slim records).
+    '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read"}],"usage":{"input_tokens":3,"output_tokens":4}},"timestamp":"2026-05-02T00:00:00Z"}',
+    '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"reply"}]},"timestamp":"2026-05-03T00:00:00Z"}',
+  ];
+  await writeFile(logPath, lines.join('\n') + '\n');
+
+  const result = await handleInspect('claude-desktop', {
+    baseDir: dir,
+    priorCursors: [],
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
+
+  // user prompt + text reply count (2); the usage-bearing tool_use record is NOT recovered.
+  // Guards the claude-code/claude-desktop branch split — a re-merge that enabled slim for
+  // Desktop would make this 3 and break consent-surface parity (Desktop ships no slim records).
+  expect(result.filesProcessed).toBe(1);
+  expect(result.telemetryRecordCount).toBe(2);
+});
+
 test('handleInspect: cursor database with various rows and keys', async () => {
   const globalStorageDir = join(dir, 'globalStorage');
   await mkdir(globalStorageDir, { recursive: true });
