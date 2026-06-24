@@ -53,6 +53,29 @@ dropped before redaction so it never reaches the wire. `isDialogueRecord` accept
 `parsed: unknown` and narrows it using type guards and checks, staying fully
 compliant with the global typescript type safety rules.
 
+## Usage recovery (F1) (`slimClaudeUsageRecord`, collect.ts)
+
+`isDialogueRecord` keeps only visible dialogue, which historically discarded the
+per-call `usage` on `tool_use` assistant records (Anthropic bills per request, so
+this lost ~75% of Claude token telemetry). Those records are NOT lost: the collect
+loop's `else` branch ships a **slim, usage-only projection** via
+`slimClaudeUsageRecord` — `{ type:'assistant', sessionId, uuid, timestamp?,
+message:{ model?, usage } }` with the bulky tool **content stripped** and `usage`
+projected field-by-field into a closed shape (`input_tokens`, `output_tokens`,
+`cache_creation_input_tokens`, `cache_read_input_tokens`, `service_tier`). It carries
+**no `promptId`**, so nest folds it into the open per-`promptId` turn — **no new
+ACRs**. `tool_result`/synthetic/api-error records carry no usage and stay dropped.
+Each slim line keeps the source line's `physicalEndOffset`, so watermark continuity
+is unchanged (one kept entry per source line, mirroring codex `trimCodexRecord`).
+
+The inspect/consent-surface preview mirrors this: `analyzeJsonlLogFile`
+(`poll-worker.ts`) counts the slim record and its slim byte size, so the previewed
+"telemetry bytes" match what is actually shipped.
+
+**Forward-only:** records dropped before this change never reached S3, so historical
+Claude under-counts are unrecoverable; only captures taken after this ships are
+complete.
+
 ## Output `NewBatch`
 
 - `sourceApp: 'claude-code'`
