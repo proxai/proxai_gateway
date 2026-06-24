@@ -20,6 +20,7 @@ import {
   discoverClaudeCodeFiles,
   defaultClaudeCodeProjectsRoot,
   isDialogueRecord,
+  slimClaudeUsageRecord,
 } from 'sources/claude-code';
 import {
   discoverClaudeDesktopFiles,
@@ -168,7 +169,20 @@ async function analyzeJsonlLogFile(
       let match = false;
       let capturedText = line;
       let lineBytes = Buffer.byteLength(line, 'utf8') + 1;
-      if (sourceApp === 'claude-code' || sourceApp === 'claude-desktop') {
+      if (sourceApp === 'claude-code') {
+        match = isDialogueRecord(parsed);
+        if (!match) {
+          // mirror collect.ts: recovered usage-bearing tool_use records ARE
+          // shipped, so count them here too (consent-surface == shipped bytes).
+          const slim = slimClaudeUsageRecord(parsed);
+          if (slim !== null) {
+            match = true;
+            capturedText = JSON.stringify(slim);
+            lineBytes = Buffer.byteLength(capturedText, 'utf8') + 1;
+          }
+        }
+      } else if (sourceApp === 'claude-desktop') {
+        // Desktop ships no slim records (out of scope) — dialogue-only.
         match = isDialogueRecord(parsed);
       } else if (sourceApp === 'codex') {
         match = isCodexDialogueRecord(parsed);
