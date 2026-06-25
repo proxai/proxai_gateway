@@ -27,6 +27,7 @@ import {
   deriveClaudeCodeSessionId,
   isDialogueRecord,
   claudeFirstText,
+  slimClaudeUsageRecord,
 } from 'sources/claude-code';
 import type { ClaudeCodeCollectorContext, DiscoveredClaudeCodeFile } from 'sources/claude-code';
 
@@ -871,4 +872,226 @@ test('pauses an excluded subagent transcript (top-level cwd is honored)', async 
     watermarkTable: null,
   });
   expect(cursor?.watermarkEnd ?? 0).toBe(0);
+});
+
+test('slimClaudeUsageRecord projects a usage-bearing tool_use record to a closed usage-only shape', () => {
+  const rec = {
+    parentUuid: '66',
+    type: 'assistant',
+    uuid: 'a-uuid',
+    sessionId: 's-id',
+    timestamp: '2026-01-01T00:00:03.000Z',
+    requestId: 'req_bbbb',
+    message: {
+      id: 'msg_bbbb',
+      model: 'claude-fake-1',
+      role: 'assistant',
+      content: [{ type: 'tool_use', id: 'toolu_a', name: 'Read', input: { file_path: '/tmp/x' } }],
+      stop_reason: 'tool_use',
+      usage: {
+        input_tokens: 3,
+        output_tokens: 4,
+        cache_creation_input_tokens: 100,
+        cache_read_input_tokens: 0,
+        service_tier: 'standard',
+        extraneous: 'DROP_ME',
+      },
+    },
+  };
+  expect(slimClaudeUsageRecord(rec)).toEqual({
+    type: 'assistant',
+    sessionId: 's-id',
+    uuid: 'a-uuid',
+    timestamp: '2026-01-01T00:00:03.000Z',
+    message: {
+      model: 'claude-fake-1',
+      usage: {
+        input_tokens: 3,
+        output_tokens: 4,
+        cache_creation_input_tokens: 100,
+        cache_read_input_tokens: 0,
+        service_tier: 'standard',
+      },
+    },
+  });
+});
+
+test('slimClaudeUsageRecord drops unknown usage fields (closed shape — no passthrough)', () => {
+  const slim = slimClaudeUsageRecord({
+    type: 'assistant',
+    sessionId: 's',
+    uuid: 'u',
+    message: { usage: { input_tokens: 5, junk: { huge: 'x'.repeat(99) } } },
+  });
+  expect(slim).toEqual({
+    type: 'assistant',
+    sessionId: 's',
+    uuid: 'u',
+    message: { usage: { input_tokens: 5 } },
+  });
+});
+
+test('slimClaudeUsageRecord returns null for records with no recoverable usage', () => {
+  expect(
+    slimClaudeUsageRecord({
+      type: 'user',
+      sessionId: 's',
+      uuid: 'u',
+      message: { content: [{ type: 'tool_result' }] },
+    }),
+  ).toBeNull();
+  expect(
+    slimClaudeUsageRecord({
+      type: 'assistant',
+      sessionId: 's',
+      uuid: 'u',
+      message: { model: '<synthetic>', usage: { input_tokens: 1 } },
+    }),
+  ).toBeNull();
+  expect(
+    slimClaudeUsageRecord({
+      type: 'assistant',
+      isApiErrorMessage: true,
+      sessionId: 's',
+      uuid: 'u',
+      message: { usage: { input_tokens: 1 } },
+    }),
+  ).toBeNull();
+  expect(
+    slimClaudeUsageRecord({ type: 'assistant', sessionId: 's', uuid: 'u', message: {} }),
+  ).toBeNull();
+  expect(
+    slimClaudeUsageRecord({ type: 'assistant', message: { usage: { input_tokens: 1 } } }),
+  ).toBeNull();
+  expect(slimClaudeUsageRecord(null)).toBeNull();
+});
+
+test('recovers usage-bearing tool_use records as slim projections; strips content; nest-parseable', async () => {
+  const user =
+    '{"type":"user","promptId":"p1","message":{"role":"user","content":"hi"},"uuid":"u1","sessionId":"s1","version":"2.1.122"}';
+  const toolUse =
+    '{"type":"assistant","message":{"model":"claude-fake-1","role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/tmp/secret-path.txt"}}],"usage":{"input_tokens":3,"output_tokens":4,"cache_creation_input_tokens":100,"cache_read_input_tokens":0}},"uuid":"u2","sessionId":"s1","timestamp":"2026-01-01T00:00:03.000Z"}';
+  const toolResult =
+    '{"type":"user","promptId":"p1","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"BULKY FILE CONTENTS"}]},"uuid":"u2b","sessionId":"s1"}';
+  const finalText =
+    '{"type":"assistant","message":{"model":"claude-fake-1","role":"assistant","content":[{"type":"text","text":"all done"}],"usage":{"input_tokens":2,"output_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":45000}},"uuid":"u3","sessionId":"s1","timestamp":"2026-01-01T00:00:04.000Z"}';
+  const content = [user, toolUse, toolResult, finalText].join('\n') + '\n';
+  const file = await makeFile(content);
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const batch = requireDefined(nextPendingBatch(buffer));
+  const body = DECODER.decode(zstdDecompressSync(batch.body));
+
+  // recovery: the tool_use call's usage reaches the body (fail-before/pass-after discriminator)
+  expect(body).toContain('"input_tokens":3');
+  // content stripped (LOAD-BEARING: secret-path.txt + tool name live ONLY in tool_use content)
+  expect(body).not.toContain('"name":"Read"');
+  expect(body).not.toContain('secret-path.txt');
+  // tool_result (no usage) stays dropped
+  expect(body).not.toContain('BULKY FILE CONTENTS');
+  // dialogue retained
+  expect(body).toContain('all done');
+
+  // nest-parseability guard: the recovered line satisfies parseClaudeCodeLine's required keys
+  const slimLine = requireDefined(body.split('\n').find((l) => l.includes('"input_tokens":3')));
+  const parsedSlim = JSON.parse(slimLine);
+  expect(typeof parsedSlim.type).toBe('string');
+  expect(typeof parsedSlim.sessionId).toBe('string');
+  expect(typeof parsedSlim.uuid).toBe('string');
+  expect(parsedSlim.promptId).toBeUndefined(); // must NOT open a new turn
+  expect(parsedSlim.message.content).toBeUndefined(); // content stripped
+});
+
+test('slim records survive the oversized-split path with watermark continuity and no dup/drop', async () => {
+  const user =
+    '{"type":"user","promptId":"p1","message":{"role":"user","content":"go"},"uuid":"u0","sessionId":"s1","version":"2.1.122"}';
+  const toolUses: string[] = [];
+  for (let i = 0; i < 40; i++) {
+    toolUses.push(
+      `{"type":"assistant","message":{"model":"m","role":"assistant","content":[{"type":"tool_use","id":"t${i}","name":"Read","input":{"file_path":"/tmp/${'p'.repeat(800)}-${i}"}}],"usage":{"input_tokens":${i + 1},"output_tokens":1,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"uuid":"u${i}","sessionId":"s1"}`,
+    );
+  }
+  const content = [user, ...toolUses].join('\n') + '\n';
+  const file = await makeFile(content, 'split.jsonl');
+  const result = await collectClaudeCodeFile(file, { ...ctx(buffer), maxDecompressedBytes: 4000 });
+  expect(result.errors).toEqual([]);
+  let prevEnd = 0;
+  const seenInputs = new Set<string>();
+  for (let i = 0; i < 100; i++) {
+    const batch = nextPendingBatch(buffer);
+    if (batch === null) break;
+    expect(batch.watermarkStart).toBe(prevEnd);
+    prevEnd = batch.watermarkEnd;
+    for (const line of DECODER.decode(zstdDecompressSync(batch.body)).split('\n')) {
+      const m = line.match(/"input_tokens":(\d+)/);
+      const tok = m?.[1];
+      if (tok !== undefined) {
+        expect(seenInputs.has(tok)).toBe(false);
+        seenInputs.add(tok);
+      } // each exactly once
+    }
+    deleteBatch(buffer, batch.captureId);
+  }
+  expect(prevEnd).toBe(content.length); // full coverage, no gap
+});
+
+test('slimClaudeUsageRecord ignores content on a MIXED text+tool_use assistant (recovers usage only)', () => {
+  const rec = {
+    type: 'assistant',
+    sessionId: 's-id',
+    uuid: 'a-uuid',
+    message: {
+      model: 'claude-fake-1',
+      content: [
+        { type: 'text', text: 'Let me read that file.' },
+        { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/tmp/x' } },
+      ],
+      usage: {
+        input_tokens: 7,
+        output_tokens: 8,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
+    },
+  };
+  expect(slimClaudeUsageRecord(rec)).toEqual({
+    type: 'assistant',
+    sessionId: 's-id',
+    uuid: 'a-uuid',
+    message: {
+      model: 'claude-fake-1',
+      usage: {
+        input_tokens: 7,
+        output_tokens: 8,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
+    },
+  });
+});
+
+test('slimClaudeUsageRecord keeps a usage-bearing assistant with an EMPTY usage object (intentional; matches aggregateUsage)', () => {
+  expect(
+    slimClaudeUsageRecord({ type: 'assistant', sessionId: 's', uuid: 'u', message: { usage: {} } }),
+  ).toEqual({ type: 'assistant', sessionId: 's', uuid: 'u', message: { usage: {} } });
+});
+
+test('recovers a MIXED text+tool_use assistant record (slims it; reasoning text AND tool content both stripped)', async () => {
+  const user =
+    '{"type":"user","promptId":"p1","message":{"role":"user","content":"hi"},"uuid":"u1","sessionId":"s1","version":"2.1.122"}';
+  const mixed =
+    '{"type":"assistant","message":{"model":"claude-fake-1","role":"assistant","content":[{"type":"text","text":"REASONING-TEXT-XYZ"},{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/tmp/SECRET-PATH"}}],"usage":{"input_tokens":7,"output_tokens":8,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"uuid":"u2","sessionId":"s1"}';
+  const finalText =
+    '{"type":"assistant","message":{"model":"claude-fake-1","role":"assistant","content":[{"type":"text","text":"all done"}],"usage":{"input_tokens":2,"output_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":45000}},"uuid":"u3","sessionId":"s1"}';
+  const content = [user, mixed, finalText].join('\n') + '\n';
+  const file = await makeFile(content);
+  await collectClaudeCodeFile(file, ctx(buffer));
+  const batch = requireDefined(nextPendingBatch(buffer));
+  const body = DECODER.decode(zstdDecompressSync(batch.body));
+  // a mixed record is dropped by isDialogueRecord (via hasToolUse) → recovered as slim; usage present
+  expect(body).toContain('"input_tokens":7');
+  // BOTH the reasoning text and the tool content are stripped (mixed records are slimmed, not shown)
+  expect(body).not.toContain('REASONING-TEXT-XYZ');
+  expect(body).not.toContain('SECRET-PATH');
+  // final dialogue retained verbatim
+  expect(body).toContain('all done');
 });

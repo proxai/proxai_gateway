@@ -192,7 +192,7 @@ Any DTO field failing validation produces `400 Bad Request` with a generic error
 | Agent | Source of value | Example |
 |---|---|---|
 | Claude Code | Top-level `version` field on user/assistant/system/attachment lines (NOT `message.version` — that path is empty in real files); falls back to `"unknown"` | `2.1.122` |
-| Cursor | `composerData._v + ':' + bubbleId._v` from the first row of each prefix | `13:3` |
+| Cursor | per batch: `max(composerData._v):max(bubbleId._v)` over the rows in that batch's body (bubble-only split batches fall back to the cycle composer; an absent axis = `unknown`) | `16:3` |
 | Codex | `threads.cli_version`, sampled once per state-collection cycle and threaded into the rollout pass | `0.126.0-alpha.8` |
 
 The backend stores it verbatim and uses it for parser dispatch. The receive DTO bounds the value: `MaxLength(128)` and `^[\w.+:\-]+$` (alphanumeric plus `._+:-`). Anything outside that returns `400`.

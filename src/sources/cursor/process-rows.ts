@@ -24,6 +24,10 @@ import type {
   CursorCollectorResult,
   CursorDiskKvRow,
 } from 'sources/cursor/cursor.types.ts';
+import {
+  computeCursorSchemaAxes,
+  formatAgentSchemaVersion,
+} from 'sources/cursor/extract-version.ts';
 
 interface SliceMeasurement {
   redactedJson: string;
@@ -34,7 +38,7 @@ interface SliceMeasurement {
 export interface ProcessRowsInput {
   rows: CursorDiskKvRow[];
   context: CursorCollectorContext;
-  agentSchemaVersion: string;
+  cycleComposerVersion: string | null;
   effectiveSourcePath: string;
   effectiveSourcePathHash: string;
   currentSizeBytes: number;
@@ -330,6 +334,23 @@ export function processRows(input: ProcessRowsInput): void {
       );
     }
 
+    // Per-batch label from THIS slice's own rows (post-filter/trim). MAX per axis;
+    // bubble-only split batches fall back to the cycle composer. Same `slice` the
+    // watermark range (firstRowidInSlice..lastRowidInSlice) is derived from.
+    const sliceAxes = computeCursorSchemaAxes(slice);
+    const agentSchemaVersion = formatAgentSchemaVersion(sliceAxes, input.cycleComposerVersion);
+    input.context.logger?.debug(
+      {
+        event: 'capture.agent_schema_version',
+        source_app: CURSOR_SOURCE_APP,
+        source_path_hash: input.effectiveSourcePathHash,
+        agent_schema_version: agentSchemaVersion,
+        slice_index: i,
+        total_slices: slices.length,
+      },
+      'per-batch agent_schema_version computed',
+    );
+
     const batch: NewBatch = {
       captureId: generateUuidV7(),
       sourceApp: CURSOR_SOURCE_APP,
@@ -342,7 +363,7 @@ export function processRows(input: ProcessRowsInput): void {
       watermarkStart: firstRowidInSlice,
       watermarkEnd: sliceWatermarkEnd,
       watermarkTable: null,
-      agentSchemaVersion: input.agentSchemaVersion,
+      agentSchemaVersion,
       gatewayVersion: input.context.gatewayVersion,
       capturedAtUtc: nowIsoUtc(),
       bodyFormat: CURSOR_BODY_FORMAT,

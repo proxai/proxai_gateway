@@ -249,7 +249,7 @@ test('only ships rows past the saved watermark on subsequent polls', async () =>
   expect(newest).not.toBeNull();
 });
 
-test('extracts agent_schema_version from composer and bubble _v fields', async () => {
+test('per-batch agent_schema_version: single-batch fixture labels from its own composer and bubble _v', async () => {
   const file = await makeDb([
     { key: 'composerData:c1', value: '{"_v":13,"name":"x"}' },
     { key: 'bubbleId:c1:b1', value: '{"_v":3,"type":1,"text":"hi"}' },
@@ -958,3 +958,89 @@ test('backfill re-keys to a fresh source_path_hash so the original stream never 
     }
   }
 });
+
+test('per-batch agent_schema_version: each size-split batch is labeled from its own rows, not the cycle', async () => {
+  // Long-lived file: ancient bubbles (_v=2) precede current ones (_v=3) in rowid
+  // order, with a current composer (_v=16) up front. Force a size split so the
+  // _v=2 and _v=3 bubbles land in different batches. The OLD collector labeled
+  // EVERY batch from the first (oldest) bubble -> `16:2`, including batches whose
+  // bodies are 100% _v=3 (the bug nest rejected). The fix labels each batch from
+  // its own body; a bubble-only split-batch falls back to the cycle composer.
+  //
+  // Filler is a fixed, non-secret string (not randomBytes): the split boundary is
+  // then fully deterministic AND the redactor cannot rewrite content and perturb
+  // row sizes — so the cross-batch assertions below never flake.
+  const filler = 'x'.repeat(1200);
+  const rows: { key: string; value: string }[] = [
+    { key: 'composerData:c-modern', value: JSON.stringify({ _v: 16, composerId: 'c-modern' }) },
+  ];
+  for (let i = 0; i < 20; i++) {
+    rows.push({
+      key: `bubbleId:c-old:b${i.toString()}`,
+      value: JSON.stringify({ _v: 2, type: 1, text: filler }),
+    });
+  }
+  for (let i = 0; i < 20; i++) {
+    rows.push({
+      key: `bubbleId:c-modern:b${i.toString()}`,
+      value: JSON.stringify({ _v: 3, type: 2, text: filler }),
+    });
+  }
+  const file = await makeDb(rows, 'spanning.vscdb');
+
+  const customCtx = { ...ctx(buffer), maxDecompressedBytes: 15_000 };
+  const result = await collectCursorFile(file, customCtx);
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBeGreaterThanOrEqual(2);
+
+  const bubbleAxes = new Set<string>();
+  for (let i = 0; i < 100; i++) {
+    const batch = nextPendingBatch(buffer);
+    if (batch === null) break;
+    const body = JSON.parse(DECODER.decode(zstdDecompressSync(batch.body))) as {
+      rows: { key: string; value: string }[];
+    };
+    // Max bubble _v actually present in THIS batch's body.
+    let maxBubbleV: number | null = null;
+    for (const r of body.rows) {
+      if (!r.key.startsWith('bubbleId:')) continue;
+      const v = (JSON.parse(r.value) as { _v?: number })._v;
+      if (typeof v === 'number') maxBubbleV = maxBubbleV === null ? v : Math.max(maxBubbleV, v);
+    }
+    const version = requireDefined(batch.agentSchemaVersion, 'agentSchemaVersion');
+    const [composerAxis, bubbleAxis] = version.split(':');
+    // PRIMARY, boundary-independent invariant: each batch's bubble axis equals the
+    // MAX _v actually present in THAT batch's body. Holds for every split layout.
+    if (maxBubbleV !== null) {
+      expect(bubbleAxis).toBe(String(maxBubbleV));
+      bubbleAxes.add(requireDefined(bubbleAxis, 'bubbleAxis'));
+    }
+    // Composer axis: this batch's own composer, or the cycle fallback (16) for
+    // bubble-only split batches. Never 'unknown' here (the file has a composer).
+    expect(composerAxis).toBe('16');
+    deleteBatch(buffer, batch.captureId);
+  }
+
+  // Cross-batch differentiation actually happened: some batch is _v=2, some _v=3.
+  // The old collector produced a uniform `16:2` across all batches.
+  expect(bubbleAxes.has('2')).toBe(true);
+  expect(bubbleAxes.has('3')).toBe(true);
+}, 60_000);
+
+test('per-batch agent_schema_version: a dropped empty-text _v=2 bubble does not lower the label', async () => {
+  // Dropped-bubble contamination: the OLD collector read the version from kvRows
+  // BEFORE the empty-text filter, so this empty _v=2 bubble (never shipped) set
+  // bubble=2 -> `16:2`, even though every shipped bubble is _v=3. The fix computes
+  // from the post-filter slice, so the dropped bubble cannot contaminate.
+  const file = await makeDb([
+    { key: 'composerData:c1', value: JSON.stringify({ _v: 16, composerId: 'c1' }) },
+    { key: 'bubbleId:c1:b0', value: JSON.stringify({ _v: 2, type: 1, text: '' }) }, // empty -> filtered
+    { key: 'bubbleId:c1:b1', value: JSON.stringify({ _v: 3, type: 1, text: 'hello' }) },
+    { key: 'bubbleId:c1:b2', value: JSON.stringify({ _v: 3, type: 2, text: 'world' }) },
+  ]);
+  await collectCursorFile(file, ctx(buffer));
+  const batch = requireDefined(nextPendingBatch(buffer), 'batch');
+  expect(batch.agentSchemaVersion).toBe('16:3');
+  const body = DECODER.decode(zstdDecompressSync(batch.body));
+  expect(body).not.toContain('bubbleId:c1:b0');
+}, 60_000);

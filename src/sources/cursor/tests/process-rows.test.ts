@@ -9,7 +9,7 @@ import type {
 } from 'sources/cursor/cursor.types.ts';
 import type { CursorGlobalExclusionPlan } from 'sources/cursor/exclusion.ts';
 import { deleteBatch, nextPendingBatch, openInMemoryBufferDb } from 'services/buffer';
-import { zstdDecompressSync } from 'core/utils';
+import { requireDefined, zstdDecompressSync } from 'core/utils';
 
 function row(rowid: number, key: string, value: unknown): CursorDiskKvRow {
   return { rowid, key, value: JSON.stringify(value) };
@@ -41,7 +41,7 @@ describe('processRows — exclusion plan drops excluded rows', () => {
     processRows({
       rows,
       context: ctx,
-      agentSchemaVersion: 'v1',
+      cycleComposerVersion: '16',
       effectiveSourcePath: '/x/globalStorage/state.vscdb',
       effectiveSourcePathHash: 'h',
       currentSizeBytes: 4096,
@@ -88,5 +88,49 @@ describe('isRowExcludedByPlan', () => {
     expect(isRowExcludedByPlan('agentKv:blob:cafe', blobPlan)).toBe(false);
     // A bare prefix with no hash slices to '' — not in the set, so kept (false).
     expect(isRowExcludedByPlan('agentKv:blob:', blobPlan)).toBe(false);
+  });
+});
+
+describe('processRows — per-batch agent_schema_version', () => {
+  function vctx(buffer: ReturnType<typeof openInMemoryBufferDb>): CursorCollectorContext {
+    return { buffer, gatewayVersion: 'gw', maxDecompressedBytes: 9 * 1024 * 1024 };
+  }
+  function runOne(
+    buffer: ReturnType<typeof openInMemoryBufferDb>,
+    rows: CursorDiskKvRow[],
+    cycleComposerVersion: string | null,
+  ) {
+    const result: CursorCollectorResult = { capturedBatches: 0, capturedBytes: 0, errors: [] };
+    processRows({
+      rows,
+      context: vctx(buffer),
+      cycleComposerVersion,
+      effectiveSourcePath: '/x/globalStorage/state.vscdb',
+      effectiveSourcePathHash: 'h',
+      currentSizeBytes: 4096,
+      currentPageCount: 1,
+      finalWatermarkEnd: rows.length + 1,
+      result,
+    });
+    return requireDefined(nextPendingBatch(buffer), 'batch');
+  }
+
+  it('labels a single batch from its own rows (MAX per axis)', () => {
+    const buffer = openInMemoryBufferDb();
+    const batch = runOne(
+      buffer,
+      [
+        row(1, 'composerData:c1', { _v: 16 }),
+        row(2, 'bubbleId:c1:b1', { _v: 3, type: 1, text: 'hi' }),
+      ],
+      '16',
+    );
+    expect(batch.agentSchemaVersion).toBe('16:3');
+  });
+
+  it('bubble-only batch with a null cycle fallback labels the composer axis "unknown"', () => {
+    const buffer = openInMemoryBufferDb();
+    const batch = runOne(buffer, [row(1, 'bubbleId:c1:b1', { _v: 3, type: 1, text: 'hi' })], null);
+    expect(batch.agentSchemaVersion).toBe('unknown:3');
   });
 });

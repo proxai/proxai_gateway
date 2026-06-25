@@ -57,7 +57,7 @@ export const TYPICAL_SESSION_FIXTURE: FixtureScenario = {
       }),
     },
   ],
-  expectedAgentSchemaVersion: '13:7',
+  expectedAgentSchemaVersion: '13:7', // MAX(13) composer : MAX(7,7,7) bubble
 };
 
 export const MIXED_VERSIONS_FIXTURE: FixtureScenario = {
@@ -84,7 +84,7 @@ export const MIXED_VERSIONS_FIXTURE: FixtureScenario = {
       value: JSON.stringify({ _v: 5, type: 2, text: 'world' }),
     },
   ],
-  expectedAgentSchemaVersion: '10:3',
+  expectedAgentSchemaVersion: '15:5', // MAX(10,14,15) composer : MAX(3,5) bubble
 };
 
 export const COMPOSER_ONLY_FIXTURE: FixtureScenario = {
@@ -99,7 +99,7 @@ export const COMPOSER_ONLY_FIXTURE: FixtureScenario = {
       value: JSON.stringify({ _v: 13, composerId: 'd1' }),
     },
   ],
-  expectedAgentSchemaVersion: '13:unknown',
+  expectedAgentSchemaVersion: '13:unknown', // MAX(13,13) composer : no bubbles
 };
 
 export const NO_RELEVANT_PREFIXES_FIXTURE: FixtureScenario = {
@@ -132,7 +132,7 @@ export const NULL_AND_MISSING_V_FIXTURE: FixtureScenario = {
       value: JSON.stringify({ _v: 3, type: 1, text: 'world' }),
     },
   ],
-  expectedAgentSchemaVersion: '14:3',
+  expectedAgentSchemaVersion: '14:3', // MAX(14) composer (null row skipped) : MAX(3) bubble (missing-_v skipped)
 };
 
 export const REDACTION_FIXTURE: FixtureScenario = {
@@ -151,7 +151,7 @@ export const REDACTION_FIXTURE: FixtureScenario = {
       }),
     },
   ],
-  expectedAgentSchemaVersion: '13:7',
+  expectedAgentSchemaVersion: '13:7', // MAX(13) composer : MAX(7) bubble
 };
 
 export const MIXED_KEY_PREFIXES_FIXTURE: FixtureScenario = {
@@ -170,7 +170,7 @@ export const MIXED_KEY_PREFIXES_FIXTURE: FixtureScenario = {
       value: JSON.stringify({ _v: 7, type: 2, text: 'hello' }),
     },
   ],
-  expectedAgentSchemaVersion: '13:7',
+  expectedAgentSchemaVersion: '13:7', // MAX(13) composer : MAX(7) bubble
 };
 
 export async function writeFixtureDb(

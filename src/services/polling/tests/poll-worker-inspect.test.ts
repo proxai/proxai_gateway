@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { rmRecursive } from 'core/io/fs';
+import { slimClaudeUsageRecord } from 'sources/claude-code';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -141,4 +142,35 @@ test('handleInspect: codex telemetry record filtering', async () => {
   expect(result.recordCount).toBe(5);
   expect(result.telemetryRecordCount).toBe(4);
   expect(result.telemetryRawBytes).toBeGreaterThan(0);
+});
+
+test('handleInspect: claude-code counts recovered slim usage records AND their slim byte size', async () => {
+  const projectDir = join(dir, 'project-rec');
+  await mkdir(projectDir, { recursive: true });
+  const userLine =
+    '{"type":"user","message":{"role":"user","content":"hello"},"sessionId":"s1","uuid":"u1"}';
+  const toolUseLine =
+    '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"123","name":"Read","input":{"file_path":"/tmp/' +
+    'x'.repeat(500) +
+    '"}}],"usage":{"input_tokens":3,"output_tokens":4}},"sessionId":"s1","uuid":"u2"}';
+  const finalLine =
+    '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"usage":{"input_tokens":2,"output_tokens":5}},"sessionId":"s1","uuid":"u3"}';
+  await writeFile(
+    join(projectDir, 'session.jsonl'),
+    [userLine, toolUseLine, finalLine].join('\n') + '\n',
+  );
+  const result = await handleInspect('claude-code', {
+    baseDir: dir,
+    captureSubAgents: false,
+    priorCursors: [],
+    gatewayVersion: 'gw-0.1',
+    maxDecompressedBytes: 9 * 1024 * 1024,
+  });
+  expect(result.telemetryRecordCount).toBe(3); // user + recovered tool_use + final (was 2)
+  // bytes reflect the SLIM size (~tens of bytes), NOT the 500-char source tool_use line
+  const slimBytes =
+    Buffer.byteLength(JSON.stringify(slimClaudeUsageRecord(JSON.parse(toolUseLine))), 'utf8') + 1;
+  const dialogueBytes =
+    Buffer.byteLength(userLine, 'utf8') + 1 + Buffer.byteLength(finalLine, 'utf8') + 1;
+  expect(result.telemetryRawBytes).toBe(slimBytes + dialogueBytes);
 });

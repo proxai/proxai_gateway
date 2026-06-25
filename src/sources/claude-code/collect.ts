@@ -184,6 +184,66 @@ export function isDialogueRecord(parsed: unknown): boolean {
   return !hasToolUse;
 }
 
+interface SlimClaudeUsageRecord {
+  type: 'assistant';
+  sessionId: string;
+  uuid: string;
+  timestamp?: string;
+  message: { model?: string; usage: Record<string, number | string> };
+}
+
+/**
+ * Project a usage-bearing assistant record that `isDialogueRecord` drops
+ * (pure or mixed `tool_use`) into a SLIM, usage-only line for nest to fold
+ * into the turn — tool content removed. `usage` is projected FIELD-BY-FIELD
+ * into a closed shape (no object passthrough) so an adversarial/huge usage
+ * blob can't ride along and nest sees only known fields. Returns null for
+ * anything without recoverable usage (tool_result/synthetic/api-error/
+ * non-assistant/missing identity keys) — those stay dropped. We do NOT carry
+ * `promptId` (assistant records never have one; adding one would open a new
+ * turn). Reuses the codex `trimCodexRecord` in-body mechanics (one kept-line
+ * per source line, source `physicalEndOffset` for watermark continuity); the
+ * content-strip + closed-shape usage projection is new.
+ */
+export function slimClaudeUsageRecord(parsed: unknown): SlimClaudeUsageRecord | null {
+  if (parsed === null || typeof parsed !== 'object') return null;
+  const rec = parsed as {
+    type?: unknown;
+    isApiErrorMessage?: unknown;
+    sessionId?: unknown;
+    uuid?: unknown;
+    timestamp?: unknown;
+    message?: { model?: unknown; usage?: unknown } | null;
+  };
+  if (rec.type !== 'assistant') return null;
+  if (rec.isApiErrorMessage === true) return null;
+  const message = rec.message;
+  if (message === null || typeof message !== 'object') return null;
+  if (message.model === '<synthetic>') return null;
+  const rawUsage = message.usage;
+  if (rawUsage === null || typeof rawUsage !== 'object') return null;
+  if (typeof rec.sessionId !== 'string' || typeof rec.uuid !== 'string') return null;
+  const u = rawUsage as Record<string, unknown>;
+  const usage: Record<string, number | string> = {};
+  for (const k of [
+    'input_tokens',
+    'output_tokens',
+    'cache_creation_input_tokens',
+    'cache_read_input_tokens',
+  ] as const) {
+    if (typeof u[k] === 'number') usage[k] = u[k] as number;
+  }
+  if (typeof u.service_tier === 'string') usage.service_tier = u.service_tier;
+  const slim: SlimClaudeUsageRecord = {
+    type: 'assistant',
+    sessionId: rec.sessionId,
+    uuid: rec.uuid,
+    message: { usage, ...(typeof message.model === 'string' ? { model: message.model } : {}) },
+  };
+  if (typeof rec.timestamp === 'string') slim.timestamp = rec.timestamp;
+  return slim;
+}
+
 export async function collectClaudeCodeFile(
   file: DiscoveredClaudeCodeFile,
   context: ClaudeCodeCollectorContext,
@@ -255,7 +315,15 @@ export async function collectClaudeCodeFile(
           kept.push({
             text: line,
             physicalEndOffset: lineEndOffset,
-          });
+          }); // visible dialogue, verbatim
+        } else {
+          // non-dialogue: recover usage-only records (tool_use calls), slimmed.
+          // physicalEndOffset stays the SOURCE line's end → watermark continuity holds
+          // (one kept entry per source line, identical to codex trimCodexRecord).
+          const slim = slimClaudeUsageRecord(parsed);
+          if (slim !== null) {
+            kept.push({ text: JSON.stringify(slim), physicalEndOffset: lineEndOffset });
+          }
         }
       } catch {}
     }
