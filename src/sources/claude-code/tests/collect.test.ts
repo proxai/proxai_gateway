@@ -1023,9 +1023,10 @@ test('slim records survive the oversized-split path with watermark continuity an
     prevEnd = batch.watermarkEnd;
     for (const line of DECODER.decode(zstdDecompressSync(batch.body)).split('\n')) {
       const m = line.match(/"input_tokens":(\d+)/);
-      if (m) {
-        expect(seenInputs.has(m[1])).toBe(false);
-        seenInputs.add(m[1]);
+      const tok = m?.[1];
+      if (tok !== undefined) {
+        expect(seenInputs.has(tok)).toBe(false);
+        seenInputs.add(tok);
       } // each exactly once
     }
     deleteBatch(buffer, batch.captureId);
