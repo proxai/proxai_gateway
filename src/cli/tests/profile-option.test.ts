@@ -127,3 +127,27 @@ test('setup reset --profile prod removes only the prod config, never the dev con
   expect(existsSync(prodConfig)).toBe(false);
   expect(existsSync(devConfig)).toBe(true);
 }, 30_000);
+
+test('redaction list is executable in prod mode', async () => {
+  const result = await runCli(['redaction', 'list', '--categories'], workdir);
+  expect(result.output).not.toContain('unknown option');
+  expect(result.exitCode).toBe(0);
+}, 30_000);
+
+test('redaction list is executable in dev mode', async () => {
+  await enableDevMode(workdir);
+  const result = await runCli(['redaction', 'list', '--categories'], workdir);
+  expect(result.output).not.toContain('unknown option');
+  expect(result.exitCode).toBe(0);
+}, 30_000);
+
+test('redaction list rejects --profile option in both modes', async () => {
+  const resultProd = await runCli(['redaction', 'list', '--profile', 'dev'], workdir);
+  expect(resultProd.output).toContain("unknown option '--profile'");
+  expect(resultProd.exitCode).not.toBe(0);
+
+  await enableDevMode(workdir);
+  const resultDev = await runCli(['redaction', 'list', '--profile', 'dev'], workdir);
+  expect(resultDev.output).toContain("unknown option '--profile'");
+  expect(resultDev.exitCode).not.toBe(0);
+}, 30_000);
