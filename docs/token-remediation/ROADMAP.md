@@ -47,8 +47,8 @@ This folder is the **execution tracker** for the token-counting fixes, plus a pr
 | 1 | Claude Code usage preservation (F1) | 🔴 | gateway + nest | — | ✅ merged (gw #10, nest #228) |
 | 2 | Codex over-count fix (F2) | 🔴 | nest | — | ✅ done (branch pushed; PR pending) |
 | 3 | Gemini phantom cache_creation (F3) | 🔴 | gateway (+nest opt) | — | ✅ resolved by #9 refactor — see phase-03 |
-| 4 | Upsert shrink-guard (overwrite corruption) | 🔴 | nest | — | ⬜ |
-| 5 | Claude Code idle-flush orphan-drop | 🔴 | nest | 4 (recommended) | ⬜ |
+| 4 | Upsert shrink-guard (overwrite corruption) | 🔴 | nest | — | ✅ done (feat/token-remediation-f2-f4) |
+| 5 | Claude Code idle-flush orphan-drop | 🔴 | nest | 4 | 🟡 Stage A done · Stage B deferred (see phase-05) |
 | 6 | Codex re-attach parser guard | 🟠 | nest | 4 | ⬜ |
 | 7 | Claude Desktop version resolution | 🟠 | nest + gateway | 1, 4, 5 | ⬜ |
 | 8 | Cursor local-only collection | 🟠 | nest + gateway | — | ⏸️ DEFERRED |
