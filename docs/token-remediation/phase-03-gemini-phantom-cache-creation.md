@@ -1,10 +1,22 @@
 # Phase 3 — Gemini phantom cache_creation (F3)
 
-- **Status:** ⬜ NOT STARTED
+- **Status:** ✅ RESOLVED (2026-06-26) — superseded by the Antigravity capture refactor (gateway #9); the phantom no longer exists. No code change needed. See "Resolution" below.
 - **Severity:** 🔴 high (latent) · **Effort:** S
 - **Repos:** proxai_gateway (+ proxai_nest only if adding the optional reasoning field)
 - **Depends on:** none · **Blocks:** Phase 10 (KPI label), Phase 11 (backfill)
 - **Source:** VERIFICATION_FINDINGS.md §10.1, §11.1 · IMPLEMENTATION_PLAN.md Rank 3
+
+## ✅ Resolution (2026-06-26) — superseded by the Antigravity refactor
+
+The proto decode this phase targets — `gateway/src/sources/gemini/step-decode.ts` and its `5.9.10 → cacheCreationInputTokens` mapping — was **deleted** in gateway #9 ("Feat/antigravity capture") plus the nest jsonl-parser rewrite. Verified 2026-06-26: no `5.9.10` / `cacheCreation` mapping remains in either repo.
+
+- **F3's goal is met incidentally:** Gemini `cacheCreationInputTokens` is now `null` — the phantom mapping no longer exists. ✅
+- **The migration changed Gemini wholesale, though:** capture switched from the token-bearing conversation `.pb` proto to `brain/<uuid>/.system_generated/logs/transcript.jsonl`, which carries **no per-turn token counts**. So Gemini `input` / `output` / `cacheRead` / `cacheCreation` are now **all null** — not just the phantom. This is intentional (the jsonl was chosen for streamable byte-range capture + folder-linkability), not a regression to fix in this phase.
+- **The real token data still exists** in the conversation `.pb` (fields `5.9.2` input / `5.9.3` output / `5.9.5` cacheRead). Recovering it is a separate, feature-sized effort — tracked in [`candidates/antigravity-token-recovery.md`](candidates/antigravity-token-recovery.md).
+
+**Outcome:** no code change for this phase; the phantom is gone. The new "Gemini ships zero token telemetry" state is the open item (see the candidate doc). The original phase spec is preserved below for historical context.
+
+---
 
 ## Concern this phase eliminates
 Gemini's `cacheCreationInputTokens` column is a **phantom** — the gateway maps proto `5.9.10` into it, but

@@ -44,9 +44,9 @@ This folder is the **execution tracker** for the token-counting fixes, plus a pr
 
 | # | Phase | Sev | Repos | Depends on | Status |
 |---|---|---|---|---|---|
-| 1 | Claude Code usage preservation (F1) | 🔴 | gateway + nest | — | ⬜ |
-| 2 | Codex over-count fix (F2) | 🔴 | nest | — | ⬜ |
-| 3 | Gemini phantom cache_creation (F3) | 🔴 | gateway (+nest opt) | — | ⬜ |
+| 1 | Claude Code usage preservation (F1) | 🔴 | gateway + nest | — | ✅ merged (gw #10, nest #228) |
+| 2 | Codex over-count fix (F2) | 🔴 | nest | — | ✅ done (branch pushed; PR pending) |
+| 3 | Gemini phantom cache_creation (F3) | 🔴 | gateway (+nest opt) | — | ✅ resolved by #9 refactor — see phase-03 |
 | 4 | Upsert shrink-guard (overwrite corruption) | 🔴 | nest | — | ⬜ |
 | 5 | Claude Code idle-flush orphan-drop | 🔴 | nest | 4 (recommended) | ⬜ |
 | 6 | Codex re-attach parser guard | 🟠 | nest | 4 | ⬜ |
@@ -61,6 +61,14 @@ all-null for now; revisit as a separate feature later (its doc is parked, not de
 
 Phases 1–7 are the **detections** (token-correctness). 8 is a **feature-add**. 9–10 are **hardening/display**.
 11 is the **historical-data refresh** that runs after the critical code phases land.
+
+> **Status update (2026-06-26).** Phases **1 (F1)** and **2 (F2)** are complete — F1 merged (gw #10 + nest #228);
+> F2 on `feat/codex-over-count-f2`, pushed + end-to-end validated against real rollouts (PR pending). Phase
+> **3 (F3)** is **resolved by the Antigravity capture refactor (gw #9)**: the phantom proto-decode was deleted,
+> so Gemini `cacheCreationInputTokens` is null (see `phase-03-*.md`). A **new gap** surfaced during that check —
+> Antigravity now ships **zero token telemetry** (the captured `transcript.jsonl` has no token counts; the real
+> tokens live in the conversation `.pb` proto). Recovery is feature-sized and tracked in
+> `candidates/antigravity-token-recovery.md` (not scheduled). **Next active phase: 4 (upsert shrink-guard).**
 
 ---
 
