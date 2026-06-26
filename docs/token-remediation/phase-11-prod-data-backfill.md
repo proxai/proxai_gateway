@@ -28,9 +28,15 @@ understood.
 ## Background (read first)
 - Re-parse mechanism: nest already has an operator-driven reparse path (search `reparse` /
   `reparse-chats` in `proxai_nest/src/agent-gateway/parse/`). Re-running it over a capture range re-derives ACRs
-  via the same pipeline; the gated UPSERT (`parse-batch-upsert.service.ts`) REPLACEs each row idempotently.
-- Equal-watermark re-parse is idempotent (verified); the Phase-4 shrink-guard protects against any smaller-window
-  re-emit during the backfill.
+  via the same pipeline through the gated UPSERT (`parse-batch-upsert.service.ts`).
+- **The gated UPSERT does NOT overwrite in place for a backfill correction — it must DELETE first.** A re-parse of
+  the same captures yields the SAME `last_capture_watermark_end` (it derives from immutable byte offsets, not
+  tokens), so the watermark gate vetoes an in-place UPDATE; and the **Phase-4 shrink-guard VETOES** any
+  smaller-grand-total in-place UPDATE (e.g. the F2-corrected, smaller Codex tokens). The guard therefore does NOT
+  "protect" a correcting re-emit — it **blocks** it. **The backfill must `DELETE FROM agent_call_records WHERE
+  parser_version <= <old>` the target rows first**, after which re-parse takes the INSERT branch where neither gate
+  applies. DELETE-then-reINSERT IS the correction mechanism; an equal-watermark in-place re-parse is a no-op by
+  design. (Verified against the shipped F4 guard, 2026-06-26.)
 
 ## Scope: ALL history (2026-06-17 decision)
 Re-parse the **entire** S3 capture history for the affected agents — not a bounded window. Because this is the
