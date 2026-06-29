@@ -1,6 +1,6 @@
 # Phase 6 — Codex re-attach parser guard
 
-- **Status:** ⬜ NOT STARTED
+- **Status:** ✅ DONE — nest `2ce3845c` (fast-forwarded onto local main; remote push pending)
 - **Severity:** 🟠 medium · **Effort:** S
 - **Repos:** proxai_nest
 - **Depends on:** Phase 4 (the upsert guard is the backstop; this is the targeted source-side fix) · **Blocks:** —
@@ -38,13 +38,20 @@ already-emitted turn is dropped (no-op) and counted, instead of silently under-c
   before.
 
 ## Acceptance criteria (100% = all true)
-- [ ] Re-emitted `task_started` for an already-emitted turn is dropped (no smaller-window overwrite).
-- [ ] Drop metric live + registered.
-- [ ] In-open-turn duplicate behavior unchanged.
-- [ ] Tests above green.
+- [x] Re-emitted `task_started` for an already-emitted turn is dropped (no smaller-window overwrite).
+- [x] Drop metric live + registered.
+- [x] In-open-turn duplicate behavior unchanged.
+- [x] Tests above green.
+
+## Implementation outcome (2026-06-29)
+- **Commit:** `2ce3845c` on nest `main` (local; push pending) — *fix(codex): drop re-attached task_started for an already-emitted turn (F6)*.
+- **Guard:** `codex-parse-chat.service.ts` — a clause added after the `openTurnId` dedup and before the truncated-flush: a `task_started` whose `turn_id === acc.lastEmittedTurnId` is dropped + counted (`continue`), so a *different* open turn is untouched and the dropped re-attach's trailing body lines fall out at the no-open-turn gate (`if (acc.openTurnId === null) continue;`). Catches the **most-recent** emitted turn only (`lastEmittedTurnId` advances, never rewinds; an older-turn re-attach still falls to the F4 upsert backstop). No post-flush continuation recovery (out of scope).
+- **Metric:** `agent_gateway_parser_codex_reattach_dropped_total` registered in `metric-kind-registry.ts` (`'counter'`), emitted via `metricAccumulator.recordEvent(name, {agent:'CODEX'})`.
+- **Tests:** 2 in `codex-parse-chat.service.spec.ts` — *headline* (full re-emit of an emitted turn → exactly 1 record + counter fires) and *edge* (re-attach while a different turn is open → no `turn_id_mismatch`, both turns preserved). TDD red→green; both proven load-bearing (guard removed → both fail).
+- **Verification:** full nest unit suite **8654/8654**, codex + registry 314/314, typecheck 0, lint 0/0, pre-commit metric-cardinality-audit passed. Adversarial plan-review + post-impl code-review both **ready-to-merge** (no Critical/Important).
 
 ## Merge checklist
-- [ ] proxai_nest PR merged
+- [x] proxai_nest merged to local `main` (`2ce3845c`, fast-forward) — remote push pending
 
 ## Orchestrator quick-check (run on "Phase 6 done")
 - `grep -n "lastEmittedTurnId" proxai_nest/src/agent-gateway/parsers/codex/services/codex-parse-chat.service.ts`
