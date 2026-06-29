@@ -1,37 +1,47 @@
-# Candidate — Antigravity (Gemini) token recovery from the conversation proto
+# Candidate — Antigravity (Gemini) token recovery
 
-- **Status:** 🔬 CANDIDATE (not scheduled)
-- **Severity:** 🟠 — Gemini/Antigravity ships **zero token telemetry** today (all usage null)
-- **Effort:** M–L (feature-sized; the join is the hard part)
-- **Repos:** proxai_gateway (capture + decode) + proxai_nest (parser join)
-- **Surfaced:** 2026-06-26, during the Phase 3 (F3) check — see [`../phase-03-gemini-phantom-cache-creation.md`](../phase-03-gemini-phantom-cache-creation.md).
+- **Status:** 🔬 CANDIDATE — **recovery from local artifacts is INFEASIBLE** (the conversation `.pb` is encrypted). Effectively an accepted gap until Antigravity changes its own logging.
+- **Severity:** 🟠 — Gemini/Antigravity ships **zero token telemetry** going forward (v2 jsonl path; all usage null). Confirmed.
+- **Effort:** XL / research-grade (break encryption) or infeasible from disk. The only *cheap* path (≈S) is contingent on Antigravity emitting usage in the jsonl — outside our control.
+- **Repos:** proxai_gateway (capture) + proxai_nest (parser)
+- **Surfaced:** 2026-06-26 (Phase 3 / F3 check). **Re-investigated empirically 2026-06-29 — this doc was rewritten; the original premise was wrong (see "Corrections" below).**
 
-## The gap
-Since the Antigravity capture refactor (gateway #9 + the nest jsonl-parser rewrite), Gemini/Antigravity ACRs carry **no token data** — `input` / `output` / `cacheRead` / `cacheCreation` are all `null`. The capture switched from the conversation `.pb` proto (which carried tokens) to `brain/<uuid>/.system_generated/logs/transcript.jsonl` (plaintext, byte-range-streamable, folder-linkable — but no token counts). This was a deliberate trade-off for capture-ability + folder identity, with tokens as the cost.
+## The gap (confirmed at code + prod level, 2026-06-29)
+The current gemini parser is **v2** (`parser_version 2.0.0`, the post-#9 jsonl path). It has **no usage extractor at all** — `proxai_nest/src/agent-gateway/parsers/gemini/extractors/index.ts` registers none, and the gemini/v2 parser set deliberately omits `result.usage.*` from `declaredFields` (`parsers.versions.ts:840-855`). So `gemini-finalize-turn.service.ts` reads `result.usage.*` → all `null`. **Parser-wide, not platform-specific.**
 
-## Where the tokens still are (verified 2026-06-26)
-The per-call usage lives in the **conversation `.pb` proto** at `~/.gemini/antigravity*/conversations/<uuid>.pb`, in the same fields the *old* decoder (`gateway/src/sources/gemini/step-decode.ts`, deleted in #9) read:
+Prod (read-only, 2026-06-29): the cli-vs-ide split is really **v1-vs-v2 = SQLite-vs-jsonl**. 1,492 `antigravity-cli @ 1.0.0` rows carry full tokens (from the OLD SQLite path); the `antigravity-ide @ 2.0.0` rows are all-null jsonl. (Aside: those 1,492 old rows still carry the **F3 phantom cacheCreation** — F3 was only "resolved" for v2, which has null everything.)
 
-| Proto path | Field |
-|---|---|
-| `5.9.2` | input (prompt) tokens |
-| `5.9.3` | output tokens |
-| `5.9.5` | cached / cache-read tokens |
-| `5.9.10` | `candidatesTokenCount` — the F3 **phantom**; do NOT map to cacheCreation |
-| `5.9.11` | request id (candidate join key) |
-| `5.20.2` | step/turn idx (candidate join key) |
+## Why recovery is infeasible from disk (the decisive findings)
+Verified on 3 real conversations under `~/.gemini/antigravity/` (`e923871b`, `a27bb4d5`, `f3486f10`):
 
-Confirmed by the pre-#9 `step-decode.ts` in git history. The current `transcript.jsonl` has only `step_index / source / type / status / created_at / content / thinking` — no usage field (verified by inspecting a real transcript).
+1. **The conversation `<uuid>.pb` is ENCRYPTED.** Shannon entropy **7.999 bits/byte**, all 256 byte values present, no readable strings, does not parse as protobuf. (Control: `agyhub_summaries_proto.pb` — the index the gateway *does* read for folder identity — is plaintext at entropy 6.24 with readable UUIDs/paths. So some Antigravity protos are cleartext; the conversation bodies are not.) `implicit/*.pb` are also encrypted (entropy 8.00).
+2. **No plaintext token telemetry exists anywhere on disk.** Grepping the entire `~/.gemini/antigravity/` tree for `usageMetadata` / `tokenCount` / `promptToken` / `candidatesToken` / `cachedContent` / `totalToken` returns **zero hits** — not in the jsonl, not in any `.pbtxt`, nowhere.
+3. **The captured `transcript.jsonl` has no usage** — only `step_index / source / type / status / created_at / content / thinking`. (A raw `grep usage` yields 3 hits — the literal word "usage" inside conversation prose, not a field.)
 
-## Why recovery is non-trivial
-1. **Re-capture the `.pb`** — the gateway currently byte-range-captures only the transcript.jsonl; a second per-conversation artifact (the `.pb`) would have to be captured + uploaded.
-2. **Decode it** — restore the conversation proto-scan (`proto-scan.ts`, removed in #9). The gateway retains *some* proto-decode capability (`agyhub.ts` decodes the summaries `.pb`), so not from scratch.
-3. **Join proto-usage → jsonl-turns (the crux)** — the `.pb` is a per-conversation blob with per-model-call usage; the jsonl is per-step. Aligning "which usage belongs to which turn" across two artifacts (the "opaque, no link" problem) is the real work + risk. Candidate join keys: `5.9.11` (requestId), `5.20.2` (idx), or step ordering/timestamps.
+## Corrections to the original (2026-06-26) version of this doc
+The original premise — *"the per-call usage still lives in the conversation `.pb`; decode it like the old `step-decode.ts`"* — is **wrong on the decisive points**:
+1. **"Tokens live in a decodable conversation `.pb`" — FALSE.** The `.pb` is encrypted (entropy 7.999, verified). There is no decodable usage source.
+2. **"The old `step-decode.ts` read the `.pb`" — FALSE.** It read **SQLite `*.db`** step-table payloads (`bun:sqlite`, glob `*.db`). **Antigravity has since dropped the SQLite format** (no `.db` files exist locally) — so the old token source is gone *independent of #9*.
+3. **"The proto↔jsonl join is the crux" — MOOT.** There's no decodable left-hand side to join from. (Secondary: the jsonl `step_index` has gaps — e.g. `0,1,2,4,5` — so even hypothetically the join would need fallback logic.)
+4. **Effort "M–L" — UNDERSTATED.** It is XL/research-grade (break encryption) or infeasible from disk.
+5. The deleted proto field paths (`5.9.2` input, `5.9.3` output, `5.9.5` cacheRead, `5.9.10` phantom, `5.9.11` requestId, `5.20.2` idx) were correct — but they applied to the **SQLite row payloads**, a format that no longer exists. The old decoder also folded `cacheRead` INTO input (`inputTokens = 5.9.2 + 5.9.5`).
+
+The #9 refactor (commit `f0d4f53`, "Feat/antigravity capture") deleted `step-decode.ts` / `proto-scan.ts` / `process-rows.ts` / `resolve-identity.ts` and switched to the byte-range-streamable, folder-linkable jsonl. **That trade-off was sound and need not be reverted** — re-adding a proto path would decode nothing (encrypted), regressing folder-linkability for zero token gain.
+
+## Options
+| Option | What | Effort | Verdict |
+|---|---|---|---|
+| A | Reverse-engineer the `.pb` encryption | XL / research-grade | No — real cipher (entropy 8.0); key not in adjacent files; brittle to version bumps |
+| B | Capture tokens at the network layer (proxy Gemini `usageMetadata`) | L–XL | No — the gateway is a local-file capturer, not a network proxy |
+| C | Wait for Antigravity to log usage in the jsonl, then add **one** extractor | S | Natural path — v2 already slots `result.usage.*` in `finalizeTurn`, just unfed — but contingent on Antigravity |
+| D | Accept Gemini as token-less; document the limitation | 0 | The honest current state |
 
 ## Recommendation
-**Defer.** It partially reverts a deliberate simplification, the proto↔jsonl join is the crux, and it ranks below the remaining 🔴 token-remediation phases (4/5). Ship the rest of the roadmap first; revisit if Gemini token telemetry becomes a priority.
+**Defer / accept the gap.** Recovery from local artifacts is infeasible (encrypted `.pb`, SQLite format gone, no usage in jsonl). Keep the #9 jsonl trade-off. The only cheap path (C) is outside our control.
 
-## If pursued — acceptance sketch
-- Gemini ACRs carry real `input` / `output` / `cacheRead` again (cacheCreation stays null — Gemini has none).
-- Per-turn usage joins to the correct turn (validate by reconciling against the proto's per-call totals — same telescoping discipline used to validate F2).
-- No regression to the jsonl turn-segmentation / folder-linkability the #9 refactor bought.
+**Cheap insurance (implemented):** a **shadow-probe** — the gemini parse path emits `agent_gateway_parser_gemini_usage_field_seen_total` if a captured `transcript.jsonl` ever contains `usageMetadata`/`tokenCount`. When that metric ever fires, Antigravity has started logging usage and option C (≈1 day: add a `usage` extractor + register it + add `result.usage.*` to v2 `declaredFields` + bump parser_version) is unblocked. No architectural change, no commitment.
+
+## If pursued via option C — acceptance sketch
+- Add a `usage` extractor under `gemini/extractors/`, register in `index.ts`, add `result.usage.*` to the gemini/v2 `declaredFields`, bump `GEMINI_PARSER_VERSION`.
+- Gemini ACRs carry real `input` / `output` / `cacheRead` (cacheCreation stays null — Gemini has none).
+- No regression to the jsonl turn-segmentation / folder-linkability.
