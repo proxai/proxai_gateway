@@ -46,7 +46,7 @@ This folder is the **execution tracker** for the token-counting fixes, plus a pr
 |---|---|---|---|---|---|
 | 1 | Claude Code usage preservation (F1) | 🔴 | gateway + nest | — | ✅ merged (gw #10, nest #228) |
 | 2 | Codex over-count fix (F2) | 🔴 | nest | — | ✅ done (branch pushed; PR pending) |
-| 3 | Gemini phantom cache_creation (F3) | 🔴 | gateway (+nest opt) | — | ⚠️ RE-OPENED — NOT resolved; phantom live in 1,492 cli ACRs (~8.18M), see phase-03 |
+| 3 | Gemini phantom cache_creation (F3) | 🟢 | gateway (+nest opt) | — | ✅ source gone (#9); 1,492 historical rows carry phantom — optional backfill (phase-03) |
 | 4 | Upsert shrink-guard (overwrite corruption) | 🔴 | nest | — | ✅ done (feat/token-remediation-f2-f4) |
 | 5 | Claude Code idle-flush orphan-drop | 🔴 | nest | 4 | 🟡 Stage A done · Stage B deferred (see phase-05) |
 | 6 | Codex re-attach parser guard | 🟠 | nest | 4 | ✅ done (nest PR #231 open @2ce3845c; main protected) |
@@ -91,14 +91,17 @@ Phases 1–7 are the **detections** (token-correctness). 8 is a **feature-add**.
 > backfill. **Next active phase: 9 (deterministicRecordId hardening) or 10 (web display).** See phase-07 for the
 > full re-scope + evidence.
 
-> **Status update (2026-06-29) — Gemini findings CORRECTED (prod DB + S3 capture bodies).** Two earlier claims were
-> WRONG: (1) "Gemini ships zero token telemetry" — FALSE: ~98% of gemini ACRs (1,492/1,522) carry real tokens via
-> the **antigravity-cli `sqlite_rows_json` path** (plaintext input/output/cacheRead, alive in prod 2026-06-24);
-> only the small **antigravity-ide `jsonl` path** (9 rows, ~0.6%) is token-null. The "encrypted `.pb` / recovery
-> infeasible" saga was a local-machine red herring — no recovery needed. (2) **F3 is NOT resolved** — 1,492 cli
-> ACRs carry the phantom `cache_creation` (sum ~8.18M); #9 only nulled the empty IDE path. F3 **re-opened** (see
-> phase-03); fix = null gemini `cache_creation` at source + Phase 11 backfill. The Gemini shadow-probe PR (nest
-> #234) was **closed** (wrong premise). Full picture: `candidates/antigravity-token-recovery.md`.
+> **Status update (2026-06-29, FINAL) — Gemini, after prod DB + S3 bodies + current-code/git.** Gemini token
+> capture is **mid-migration**: the pre-#9 `antigravity-cli` SQLite path carried real tokens (+ the F3 phantom);
+> #9 (`f0d4f53`) replaced it with a **tokenless jsonl** path (current code), rolling out across the fleet. So
+> **existing data is ~98% token-covered** (1,492/1,522, pre-#9 SQLite captures) BUT **going forward gemini →
+> token-null** (the jsonl has no usage; the conversation `.pb` is encrypted) — a deliberate
+> tokens-for-folder-linkability trade-off, not a bug to fix now. **F3:** source already deleted by #9 (no NEW
+> phantom); 1,492 historical rows carry it — optional backfill, no reader, not a double-count (so NOT "re-opened
+> needing a source fix" — that intermediate call was wrong). Gemini token recovery is deferred/low-priority (small
+> usage). Shadow-probe PR (nest #234) closed. Full picture: `candidates/antigravity-token-recovery.md`; F3
+> detail: `phase-03`. (This note supersedes the earlier 2026-06-29 Gemini notes — the analysis flip-flopped before
+> prod S3 bodies + current-code settled it.)
 
 ---
 
