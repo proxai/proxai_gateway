@@ -49,7 +49,7 @@ This folder is the **execution tracker** for the token-counting fixes, plus a pr
 | 3 | Gemini phantom cache_creation (F3) | 🔴 | gateway (+nest opt) | — | ✅ resolved by #9 refactor — see phase-03 |
 | 4 | Upsert shrink-guard (overwrite corruption) | 🔴 | nest | — | ✅ done (feat/token-remediation-f2-f4) |
 | 5 | Claude Code idle-flush orphan-drop | 🔴 | nest | 4 | 🟡 Stage A done · Stage B deferred (see phase-05) |
-| 6 | Codex re-attach parser guard | 🟠 | nest | 4 | ✅ done (on nest main local @2ce3845c; push pending) |
+| 6 | Codex re-attach parser guard | 🟠 | nest | 4 | ✅ done (nest PR #231 open @2ce3845c; main protected) |
 | 7 | Claude Desktop version resolution | 🟠 | nest + gateway | 1, 4, 5 | ⬜ |
 | 8 | Cursor local-only collection | 🟠 | nest + gateway | — | ⏸️ DEFERRED |
 | 9 | deterministicRecordId fallback hardening | 🟢 | nest | — | ⬜ |
@@ -71,8 +71,9 @@ Phases 1–7 are the **detections** (token-correctness). 8 is a **feature-add**.
 > `candidates/antigravity-token-recovery.md` (not scheduled). **Next active phase: 4 (upsert shrink-guard).**
 
 > **Status update (2026-06-29).** Phases **4 (F4)**, **5 (F5 Stage A)** and **6 (F6)** are complete on nest.
-> Current nest `main` = F1+F2+F4 (merged via nest #230) **+ F6** (`2ce3845c`, fast-forwarded onto local main —
-> push pending). F6 (Codex re-attach guard) extends the duplicate-`task_started` guard to also drop a re-attach of
+> Nest `main` = F1+F2+F4 (merged via nest #230); **F6** (`2ce3845c`) is up as **nest PR #231** (main is a protected
+> branch — 2 required checks — so F6 lands via PR, not a direct push). Gateway docs pushed to gateway `main`.
+> F6 (Codex re-attach guard) extends the duplicate-`task_started` guard to also drop a re-attach of
 > the most-recent emitted turn (`lastEmittedTurnId`), counted via `agent_gateway_parser_codex_reattach_dropped_total`;
 > the in-open-turn dedup and a different open turn are left untouched, and F4 stays the upsert backstop. Adversarial
 > plan-review + post-impl code-review both passed (ready-to-merge); full nest unit suite 8654/8654 green.
