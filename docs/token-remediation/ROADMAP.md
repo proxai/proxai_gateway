@@ -50,13 +50,16 @@ This folder is the **execution tracker** for the token-counting fixes, plus a pr
 | 4 | Upsert shrink-guard (overwrite corruption) | 🔴 | nest | — | ✅ done (feat/token-remediation-f2-f4) |
 | 5 | Claude Code idle-flush orphan-drop | 🔴 | nest | 4 | 🟡 Stage A done · Stage B deferred (see phase-05) |
 | 6 | Codex re-attach parser guard | 🟠 | nest | 4 | ✅ done (nest PR #231 open @2ce3845c; main protected) |
-| 7 | Claude Desktop version resolution | 🟠 | nest + gateway | 1, 4, 5 | ⬜ |
+| 7 | Claude Desktop version resolution | 🟢 | nest + gateway | — | ⚠️ RE-SCOPED — premise INVALID; Desktop already counted under CLAUDE_CODE (see phase-07) |
 | 8 | Cursor local-only collection | 🟠 | nest + gateway | — | ⏸️ DEFERRED |
 | 9 | deterministicRecordId fallback hardening | 🟢 | nest | — | ⬜ |
 | 10 | Web KPI label + Cursor null display | 🟢 | web | 3 | ⬜ |
 | 11 | Production data backfill / re-parse (ALL history) | 🟠 | ops script | 2, 3, 5, 7 | ⬜ |
 
-**Active phases:** 1, 2, 3, 4, 5, 6, 7, 9, 10, 11 (10 phases). **Phase 8 (Cursor) is DEFERRED** — Cursor stays
+**Active phases:** 1, 2, 3, 4, 5, 6, 9, 10, 11 (9 phases). **Phase 7 (Desktop) is RE-SCOPED** — its original
+premise is invalid (Desktop tokens are already counted under `CLAUDE_CODE`/`claude-code-desktop`; "fixing" version
+resolution would double-count), so only optional cleanup remains; see phase-07 + the 2026-06-29 note below.
+**Phase 8 (Cursor) is DEFERRED** — Cursor stays
 all-null for now; revisit as a separate feature later (its doc is parked, not deleted).
 
 Phases 1–7 are the **detections** (token-correctness). 8 is a **feature-add**. 9–10 are **hardening/display**.
@@ -78,6 +81,15 @@ Phases 1–7 are the **detections** (token-correctness). 8 is a **feature-add**.
 > the in-open-turn dedup and a different open turn are left untouched, and F4 stays the upsert backstop. Adversarial
 > plan-review + post-impl code-review both passed (ready-to-merge); full nest unit suite 8654/8654 green.
 > **Next active phase: 7 (Claude Desktop version resolution)** — depends on 1, 4, 5 (all satisfied).
+
+> **Status update (2026-06-29) — Phase 7 RE-SCOPED (premise INVALID).** Read-only prod check: Claude Desktop
+> conversation tokens are ALREADY counted under `CLAUDE_CODE` as `source_platform=claude-code-desktop` (811 ACRs);
+> there is NO `CLAUDE_DESKTOP` agent (0 ACRs / 0 parse states). The `claude-desktop`/`claude-cowork-desktop`
+> `audit.jsonl` stream (468 captures, 6 hosts) is ~97% redundant with those transcripts (456/468 carry a real CLI
+> version = the audit record matched a `.claude/projects` transcript), so the original "fix version resolution"
+> would DOUBLE-COUNT (ACR id includes `agent`). Phase 7 downgraded to 🟢 cleanup-only; Phase 11 needs no Desktop
+> backfill. **Next active phase: 9 (deterministicRecordId hardening) or 10 (web display).** See phase-07 for the
+> full re-scope + evidence.
 
 ---
 
@@ -106,7 +118,7 @@ Phases 1–7 are the **detections** (token-correctness). 8 is a **feature-add**.
 | F3 (Gemini cacheCreation) | composer/step data in S3 | ✅ yes — re-parse (or a targeted null) |
 | F4 orphan-drop (CC idle) | continuation records ARE in S3 (drop is in nest, post-upload) | ✅ yes — re-parse |
 | Codex re-attach | in S3 | ✅ yes — re-parse |
-| Claude Desktop | captures in S3, currently UNSUPPORTED_VERSION | ✅ yes — re-parse once Phase 7 lands |
+| Claude Desktop | conversations ALREADY captured under CLAUDE_CODE/claude-code-desktop | n/a — NOT a separate backfill (the audit.jsonl/cowork stream is ~97% redundant; re-parsing under CLAUDE_DESKTOP would double-count) |
 
 Phase 11 re-parses existing S3 captures through the fixed pipeline (upsert REPLACE semantics correct the ACRs).
 **The one permanent gap is F1's historical Claude Code under-count** — that data is gone; set expectations.
