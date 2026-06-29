@@ -1,12 +1,23 @@
 # Phase 3 — Gemini phantom cache_creation (F3)
 
-- **Status:** ✅ RESOLVED (2026-06-26) — superseded by the Antigravity capture refactor (gateway #9); the phantom no longer exists. No code change needed. See "Resolution" below.
+- **Status:** ⚠️ **RE-OPENED (2026-06-29) — NOT resolved.** "The phantom no longer exists" is false: **1,492 prod gemini ACRs carry a positive `cache_creation` (sum ~8.18M)** — verified against prod DB + S3 capture bodies. #9 only removed the proto path + the empty IDE/jsonl path; the phantom lives in the CLI `sqlite_rows_json` path. At minimum a Phase 11 backfill is needed (whether new CLI captures still emit it needs a gateway-code check). Old "Resolution" below was wrong. (Mitigating: no aggregate folds `cacheCreation` into a total → wrong-data, not a live double-count.)
 - **Severity:** 🔴 high (latent) · **Effort:** S
 - **Repos:** proxai_gateway (+ proxai_nest only if adding the optional reasoning field)
 - **Depends on:** none · **Blocks:** Phase 10 (KPI label), Phase 11 (backfill)
 - **Source:** VERIFICATION_FINDINGS.md §10.1, §11.1 · IMPLEMENTATION_PLAN.md Rank 3
 
-## ✅ Resolution (2026-06-26) — superseded by the Antigravity refactor
+## ⚠️ RE-OPENED (2026-06-29) — the "Resolution" below was WRONG
+
+Verified against **prod DB + prod S3 capture bodies** (read-only): the phantom is **live data**, not gone.
+
+- **1,492 / 1,522 gemini ACRs carry a positive `cache_creation`** (sum ~8,175,160; max ~138,246) — all `antigravity-cli`, parser_version 1.0.0. Gemini has no cache-write → phantom. Samples: output 1776 / cacheCreation 758; output 27693 / cacheCreation 13802 (cacheCreation < output, consistent with `5.9.10`=`candidatesTokenCount`, a slice of output — exactly this phantom).
+- **The source is NOT the deleted proto `step-decode.ts`.** Gemini has two capture paths: **antigravity-cli → `sqlite_rows_json`** (the captured body carries a plaintext `cache_creation_input_tokens`, e.g. `113`, which gemini/v1 extracts) and **antigravity-ide → `transcript.jsonl`** (no usage → null). #9 deleted the proto path and the IDE/jsonl emits null, so the phantom is gone ONLY for the ~0.6% IDE path. The dominant CLI path was never addressed.
+- **Impact:** wrong data, NOT a live double-count (no aggregate folds `cacheCreation` into a total — pre-flight).
+- **Fix (effort S):** (1) confirm whether the *current* gateway gemini SQLite capture still emits `cache_creation_input_tokens` (quick code check — historical-only vs ongoing); (2) null it at the source (gateway capture or nest gemini/v1 extractor); (3) Phase 11 backfill to clear the 1,492 rows. See `candidates/antigravity-token-recovery.md` — Gemini is ~98% token-covered (the CLI path also carries the real input/output/cacheRead), contrary to the earlier "zero telemetry" claims.
+
+---
+
+## ~~✅ Resolution (2026-06-26)~~ — SUPERSEDED / INCORRECT (kept for history): superseded by the Antigravity refactor
 
 The proto decode this phase targets — `gateway/src/sources/gemini/step-decode.ts` and its `5.9.10 → cacheCreationInputTokens` mapping — was **deleted** in gateway #9 ("Feat/antigravity capture") plus the nest jsonl-parser rewrite. Verified 2026-06-26: no `5.9.10` / `cacheCreation` mapping remains in either repo.
 
