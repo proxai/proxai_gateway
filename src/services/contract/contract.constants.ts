@@ -51,6 +51,11 @@ export const VALID_CODEX_TABLES: readonly CodexTable[] = [
   'thread_spawn_edges',
 ];
 
+// Gemini/Antigravity token capture ships ONLY the content-free `gen_metadata`
+// table (token counts + ids, no conversation content). Scoped per-variant so
+// this source can never carry a codex table name and vice versa.
+export const VALID_GEMINI_TABLES: readonly string[] = ['gen_metadata'];
+
 export const SOURCE_VARIANTS: readonly SourceVariantSpec[] = [
   {
     sourceApp: 'claude-code',
@@ -79,6 +84,7 @@ export const SOURCE_VARIANTS: readonly SourceVariantSpec[] = [
     bodyFormat: 'sqlite_rows_json',
     watermarkKind: 'rowid_range',
     watermarkTableRequired: true,
+    allowedTables: VALID_CODEX_TABLES,
   },
   {
     sourceApp: 'claude-desktop',
@@ -93,6 +99,16 @@ export const SOURCE_VARIANTS: readonly SourceVariantSpec[] = [
     bodyFormat: 'jsonl',
     watermarkKind: 'byte_range',
     watermarkTableRequired: false,
+  },
+  {
+    // Gemini token capture: content-free `gen_metadata` rows (base64 proto),
+    // stamped with the transcript's source_path so it lands on the same chat.
+    sourceApp: 'gemini',
+    sourceKind: 'sqlite_table_snapshot',
+    bodyFormat: 'sqlite_rows_json',
+    watermarkKind: 'rowid_range',
+    watermarkTableRequired: true,
+    allowedTables: VALID_GEMINI_TABLES,
   },
 ];
 
