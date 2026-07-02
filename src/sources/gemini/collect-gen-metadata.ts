@@ -210,7 +210,10 @@ export async function collectGeminiGenMetadata(
         sourcePath: file.transcriptSourcePath,
         sourceInode: null,
         watermarkTable: GEMINI_GEN_METADATA_TABLE,
-        watermarkEnd: prior?.watermarkEnd ?? 1,
+        // `?? 0` (NOT codex's `?? 1`): gen_metadata.idx starts at 0, so a first-attempt
+        // failure (prior=null) must leave the floor at -1 (idx > -1) — `?? 1` would floor
+        // at idx > 0 and drop gen#0's tokens forever once the DB recovers.
+        watermarkEnd: prior?.watermarkEnd ?? 0,
         consecutiveErrors: (prior?.consecutiveErrors ?? 0) + 1,
       });
     } catch {}
