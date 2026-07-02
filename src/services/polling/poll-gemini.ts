@@ -15,16 +15,33 @@ import type {
   SourcePollerResult,
 } from 'services/polling/polling.types.ts';
 
+/** Injectable token-pass collaborators (mirrors CodexSourceDeps) so the
+ *  gen_metadata discovery/collect paths are testable in isolation. */
+export interface GeminiSourceDeps {
+  discoverGeminiConversationDbs: typeof discoverGeminiConversationDbs;
+  collectGeminiGenMetadata: typeof collectGeminiGenMetadata;
+}
+
 export interface GeminiSourcePollerOptions {
   baseDir?: string;
+  deps?: Partial<GeminiSourceDeps>;
 }
 
 export function makeGeminiSourcePoller(options: GeminiSourcePollerOptions = {}): SourcePoller {
   const baseDir = options.baseDir ?? defaultGeminiAntigravityBaseDir();
-  return (ctx) => pollGemini(ctx, baseDir);
+  const deps: GeminiSourceDeps = {
+    discoverGeminiConversationDbs:
+      options.deps?.discoverGeminiConversationDbs ?? discoverGeminiConversationDbs,
+    collectGeminiGenMetadata: options.deps?.collectGeminiGenMetadata ?? collectGeminiGenMetadata,
+  };
+  return (ctx) => pollGemini(ctx, baseDir, deps);
 }
 
-async function pollGemini(ctx: SourcePollerContext, baseDir: string): Promise<SourcePollerResult> {
+async function pollGemini(
+  ctx: SourcePollerContext,
+  baseDir: string,
+  deps: GeminiSourceDeps,
+): Promise<SourcePollerResult> {
   const result: SourcePollerResult = {
     filesProcessed: 0,
     capturedBatches: 0,
@@ -85,7 +102,7 @@ async function pollGemini(ctx: SourcePollerContext, baseDir: string): Promise<So
   // context (agyhub folders + exclusions), so the exclusion PAUSE gate is enforced.
   let dbFiles: DiscoveredGeminiDbFile[];
   try {
-    dbFiles = await discoverGeminiConversationDbs(baseDir, { minimumMtime });
+    dbFiles = await deps.discoverGeminiConversationDbs(baseDir, { minimumMtime });
   } catch (err) {
     result.errors.push({
       sourcePath: baseDir,
@@ -95,7 +112,7 @@ async function pollGemini(ctx: SourcePollerContext, baseDir: string): Promise<So
   }
 
   for (const dbFile of dbFiles) {
-    const tokenResult = await collectGeminiGenMetadata(dbFile, collectorContext);
+    const tokenResult = await deps.collectGeminiGenMetadata(dbFile, collectorContext);
     result.filesProcessed += 1;
     result.capturedBatches += tokenResult.capturedBatches;
     result.capturedBytes += tokenResult.capturedBytes;
