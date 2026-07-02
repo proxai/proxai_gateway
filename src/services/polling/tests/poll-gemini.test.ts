@@ -6,7 +6,11 @@ import { join } from 'node:path';
 
 import { rmRecursive } from 'core/io/fs';
 import { countByStatus, countCursors, openInMemoryBufferDb } from 'services/buffer';
-import { GEMINI_AGYHUB_FILE } from 'sources/gemini';
+import {
+  GEMINI_AGYHUB_FILE,
+  type DiscoveredGeminiDbFile,
+  type GeminiCollectorResult,
+} from 'sources/gemini';
 import { makeGeminiSourcePoller } from 'services/polling/poll-gemini.ts';
 
 let dir: string;
@@ -86,6 +90,52 @@ test('records a discovery error when the base path contains a null byte', async 
   const result = await poller({ buffer, ...POLL_CTX });
 
   expect(result.errors.length).toBeGreaterThan(0);
+});
+
+test('records a token-pass (gen_metadata) discovery error and returns without throwing', async () => {
+  // The transcript pass shares baseDir, so it succeeds (empty dir → []); the
+  // token-pass discovery throws → its own catch records the error.
+  const poller = makeGeminiSourcePoller({
+    baseDir: dir,
+    deps: {
+      discoverGeminiConversationDbs: async () => {
+        throw new Error('db discovery boom');
+      },
+    },
+  });
+  const result = await poller({ buffer, ...POLL_CTX, minimumMtimeOverride: null });
+
+  expect(result.errors.some((e) => e.reason.includes('db discovery boom'))).toBe(true);
+});
+
+test('runs the token pass over discovered dbs and folds their batches/bytes/errors in', async () => {
+  const fakeDb: DiscoveredGeminiDbFile = {
+    dbPath: join(dir, 'conversations', 'u.db'),
+    transcriptSourcePath: join(dir, 'brain', 'u', '.system_generated', 'logs', 'transcript.jsonl'),
+    transcriptSourcePathHash: 'deadbeef',
+    conversationId: 'u',
+    dbSizeBytes: 1,
+    dbInode: 1,
+    sourcePlatform: 'antigravity-ide',
+  };
+  const tokenResult: GeminiCollectorResult = {
+    capturedBatches: 3,
+    capturedBytes: 42,
+    errors: [{ sourcePath: fakeDb.dbPath, reason: 'token oops' }],
+  };
+  const poller = makeGeminiSourcePoller({
+    baseDir: dir,
+    deps: {
+      discoverGeminiConversationDbs: async () => [fakeDb],
+      collectGeminiGenMetadata: async () => tokenResult,
+    },
+  });
+  const result = await poller({ buffer, ...POLL_CTX, minimumMtimeOverride: null });
+
+  expect(result.filesProcessed).toBe(1); // 0 transcripts + 1 token db
+  expect(result.capturedBatches).toBe(3);
+  expect(result.capturedBytes).toBe(42);
+  expect(result.errors).toContainEqual({ sourcePath: fakeDb.dbPath, reason: 'token oops' });
 });
 
 test('fail-open plumbing: excludedProjects forwarded; a conversation with no agyhub entry still captures', async () => {

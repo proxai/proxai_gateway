@@ -203,3 +203,24 @@ test('error on the FIRST attempt does not drop gen#0 on recovery (error-path flo
   const batch = requireDefined(nextPendingBatch(buffer), 'batch');
   expect(decodeBatchRows(batch.body).map((r) => r.idx)).toEqual([0]);
 });
+
+test('exclusions active but conversation absent from the agyhub map → captures (fail-open)', async () => {
+  const file = await makeGenMetadataDb([{ idx: 0, data: new Uint8Array([1, 2, 3]), notes: 'n' }]);
+  // excluded list is non-empty and the index is complete, but conv-1 is not in
+  // the folder map → no folder to protect → fall through the gate and capture.
+  const result = await collectGeminiGenMetadata(
+    file,
+    ctx({ excludedProjects: ['/x/excluded'], agyhubFolders: new Map(), agyhubComplete: true }),
+  );
+  expect(result.errors).toEqual([]);
+  expect(result.capturedBatches).toBe(1);
+});
+
+test('a slice exceeding maxDecompressedBytes is recorded as an error (oversized guard)', async () => {
+  const file = await makeGenMetadataDb([{ idx: 0, data: new Uint8Array([1, 2, 3]), notes: 'n' }]);
+  // A 1-byte cap makes even a single tiny row's serialized JSON exceed the cap.
+  const result = await collectGeminiGenMetadata(file, ctx({ maxDecompressedBytes: 1 }));
+  expect(result.capturedBatches).toBe(0);
+  expect(nextPendingBatch(buffer)).toBeNull();
+  expect(result.errors.length).toBeGreaterThan(0);
+});
