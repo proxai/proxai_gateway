@@ -1,10 +1,27 @@
 import { afterEach, beforeEach, expect, it } from 'bun:test';
+import { Database } from 'bun:sqlite';
 import { mkdir, mkdtemp, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { rmRecursive } from 'core/io/fs';
-import { discoverGeminiTranscripts } from 'sources/gemini';
+import { discoverGeminiConversationDbs, discoverGeminiTranscripts } from 'sources/gemini';
+
+/** Seed <dir>/conversations/<uuid>.db with a gen_metadata table. */
+async function seedConversationDb(baseDir: string, uuid: string): Promise<string> {
+  const convDir = join(baseDir, 'conversations');
+  await mkdir(convDir, { recursive: true });
+  const path = join(convDir, `${uuid}.db`);
+  const db = new Database(path, { create: true });
+  db.run(`CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB, size INTEGER)`);
+  db.query('INSERT INTO gen_metadata (idx, data, size) VALUES (?, ?, ?)').run(
+    0,
+    new Uint8Array([1, 2, 3]),
+    3,
+  );
+  db.close();
+  return path;
+}
 
 /** Seed <dir>/brain/<uuid>/.system_generated/logs/transcript.jsonl, return its absolute path. */
 async function seedTranscript(baseDir: string, uuid: string): Promise<string> {
@@ -63,4 +80,28 @@ it('returns [] when minimumMtime is in the future (everything is older)', async 
   const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
   const files = await discoverGeminiTranscripts(dir, { minimumMtime: future });
   expect(files).toEqual([]);
+});
+
+it('discovers a conversation .db paired with a transcript, aligning on the content chat_id', async () => {
+  const uuid = 'conv-uuid-9';
+  await seedConversationDb(dir, uuid);
+  await seedTranscript(dir, uuid);
+
+  const dbs = await discoverGeminiConversationDbs(dir, { minimumMtime: null });
+  expect(dbs).toHaveLength(1);
+  expect(dbs[0]?.conversationId).toBe(uuid);
+  expect(dbs[0]?.dbPath.endsWith(`${uuid}.db`)).toBe(true);
+  expect(dbs[0]?.transcriptSourcePath.endsWith('transcript.jsonl')).toBe(true);
+
+  // The token capture MUST land on the same chat as the content capture: its
+  // transcriptSourcePathHash equals the content discovery's sourcePathHash.
+  const transcripts = await discoverGeminiTranscripts(dir, { minimumMtime: null });
+  const content = transcripts.find((t) => t.conversationId === uuid);
+  expect(dbs[0]?.transcriptSourcePathHash).toBe(content?.sourcePathHash);
+});
+
+it('skips a conversation .db with no paired transcript', async () => {
+  await seedConversationDb(dir, 'conv-orphan');
+  const dbs = await discoverGeminiConversationDbs(dir, { minimumMtime: null });
+  expect(dbs).toEqual([]);
 });

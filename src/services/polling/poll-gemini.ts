@@ -1,7 +1,10 @@
 import {
   collectGeminiConversation,
+  collectGeminiGenMetadata,
   defaultGeminiAntigravityBaseDir,
+  discoverGeminiConversationDbs,
   discoverGeminiTranscripts,
+  type DiscoveredGeminiDbFile,
   type DiscoveredGeminiFile,
   type GeminiCollectorContext,
 } from 'sources/gemini';
@@ -76,6 +79,30 @@ async function pollGemini(ctx: SourcePollerContext, baseDir: string): Promise<So
   }
 
   await processNext(0);
+
+  // Token pass: content-free `gen_metadata` capture from conversations/<uuid>.db,
+  // stamped with the transcript's source_path (same chat). Uses the SAME collector
+  // context (agyhub folders + exclusions), so the exclusion PAUSE gate is enforced.
+  let dbFiles: DiscoveredGeminiDbFile[];
+  try {
+    dbFiles = await discoverGeminiConversationDbs(baseDir, { minimumMtime });
+  } catch (err) {
+    result.errors.push({
+      sourcePath: baseDir,
+      reason: err instanceof Error ? err.message : String(err),
+    });
+    return result;
+  }
+
+  for (const dbFile of dbFiles) {
+    const tokenResult = await collectGeminiGenMetadata(dbFile, collectorContext);
+    result.filesProcessed += 1;
+    result.capturedBatches += tokenResult.capturedBatches;
+    result.capturedBytes += tokenResult.capturedBytes;
+    for (const err of tokenResult.errors) {
+      result.errors.push({ sourcePath: err.sourcePath, reason: err.reason });
+    }
+  }
 
   return result;
 }

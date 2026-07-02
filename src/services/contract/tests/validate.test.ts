@@ -81,6 +81,27 @@ function codexThreadsDto(overrides: Partial<RawRecordDTO> = {}): RawRecordDTO {
   };
 }
 
+function geminiTokensDto(overrides: Partial<RawRecordDTO> = {}): RawRecordDTO {
+  return {
+    capture_id: VALID_UUIDV7,
+    host_id: 'h_test',
+    source_app: 'gemini',
+    source_kind: 'sqlite_table_snapshot',
+    source_path:
+      '/Users/test/.gemini/antigravity/brain/uuid/.system_generated/logs/transcript.jsonl',
+    source_path_hash: VALID_SHA256,
+    source_inode: null,
+    watermark: { kind: 'rowid_range', start: 1, end: 9, table: 'gen_metadata' },
+    agent_schema_version: 'antigravity/3.0.0',
+    gateway_version: '@proxai/gateway 0.1.0',
+    captured_at_utc: '2026-07-02T10:42:00.123Z',
+    body_format: 'sqlite_rows_json',
+    body_compression: 'zstd',
+    body: VALID_BODY,
+    ...overrides,
+  };
+}
+
 test('accepts valid claude-code DTO', () => {
   expect(() => validateRawRecordDTO(claudeCodeDto())).not.toThrow();
 });
@@ -105,6 +126,28 @@ test('accepts each codex table value', () => {
       ),
     ).not.toThrow();
   }
+});
+
+test('accepts valid gemini gen_metadata token DTO', () => {
+  expect(() => validateRawRecordDTO(geminiTokensDto())).not.toThrow();
+});
+
+test('rejects gemini sqlite DTO carrying a non-gemini table (no cross-source smuggling)', () => {
+  expect(() =>
+    validateRawRecordDTO(
+      geminiTokensDto({ watermark: { kind: 'rowid_range', start: 1, end: 5, table: 'threads' } }),
+    ),
+  ).toThrow(/watermark.table must be one of: gen_metadata/);
+});
+
+test('rejects codex sqlite DTO carrying gemini table gen_metadata (scoped both ways)', () => {
+  expect(() =>
+    validateRawRecordDTO(
+      codexThreadsDto({
+        watermark: { kind: 'rowid_range', start: 1, end: 5, table: 'gen_metadata' },
+      }),
+    ),
+  ).toThrow(/watermark.table must be one of/);
 });
 
 test('accepts a present, valid source_platform', () => {

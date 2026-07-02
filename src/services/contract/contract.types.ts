@@ -43,6 +43,13 @@ export interface SourceVariantSpec {
   bodyFormat: BodyFormat;
   watermarkKind: WatermarkKind;
   watermarkTableRequired: boolean;
+  /**
+   * When `watermarkTableRequired`, the exact `watermark.table` names this variant
+   * may carry. Each sqlite-table-snapshot source scopes its own tables (codex →
+   * thread tables; gemini → `gen_metadata`) so one source can't smuggle another's
+   * table name. Unused when a table is not required.
+   */
+  allowedTables?: readonly string[];
 }
 
 export interface RawRecordDTO {

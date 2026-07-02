@@ -13,6 +13,24 @@ export interface DiscoveredGeminiFile {
   conversationId: string;
 }
 
+/**
+ * A `conversations/<uuid>.db` paired with its `transcript.jsonl`. The token capture
+ * READS `dbPath` but is STAMPED with `transcriptSourcePath` / `transcriptSourcePathHash`
+ * so it lands on the same chat as the content capture (chat_id = source_path_hash of the
+ * transcript path). `transcriptSourcePath` is built the SAME way the content discovery
+ * builds it (`join(baseDir, 'brain/<uuid>/.system_generated/logs/transcript.jsonl')`) so
+ * the hash is byte-identical across OSes.
+ */
+export interface DiscoveredGeminiDbFile {
+  dbPath: string;
+  transcriptSourcePath: string;
+  transcriptSourcePathHash: string;
+  conversationId: string;
+  dbSizeBytes: number;
+  dbInode: number;
+  sourcePlatform: SourcePlatform;
+}
+
 export interface GeminiCollectorContext {
   buffer: Database;
   gatewayVersion: string;
