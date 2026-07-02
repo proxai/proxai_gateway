@@ -446,8 +446,13 @@ test('rejects body whose base64 length is not a multiple of 4', () => {
   expect(() => validateRawRecordDTO(claudeCodeDto({ body: 'abc' }))).toThrow(/body/);
 });
 
-it('gemini source variant is jsonl_append/jsonl/byte_range (no watermark table)', () => {
-  const v = SOURCE_VARIANTS.find((s) => s.sourceApp === 'gemini');
+it('gemini content variant is jsonl_append/jsonl/byte_range (no watermark table)', () => {
+  // Pin to the jsonl (content) variant explicitly — gemini now has two variants
+  // (content jsonl + the gen_metadata sqlite_table_snapshot), so a bare
+  // `find(sourceApp==='gemini')` would silently depend on array order.
+  const v = SOURCE_VARIANTS.find(
+    (s) => s.sourceApp === 'gemini' && s.sourceKind === 'jsonl_append',
+  );
   expect(v).toMatchObject({
     sourceKind: 'jsonl_append',
     bodyFormat: 'jsonl',

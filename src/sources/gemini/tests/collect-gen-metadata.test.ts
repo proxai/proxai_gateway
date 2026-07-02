@@ -174,3 +174,32 @@ test('advances the rowid watermark across ticks (no re-capture)', async () => {
   const second = await collectGeminiGenMetadata(file, ctx());
   expect(second.capturedBatches).toBe(0);
 });
+
+test('error on the FIRST attempt does not drop gen#0 on recovery (error-path floor)', async () => {
+  // First attempt fails (missing db → snapshotSqlite throws) → catch sets the cursor.
+  const bad: DiscoveredGeminiDbFile = {
+    dbPath: join(dir, 'does-not-exist.db'),
+    transcriptSourcePath: TRANSCRIPT,
+    transcriptSourcePathHash: sha256Hex(TRANSCRIPT),
+    conversationId: 'conv-1',
+    dbSizeBytes: 0,
+    dbInode: 0,
+    sourcePlatform: 'antigravity-ide',
+  };
+  const r1 = await collectGeminiGenMetadata(bad, ctx());
+  expect(r1.errors.length).toBe(1);
+  const cursor = getCursor(buffer, {
+    sourceApp: 'gemini',
+    sourcePathHash: sha256Hex(TRANSCRIPT),
+    sourceInode: null,
+    watermarkTable: 'gen_metadata',
+  });
+  expect(cursor?.watermarkEnd).toBe(0); // NOT 1 — a `?? 1` here would floor at idx>0
+
+  // Recovery over the SAME conversation with a valid db → gen#0 (idx 0) must still ship.
+  const good = await makeGenMetadataDb([{ idx: 0, data: new Uint8Array([7, 8, 9]), notes: 'n' }]);
+  const r2 = await collectGeminiGenMetadata(good, ctx());
+  expect(r2.capturedBatches).toBe(1);
+  const batch = requireDefined(nextPendingBatch(buffer), 'batch');
+  expect(decodeBatchRows(batch.body).map((r) => r.idx)).toEqual([0]);
+});
